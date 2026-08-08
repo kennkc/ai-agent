@@ -1,0 +1,4 @@
+# NLP 服务依赖（Phase 0 最小骨架，Phase 2 引入模型）
+fastapi>=0.110.0
+uvicorn[standard]>=0.29.0
+pydantic>=2.6.0

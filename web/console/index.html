@@ -1,0 +1,327 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lifeform Console · 生命体总控台（Mock 原型）</title>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#f4f6fa; --panel:#ffffff; --border:#e3e8f0; --text:#1c2536; --text2:#64748b;
+  --primary:#185fa5; --accent:#0f6e56; --warn:#a32d2d; --muted:#94a3b8;
+  --brain:#185fa5; --sense:#0f6e56; --body:#7c5cbf; --limb:#c05621;
+  --immune:#a32d2d; --evolve:#0f766e; --system:#5f5e5a; --chat:#334155;
+}
+*{margin:0;padding:0;box-sizing:border-box;font-family:'Segoe UI','PingFang SC','Microsoft YaHei',system-ui,sans-serif}
+body{background:var(--bg);color:var(--text);min-height:100vh}
+/* ── 顶部栏 ── */
+header{background:linear-gradient(135deg,#0f2f5c,#185fa5 60%,#1d7a8a);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:16px;position:sticky;top:0;z-index:50;box-shadow:0 2px 12px rgba(15,47,92,.25)}
+.logo{display:flex;align-items:center;gap:10px;font-size:18px;font-weight:600;letter-spacing:.5px}
+.logo .pulse{width:12px;height:12px;border-radius:50%;background:#4ade80;box-shadow:0 0 10px #4ade80;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.4}}
+.badge{margin-left:auto;display:flex;align-items:center;gap:8px}
+.tag{font-size:11px;font-weight:600;padding:4px 10px;border-radius:999px;letter-spacing:.5px}
+.tag.mock{background:#fbbf24;color:#451a03;border:1px solid #f59e0b}
+.tag.api{background:#34d399;color:#064e3b;border:1px solid #10b981}
+.tag.phase{background:rgba(255,255,255,.15);color:#fff;border:1px solid rgba(255,255,255,.3)}
+/* ── 布局 ── */
+.wrap{display:flex;min-height:calc(100vh - 60px)}
+/* ── 左侧导航 ── */
+nav{width:210px;background:var(--panel);border-right:1px solid var(--border);padding:16px 10px;flex-shrink:0}
+.nav-item{display:flex;align-items:center;gap:10px;padding:11px 12px;border-radius:10px;cursor:pointer;margin-bottom:4px;font-size:13.5px;color:var(--text2);transition:all .2s;border:1px solid transparent;position:relative}
+.nav-item:hover{background:#eef4fb;color:var(--text)}
+.nav-item.active{background:var(--primary);color:#fff;box-shadow:0 4px 12px rgba(24,95,165,.3)}
+.nav-item .ico{font-size:16px}
+.nav-item .dot{margin-left:auto;width:8px;height:8px;border-radius:50%}
+.nav-item .dot.on{background:#4ade80}
+.nav-item .dot.off{background:#cbd5e1}
+.nav-sep{margin:12px 0;border-top:1px solid var(--border)}
+.nav-hint{font-size:11px;color:var(--muted);padding:8px 12px;line-height:1.6}
+/* ── 主区 ── */
+main{flex:1;padding:20px 24px;overflow-y:auto}
+.view-title{display:flex;align-items:center;gap:10px;margin-bottom:16px}
+.view-title h2{font-size:19px;font-weight:600}
+.view-title .desc{font-size:12.5px;color:var(--text2)}
+.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:14px}
+.grid.c3{grid-template-columns:repeat(3,1fr)}
+.grid.c2{grid-template-columns:repeat(2,1fr)}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px;transition:box-shadow .2s}
+.card:hover{box-shadow:0 6px 18px rgba(15,47,92,.08)}
+.card .k{font-size:12px;color:var(--text2);margin-bottom:6px;display:flex;align-items:center;gap:6px}
+.card .v{font-size:26px;font-weight:600;line-height:1.2}
+.card .s{font-size:11.5px;color:var(--text2);margin-top:4px}
+.card .v.g{color:var(--accent)} .card .v.r{color:var(--warn)} .card .v.b{color:var(--primary)}
+.chart-box{position:relative;height:220px}
+/* ── 状态条 ── */
+.status-bar{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:12px 16px;display:flex;gap:20px;flex-wrap:wrap;font-size:12px;color:var(--text2);align-items:center}
+.status-bar b{color:var(--text)}
+.ok{color:var(--accent)} .bad{color:var(--warn)}
+/* ── 对话终端 ── */
+.chat-box{display:flex;flex-direction:column;height:480px;border:1px solid var(--border);border-radius:12px;overflow:hidden;background:var(--panel)}
+.chat-head{background:#eef4fb;padding:10px 16px;font-weight:600;font-size:13.5px;display:flex;align-items:center;gap:8px;border-bottom:1px solid var(--border)}
+.chat-body{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:12px;background:#fafcff}
+.msg{max-width:78%;padding:10px 14px;border-radius:12px;font-size:13.5px;line-height:1.6}
+.msg.user{align-self:flex-end;background:var(--primary);color:#fff;border-bottom-right-radius:4px}
+.msg.ai{align-self:flex-start;background:#fff;border:1px solid var(--border);border-bottom-left-radius:4px}
+.msg .src{display:block;font-size:11px;color:var(--text2);margin-top:6px}
+.chat-input{display:flex;gap:8px;padding:12px;border-top:1px solid var(--border);background:#fff}
+.chat-input input{flex:1;padding:10px 14px;border:1px solid var(--border);border-radius:8px;font-size:13.5px;outline:none}
+.chat-input input:focus{border-color:var(--primary)}
+.chat-input button{background:var(--primary);color:#fff;border:none;border-radius:8px;padding:0 20px;font-size:13.5px;cursor:pointer}
+/* ── 表格 ── */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{text-align:left;padding:8px 10px;background:#f1f5f9;color:var(--text2);font-weight:500;border-bottom:1px solid var(--border)}
+td{padding:8px 10px;border-bottom:1px solid var(--border)}
+.st{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:500}
+.st.up{background:#dcfce7;color:#166534}.st.down{background:#fee2e2;color:#991b1b}.st.deg{background:#fef3c7;color:#92400e}
+/* 待点亮 */
+.placeholder{border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;color:var(--muted);font-size:13px}
+footer{padding:16px 24px;font-size:11.5px;color:var(--muted);text-align:center;border-top:1px solid var(--border);background:var(--panel)}
+@media(max-width:900px){.grid,.grid.c3,.grid.c2{grid-template-columns:repeat(2,1fr)}nav{width:64px}.nav-item span.txt{display:none}}
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo"><span class="pulse"></span>Lifeform Console · 生命体总控台</div>
+  <div class="badge">
+    <span class="tag phase">设计阶段 · 原型预览</span>
+    <span class="tag mock" id="dsTag">DATA_SOURCE = MOCK</span>
+  </div>
+</header>
+
+<div class="wrap">
+  <nav id="nav">
+    <div class="nav-item active" data-view="brain"><span class="ico">🧠</span><span class="txt">大脑视图</span><span class="dot on"></span></div>
+    <div class="nav-item" data-view="sense"><span class="ico">👁️</span><span class="txt">感官视图</span><span class="dot on"></span></div>
+    <div class="nav-item" data-view="body"><span class="ico">📚</span><span class="txt">躯体视图</span><span class="dot on"></span></div>
+    <div class="nav-item" data-view="limb"><span class="ico">🛠️</span><span class="txt">执行视图</span><span class="dot on"></span></div>
+    <div class="nav-item" data-view="immune"><span class="ico">🛡️</span><span class="txt">免疫视图</span><span class="dot on"></span></div>
+    <div class="nav-item" data-view="evolve"><span class="ico">🔄</span><span class="txt">进化视图</span><span class="dot on"></span></div>
+    <div class="nav-item" data-view="system"><span class="ico">⚙️</span><span class="txt">系统视图</span><span class="dot on"></span></div>
+    <div class="nav-item" data-view="chat"><span class="ico">💬</span><span class="txt">交互终端</span><span class="dot on"></span></div>
+    <div class="nav-sep"></div>
+    <div class="nav-hint">Mock 先行原型：8 视图全部以静态测试数据展示，接口契约已定义（见设计文档 §10）。阶段功能完成后将切换 DATA_SOURCE=api。</div>
+  </nav>
+
+  <main id="main"></main>
+</div>
+
+<footer>Agent-Lifeform · Lifeform Console 静态原型（Mock 版）· 依据《LifeformConsole-统一可视化终端设计》v1.1 · 数据为演示用静态测试数据</footer>
+
+<script>
+// ═══════════ Mock 数据（MockDataSource · 契约先行）═══════════
+const MOCK = {
+  brain:{ active_sessions:42, intent_dist:[{n:'知识问答',v:58},{n:'工具调用',v:22},{n:'总结报告',v:12},{n:'闲聊',v:8}], queue:['任务T-1024 汇总报告','任务T-1025 舆情采集','任务T-1026 竞品分析'], trend:[8,12,15,13,18,22,28,33,42] },
+  sense:{ channels:[{n:'视觉',s:'UP'},{n:'听觉',s:'UP'},{n:'触觉',s:'UP'},{n:'嗅觉',s:'DEGRADED'},{n:'味觉',s:'UP'}], collect_rate:186, quality_pass_rate:96.2, rate:[120,145,138,168,175,186], quality_trend:[95.1,95.8,96.0,96.4,96.2,96.2] },
+  body:{ total:128450, p99:286, hit_rate:94.3, docs:34210, ingest_rate:5.8, retrieve_trend:[310,295,288,290,286,286] },
+  limb:{ tool_calls:1520, sandbox:['运行中','运行中','空闲'], success:96.8, dag_running:3, tools:[{n:'calculator',c:620,s:99.2},{n:'http',c:410,s:96.5},{n:'code',c:305,s:94.8},{n:'search',c:185,s:95.1}] },
+  immune:{ events:12, circuit:['gateway:关闭','llm-gateway:半开','sense:关闭'], tenants:3, error_rate:0.42, alerts:[{t:'LLM成本激增',l:'P1',s:'已确认'},{t:'渠道降级',l:'P2',s:'处理中'}] },
+  evolve:{ feedback:{up:328,down:47,retry:23}, healing_count:18, hallucination_rate:2.1, satisfaction:[88,89,90,91,91,92], heal_list:[{d:'doc-8842',a:'重采替换',t:'2026-08-08 09:12'},{d:'doc-3317',a:'人工复核',t:'2026-08-07 16:40'}] },
+  system:{ services:[{n:'gateway-service',p:8080,s:'UP'},{n:'session-manager',p:8081,s:'UP'},{n:'sense-service',p:8082,s:'UP'},{n:'nlp-service',p:8000,s:'UP'},{n:'body-service',p:8083,s:'UP'},{n:'tool-executor',p:8084,s:'UP'},{n:'dag-engine',p:8085,s:'UP'}], cpu:46, mem:58, cost:1280.5, cost_trend:[980,1050,1120,1180,1230,1280.5] }
+};
+
+let charts = {};
+const $ = id => document.getElementById(id);
+const main = document.getElementById('main');
+
+// ═══════════ 视图渲染 ═══════════
+function card(k,v,cls='',s=''){return `<div class="card"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${s?`<div class="s">${s}</div>`:''}</div>`}
+function chartCard(title,type,labels,data,color){
+  return `<div class="card"><div class="k">${title}</div><div class="chart-box"><canvas id="c-${title.replace(/\s/g,'')}"></canvas></div></div>`;
+}
+
+function renderBrain(){
+  return `
+  <div class="view-title"><h2>🧠 大脑视图</h2><span class="desc">会话 · 意图 · 任务规划（Mock 数据）</span></div>
+  <div class="grid">
+    ${card('活跃会话','42','b','较昨日 +8')}
+    ${card('意图识别准确率','91.5%','g','P99 45ms')}
+    ${card('任务队列','3','','规划中')}
+    ${card('今日完成任务','186','','完成率 97.2%')}
+  </div>
+  <div class="grid c2">
+    ${chartCard('意图分布','doughnut',null,MOCK.brain.intent_dist,'#185fa5')}
+    ${chartCard('会话趋势（近7日）','line',['D1','D2','D3','D4','D5','D6','D7'],MOCK.brain.trend,'#185fa5')}
+  </div>
+  <div class="status-bar"><span>任务队列：<b>${MOCK.brain.queue.map(q=>q).join(' · ')}</b></span><span>多轮上下文：<b>10 轮</b></span><span>语义缓存命中：<b class="ok">24%</b></span></div>`;
+}
+
+function renderSense(){
+  return `
+  <div class="view-title"><h2>👁️ 感官视图</h2><span class="desc">多渠道采集 · 数据质检（Mock 数据）</span></div>
+  <div class="grid">
+    ${card('采集速率','186 条/min','b','较昨日 +12%')}
+    ${card('质检通过率','96.2%','g','六维质量体系')}
+    ${card('今日采集量','1.2 万','','触觉渠道为主')}
+    ${card('活跃渠道','4/5','','嗅觉 DEGRADED')}
+  </div>
+  <div class="grid c2">
+    ${chartCard('采集量趋势（近6h）','line',['10:00','11:00','12:00','13:00','14:00','15:00'],MOCK.sense.rate,'#0f6e56')}
+    <div class="card"><div class="k">渠道状态</div><table><tr><th>渠道</th><th>状态</th></tr>${
+      MOCK.sense.channels.map(c=>`<tr><td>${c.n}</td><td><span class="st ${c.s==='UP'?'up':'deg'}">${c.s==='UP'?'正常':'降级'}</span></td></tr>`).join('')
+    }</table></div>
+  </div>
+  <div class="status-bar"><span>R0 定时采集：<b>每 5min</b></span><span>R1 动态采集：<b>启用</b></span><span>数据暂存：<b class="ok">MinIO 正常</b></span></div>`;
+}
+
+function renderBody(){
+  return `
+  <div class="view-title"><h2>📚 躯体视图</h2><span class="desc">知识库 · 语义检索（Mock 数据）</span></div>
+  <div class="grid">
+    ${card('知识总量','12.8 万','b','34,210 篇文档')}
+    ${card('检索 P99','286 ms','g','目标 < 500ms')}
+    ${card('TOP5 命中率','94.3%','g','近7日')}
+    ${card('入库速率','5.8 条/min','','索引异步')}
+  </div>
+  <div class="grid c2">
+    ${chartCard('检索延迟趋势（近6日）','line',['D1','D2','D3','D4','D5','D6'],MOCK.body.retrieve_trend,'#7c5cbf')}
+    <div class="card"><div class="k">知识健康度</div><div class="v">98.6<span style="font-size:14px;color:var(--text2)"> / 100</span></div>
+    <div class="s">低质知识：0.4% · 待自愈：18 条 · 版本回滚：0</div></div>
+  </div>
+  <div class="status-bar"><span>三级存储：<b>Redis 热 / Qdrant 温 / PG 冷</b></span><span>语义缓存命中：<b class="ok">31%</b></span></div>`;
+}
+
+function renderLimb(){
+  return `
+  <div class="view-title"><h2>🛠️ 执行视图</h2><span class="desc">工具调用 · 沙箱 · DAG 编排（Mock 数据）</span></div>
+  <div class="grid">
+    ${card('今日工具调用','1,520','b','+18%')}
+    ${card('工具成功率','96.8%','g','白名单 4 工具')}
+    ${card('DAG 运行中','3','','虚拟线程池')}
+    ${card('沙箱实例','2/3','','运行中')}
+  </div>
+  <div class="grid c2">
+    <div class="card"><div class="k">工具调用分布</div><table><tr><th>工具</th><th>调用量</th><th>成功率</th></tr>${
+      MOCK.limb.tools.map(t=>`<tr><td>${t.n}</td><td>${t.c}</td><td>${t.s}%</td></tr>`).join('')
+    }</table></div>
+    ${chartCard('DAG 执行耗时（P99）','bar',['5节点','8节点','12节点'],[4.2,6.8,9.5],'#c05621')}
+  </div>
+  <div class="status-bar"><span>恶意命令拦截：<b class="ok">100%</b></span><span>沙箱逃逸测试：<b class="ok">0 通过逃逸</b></span></div>`;
+}
+
+function renderImmune(){
+  return `
+  <div class="view-title"><h2>🛡️ 免疫视图</h2><span class="desc">安全 · 容错 · 多租户（Mock 数据）</span></div>
+  <div class="grid">
+    ${card('安全事件','12','','近7日')}
+    ${card('错误率','0.42%','g','目标 < 1%')}
+    ${card('熔断器','2 关闭 / 1 半开','','Sentinel')}
+    ${card('租户数','3','','隔离验证通过')}
+  </div>
+  <div class="grid c2">
+    <div class="card"><div class="k">熔断状态</div><table><tr><th>资源</th><th>状态</th></tr>${
+      MOCK.immune.circuit.map(c=>{const p=c.split(':');return `<tr><td>${p[0]}</td><td><span class="st ${p[1].trim()==='关闭'?'up':(p[1].trim()==='半开'?'deg':'down')}">${p[1].trim()==='关闭'?'正常':p[1].trim()}</span></td></tr>`}).join('')
+    }</table></div>
+    <div class="card"><div class="k">告警列表</div><table><tr><th>告警</th><th>级别</th><th>状态</th></tr>${
+      MOCK.immune.alerts.map(a=>`<tr><td>${a.t}</td><td><span class="st ${a.l==='P1'?'deg':'up'}">${a.l}</span></td><td>${a.s}</td></tr>`).join('')
+    }</table></div>
+  </div>
+  <div class="status-bar"><span>OAuth2：<b class="ok">已启用</b></span><span>输入净化：<b class="ok">100% 拦截</b></span><span>审计留存：<b>完整</b></span></div>`;
+}
+
+function renderEvolve(){
+  return `
+  <div class="view-title"><h2>🔄 进化视图</h2><span class="desc">反馈学习 · 知识自愈（Mock 数据）</span></div>
+  <div class="grid">
+    ${card('👍 正向反馈','328','g','近7日')}
+    ${card('👎 负向反馈','47','r','占比 12.5%')}
+    ${card('知识自愈','18 次','','SLA < 1h')}
+    ${card('幻觉率','2.1%','g','周报 · 目标 < 3%')}
+  </div>
+  <div class="grid c2">
+    ${chartCard('满意度趋势（近6周）','line',['W1','W2','W3','W4','W5','W6'],MOCK.evolve.satisfaction,'#0f766e')}
+    <div class="card"><div class="k">自愈记录</div><table><tr><th>文档</th><th>动作</th><th>时间</th></tr>${
+      MOCK.evolve.heal_list.map(h=>`<tr><td>${h.d}</td><td>${h.a}</td><td>${h.t}</td></tr>`).join('')
+    }</table></div>
+  </div>
+  <div class="status-bar"><span>反馈闭环：<b class="ok">运行中</b></span><span>知识建议：<b>高频缺口 7 条</b></span><span>评估集：<b>510 条 · v2.3</b></span></div>`;
+}
+
+function renderSystem(){
+  return `
+  <div class="view-title"><h2>⚙️ 系统视图</h2><span class="desc">服务拓扑 · 资源 · 成本（Mock 数据）</span></div>
+  <div class="grid">
+    ${card('服务健康','7/7','g','全部 UP')}
+    ${card('CPU 水位','46%','','集群')}
+    ${card('内存水位','58%','','集群')}
+    ${card('今日 LLM 成本','¥1,280','','缓存命中 24%')}
+  </div>
+  <div class="grid c2">
+    <div class="card"><div class="k">服务清单</div><table><tr><th>服务</th><th>端口</th><th>状态</th></tr>${
+      MOCK.system.services.map(s=>`<tr><td>${s.n}</td><td>${s.p}</td><td><span class="st up">UP</span></td></tr>`).join('')
+    }</table></div>
+    ${chartCard('LLM 成本趋势（近6日）','line',['D1','D2','D3','D4','D5','D6'],MOCK.system.cost_trend,'#5f5e5a')}
+  </div>
+  <div class="status-bar"><span>Nacos：<b class="ok">正常</b></span><span>Qdrant：<b class="ok">正常</b></span><span>Jaeger：<b class="ok">正常</b></span></div>`;
+}
+
+function renderChat(){
+  return `
+  <div class="view-title"><h2>💬 交互终端</h2><span class="desc">多轮对话 · 来源标注 · 反馈（Mock 数据）</span></div>
+  <div class="chat-box">
+    <div class="chat-head"><span>Agent 会话</span><span style="margin-left:auto;font-size:11px;color:var(--text2)">会话 S-8821 · 租户 default</span></div>
+    <div class="chat-body" id="chatBody">
+      <div class="msg ai">您好，我是 Agent-Lifeform 知识助手。支持知识问答、工具调用与任务汇总，请问有什么可以帮您？</div>
+      <div class="msg user">帮我查一下 Q2 季度竞品的市场占有率？</div>
+      <div class="msg ai">已为您检索相关情报（3 个来源交叉验证）。Q2 竞品市场占有率情况如下：<br><br>• 竞品A：32.4%（较上季 +2.1%）<br>• 竞品B：28.7%（较上季 -0.8%）<br>• 竞品C：19.2%（较上季 +1.4%）<br><span class="src">📌 来源：① 行业报告 2026-08-08 · ② 财经媒体 2026-08-07 · ③ 官方财报 2026-08-06（置信度 0.92）</span></div>
+      <div class="msg user">汇总成一份简要报告，并列出数据来源。</div>
+      <div class="msg ai">已完成汇总：<br><br><b>Q2 竞品市场格局简报</b><br>头部集中度小幅提升（CR3 由 78%→80.3%），竞品A 增速最快。建议重点关注其渠道策略变化。<br><span class="src">📌 数据来源：3 个信息源交叉验证 · 生成于 2026-08-08 13:15</span><br><span style="font-size:11px">👍 有帮助 · 👎 回答有误</span></div>
+    </div>
+    <div class="chat-input">
+      <input id="chatInput" placeholder="输入问题…（原型演示，输入任意内容可模拟回复）">
+      <button onclick="mockReply()">发送</button>
+    </div>
+  </div>`;
+}
+
+// ═══════════ 视图切换 ═══════════
+const views = { brain:renderBrain, sense:renderSense, body:renderBody, limb:renderLimb, immune:renderImmune, evolve:renderEvolve, system:renderSystem, chat:renderChat };
+
+function switchView(name){
+  document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));
+  main.innerHTML = views[name]();
+  renderCharts(name);
+}
+
+function renderCharts(name){
+  Object.keys(charts).forEach(k=>{try{charts[k].destroy()}catch(e){}}); charts={};
+  const specs = {
+    brain:[{id:'c-意图分布',type:'doughnut',data:MOCK.brain.intent_dist.map(x=>x.v),labels:MOCK.brain.intent_dist.map(x=>x.n),colors:['#185fa5','#0f6e56','#c05621','#94a3b8']},
+           {id:'c-会话趋势（近7日）',type:'line',data:MOCK.brain.trend,labels:['D1','D2','D3','D4','D5','D6','D7'],color:'#185fa5'}],
+    sense:[{id:'c-采集量趋势（近6h）',type:'line',data:MOCK.sense.rate,labels:['10:00','11:00','12:00','13:00','14:00','15:00'],color:'#0f6e56'}],
+    body:[{id:'c-检索延迟趋势（近6日）',type:'line',data:MOCK.body.retrieve_trend,labels:['D1','D2','D3','D4','D5','D6'],color:'#7c5cbf'}],
+    limb:[{id:'c-DAG执行耗时（P99）',type:'bar',data:MOCK.limb.dag_running?[4.2,6.8,9.5]:[0],labels:['5节点','8节点','12节点'],color:'#c05621'}],
+    evolve:[{id:'c-满意度趋势（近6周）',type:'line',data:MOCK.evolve.satisfaction,labels:['W1','W2','W3','W4','W5','W6'],color:'#0f766e'}],
+    system:[{id:'c-LLM成本趋势（近6日）',type:'line',data:MOCK.system.cost_trend,labels:['D1','D2','D3','D4','D5','D6'],color:'#5f5e5a'}]
+  };
+  (specs[name]||[]).forEach(sp=>{
+    const el=document.getElementById(sp.id); if(!el)return;
+    const isDoughnut=sp.type==='doughnut';
+    charts[sp.id]=new Chart(el,{type:sp.type,data:{labels:sp.labels,datasets:[{data:sp.data,label:'',borderColor:sp.color,backgroundColor:sp.colors||(isDoughnut?sp.colors:sp.color+'33'),borderWidth:2,fill:false,tension:.4}]},
+      options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}}},scales:isDoughnut?{}:{y:{beginAtZero:true,ticks:{font:{size:10}}},x:{ticks:{font:{size:10}}}}}});
+  });
+}
+
+// ═══════════ 交互 ═══════════
+document.getElementById('nav').addEventListener('click',e=>{
+  const item=e.target.closest('.nav-item'); if(item)switchView(item.dataset.view);
+});
+
+function mockReply(){
+  const input=document.getElementById('chatInput'); const v=input.value.trim();
+  if(!v)return;
+  const body=document.getElementById('chatBody');
+  body.insertAdjacentHTML('beforeend',`<div class="msg user">${v}</div>`);
+  input.value='';
+  setTimeout(()=>{
+    body.insertAdjacentHTML('beforeend',`<div class="msg ai">（Mock 回复）已收到您的问题，正在检索知识库与调用工具分析…<br><span class="src">📌 原型演示：真实回复将在 DATA_SOURCE=api 后由后端 Agent 生成</span></div>`);
+    body.scrollTop=body.scrollHeight;
+  },600);
+  body.scrollTop=body.scrollHeight;
+}
+
+switchView('brain');
+</script>
+</body>
+</html>

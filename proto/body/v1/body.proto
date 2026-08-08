@@ -1,0 +1,50 @@
+// DEBT-001: 本地文件检索简化版 — 触发点: VS3 升级 Qdrant 向量检索
+syntax = "proto3";
+
+package body.v1;
+
+option java_multiple_files = true;
+option java_package = "com.agent.body.v1";
+
+// 躯体层：知识存储与检索
+service BodyService {
+  // 文档入库
+  rpc Ingest(IngestRequest) returns (IngestResponse);
+  // 语义检索
+  rpc Retrieve(RetrieveRequest) returns (RetrieveResponse);
+}
+
+message IngestRequest {
+  string doc_id = 1;
+  string content = 2;
+  string source = 3;       // 来源渠道标识
+  string tenant_id = 4;
+  map<string, string> metadata = 5;
+}
+
+message IngestResponse {
+  string doc_id = 1;
+  int32 chunk_count = 2;
+  bool success = 3;
+}
+
+message RetrieveRequest {
+  string query = 1;
+  string tenant_id = 2;
+  int32 top_k = 3;
+  map<string, string> filters = 4;
+}
+
+message RetrievedChunk {
+  string chunk_id = 1;
+  string doc_id = 2;
+  string content = 3;
+  double score = 4;
+  string source = 5;
+  int64 ingest_time = 6;
+}
+
+message RetrieveResponse {
+  repeated RetrievedChunk chunks = 1;
+  int64 latency_ms = 2;
+}

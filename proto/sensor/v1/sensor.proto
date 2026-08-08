@@ -1,0 +1,71 @@
+syntax = "proto3";
+
+package sensor.v1;
+
+option java_multiple_files = true;
+option java_package = "com.agent.sensor.v1";
+
+// 五官层：多渠道信息采集
+service SensorService {
+  // 触发采集（R1 动态感知）
+  rpc Collect(CollectRequest) returns (CollectResponse);
+  // 渠道注册
+  rpc RegisterChannel(RegisterChannelRequest) returns (RegisterChannelResponse);
+  // 渠道健康检查
+  rpc ChannelHealth(ChannelHealthRequest) returns (ChannelHealthResponse);
+}
+
+enum ChannelType {
+  CHANNEL_UNSPECIFIED = 0;
+  CHANNEL_VISUAL = 1;  // 视觉：图像/OCR
+  CHANNEL_AUDIO = 2;   // 听觉：语音
+  CHANNEL_TOUCH = 3;   // 触觉：文件/URL/系统
+  CHANNEL_NOSE = 4;    // 嗅觉：舆情/情报
+  CHANNEL_TASTE = 5;   // 味觉：数据质检
+}
+
+enum CollectMode {
+  MODE_UNSPECIFIED = 0;
+  MODE_R0_DEFAULT = 1;  // 默认常规采集（定时/订阅）
+  MODE_R1_DYNAMIC = 2;  // 动态感知采集（大脑指令）
+}
+
+message CollectRequest {
+  ChannelType channel = 1;
+  CollectMode mode = 2;
+  string data_source = 3;   // URL/文件路径/数据源标识
+  string query = 4;         // 采集意图（如：竞品Q2财报）
+  map<string, string> params = 5;
+  string tenant_id = 6;
+}
+
+message CollectResponse {
+  string batch_id = 1;
+  string source_channel = 2;
+  int64 collect_time_ms = 3;
+  int32 item_count = 4;
+  double quality_score = 5;  // 六维质量综合分
+  bool accepted = 6;         // 是否通过质检
+}
+
+message RegisterChannelRequest {
+  ChannelType channel = 1;
+  string name = 2;
+  string endpoint = 3;
+  map<string, string> config = 4;
+  string tenant_id = 5;
+}
+
+message RegisterChannelResponse {
+  string channel_id = 1;
+  bool success = 2;
+}
+
+message ChannelHealthRequest {
+  string channel_id = 1;
+}
+
+message ChannelHealthResponse {
+  bool healthy = 1;
+  string status = 2; // UP/DOWN/DEGRADED
+}

@@ -1,0 +1,51 @@
+// DEBT-002: 大脑回答为模板占位（VS1 简化版）— 触发点: VS2 接入 LLM 生成
+syntax = "proto3";
+
+package brain.v1;
+
+option java_multiple_files = true;
+option java_package = "com.agent.brain.v1";
+
+// 大脑层：意图识别与任务规划
+service BrainService {
+  // 意图识别
+  rpc RecognizeIntent(RecognizeIntentRequest) returns (RecognizeIntentResponse);
+  // 任务规划
+  rpc PlanTask(PlanTaskRequest) returns (PlanTaskResponse);
+}
+
+message RecognizeIntentRequest {
+  string user_query = 1;
+  string session_id = 2;
+  string tenant_id = 3;
+  repeated string history = 4; // 对话历史
+}
+
+message IntentResult {
+  string intent_type = 1;      // task/qa/smalltalk/tool_call
+  double confidence = 2;
+  repeated string sub_intents = 3;
+  map<string, string> slots = 4; // 实体槽位
+}
+
+message RecognizeIntentResponse {
+  IntentResult result = 1;
+}
+
+message PlanTaskRequest {
+  string session_id = 1;
+  string tenant_id = 2;
+  IntentResult intent = 3;
+}
+
+message PlanTaskResponse {
+  string plan_id = 1;
+  repeated TaskStep steps = 2;
+}
+
+message TaskStep {
+  string step_id = 1;
+  string action = 2;         // retrieve/tool_call/generate/summarize
+  map<string, string> params = 3;
+  repeated string depends_on = 4; // 依赖的前置步骤
+}

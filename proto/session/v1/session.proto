@@ -1,0 +1,113 @@
+syntax = "proto3";
+
+package session.v1;
+
+option java_multiple_files = true;
+option java_package = "com.agent.session.v1";
+
+// 会话服务：VS1 垂直切片中枢（输入→网关→会话→意图→检索→回答）
+// 字段定义对齐《D5-2 核心数据字典》§3.1 Session / Message 模型
+// DEBT-003: 存储为内存 Map（VS1 简化版），触发点 P4 完成时替换 Redis 持久化
+service SessionService {
+  // 创建会话
+  rpc CreateSession(CreateSessionRequest) returns (CreateSessionResponse);
+  // 追加消息（user 消息由网关转发；assistant 消息由大脑回写）
+  rpc AppendMessage(AppendMessageRequest) returns (AppendMessageResponse);
+  // 获取会话详情
+  rpc GetSession(GetSessionRequest) returns (GetSessionResponse);
+  // 拉取会话消息列表（历史上下文）
+  rpc ListMessages(ListMessagesRequest) returns (ListMessagesResponse);
+  // 会话状态变更（archive/delete）
+  rpc UpdateSessionStatus(UpdateSessionStatusRequest) returns (UpdateSessionStatusResponse);
+}
+
+// ── 数据字典 §3.1 Session 模型 ──
+message Session {
+  string id = 1;                 // UUID v7（字典: id）
+  string agent_id = 2;           // 所属 Agent（字典: agent_id）
+  string title = 3;              // 会话标题（字典: title）
+  string model = 4;              // 当前路由模型 L0-L3（字典: model）
+  int32 message_count = 5;       // 消息条数（字典: message_count）
+  int64 last_activity_at = 6;    // 最后活跃时间 epoch ms（字典: last_activity_at）
+  string status = 7;             // active/archived/deleted（字典: status 枚举）
+  string tenant_id = 8;          // 租户标识（字典通用字段）
+  int64 created_at = 9;          // 创建时间（字典通用字段）
+  int64 updated_at = 10;         // 更新时间（字典通用字段）
+  int32 version = 11;            // 乐观锁版本号（字典通用字段）
+}
+
+// ── 数据字典 §3.1 Message 模型 ──
+message Message {
+  string id = 1;                 // UUID v7（字典: id）
+  string session_id = 2;         // 所属会话（字典: session_id）
+  string role = 3;               // user/assistant/system/tool（字典: role 枚举）
+  string content = 4;            // 内容 markdown（字典: content）
+  string intent = 5;             // 意图标签（字典: intent, P2 起）
+  double confidence = 6;         // 意图置信度 0-1（字典: confidence）
+  repeated Citation source_citations = 7;  // 来源标注（字典: source_citations, 感知可信度呈现）
+  int32 latency_ms = 8;          // 生成耗时（字典: latency_ms）
+  string source = 9;             // user/system/channel/llm/knowledge（字典通用 source 枚举）
+  int64 created_at = 10;         // 创建时间（字典通用字段）
+}
+
+message Citation {
+  string source = 1;             // 来源类型（实时采集/知识库/模型生成）
+  string ref_id = 2;             // 引用 ID（doc/chunk/channel）
+  string title = 3;              // 来源标题
+  double confidence = 4;         // 置信度 0-1
+  int64 collected_at = 5;        // 采集时间 epoch ms
+}
+
+// ── 请求/响应 ──
+message CreateSessionRequest {
+  string agent_id = 1;
+  string tenant_id = 2;
+}
+
+message CreateSessionResponse {
+  Session session = 1;
+}
+
+message AppendMessageRequest {
+  string session_id = 1;
+  string role = 2;
+  string content = 3;
+  string tenant_id = 4;
+}
+
+message AppendMessageResponse {
+  Message message = 1;
+  int32 message_count = 2;       // 追加后消息总数
+}
+
+message GetSessionRequest {
+  string session_id = 1;
+  string tenant_id = 2;
+}
+
+message GetSessionResponse {
+  Session session = 1;
+}
+
+message ListMessagesRequest {
+  string session_id = 1;
+  string tenant_id = 2;
+  int32 limit = 3;               // 分页大小（默认 50）
+  string cursor = 4;             // 分页游标
+}
+
+message ListMessagesResponse {
+  repeated Message messages = 1;
+  string next_cursor = 2;
+}
+
+message UpdateSessionStatusRequest {
+  string session_id = 1;
+  string status = 2;             // archived/deleted
+  string tenant_id = 3;
+  int32 expected_version = 4;    // 乐观锁（字典: version）
+}
+
+message UpdateSessionStatusResponse {
+  Session session = 1;
+}
