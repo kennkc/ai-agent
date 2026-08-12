@@ -1,15 +1,20 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Contract Checker · 数据字典 ↔ proto 双向校验（E2 契约工具化）
+Contract Checker · 数据字典 ↔ proto 双向校验 + work-platform 契约分层校验（E2/W2/X3）
 ================================================================
-用途: 校验 proto 契约字段与《D5-2 核心数据字典》字段定义一致，防止字段漂移。
+用途: 校验 proto 契约字段与《D5-2 核心数据字典》字段定义一致，防止字段漂移；
+      校验《work-platform-bff-openapi.yaml》端点分层（P1 启用层 / 阶段层）完整性。
 
-运行: python scripts/contract-check.py [--proto-dir proto] [--dict-md 字典路径]
+运行:
+  python scripts/contract-check.py [--proto-dir proto]
+  python scripts/contract-check.py --work-platform [--openapi <yaml路径>]
+
 规则:
   1. proto message 字段名必须为 snake_case（D5-2 命名规则）
   2. 通用字段 (id/tenant_id/created_at/updated_at/version/status/source) 必须全模型覆盖
-  3. 校验结果输出报告，exit code 0=通过 1=有漂移（CI 门禁用）
+  3. work-platform 端点必须包含 P1 启用层全部端点；路径命名 snake_case（X3 分层校验）
+  4. 校验结果输出报告，exit code 0=通过 1=有漂移（CI 门禁用）
 """
 import argparse
 import os
@@ -20,11 +25,32 @@ import sys
 COMMON_FIELDS = ["id", "tenant_id", "created_at", "updated_at", "version"]
 # D5-2 命名规则：snake_case（允许下划线，禁止驼峰/大写）
 SNAKE_RE = re.compile(r"^[a-z][a-z0-9_]*$")
+# work-platform 路径段命名：小写字母/数字/下划线/连字符/花括号
+PATH_SEG_RE = re.compile(r"^[a-z0-9_{}.-]+$")
 
 # 预期核心模型 → proto 文件映射（校验目标）
 MODEL_EXPECT = {
     "Session":  {"file": "session/v1/session.proto", "extra": ["agent_id", "title", "message_count", "last_activity_at", "model"]},
     "Message":  {"file": "session/v1/session.proto", "extra": ["session_id", "role", "content", "intent", "confidence", "source_citations", "latency_ms", "source"]},
+}
+
+# X3 · work-platform 契约分层：P1 启用层（数据源已就绪，P1 必须可接入）
+WP_P1_ENDPOINTS = {
+    "/overview", "/vitals", "/tasks", "/tasks/{task_id}",
+    "/chat/{task_id}", "/results/{task_id}", "/search", "/preferences",
+}
+# 阶段层端点（P2-P8 随阶段点亮）
+WP_STAGE_ENDPOINTS = {
+    "/organs", "/brain/{decision_id}", "/evolution", "/collab/{domain_id}",
+    "/experts", "/experts/{expert_id}", "/skills", "/skills/{skill_id}/install",
+    "/connectors", "/connectors/{connector_id}/authorize",
+    "/automations", "/automations/{automation_id}",
+    "/cases", "/cases/{case_id}/reuse",
+    "/approvals", "/approvals/{approval_id}/decision",
+}
+WP_WS_EVENTS = {
+    "wp.task.progress", "wp.approval.pending", "wp.vitals.update",
+    "wp.collab.heartbeat", "wp.collab.result", "wp.notification",
 }
 
 
@@ -43,47 +69,103 @@ def parse_proto_messages(path):
     return messages
 
 
+def parse_openapi_paths(path):
+    """行解析提取 OpenAPI 端点与 WS 事件（避免 yaml 依赖）"""
+    paths, ws_events = set(), set()
+    in_ws = False
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            s = line.strip()
+            if s == "ws:":
+                in_ws = True
+                continue
+            if in_ws:
+                m = re.search(r"name:\s*([\w.]+)", s)
+                if m and s.startswith("-"):
+                    ws_events.add(m.group(1))
+                continue
+            m = re.match(r"^  (/[a-z0-9_{}/.-]+):\s*$", line)
+            if m:
+                paths.add(m.group(1))
+    return paths, ws_events
+
+
 def check_model(messages, model, spec):
     if model not in messages:
         return [f"FAIL 模型缺失: {model} 未在 {spec['file']} 中定义"]
     fields = messages[model]
     issues = []
-    # 1) 通用字段
     for cf in COMMON_FIELDS:
         if cf not in fields:
             issues.append(f"WARN 通用字段缺失: {model}.{cf}（若为精简场景可忽略，需字典登记）")
-    # 2) 模型特有字段
     for ef in spec.get("extra", []):
         if ef not in fields:
             issues.append(f"FAIL 字典字段缺失: {model}.{ef}")
-    # 3) 命名规则
     for fld in fields:
         if not SNAKE_RE.match(fld):
             issues.append(f"FAIL 命名违规: {model}.{fld} 非 snake_case")
     return issues
 
 
+def check_work_platform(openapi_path):
+    """X3 · work-platform 契约分层校验"""
+    if not os.path.exists(openapi_path):
+        return [f"FAIL 契约文件缺失: {openapi_path}"]
+    paths, ws_events = parse_openapi_paths(openapi_path)
+    issues = []
+    # 1) P1 启用层必须全覆盖
+    for ep in sorted(WP_P1_ENDPOINTS):
+        if ep not in paths:
+            issues.append(f"FAIL P1 层端点缺失: {ep}")
+    # 2) 阶段层端点抽查
+    for ep in sorted(WP_STAGE_ENDPOINTS):
+        if ep not in paths:
+            issues.append(f"WARN 阶段层端点缺失: {ep}（若尚未开发可忽略，需登记）")
+    # 3) 路径命名规范
+    for ep in paths:
+        for seg in ep.strip("/").split("/"):
+            if not PATH_SEG_RE.match(seg):
+                issues.append(f"FAIL 路径命名违规: {seg}（应小写 snake_case）")
+    # 4) WS 事件完整性
+    for ev in sorted(WP_WS_EVENTS):
+        if ev not in ws_events:
+            issues.append(f"FAIL WS 事件缺失: {ev}")
+    print(f"扫描端点: {len(paths)} 个 | WS 事件: {len(ws_events)} 个 | P1 层: {len(WP_P1_ENDPOINTS)} | 阶段层: {len(WP_STAGE_ENDPOINTS)}")
+    return issues
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--proto-dir", default="proto", help="proto 根目录")
+    ap.add_argument("--work-platform", action="store_true", help="校验 work-platform 契约分层（X3）")
+    ap.add_argument("--openapi", default="", help="work-platform OpenAPI 契约路径")
     args = ap.parse_args()
 
     all_issues = []
-    proto_messages = {}
-    for root, _, files in os.walk(args.proto_dir):
-        for fn in files:
-            if fn.endswith(".proto"):
-                proto_messages.update(parse_proto_messages(os.path.join(root, fn)))
-
-    for model, spec in MODEL_EXPECT.items():
-        all_issues += check_model(proto_messages, model, spec)
-
     print("=" * 60)
-    print("Contract Check · 数据字典 ↔ proto 双向校验")
-    print("=" * 60)
-    print(f"扫描 proto 文件: {len(proto_messages)} 个 message 定义")
+
+    if args.work_platform:
+        print("Contract Check · work-platform BFF 契约分层校验（X3）")
+        print("=" * 60)
+        openapi = args.openapi or os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "..", "AI知识库", "任务指挥中心知识库", "核心知识", "AGENT_CONTEXT", "D2-过渡准备", "work-platform-bff-openapi.yaml",
+        )
+        all_issues = check_work_platform(openapi)
+    else:
+        print("Contract Check · 数据字典 ↔ proto 双向校验")
+        print("=" * 60)
+        proto_messages = {}
+        for root, _, files in os.walk(args.proto_dir):
+            for fn in files:
+                if fn.endswith(".proto"):
+                    proto_messages.update(parse_proto_messages(os.path.join(root, fn)))
+        print(f"扫描 proto 文件: {len(proto_messages)} 个 message 定义")
+        for model, spec in MODEL_EXPECT.items():
+            all_issues += check_model(proto_messages, model, spec)
+
     if not all_issues:
-        print("✅ 全部通过：字典字段完整、命名符合规范")
+        print("✅ 全部通过：契约完整、命名符合规范")
         return 0
     for i in all_issues:
         print(f"  {i}")
