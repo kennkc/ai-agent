@@ -33,6 +33,8 @@ check_port "Qdrant" 6333
 check_port "NATS" 4222
 check_port "Nacos" 8848
 check_port "MinIO" 9000
+check_port "Kafka" 9092
+check_port "Jaeger" 16686
 
 echo ""
 echo "[Java 服务]"

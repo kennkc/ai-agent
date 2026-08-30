@@ -8,6 +8,7 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        ip: 127.0.0.1
     gateway:
       discovery:
         locator:
@@ -33,6 +34,13 @@ management:
   endpoint:
     health:
       show-details: always
+  # R1-06 链路追踪：OTLP 导出至 Jaeger
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
 
 logging:
   level:

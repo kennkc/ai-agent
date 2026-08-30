@@ -86,8 +86,41 @@ services:
       - minio-data:/data
     # 极简镜像无 curl，健康由 scripts/healthcheck.sh 端口检查兜底
 
+  # ── Phase 1 新增：链路追踪（R1-07）──
+  jaeger:
+    image: jaegertracing/all-in-one:1.57
+    container_name: lifeform-jaeger
+    ports:
+      - "16686:16686"   # Jaeger UI
+      - "4317:4317"     # OTLP gRPC
+      - "4318:4318"     # OTLP HTTP
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+
+  # ── Phase 1 新增：异步事件流 Kafka（R1-05）──
+  kafka:
+    image: apache/kafka:3.7.0
+    container_name: lifeform-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://127.0.0.1:9092
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+    volumes:
+      - kafka-data:/tmp/kraft-combined-logs
+
 volumes:
   redis-data:
   pg-data:
   qdrant-data:
   minio-data:
+  kafka-data:
