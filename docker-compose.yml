@@ -35,18 +35,14 @@ services:
       retries: 5
 
   qdrant:
-    image: qdrant/qdrant:v1.9
+    image: qdrant/qdrant:v1.12.4
     container_name: lifeform-qdrant
     ports:
       - "6333:6333"
       - "6334:6334"
     volumes:
       - qdrant-data:/qdrant/storage
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:6333/healthz"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
+    # 极简镜像无 curl/wget，健康由 scripts/healthcheck.sh 端口检查兜底
 
   nats:
     image: nats:2.10-alpine
@@ -88,11 +84,7 @@ services:
     command: server /data --console-address ":9001"
     volumes:
       - minio-data:/data
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+    # 极简镜像无 curl，健康由 scripts/healthcheck.sh 端口检查兜底
 
 volumes:
   redis-data:

@@ -7,7 +7,8 @@ echo "=== Agent-Lifeform 健康检查 ==="
 check_http() {
     local name="$1" url="$2" expect="$3"
     local code
-    code=$(curl -s -o /dev/null -w "%{http_code}" --max-time 5 "$url" 2>/dev/null || echo "000")
+    code=$(curl -s --noproxy "*" -o NUL -w "%{http_code}" --max-time 5 "$url" 2>/dev/null)
+    [ -z "$code" ] && code="000"
     if [ "$code" = "$expect" ]; then
         echo "  ✅ $name: HTTP $code"
     else
