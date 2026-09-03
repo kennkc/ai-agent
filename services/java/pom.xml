@@ -61,6 +61,17 @@
     </dependencyManagement>
 
     <build>
+        <!-- os-maven-plugin 必须在 build 级声明为扩展（extension），
+             Maven 才会在构建早期加载其 MavenLifecycleParticipant，
+             从而注入 os.detected.classifier 等属性供 protobuf-maven-plugin 使用。
+             注意：pluginManagement 中的 <extensions> 声明会被 Maven 忽略。 -->
+        <extensions>
+            <extension>
+                <groupId>kr.motd.maven</groupId>
+                <artifactId>os-maven-plugin</artifactId>
+                <version>${os-maven-plugin.version}</version>
+            </extension>
+        </extensions>
         <pluginManagement>
             <plugins>
                 <plugin>
