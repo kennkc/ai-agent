@@ -20,9 +20,11 @@
     <description>AI Agent 生命体架构 - Java 核心服务父工程</description>
 
     <modules>
+        <module>proto-contracts</module>
         <module>gateway-service</module>
         <module>session-manager</module>
         <module>sense-service</module>
+        <module>body-service</module>
     </modules>
 
     <properties>
@@ -93,3 +95,5 @@
         </pluginManagement>
     </build>
 </project>
+
+

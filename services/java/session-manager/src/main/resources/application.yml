@@ -1,6 +1,15 @@
 server:
   port: 8081
 
+app:
+  nlp:
+    base-url: ${NLP_BASE_URL:http://127.0.0.1:8000}
+  body:
+    base-url: ${BODY_BASE_URL:http://127.0.0.1:8083}
+
+grpc:
+  port: ${GRPC_PORT:9092}
+
 spring:
   application:
     name: session-manager
@@ -8,7 +17,6 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
-        ip: 127.0.0.1
   data:
     redis:
       host: ${REDIS_HOST:127.0.0.1}
@@ -22,7 +30,6 @@ management:
   endpoint:
     health:
       show-details: always
-  # R1-06 链路追踪：OTLP 导出至 Jaeger
   tracing:
     sampling:
       probability: 1.0

@@ -1,0 +1,443 @@
+openapi: 3.0.3
+info:
+  title: Work Platform BFF API Contract (Agent-Lifeform)
+  version: 1.0.0
+  description: >
+    工作平台（统一工作台）BFF 接口契约（W2 扩展）。
+    覆盖 14 模块：总览/生命体征/决策沙盘/五感/进化/协作总线/任务/对话/专家/技能/连接器/自动化/灵感/审批。
+    Mock 数据必须与该契约结构完全一致 → 切换零 UI 改动（R-C09 延续）。
+    设计依据：《工作平台功能设计文档》v1.0 §6。
+servers:
+  - url: /api/wp
+    description: Work Platform BFF 聚合层
+security:
+  - bearerAuth: []
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  headers:
+    X-Tenant-Id:
+      schema: { type: string }
+      description: 租户标识（P7 后强制）
+  schemas:
+    ApiResponse:
+      type: object
+      required: [code, data, msg]
+      properties:
+        code: { type: integer, example: 0 }
+        data: { type: object }
+        msg: { type: string, example: ok }
+    TaskState:
+      type: string
+      enum: [pending, running, done, failed, archived]
+    Task:
+      type: object
+      required: [task_id, title, type, state, progress, priority]
+      properties:
+        task_id: { type: string, example: T-1042 }
+        title: { type: string, example: 金融竞品调研报告 }
+        type: { type: string, example: expert_team }
+        state: { $ref: '#/components/schemas/TaskState' }
+        progress: { type: integer, example: 62 }
+        agent: { type: string, example: 团长+5专家 }
+        priority: { type: string, enum: [P0, P1, P2] }
+        created_at: { type: integer, format: int64, example: 1786462920000 }
+    ExpertProfile:
+      type: object
+      required: [expert_id, domain, persona, tool_whitelist, state]
+      properties:
+        expert_id: { type: string, example: E-01 }
+        domain: { type: string, example: 信息调研 }
+        persona: { type: string }
+        methodology: { type: string }
+        tool_whitelist: { type: array, items: { type: string } }
+        output_schema: { type: object }
+        state: { type: string, enum: [active, deprecated, suspended] }
+    Skill:
+      type: object
+      required: [skill_id, name, category, version, state]
+      properties:
+        skill_id: { type: string, example: S-101 }
+        name: { type: string, example: 深度调研 }
+        category: { type: string }
+        version: { type: string, example: 2.1.0 }
+        installs: { type: integer, example: 128 }
+        rating: { type: number, example: 4.8 }
+        state: { type: string, enum: [installed, available] }
+    Connector:
+      type: object
+      required: [connector_id, name, protocol, state]
+      properties:
+        connector_id: { type: string, example: C-01 }
+        name: { type: string, example: 腾讯文档 }
+        protocol: { type: string, example: MCP }
+        use: { type: string }
+        state: { type: string, enum: [online, pending_auth, offline] }
+        latency: { type: integer, example: 42 }
+        calls: { type: integer, example: 1260 }
+    Automation:
+      type: object
+      required: [automation_id, name, cron, state]
+      properties:
+        automation_id: { type: string, example: A-01 }
+        name: { type: string, example: 科创板行情摘要 }
+        cron: { type: string, example: 0 9 * * 1-5 }
+        action: { type: string }
+        state: { type: string, enum: [active, paused, failed] }
+        last_run: { type: string }
+        next_run: { type: string }
+        push: { type: array, items: { type: string } }
+    Case:
+      type: object
+      required: [case_id, title, category]
+      properties:
+        case_id: { type: string, example: C-01 }
+        title: { type: string, example: 行业竞品调研报告 }
+        category: { type: string }
+        reuse_count: { type: integer, example: 86 }
+        experts: { type: string }
+        skills: { type: string }
+    Approval:
+      type: object
+      required: [approval_id, action, risk_level, applicant, state]
+      properties:
+        approval_id: { type: string, example: A-3021 }
+        action: { type: string }
+        risk_level: { type: string, enum: [L1, L2, L3, L4] }
+        applicant: { type: string }
+        context: { type: object }
+        state: { type: string, enum: [pending, approved, rejected, expired] }
+        decided_by: { type: string }
+        at: { type: string }
+    CollabDomain:
+      type: object
+      required: [domain_id, task_id, mode, agents, artifacts, gates]
+      properties:
+        domain_id: { type: string, example: collab-20260812-0042 }
+        task_id: { type: string, example: T-1042 }
+        mode: { type: string, enum: [fanout, pipeline, negotiation] }
+        agents: { type: array, items: { type: object } }
+        msg_flow: { type: array, items: { type: string } }
+        artifacts: { type: array, items: { $ref: '#/components/schemas/Artifact' } }
+        gates: { type: array, items: { type: object } }
+    Artifact:
+      type: object
+      required: [artifact_id, task_id, kind, title, conf_score]
+      properties:
+        artifact_id: { type: string, example: a-8810 }
+        task_id: { type: string }
+        kind: { type: string, enum: [document, spreadsheet, slide, image, dataset, code, report] }
+        title: { type: string }
+        source_agent: { type: string }
+        conf_score: { type: number, example: 0.94 }
+        provenance: { type: array, items: { type: string } }
+        version: { type: string }
+    VitalSigns:
+      type: object
+      required: [heart_rate, body_temp, blood_pressure, blood_oxygen, immune_index]
+      properties:
+        heart_rate: { type: object }
+        body_temp: { type: object }
+        blood_pressure: { type: object }
+        blood_oxygen: { type: object }
+        immune_index: { type: object }
+    DecisionChain:
+      type: object
+      required: [decision_id, chain, confidence]
+      properties:
+        decision_id: { type: string, example: d-33921 }
+        chain:
+          type: array
+          items:
+            type: object
+            required: [step, model, latency, confidence]
+            properties:
+              step: { type: string }
+              model: { type: string }
+              detail: { type: string }
+              latency: { type: string }
+              confidence: { type: number }
+              io: { type: string }
+        confidence: { type: number, example: 0.92 }
+    EvolutionData:
+      type: object
+      properties:
+        feedback_up: { type: integer }
+        feedback_down: { type: integer }
+        feedback_retry: { type: integer }
+        hallucination_rate: { type: number }
+        satisfaction: { type: number }
+        healings:
+          type: array
+          items:
+            type: object
+            properties:
+              doc: { type: string }
+              action: { type: string }
+              reason: { type: string }
+              at: { type: string }
+
+paths:
+  /overview:
+    get:
+      summary: 总览聚合（体征摘要+4 指标卡+成长史）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /vitals:
+    get:
+      summary: 生命体征实时（D1）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /organs:
+    get:
+      summary: 器官健康报告（D2，M1 后启用）
+      responses:
+        '200':
+          description: OK
+  /brain/{decision_id}:
+    get:
+      summary: 决策链回放（D5，读 IN3 AuditLog）
+      parameters:
+        - { name: decision_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /evolution:
+    get:
+      summary: 进化视图（R-C07）
+      responses:
+        '200':
+          description: OK
+  /collab/{domain_id}:
+    get:
+      summary: 协作域详情（MC）
+      parameters:
+        - { name: domain_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+  /tasks:
+    get:
+      summary: 任务列表（WB-01）
+      parameters:
+        - { name: state, in: query, required: false, schema: { $ref: '#/components/schemas/TaskState' } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+    post:
+      summary: 创建任务（WB-01）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [title, type]
+              properties:
+                title: { type: string }
+                type: { type: string }
+                expert_id: { type: string }
+      responses:
+        '201':
+          description: Created
+  /tasks/{task_id}:
+    get:
+      summary: 任务详情（WB-01）
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /chat/{task_id}:
+    get:
+      summary: 任务对话消息（WB-02）
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /results/{task_id}:
+    get:
+      summary: 结果工作区产物（WB-02，Artifact 列表）
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /experts:
+    get:
+      summary: 专家列表（WB-03）
+      responses:
+        '200':
+          description: OK
+  /experts/{expert_id}:
+    get:
+      summary: 专家详情（含 output_schema）
+      parameters:
+        - { name: expert_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /skills:
+    get:
+      summary: 技能市场列表（WB-05）
+      responses:
+        '200':
+          description: OK
+  /skills/{skill_id}/install:
+    post:
+      summary: 安装技能（WB-05）
+      parameters:
+        - { name: skill_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /connectors:
+    get:
+      summary: 连接器列表（WB-06）
+      responses:
+        '200':
+          description: OK
+  /connectors/{connector_id}/authorize:
+    post:
+      summary: 连接器授权（WB-06，OAuth 流）
+      parameters:
+        - { name: connector_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /automations:
+    get:
+      summary: 自动化列表（WB-07）
+      responses:
+        '200':
+          description: OK
+    post:
+      summary: 创建自动化任务（WB-07）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, cron, action]
+              properties:
+                name: { type: string }
+                cron: { type: string }
+                action: { type: string }
+                push: { type: array, items: { type: string } }
+      responses:
+        '201':
+          description: Created
+  /automations/{automation_id}:
+    patch:
+      summary: 启停/修改自动化（WB-07）
+      parameters:
+        - { name: automation_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /cases:
+    get:
+      summary: 灵感案例列表（WB-08）
+      responses:
+        '200':
+          description: OK
+  /cases/{case_id}/reuse:
+    post:
+      summary: 案例"做同款"（WB-08）
+      parameters:
+        - { name: case_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '201':
+          description: 已创建任务
+  /approvals:
+    get:
+      summary: 审批队列（IN4）
+      parameters:
+        - { name: state, in: query, required: false, schema: { type: string, enum: [pending, approved, rejected, expired] } }
+      responses:
+        '200':
+          description: OK
+  /approvals/{approval_id}/decision:
+    post:
+      summary: 审批决策（IN4，L4 双人复核）
+      parameters:
+        - { name: approval_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [decision]
+              properties:
+                decision: { type: string, enum: [approved, rejected] }
+                reason: { type: string }
+      responses:
+        '200':
+          description: OK
+  /search:
+    get:
+      summary: 全局搜索（W4，任务/知识/技能/案例）
+      parameters:
+        - { name: q, in: query, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /preferences:
+    get:
+      summary: 偏好设置（W4）
+      responses:
+        '200':
+          description: OK
+    put:
+      summary: 更新偏好设置（W4）
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                theme: { type: string, enum: [light, dark, system] }
+                default_model: { type: string }
+                notification_prefs: { type: object }
+      responses:
+        '200':
+          description: OK
+
+ws:
+  events:
+    - { name: wp.task.progress, direction: server_to_client, trigger: 任务进度变化 }
+    - { name: wp.approval.pending, direction: server_to_client, trigger: 新审批请求 }
+    - { name: wp.vitals.update, direction: server_to_client, trigger: 体征变化/异常 }
+    - { name: wp.collab.heartbeat, direction: server_to_client, trigger: Agent 心跳 }
+    - { name: wp.collab.result, direction: server_to_client, trigger: 团员结果回传 }
+    - { name: wp.notification, direction: server_to_client, trigger: 自愈/任务完成 }

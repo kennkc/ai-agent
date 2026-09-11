@@ -20,6 +20,9 @@ import argparse
 import os
 import re
 import sys
+from pathlib import Path
+
+REPO_ROOT = Path(__file__).resolve().parents[1]
 
 # D5-2 通用字段（所有模型必须包含，status/source 允许枚举差异）
 COMMON_FIELDS = ["id", "tenant_id", "created_at", "updated_at", "version"]
@@ -136,7 +139,7 @@ def check_work_platform(openapi_path):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("--proto-dir", default="proto", help="proto 根目录")
+    ap.add_argument("--proto-dir", default=str(REPO_ROOT / "proto"), help="proto 根目录")
     ap.add_argument("--work-platform", action="store_true", help="校验 work-platform 契约分层（X3）")
     ap.add_argument("--openapi", default="", help="work-platform OpenAPI 契约路径")
     args = ap.parse_args()
@@ -149,7 +152,7 @@ def main():
         print("=" * 60)
         openapi = args.openapi or os.path.join(
             os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "..", "AI知识库", "任务指挥中心知识库", "核心知识", "AGENT_CONTEXT", "D2-过渡准备", "work-platform-bff-openapi.yaml",
+            "contracts", "work-platform-bff-openapi.yaml",
         )
         all_issues = check_work_platform(openapi)
     else:

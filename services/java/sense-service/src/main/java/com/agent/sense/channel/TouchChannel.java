@@ -1,41 +1,32 @@
 package com.agent.sense.channel;
 
-// DEBT-006: 触觉单渠道（VS1/P2 简化版）— 触发点: P5 扩展五感官多渠道
-
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Component;
 
+import java.net.InetAddress;
 import java.net.URI;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
+import java.util.Arrays;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+import java.util.stream.Collectors;
 
-/**
- * 触觉渠道：URL/文件文本采集（R2-02）
- * Phase 0 提供最小实现，Phase 2 完善标准化与质检
- */
 @Slf4j
 @Component
 public class TouchChannel implements SenseChannel {
+    private static final int MAX_RESPONSE_BYTES = 2 * 1024 * 1024;
+    private final HttpClient httpClient = HttpClient.newBuilder().connectTimeout(Duration.ofSeconds(5)).followRedirects(HttpClient.Redirect.NEVER).build();
+    private final Set<String> allowedHosts = parseAllowedHosts(System.getenv("SENSE_ALLOWED_HOSTS"));
 
-    private final HttpClient httpClient = HttpClient.newBuilder()
-            .connectTimeout(Duration.ofSeconds(5))
-            .followRedirects(HttpClient.Redirect.NORMAL)
-            .build();
-
-    @Override
-    public ChannelType type() {
-        return ChannelType.TOUCH;
-    }
-
-    @Override
-    public boolean register(Map<String, String> config) {
-        log.info("TouchChannel 注册成功: {}", config);
-        return true;
-    }
+    @Override public ChannelType type() { return ChannelType.TOUCH; }
+    @Override public boolean register(Map<String, String> config) { return true; }
+    @Override public boolean healthy() { return true; }
+    @Override public void close() {}
 
     @Override
     public CollectResult collect(CollectRequest request) {
@@ -46,51 +37,44 @@ public class TouchChannel implements SenseChannel {
             String content = fetchContent(request.getDataSource());
             result.setContent(content);
             result.setItemCount(content.isEmpty() ? 0 : 1);
-            result.setQualityScore(1.0); // Phase 2 接入六维质检
-            result.setAccepted(true);
+            result.setQualityScore(content.isEmpty() ? 0 : 1.0);
+            result.setAccepted(!content.isEmpty());
         } catch (Exception e) {
-            log.warn("TouchChannel 采集失败: {}", e.getMessage());
-            result.setItemCount(0);
-            result.setQualityScore(0);
-            result.setAccepted(false);
+            log.warn("TouchChannel collection rejected: {}", e.getMessage());
+            result.setItemCount(0); result.setQualityScore(0); result.setAccepted(false);
         }
         return result;
     }
 
-    @Override
-    public boolean healthy() {
-        return true;
-    }
-
-    @Override
-    public void close() {
-        log.info("TouchChannel 已关闭");
-    }
-
     private String fetchContent(String dataSource) throws Exception {
-        if (dataSource == null || dataSource.isBlank()) {
-            throw new IllegalArgumentException("dataSource 不能为空");
-        }
-        // 支持 URL 或纯文本
-        if (dataSource.startsWith("http://") || dataSource.startsWith("https://")) {
-            HttpRequest request = HttpRequest.newBuilder()
-                    .uri(URI.create(dataSource))
-                    .timeout(Duration.ofSeconds(10))
-                    .GET()
-                    .build();
-            HttpResponse<String> response = httpClient.send(request,
-                    HttpResponse.BodyHandlers.ofString());
-            if (response.statusCode() != 200) {
-                throw new RuntimeException("HTTP " + response.statusCode());
-            }
-            return stripHtml(response.body());
-        }
-        return dataSource; // 纯文本直接返回
+        if (dataSource == null || dataSource.isBlank()) throw new IllegalArgumentException("dataSource must not be blank");
+        if (!dataSource.startsWith("http://") && !dataSource.startsWith("https://")) return dataSource;
+        URI uri = URI.create(dataSource);
+        assertPublicHttpUrl(uri);
+        HttpRequest request = HttpRequest.newBuilder().uri(uri).timeout(Duration.ofSeconds(10)).GET().build();
+        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+        if (response.statusCode() < 200 || response.statusCode() >= 300) throw new IllegalStateException("HTTP " + response.statusCode());
+        if (response.body().length > MAX_RESPONSE_BYTES) throw new IllegalArgumentException("response exceeds max size");
+        return stripHtml(new String(response.body(), StandardCharsets.UTF_8));
     }
 
-    private String stripHtml(String html) {
-        return html.replaceAll("<[^>]+>", " ")
-                .replaceAll("\\s+", " ")
-                .trim();
+    void assertPublicHttpUrl(URI uri) throws Exception {
+        String scheme = uri.getScheme();
+        String host = uri.getHost();
+        if (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme)) throw new IllegalArgumentException("only http/https URLs are allowed");
+        if (host == null || host.isBlank()) throw new IllegalArgumentException("URL host is required");
+        if (!allowedHosts.isEmpty() && !allowedHosts.contains(host.toLowerCase())) throw new IllegalArgumentException("host is not in SENSE_ALLOWED_HOSTS");
+        for (InetAddress address : InetAddress.getAllByName(host)) {
+            if (address.isAnyLocalAddress() || address.isLoopbackAddress() || address.isLinkLocalAddress() || address.isSiteLocalAddress() || address.isMulticastAddress()) {
+                throw new IllegalArgumentException("private or local network targets are forbidden");
+            }
+        }
     }
+
+    private static Set<String> parseAllowedHosts(String value) {
+        if (value == null || value.isBlank()) return Set.of();
+        return Arrays.stream(value.split(",")).map(String::trim).filter(s -> !s.isBlank()).map(String::toLowerCase).collect(Collectors.toUnmodifiableSet());
+    }
+
+    private String stripHtml(String html) { return html.replaceAll("<[^>]+>", " ").replaceAll("\\s+", " ").trim(); }
 }

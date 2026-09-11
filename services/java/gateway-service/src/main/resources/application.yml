@@ -1,6 +1,15 @@
 server:
   port: 8080
 
+app:
+  auth:
+    secret: ${JWT_SECRET:}
+    token-ttl: PT24H
+    dev-token-endpoint-enabled: ${DEV_TOKEN_ENDPOINT_ENABLED:false}
+
+grpc:
+  port: ${GRPC_PORT:9091}
+
 spring:
   application:
     name: gateway-service
@@ -8,23 +17,28 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
-        ip: 127.0.0.1
     gateway:
       discovery:
         locator:
           enabled: true
           lower-case-service-id: true
       routes:
-        # 会话管理服务路由
         - id: session-manager
           uri: lb://session-manager
           predicates:
             - Path=/api/session/**
-        # 感官采集服务路由
         - id: sense-service
           uri: lb://sense-service
           predicates:
             - Path=/api/sense/**
+        - id: nlp-service
+          uri: lb://nlp-service
+          predicates:
+            - Path=/api/nlp/**
+        - id: body-service
+          uri: lb://body-service
+          predicates:
+            - Path=/api/body/**
 
 management:
   endpoints:
@@ -34,7 +48,6 @@ management:
   endpoint:
     health:
       show-details: always
-  # R1-06 链路追踪：OTLP 导出至 Jaeger
   tracing:
     sampling:
       probability: 1.0

@@ -7,6 +7,7 @@ stages:
   - package
 
 variables:
+  PYTHONIOENCODING: "utf-8"
   MAVEN_OPTS: "-Dmaven.repo.local=$CI_PROJECT_DIR/.m2/repository"
 
 cache:
@@ -41,6 +42,13 @@ java-test:
     - cd services/java
     - mvn test -q
   coverage: '/Total.*?([0-9]{1,3})%/'
+
+contract-check:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - python scripts/contract-check.py
+    - python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
 
 # ── 阶段3: 打包 ──
 java-package:

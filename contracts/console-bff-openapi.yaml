@@ -1,0 +1,286 @@
+openapi: 3.0.3
+info:
+  title: Console BFF API Contract (Agent-Lifeform)
+  version: 1.0.0
+  description: >
+    Lifeform Console 统一数据适配层（ApiDataSource）真实接口契约。
+    由《Console-BFF接口契约》(D2-3) 文档态转可执行 OpenAPI 格式（E2 工具化）。
+    Mock 数据必须与该契约结构完全一致 → 切换零 UI 改动（R-C09）。
+servers:
+  - url: /api/console
+    description: Console BFF 聚合层
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+  headers:
+    X-Tenant-Id:
+      schema:
+        type: string
+      description: 租户标识（P7 后强制）
+  schemas:
+    ApiResponse:
+      type: object
+      required: [code, data, msg]
+      properties:
+        code:
+          type: integer
+          example: 0
+        data:
+          type: object
+        msg:
+          type: string
+          example: ok
+    ServiceStatus:
+      type: object
+      required: [name, port, status]
+      properties:
+        name: { type: string, example: gateway-service }
+        port: { type: integer, example: 8080 }
+        status: { type: string, enum: [UP, DOWN, DEGRADED] }
+    IntentDist:
+      type: object
+      properties:
+        intent: { type: string, example: 知识问答 }
+        count: { type: integer, example: 58 }
+    ChannelStatus:
+      type: object
+      properties:
+        channel: { type: string, enum: [VISUAL, AUDIO, TOUCH, NOSE, TASTE] }
+        status: { type: string, enum: [UP, DEGRADED, DOWN] }
+    ChatRequest:
+      type: object
+      required: [session_id, content]
+      properties:
+        session_id: { type: string, example: sess-001 }
+        content: { type: string, example: 今天天气如何 }
+    ChatReply:
+      type: object
+      properties:
+        message_id: { type: string }
+        content: { type: string }
+        intent: { type: string }
+        confidence: { type: number, format: double }
+        source_citations:
+          type: array
+          items:
+            type: object
+            properties:
+              source: { type: string, enum: [realtime, knowledge, llm] }
+              ref_id: { type: string }
+              title: { type: string }
+              confidence: { type: number }
+              collected_at: { type: integer, format: int64 }
+    WsEvent:
+      type: object
+      properties:
+        type:
+          type: string
+          enum: [session_update, collect_update, dag_update, feedback_update, health_update]
+        payload:
+          type: object
+        ts:
+          type: integer
+          format: int64
+paths:
+  /overview:
+    get:
+      summary: 系统总览（⚙️系统视图）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  services:
+                    type: array
+                    items: { $ref: '#/components/schemas/ServiceStatus' }
+                  cpu: { type: number, example: 46 }
+                  memory: { type: number, example: 58 }
+                  llm_cost_today: { type: number, example: 1280.5 }
+                  cost_trend:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string, example: '2026-08-02' }
+                        cost: { type: number }
+  /brain:
+    get:
+      summary: 大脑视图（🧠）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  active_sessions: { type: integer, example: 42 }
+                  intent_accuracy: { type: number, example: 91.5 }
+                  intent_dist:
+                    type: array
+                    items: { $ref: '#/components/schemas/IntentDist' }
+                  task_queue:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        task_id: { type: string, example: T-1024 }
+                        name: { type: string }
+                        status: { type: string, enum: [PENDING, RUNNING, SUCCESS, FAILED] }
+                  session_trend:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string }
+                        count: { type: integer }
+  /sense:
+    get:
+      summary: 感官视图（👁️）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  channels:
+                    type: array
+                    items: { $ref: '#/components/schemas/ChannelStatus' }
+                  collect_rate: { type: integer, example: 186 }
+                  quality_pass_rate: { type: number, example: 96.2 }
+                  rate_trend:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        time: { type: string, example: '10:00' }
+                        count: { type: integer }
+  /body:
+    get:
+      summary: 躯体视图（📚）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  doc_count: { type: integer, example: 1284 }
+                  chunk_count: { type: integer, example: 98230 }
+                  storage_tier_dist:
+                    type: object
+                    properties:
+                      hot: { type: integer }
+                      warm: { type: integer }
+                      cold: { type: integer }
+                  retrieve_p99_ms: { type: integer, example: 286 }
+                  hit_rate: { type: number, example: 87.4 }
+  /execution:
+    get:
+      summary: 执行视图（🛠️）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  running_dags: { type: integer, example: 3 }
+                  tool_success_rate: { type: number, example: 94.1 }
+                  sandbox_blocks: { type: integer, example: 7 }
+                  dag_nodes:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        dag_id: { type: string }
+                        node_id: { type: string }
+                        tool: { type: string }
+                        state: { type: string, enum: [PENDING, RUNNING, SUCCESS, FAILED, COMPENSATED] }
+                        cost_ms: { type: integer }
+  /security:
+    get:
+      summary: 免疫视图（🛡️）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  circuit_breakers:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        service: { type: string }
+                        state: { type: string, enum: [CLOSED, OPEN, HALF_OPEN] }
+                  rate_limit_hits: { type: integer, example: 32 }
+                  tenant_count: { type: integer, example: 5 }
+  /evolution:
+    get:
+      summary: 进化视图（🔄）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  feedback_total: { type: integer, example: 256 }
+                  healing_count: { type: integer, example: 18 }
+                  hallucination_rate: { type: number, example: 2.1 }
+                  heal_trend:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        date: { type: string }
+                        count: { type: integer }
+  /chat:
+    post:
+      summary: 交互终端对话（💬）
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ChatRequest' }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  reply: { $ref: '#/components/schemas/ChatReply' }
+  /ws:
+    get:
+      summary: 实时事件流（WebSocket）
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200':
+          description: WebSocket upgrade
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/WsEvent' }

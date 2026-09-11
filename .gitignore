@@ -18,3 +18,7 @@ dist/
 # 日志
 *.log
 logs/
+
+# Generated Python proto code
+services/python/nlp-service/generated/
+

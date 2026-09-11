@@ -1,7 +1,5 @@
 # AI Agent 生命体 - 基础基础设施栈 (R0-05)
 # 用法: docker compose up -d
-version: "3.8"
-
 services:
   redis:
     image: redis:7.2-alpine

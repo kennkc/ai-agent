@@ -1,56 +1,53 @@
 #!/usr/bin/env bash
-# AI Agent 生命体 - 一键启动脚本 (Phase 0)
-# 用法: ./scripts/start.sh [all|infra|java|python]
+# Agent-Lifeform - local start script (Phase 0/1 hardening + VS1)
 set -e
-
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 MODE="${1:-all}"
-
-echo "=============================================="
-echo " Agent-Lifeform Phase 0 - 生命体骨架启动"
-echo "=============================================="
+export JWT_SECRET="${JWT_SECRET:-agent-lifeform-dev-secret-key-2026-change-me-in-prod}"
+export DEV_TOKEN_ENDPOINT_ENABLED="${DEV_TOKEN_ENDPOINT_ENABLED:-true}"
+export NLP_BASE_URL="${NLP_BASE_URL:-http://127.0.0.1:8000}"
+export BODY_BASE_URL="${BODY_BASE_URL:-http://127.0.0.1:8083}"
 
 start_infra() {
-    echo "[1/4] 启动基础设施 (Redis/PG/Qdrant/NATS/Nacos/MinIO)..."
-    docker compose -f "$ROOT/docker-compose.yml" up -d
-    echo "      等待基础设施健康..."
-    sleep 15
-    docker compose -f "$ROOT/docker-compose.yml" ps
+  echo "[1/4] starting infrastructure..."
+  docker compose -f "$ROOT/docker-compose.yml" up -d
+  sleep 15
+  docker compose -f "$ROOT/docker-compose.yml" ps
 }
 
 start_java() {
-    echo "[2/4] 构建并启动 Java 服务 (gateway/session/sense)..."
-    cd "$ROOT/services/java"
-    mvn clean package -DskipTests -q
-    for svc in gateway-service session-manager sense-service; do
-        echo "      启动 $svc ..."
-        (cd "$svc" && nohup java -jar target/*.jar > /tmp/$svc.log 2>&1 &)
-    done
-    echo "      Java 服务已后台启动, 日志: /tmp/*.log"
+  echo "[2/4] building and starting Java services..."
+  cd "$ROOT/services/java"
+  mvn clean package -DskipTests -q
+  for svc in gateway-service session-manager sense-service body-service; do
+    (cd "$svc" && nohup java -jar target/*.jar > "/tmp/$svc.log" 2>&1 &)
+  done
 }
 
 start_python() {
-    echo "[3/4] 启动 Python 服务 (nlp-service)..."
-    cd "$ROOT/services/python/nlp-service"
-    pip install -q -r requirements.txt
-    nohup uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/nlp-service.log 2>&1 &
-    echo "      nlp-service 已后台启动, 日志: /tmp/nlp-service.log"
+  echo "[3/4] starting nlp-service..."
+  cd "$ROOT/services/python/nlp-service"
+  if [ -x "$ROOT/services/python/venv/Scripts/python.exe" ]; then
+    PY="$ROOT/services/python/venv/Scripts/python.exe"
+  elif [ -x "$ROOT/services/python/venv/bin/python" ]; then
+    PY="$ROOT/services/python/venv/bin/python"
+  else
+    PY="python3"
+    "$PY" -m pip install -q -r requirements.txt
+  fi
+  nohup "$PY" -m uvicorn app.main:app --host 0.0.0.0 --port 8000 > /tmp/nlp-service.log 2>&1 &
 }
 
 verify() {
-    echo "[4/4] 健康检查..."
-    sleep 8
-    "$ROOT/scripts/healthcheck.sh"
+  echo "[4/4] health check..."
+  sleep 8
+  "$ROOT/scripts/healthcheck.sh"
 }
 
 case "$MODE" in
-    infra)  start_infra ;;
-    java)   start_java ;;
-    python) start_python ;;
-    all)    start_infra && start_java && start_python && verify ;;
-    *)      echo "用法: $0 [all|infra|java|python]"; exit 1 ;;
+  infra) start_infra ;;
+  java) start_java ;;
+  python) start_python ;;
+  all) start_infra && start_java && start_python && verify ;;
+  *) echo "usage: $0 [all|infra|java|python]"; exit 1 ;;
 esac
-
-echo "=============================================="
-echo " ✅ Phase 0 启动完成！演示说明见 docs/demo/Phase0-DEMO.md"
-echo "=============================================="
