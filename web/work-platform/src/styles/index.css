@@ -15,6 +15,7 @@
   --wp-success: #34d399;
   --wp-shadow: 0 24px 80px rgba(0, 0, 0, 0.35);
   --wp-glow: 0 0 30px rgba(94, 234, 212, 0.13);
+  --wp-primary-weak: rgba(94, 234, 212, 0.12);
   --wp-shell-sidebar: linear-gradient(180deg, rgba(6, 10, 20, .96), rgba(10, 17, 32, .88));
   --wp-shell-header: rgba(8, 13, 25, .72);
   --wp-input-bg: rgba(15, 22, 38, .62);
@@ -39,6 +40,7 @@ html:not(.dark) {
   --wp-gold-soft: #8a6210;
   --wp-shadow: 0 18px 48px rgba(30, 64, 175, 0.12);
   --wp-glow: 0 0 26px rgba(8, 145, 178, 0.10);
+  --wp-primary-weak: rgba(8, 145, 178, 0.10);
   --wp-shell-sidebar: linear-gradient(180deg, rgba(255,255,255,.97), rgba(241,245,249,.92));
   --wp-shell-header: rgba(255, 255, 255, .88);
   --wp-input-bg: rgba(255, 255, 255, .88);
@@ -139,3 +141,40 @@ body::after {
 .metric-card:nth-child(4) { border-color: rgba(219, 39, 119, .25) !important; }
 @media (max-width: 1100px) { .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .two-column { grid-template-columns: 1fr; } }
 @media (max-width: 720px) { .metric-grid { grid-template-columns: 1fr; } .hero-command::after { display: none; } }
+
+.el-dialog,
+.el-drawer,
+.el-message-box {
+  background: var(--wp-card-solid) !important;
+  color: var(--wp-text) !important;
+}
+.el-dialog__title,
+.el-drawer__title,
+.el-message-box__title {
+  color: var(--wp-text) !important;
+}
+.el-dialog__body,
+.el-drawer__body {
+  color: var(--wp-text);
+}
+.el-radio-button__inner {
+  background: var(--wp-input-bg) !important;
+  border-color: var(--wp-border) !important;
+  color: var(--wp-sub) !important;
+}
+.el-radio-button__original-radio:checked + .el-radio-button__inner {
+  background: linear-gradient(135deg, var(--wp-primary), var(--wp-primary-strong)) !important;
+  border-color: transparent !important;
+  color: #04111b !important;
+  box-shadow: none !important;
+}
+.el-check-tag {
+  color: var(--wp-sub);
+}
+.el-check-tag.is-checked {
+  background: var(--wp-primary-weak) !important;
+  color: var(--wp-primary) !important;
+}
+.el-timeline-item__node {
+  box-shadow: 0 0 12px rgba(94, 234, 212, .25);
+}
