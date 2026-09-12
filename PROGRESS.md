@@ -72,6 +72,20 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 - [x] protobuf plugin deadlock fixed: generated Java sources (90 files, 6 proto) committed into `proto-contracts/src/main/java`; `protobuf-maven-plugin` removed from default lifecycle, kept behind the `proto-gen` profile
 - [x] `scripts/mvn-dev.sh` wrapper (direct Maven launcher) works around broken `mvn.cmd` on this host
 
+## Frontend
+
+- [x] Vue 3 + Vite + TypeScript + Element Plus work-platform scaffold
+- [x] Vue Router + Pinia + ConsoleDataProvider Mock/API switch
+- [x] Global search, notification center and persisted preferences
+- [x] Overview enhanced cockpit: life-colony concurrency topology, model call trend, model runtime topology and optimization suggestions
+- [x] Overview vitals summary, service health and growth timeline drill-down
+- [x] Tasks create/retry/archive/reorder and chat result workspace (artifacts/files/diff/preview)
+- [x] Vitals realtime status, organ report, brain trace, senses drill-down and evolution trend
+- [x] Multi-agent bus topology with mode cards, agent message rails, non-flickering MC-P stream, stacked artifacts and gates
+- [x] Automation cron validation, case assembly and L3/L4 approval workflow displays
+- [x] npm run typecheck passed
+- [x] npm run build passed
+
 ## Verification completed
 
 - `mvn clean package`: passed, 52 tests / 0 failures / 0 errors
@@ -94,5 +108,4 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
   visual channel stays `DEGRADED` and the API truthfully reports `available=false`.
 - Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration,
   Work Platform BFF/API mode).
-
 

@@ -40,19 +40,20 @@ MODEL_EXPECT = {
 # X3 · work-platform 契约分层：P1 启用层（数据源已就绪，P1 必须可接入）
 WP_P1_ENDPOINTS = {
     "/overview", "/vitals", "/tasks", "/tasks/{task_id}",
-    "/chat/{task_id}", "/results/{task_id}", "/search", "/preferences",
+    "/tasks/{task_id}/retry", "/chat/{task_id}", "/results/{task_id}", "/search", "/preferences",
 }
 # 阶段层端点（P2-P8 随阶段点亮）
 WP_STAGE_ENDPOINTS = {
-    "/organs", "/brain/{decision_id}", "/evolution", "/collab/{domain_id}",
+    "/organs", "/senses", "/brain/{decision_id}", "/evolution", "/collab/{domain_id}",
     "/experts", "/experts/{expert_id}", "/skills", "/skills/{skill_id}/install",
     "/connectors", "/connectors/{connector_id}/authorize",
     "/automations", "/automations/{automation_id}",
+    "/models", "/models/{model_id}", "/remote-im/channels", "/remote-im/command", "/agents/online",
     "/cases", "/cases/{case_id}/reuse",
     "/approvals", "/approvals/{approval_id}/decision",
 }
 WP_WS_EVENTS = {
-    "wp.task.progress", "wp.approval.pending", "wp.vitals.update",
+    "wp.task.progress", "wp.approval.pending", "wp.vitals.update", "wp.model.metrics", "wp.optimization.suggestion",
     "wp.collab.heartbeat", "wp.collab.result", "wp.notification",
 }
 

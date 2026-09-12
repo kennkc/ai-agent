@@ -47,9 +47,10 @@ components:
         created_at: { type: integer, format: int64, example: 1786462920000 }
     ExpertProfile:
       type: object
-      required: [expert_id, domain, persona, tool_whitelist, state]
+      required: [expert_id, name, domain, persona, tool_whitelist, state]
       properties:
         expert_id: { type: string, example: E-01 }
+        name: { type: string, example: 行业研究员 }
         domain: { type: string, example: 信息调研 }
         persona: { type: string }
         methodology: { type: string }
@@ -80,10 +81,10 @@ components:
         calls: { type: integer, example: 1260 }
     Automation:
       type: object
-      required: [automation_id, name, cron, state]
+      required: [automation_id, auto_name, cron, state]
       properties:
         automation_id: { type: string, example: A-01 }
-        name: { type: string, example: 科创板行情摘要 }
+        auto_name: { type: string, example: 科创板行情摘要 }
         cron: { type: string, example: 0 9 * * 1-5 }
         action: { type: string }
         state: { type: string, enum: [active, paused, failed] }
@@ -98,8 +99,10 @@ components:
         title: { type: string, example: 行业竞品调研报告 }
         category: { type: string }
         reuse_count: { type: integer, example: 86 }
-        experts: { type: string }
-        skills: { type: string }
+        experts: { type: array, items: { type: string } }
+        skills: { type: array, items: { type: string } }
+        prompt: { type: string }
+        outcome: { type: string }
     Approval:
       type: object
       required: [approval_id, action, risk_level, applicant, state]
@@ -108,21 +111,66 @@ components:
         action: { type: string }
         risk_level: { type: string, enum: [L1, L2, L3, L4] }
         applicant: { type: string }
-        context: { type: object }
+        context: { type: string }
         state: { type: string, enum: [pending, approved, rejected, expired] }
+        target: { type: string }
+        impact: { type: string }
+        parameters: { type: object }
+        ttl: { type: string }
+        approved_by: { type: array, items: { type: string } }
+        required_approvals: { type: integer, example: 2 }
         decided_by: { type: string }
         at: { type: string }
+    CollaborationAgent:
+      type: object
+      required: [agent_id, name, role, progress, state, current_task, use_case, model, artifact_count, bus_position]
+      properties:
+        agent_id: { type: string, example: AG-02 }
+        name: { type: string, example: 调研 Agent }
+        role: { type: string, example: Researcher }
+        progress: { type: number, example: 84 }
+        state: { type: string, enum: [running, done, waiting, blocked] }
+        current_task: { type: string }
+        use_case: { type: string }
+        model: { type: string }
+        tools: { type: array, items: { type: string } }
+        artifact_count: { type: integer }
+        confidence: { type: number }
+        waiting_for: { type: string }
+        bus_position: { type: number }
+        bus_message: { type: string }
+        bus_kind: { type: string, enum: [dispatch, running, result, waiting] }
+        is_leader: { type: boolean }
     CollabDomain:
       type: object
-      required: [domain_id, task_id, mode, agents, artifacts, gates]
+      required: [domain_id, task_id, mode, protocol, concurrency_current, concurrency_limit, agents, artifacts, gates]
       properties:
         domain_id: { type: string, example: collab-20260812-0042 }
         task_id: { type: string, example: T-1042 }
         mode: { type: string, enum: [fanout, pipeline, negotiation] }
-        agents: { type: array, items: { type: object } }
-        msg_flow: { type: array, items: { type: string } }
+        mode_label: { type: string, example: 扇出 Fan-out }
+        protocol: { type: string, example: MC-P v1 }
+        concurrency_current: { type: integer, example: 5 }
+        concurrency_limit: { type: integer, example: 8 }
+        p99_ms: { type: number, example: 7.8 }
+        ack_rate: { type: number, example: 99.98 }
+        messages_per_sec: { type: number, example: 42 }
+        updated_at: { type: string }
+        agents: { type: array, items: { $ref: '#/components/schemas/CollaborationAgent' } }
+        msg_flow: { type: array, items: { $ref: '#/components/schemas/CollaborationMessage' } }
         artifacts: { type: array, items: { $ref: '#/components/schemas/Artifact' } }
         gates: { type: array, items: { type: object } }
+    CollaborationMessage:
+      type: object
+      required: [message_id, time, type, from, to, text]
+      properties:
+        message_id: { type: string }
+        time: { type: string }
+        type: { type: string, enum: [dispatch, result, heartbeat, negotiate] }
+        from: { type: string }
+        to: { type: string }
+        text: { type: string }
+        payload: { type: object }
     Artifact:
       type: object
       required: [artifact_id, task_id, kind, title, conf_score]
@@ -180,10 +228,178 @@ components:
               reason: { type: string }
               at: { type: string }
 
+    OverviewWorkflowStep:
+      type: object
+      required: [step_id, label, state, progress]
+      properties:
+        step_id: { type: string }
+        label: { type: string }
+        state: { type: string, enum: [done, running, waiting, blocked] }
+        progress: { type: number }
+        owner: { type: string }
+        timestamp: { type: string }
+    OverviewWorkflowAgent:
+      type: object
+      required: [agent_id, name, state, progress]
+      properties:
+        agent_id: { type: string }
+        name: { type: string }
+        role: { type: string }
+        state: { type: string, enum: [running, done, waiting] }
+        progress: { type: number }
+        current_task: { type: string }
+        use_case: { type: string }
+        model: { type: string }
+    OverviewWorkflow:
+      type: object
+      required: [domain_id, task_title, progress, steps, agents]
+      properties:
+        domain_id: { type: string }
+        task_title: { type: string }
+        progress: { type: number }
+        eta: { type: string }
+        last_update: { type: string }
+        execution_mode: { type: string, example: 多线并行 · fan-out }
+        steps: { type: array, items: { $ref: '#/components/schemas/OverviewWorkflowStep' } }
+        agents: { type: array, items: { $ref: '#/components/schemas/OverviewWorkflowAgent' } }
+    ModelCallPoint:
+      type: object
+      required: [time, calls, tokens, latency, cost]
+      properties:
+        time: { type: string }
+        calls: { type: number }
+        tokens: { type: number }
+        latency: { type: number }
+        cost: { type: number }
+    ModelRuntimeNode:
+      type: object
+      required: [node_id, name, model, state, load, queue, throughput, latency]
+      properties:
+        node_id: { type: string }
+        name: { type: string }
+        model: { type: string }
+        state: { type: string, enum: [healthy, busy, degraded, offline] }
+        load: { type: number }
+        queue: { type: integer }
+        throughput: { type: number }
+        latency: { type: number }
+        role: { type: string }
+    OptimizationSuggestion:
+      type: object
+      required: [suggestion_id, title, category, priority, impact, confidence, status]
+      properties:
+        suggestion_id: { type: string }
+        title: { type: string }
+        category: { type: string, enum: [成本优化, 性能优化, 质量优化, 安全优化] }
+        priority: { type: string, enum: [high, medium, low] }
+        impact: { type: string }
+        confidence: { type: number }
+        effort: { type: string, enum: [低, 中, 高] }
+        status: { type: string, enum: [pending, applied, dismissed] }
+        evidence: { type: string }
+        action: { type: string }
+        source: { type: string }
+    TodaySummaryMetric:
+      type: object
+      required: [label, value, trend, tone]
+      properties:
+        label: { type: string }
+        value: { oneOf: [{ type: string }, { type: number }] }
+        unit: { type: string }
+        trend: { type: string }
+        tone: { type: string, enum: [primary, success, warning, danger] }
+    TodaySummaryEvent:
+      type: object
+      required: [time, title, detail, type]
+      properties:
+        time: { type: string }
+        title: { type: string }
+        detail: { type: string }
+        type: { type: string, enum: [task, knowledge, model, governance] }
+    TodaySummary:
+      type: object
+      required: [date, headline, running_index, metrics, events, attention]
+      properties:
+        date: { type: string }
+        headline: { type: string }
+        running_index: { type: integer }
+        metrics: { type: array, items: { $ref: '#/components/schemas/TodaySummaryMetric' } }
+        events: { type: array, items: { $ref: '#/components/schemas/TodaySummaryEvent' } }
+        attention: { type: array, items: { type: string } }
+    OverviewDashboard:
+      type: object
+      properties:
+        today_summary: { $ref: '#/components/schemas/TodaySummary' }
+        metrics: { type: array, items: { type: object } }
+        services: { type: array, items: { type: object } }
+        vitals: { type: array, items: { type: object } }
+        timeline: { type: array, items: { type: object } }
+        workflow: { $ref: '#/components/schemas/OverviewWorkflow' }
+        model_calls: { type: array, items: { $ref: '#/components/schemas/ModelCallPoint' } }
+        model_runtime: { type: array, items: { $ref: '#/components/schemas/ModelRuntimeNode' } }
+        optimization_suggestions: { type: array, items: { $ref: '#/components/schemas/OptimizationSuggestion' } }
+    ManagedModel:
+      type: object
+      required: [model_id, name, provider, tier, state, cost_per_1k, latency_ms, quality, share]
+      properties:
+        model_id: { type: string }
+        name: { type: string }
+        provider: { type: string }
+        tier: { type: string, enum: [L0, L1, L2, L3] }
+        state: { type: string, enum: [active, standby, degraded, disabled] }
+        task_types: { type: array, items: { type: string } }
+        cost_per_1k: { type: number }
+        latency_ms: { type: integer }
+        quality: { type: number }
+        share: { type: number }
+        quota: { type: string }
+    ModelRoute:
+      type: object
+      required: [route_id, task_type, model_id, share]
+      properties:
+        route_id: { type: string }
+        task_type: { type: string }
+        model_id: { type: string }
+        model_name: { type: string }
+        share: { type: number }
+        cost: { type: string }
+        note: { type: string }
+    RemoteChannel:
+      type: object
+      required: [channel_id, name, type, state]
+      properties:
+        channel_id: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [wechat, wecom, feishu, dingtalk, qq] }
+        state: { type: string, enum: [online, available, offline] }
+        account: { type: string }
+        capabilities: { type: array, items: { type: string } }
+        last_message: { type: string }
+    RemoteFlowEvent:
+      type: object
+      required: [event_id, time, direction, channel, message, status]
+      properties:
+        event_id: { type: string }
+        time: { type: string }
+        direction: { type: string, enum: [下发, 执行, 回传] }
+        channel: { type: string }
+        message: { type: string }
+        status: { type: string, enum: [sent, running, done, failed] }
+    OnlineAgent:
+      type: object
+      required: [agent_id, name, role, state, task]
+      properties:
+        agent_id: { type: string }
+        name: { type: string }
+        role: { type: string }
+        state: { type: string, enum: [run, wait, idle] }
+        task: { type: string }
+        model: { type: string }
+        latency_ms: { type: integer }
 paths:
   /overview:
     get:
-      summary: 总览聚合（体征摘要+4 指标卡+成长史）
+      summary: 总览增强驾驶舱（团队协作/模型监控/运行状态/优化建议）
       security: [{ bearerAuth: [] }]
       responses:
         '200':
@@ -191,7 +407,11 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/ApiResponse'
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/OverviewDashboard' }
   /vitals:
     get:
       summary: 生命体征实时（D1）
@@ -208,6 +428,16 @@ paths:
       responses:
         '200':
           description: OK
+  /senses:
+    get:
+      summary: 五感矩阵渠道状态与采集质量（D6）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
   /brain/{decision_id}:
     get:
       summary: 决策链回放（D5，读 IN3 AuditLog）
@@ -269,6 +499,14 @@ paths:
   /tasks/{task_id}:
     get:
       summary: 任务详情（WB-01）
+      parameters:
+        - { name: task_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+  /tasks/{task_id}/retry:
+    post:
+      summary: 重试失败任务（WB-01）
       parameters:
         - { name: task_id, in: path, required: true, schema: { type: string } }
       responses:
@@ -403,6 +641,33 @@ paths:
       responses:
         '200':
           description: OK
+  /models:
+    get:
+      summary: 多模型池与运行状态（WB-10）
+      responses:
+        '200': { description: OK }
+  /models/{model_id}:
+    patch:
+      summary: 更新模型启停与路由状态
+      parameters:
+        - { name: model_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+  /remote-im/channels:
+    get:
+      summary: 远程 IM 通道列表（WB-09 / IN8）
+      responses:
+        '200': { description: OK }
+  /remote-im/command:
+    post:
+      summary: 通过 IM 下发远程任务指令
+      responses:
+        '202': { description: Accepted }
+  /agents/online:
+    get:
+      summary: Agent 在线状态与当前任务
+      responses:
+        '200': { description: OK }
   /search:
     get:
       summary: 全局搜索（W4，任务/知识/技能/案例）
@@ -441,3 +706,5 @@ ws:
     - { name: wp.collab.heartbeat, direction: server_to_client, trigger: Agent 心跳 }
     - { name: wp.collab.result, direction: server_to_client, trigger: 团员结果回传 }
     - { name: wp.notification, direction: server_to_client, trigger: 自愈/任务完成 }
+    - { name: wp.model.metrics, direction: server_to_client, trigger: 模型调用、Token、延迟、成本与节点状态变化 }
+    - { name: wp.optimization.suggestion, direction: server_to_client, trigger: 生成或状态变更优化建议 }
