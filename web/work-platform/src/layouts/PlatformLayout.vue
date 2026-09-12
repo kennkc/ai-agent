@@ -134,3 +134,14 @@ const modulesByGroup = (group: string) => modules.filter(item => item.group === 
 }
 </style>
 
+
+<style scoped>
+.search-results { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; max-height: 360px; overflow: auto; }
+.search-result { display: flex; align-items: flex-start; gap: 10px; padding: 10px; border: 1px solid var(--wp-border); border-radius: 10px; cursor: pointer; }
+.search-result p, .notification-item p { margin: 4px 0 0; color: var(--wp-sub); font-size: 12px; }
+.notification-item { padding: 12px 0; border-bottom: 1px solid var(--wp-border); }
+.notification-item.unread { padding-left: 10px; border-left: 2px solid var(--wp-gold); }
+.notification-title { display: flex; justify-content: space-between; gap: 8px; }
+.notification-title span { color: var(--wp-sub); font-size: 11px; }
+</style>
+
