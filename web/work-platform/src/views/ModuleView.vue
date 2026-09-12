@@ -1,8 +1,9 @@
 <template>
   <div class="page">
-    <div>
-      <h2 class="page-title">{{ module.title }}</h2>
-      <p class="page-sub">{{ module.description }} · {{ module.phase }} · {{ module.status }}</p>
+    <div class="hero-command compact-hero">
+      <div class="hero-kicker">{{ module.group }} / {{ module.phase }}</div>
+      <h2 class="hero-title">{{ module.title }}</h2>
+      <p class="hero-desc">{{ module.description }} · {{ module.status }}</p>
     </div>
     <el-alert
       v-if="module.status === 'prototype'"
@@ -12,13 +13,13 @@
       show-icon
     />
     <div class="metric-grid">
-      <el-card v-for="item in summary" :key="item.label" class="section-card" shadow="never">
+      <el-card v-for="item in summary" :key="item.label" class="section-card metric-card" shadow="never">
         <div class="metric-label">{{ item.label }}</div>
         <div class="metric-value">{{ item.value }}<span class="metric-unit">{{ item.unit }}</span></div>
         <div class="metric-trend">{{ item.trend }}</div>
       </el-card>
     </div>
-    <el-card class="section-card" shadow="never">
+    <el-card class="section-card metric-card" shadow="never">
       <template #header><strong>{{ module.title }} 工作区</strong></template>
       <el-table :data="rows" stripe>
         <el-table-column v-for="column in columns" :key="column.prop" :prop="column.prop" :label="column.label" />
@@ -51,3 +52,5 @@ const rows = [
   { name: `${module.value.title}示例对象`, state: 'ready', owner: 'Agent', updated_at: '刚刚' },
 ]
 </script>
+
+

@@ -1,8 +1,9 @@
 <template>
   <div class="page">
-    <div>
-      <h2 class="page-title">任务对话与结果工作区</h2>
-      <p class="page-sub">对话追问、来源标注、产物交付</p>
+    <div class="hero-command compact-hero">
+      <div class="hero-kicker">NEURAL DIALOGUE</div>
+      <h2 class="hero-title">任务对话与结果工作区</h2>
+      <p class="hero-desc">对话追问、来源标注、产物交付 · 实时上下文与结果聚合</p>
     </div>
     <div class="two-column">
       <el-card class="section-card" shadow="never">
@@ -79,3 +80,4 @@ onMounted(async () => {
 .artifact { display: flex; align-items: center; gap: 8px; padding: 10px 0; border-bottom: 1px solid var(--wp-border); }
 .artifact span { flex: 1; }
 </style>
+

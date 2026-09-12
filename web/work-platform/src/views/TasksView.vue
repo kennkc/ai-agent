@@ -1,8 +1,9 @@
 <template>
   <div class="page">
-    <div>
-      <h2 class="page-title">任务中心</h2>
-      <p class="page-sub">任务生命周期、优先级、状态与进度</p>
+    <div class="hero-command compact-hero">
+      <div class="hero-kicker">MISSION CONTROL</div>
+      <h2 class="hero-title">任务中心</h2>
+      <p class="hero-desc">任务生命周期、优先级、状态与进度 · 任务编排与交付视图</p>
     </div>
     <el-card class="section-card" shadow="never">
       <div class="toolbar">
@@ -57,3 +58,4 @@ onMounted(async () => {
 <style scoped>
 .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin-bottom: 16px; }
 </style>
+

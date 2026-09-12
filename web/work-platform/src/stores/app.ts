@@ -3,7 +3,7 @@ import { defineStore } from 'pinia'
 export const useAppStore = defineStore('app', {
   state: () => ({
     sidebarCollapsed: false,
-    dark: false,
+    dark: true,
     dataSource: (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api',
     tenant: import.meta.env.VITE_TENANT_ID || 'default',
     model: 'L2',

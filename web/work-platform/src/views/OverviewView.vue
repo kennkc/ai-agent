@@ -1,12 +1,13 @@
 <template>
   <div class="page">
-    <div>
-      <h2 class="page-title">生命体总览</h2>
-      <p class="page-sub">生命体征、任务、知识与成本摘要 · {{ dataProvider.mode.toUpperCase() }} 数据源</p>
+    <div class="hero-command">
+      <div class="hero-kicker">LIFEFORM STATUS MATRIX</div>
+      <h2 class="hero-title">生命体总览</h2>
+      <p class="hero-desc">生命体征、任务、知识与成本摘要 · {{ dataProvider.mode.toUpperCase() }} 数据源 · 实时同步</p>
     </div>
 
     <div class="metric-grid">
-      <el-card v-for="metric in metrics" :key="metric.label" class="section-card" shadow="never">
+      <el-card v-for="metric in metrics" :key="metric.label" class="section-card metric-card" shadow="never">
         <div class="metric-label">{{ metric.label }}</div>
         <div class="metric-value">
           {{ metric.value }}<span class="metric-unit">{{ metric.unit }}</span>
@@ -16,7 +17,7 @@
     </div>
 
     <div class="two-column">
-      <el-card class="section-card" shadow="never">
+      <el-card class="section-card metric-card" shadow="never">
         <template #header><strong>服务健康</strong></template>
         <el-table :data="services" size="small">
           <el-table-column prop="name" label="服务" />
@@ -27,7 +28,7 @@
         </el-table>
       </el-card>
 
-      <el-card class="section-card" shadow="never">
+      <el-card class="section-card metric-card" shadow="never">
         <template #header><strong>生命体成长时间轴</strong></template>
         <el-timeline>
           <el-timeline-item timestamp="P0/P1" type="success">骨架、总线、VS1 已完成</el-timeline-item>
@@ -56,3 +57,5 @@ onMounted(async () => {
   services.value = data.services || mockServices
 })
 </script>
+
+
