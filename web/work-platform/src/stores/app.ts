@@ -1,9 +1,11 @@
 import { defineStore } from 'pinia'
 
+const savedTheme = localStorage.getItem('wp-theme') || 'dark'
+
 export const useAppStore = defineStore('app', {
   state: () => ({
     sidebarCollapsed: false,
-    dark: true,
+    dark: savedTheme === 'dark',
     dataSource: (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api',
     tenant: import.meta.env.VITE_TENANT_ID || 'default',
     model: 'L2',
@@ -13,6 +15,7 @@ export const useAppStore = defineStore('app', {
     toggleTheme() {
       this.dark = !this.dark
       document.documentElement.classList.toggle('dark', this.dark)
+      localStorage.setItem('wp-theme', this.dark ? 'dark' : 'light')
     },
     toggleDataSource() {
       this.dataSource = this.dataSource === 'mock' ? 'api' : 'mock'

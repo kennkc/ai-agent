@@ -7,5 +7,7 @@ import App from './App.vue'
 import router from './router'
 import './styles/index.css'
 
-document.documentElement.classList.add('dark')
+const savedTheme = localStorage.getItem('wp-theme') || 'dark'
+document.documentElement.classList.toggle('dark', savedTheme === 'dark')
+
 createApp(App).use(createPinia()).use(router).use(ElementPlus).mount('#app')

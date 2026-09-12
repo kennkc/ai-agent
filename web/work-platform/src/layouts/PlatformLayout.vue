@@ -94,8 +94,8 @@ const modulesByGroup = (group: string) => modules.filter(item => item.group === 
 .platform-shell { min-height: 100vh; background: transparent; }
 .platform-aside {
   position: relative;
-  background: linear-gradient(180deg, rgba(6, 10, 20, .96), rgba(10, 17, 32, .88));
-  border-right: 1px solid rgba(148, 163, 184, .16);
+  background: var(--wp-shell-sidebar);
+  border-right: 1px solid var(--wp-border);
   box-shadow: 20px 0 60px rgba(0, 0, 0, .24);
   transition: width .22s ease;
 }
@@ -104,7 +104,7 @@ const modulesByGroup = (group: string) => modules.filter(item => item.group === 
 .brand.compact { justify-content: center; padding: 0; }
 .brand-orbit { display: grid; place-items: center; width: 38px; height: 38px; border-radius: 50%; border: 1px solid rgba(94,234,212,.55); color: var(--wp-gold-soft); box-shadow: 0 0 24px rgba(94,234,212,.22), inset 0 0 18px rgba(212,175,55,.12); }
 .brand-text { display: flex; flex-direction: column; min-width: 0; }
-.brand-text strong { color: #f8fafc; letter-spacing: .12em; font-size: 13px; }
+.brand-text strong { color: var(--wp-brand-text); letter-spacing: .12em; font-size: 13px; }
 .brand-text span { color: var(--wp-sub); font-size: 10px; letter-spacing: .08em; }
 .system-pulse { display: flex; align-items: center; gap: 8px; margin: 14px 18px; color: var(--wp-sub); font-size: 11px; letter-spacing: .12em; }
 .pulse-dot, .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wp-success); box-shadow: 0 0 12px var(--wp-success); animation: breathe 2s ease-in-out infinite; }
@@ -113,7 +113,7 @@ const modulesByGroup = (group: string) => modules.filter(item => item.group === 
 .aside-footer { position: absolute; bottom: 14px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 20px; color: rgba(148,163,184,.55); font-size: 10px; letter-spacing: .16em; }
 .platform-header {
   display: flex; align-items: center; gap: 12px; height: 72px;
-  background: rgba(8, 13, 25, .72); border-bottom: 1px solid rgba(148,163,184,.14);
+  background: var(--wp-shell-header); border-bottom: 1px solid var(--wp-border);
   backdrop-filter: blur(20px); box-shadow: 0 12px 50px rgba(0,0,0,.22);
 }
 .header-icon { color: var(--wp-sub) !important; }
@@ -133,3 +133,4 @@ const modulesByGroup = (group: string) => modules.filter(item => item.group === 
   .platform-main { padding: 14px; }
 }
 </style>
+
