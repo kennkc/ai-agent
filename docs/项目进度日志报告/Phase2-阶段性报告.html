@@ -1,0 +1,1290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 2 感官期 · 阶段性报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-12 13:38 · 源文件 Phase2-阶段性报告.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 阶段目标回顾</a></li>
+<li><a href="#2">2. 交付物清单</a><ul>
+<li><a href="#21-sense-servicejava-36-7">2.1 sense-service（Java 主服务，新增 36 个源文件 + 7 个测试类）</a></li>
+<li><a href="#22-nlp-servicepython">2.2 nlp-service（Python）</a></li>
+<li><a href="#23-console">2.3 Console 前端与契约</a></li>
+<li><a href="#24">2.4 基础设施与工程化</a></li>
+<li><a href="#25">2.5 本报告目录</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 需求覆盖情况</a></li>
+<li><a href="#4">4. 关键设计落地说明</a><ul>
+<li><a href="#41-r2-01">4.1 渠道可插拔（R2-01）</a></li>
+<li><a href="#42-r2-02-r2-04r2-09r2-10">4.2 采集主链路（R2-02 ~ R2-04、R2-09、R2-10）</a></li>
+<li><a href="#43-r2-05-r2-06">4.3 双模式采集（R2-05 / R2-06）</a></li>
+<li><a href="#44-r2-07-r2-08">4.4 意图识别双级级联（R2-07 / R2-08）</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 验证结果汇总</a><ul>
+<li><a href="#51">5.1 构建</a></li>
+<li><a href="#52">5.2 测试</a></li>
+<li><a href="#53">5.3 硬指标达标情况</a></li>
+<li><a href="#54">5.4 详细证据</a></li>
+</ul>
+</li>
+<li><a href="#6">6. 当前开发发现的问题与解决思路</a><ul>
+<li><a href="#a">类别 A：构建工具链</a><ul>
+<li><a href="#a-1maven-protobuf">A-1（阻塞级）Maven 构建永久卡死 —— protobuf 插件删除目录原生阻塞</a></li>
+<li><a href="#a-2-mvncmd">A-2 mvn.cmd 损坏导致无法构建</a></li>
+<li><a href="#a-3-pl-could-not-find-the-selected-project-in-the-reactor">A-3 多模块 -pl 报 "Could not find the selected project in the reactor"</a></li>
+<li><a href="#a-4-rm-rf-target">A-4 rm -rf target 被安全策略拦截</a></li>
+</ul>
+</li>
+<li><a href="#b">类别 B：实现缺陷（由单元测试暴露）</a><ul>
+<li><a href="#b-1-qualitygate">B-1 QualityGate 双判定源不一致 → 低质数据被错放</a></li>
+<li><a href="#b-2-touchchannel-file">B-2 TouchChannel 的 file:// 路径解析返回空</a></li>
+<li><a href="#b-3-localstagingbackendrollback-directorynotemptyexception">B-3 LocalStagingBackend.rollback 正序删除触发 DirectoryNotEmptyException</a></li>
+</ul>
+</li>
+<li><a href="#c">类别 C：集成契约</a><ul>
+<li><a href="#c-1-api-x-tenant-id">C-1 前端 API 数据源缺失 X-Tenant-Id 头</a></li>
+<li><a href="#c-2">C-2 文件误置包路径</a></li>
+<li><a href="#c-3-d-1">C-3 网关路由误判（方法论问题，见 D-1）</a></li>
+</ul>
+</li>
+<li><a href="#d">类别 D：方法论误判与纠正</a><ul>
+<li><a href="#d-1-grep-sense">D-1 错误的空结果导致错误结论：grep 路径写错 → 误判"网关缺 sense 路由"</a></li>
+<li><a href="#d-2">D-2 环境依赖不可用时的判断尺度</a></li>
+<li><a href="#d-3-git-bash">D-3 本机 Git Bash 工具缺失（环境类）</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#7">7. 问题归类统计</a></li>
+<li><a href="#8">8. 风险与遗留项</a></li>
+<li><a href="#9">9. 阶段结论与下一步</a><ul>
+<li><a href="#91">9.1 结论</a></li>
+<li><a href="#92-phase-3">9.2 下一步（Phase 3 躯体期）</a></li>
+</ul>
+</li>
+<li><a href="#a_1">附录 A：可复现验证命令</a></li>
+<li><a href="#b_1">附录 B：关联文档</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-2">Phase 2 感官期 · 阶段性报告<a class="headerlink" href="#phase-2" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 2 · 感官期（Sensory Stage）</td>
+</tr>
+<tr>
+<td>项目</td>
+<td>Agent-Lifeform · AI Agent 生命体架构</td>
+</tr>
+<tr>
+<td>仓库</td>
+<td><code>E:\ai_workspace\project_space\ai-agent-lifeform\ai-agent</code></td>
+</tr>
+<tr>
+<td>分支</td>
+<td><code>workbuddy/main</code></td>
+</tr>
+<tr>
+<td>报告日期</td>
+<td>2026-09-12</td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td><code>850f49d feat(phase2): 感官期五感采集、质检暂存与意图识别双级联（R2-01~R2-10）</code></td>
+</tr>
+<tr>
+<td>需求范围</td>
+<td>R2-01 ~ R2-10（依据《AI-Agent生命体架构-阶段性需求拆解分析》v1.6）</td>
+</tr>
+<tr>
+<td>阶段结论</td>
+<td><strong>通过</strong>（1 项受外部引擎依赖降级为待补验证，详见 §6）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 阶段目标回顾<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>Phase 1（神经期）打通了「网关 → 会话 → 意图 → 检索」的脊柱数据总线，但生命体<strong>只有反射、没有感官</strong>——
+数据只能靠人喂（<code>/api/body/ingest</code> 手工灌库），无法自主获取外部信息。</p>
+<p>Phase 2 的目标是<strong>接通五感</strong>：让生命体能够按规则自主采集外部数据、把异构数据标准化、在入库前拦截低质内容、
+并把意图识别从"单一规则匹配"升级为"规则优先 + 模型兜底"的双级级联。</p>
+<p>设计文档定义的活动流程（<code>Phase2-感官期/需求设计文档.md</code> §4）：</p>
+<pre><code>采集触发(R0定时 / R1指令)
+  → 渠道选择(触觉/视觉/...)
+  → 采集执行(抓取/OCR/读取)
+  → 数据标准化(五字段打标)
+  → 质检(基础: 非空/长度/编码) ── 失败 → 重试(3次) → 失败 → 死信
+  → 通过 → 隔离暂存(MinIO) → 通知入库(Phase 3 消费)
+</code></pre>
+<p>本阶段的全部实现即围绕这条链路落地。</p>
+<hr />
+<h2 id="2">2. 交付物清单<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-sense-servicejava-36-7">2.1 sense-service（Java 主服务，新增 36 个源文件 + 7 个测试类）<a class="headerlink" href="#21-sense-servicejava-36-7" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>包</th>
+<th>交付物</th>
+<th>对应需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>channel</code></td>
+<td><code>SenseChannel</code>（可插拔抽象）、<code>ChannelRegistry</code>、<code>TouchChannel</code>、<code>VisualChannel</code>、<code>AudioChannel</code>、<code>NoseChannel</code>、<code>TasteChannel</code></td>
+<td>R2-01 ~ R2-03</td>
+</tr>
+<tr>
+<td><code>normalize</code></td>
+<td><code>DataNormalizer</code>（五字段打标）</td>
+<td>R2-04</td>
+</tr>
+<tr>
+<td><code>quality</code></td>
+<td><code>QualityGate</code>（内容/长度/编码/重复/密度五维质检）</td>
+<td>R2-10</td>
+</tr>
+<tr>
+<td><code>schedule</code></td>
+<td><code>R0Scheduler</code>（规则驱动定时轮询）</td>
+<td>R2-05</td>
+</tr>
+<tr>
+<td><code>dynamic</code></td>
+<td><code>R1DynamicHandler</code>、<code>SenseCommand</code></td>
+<td>R2-06</td>
+</tr>
+<tr>
+<td><code>health</code></td>
+<td><code>ChannelHealthMonitor</code>（探针 + 隔离 + 恢复）</td>
+<td>R2-09</td>
+</tr>
+<tr>
+<td><code>staging</code></td>
+<td><code>StagingStore</code>、<code>StagingBackend</code>、<code>MinioStagingBackend</code>、<code>LocalStagingBackend</code></td>
+<td>R2-10</td>
+</tr>
+<tr>
+<td><code>deadletter</code></td>
+<td><code>DeadLetterStore</code></td>
+<td>R2-09</td>
+</tr>
+<tr>
+<td><code>event</code></td>
+<td><code>SenseEventPublisher</code></td>
+<td>R2-10</td>
+</tr>
+<tr>
+<td><code>metrics</code></td>
+<td><code>SenseMetrics</code></td>
+<td>观测</td>
+</tr>
+<tr>
+<td><code>security</code></td>
+<td><code>OutboundGuard</code>（SSRF 防护）</td>
+<td>安全</td>
+</tr>
+<tr>
+<td><code>util</code></td>
+<td><code>TextExtractor</code>（jsoup 正文提取）</td>
+<td>R2-02</td>
+</tr>
+<tr>
+<td><code>config</code></td>
+<td><code>SenseProperties</code></td>
+<td>配置</td>
+</tr>
+<tr>
+<td><code>controller</code></td>
+<td><code>SenseController</code>（采集入口）、<code>SenseAdminController</code>（运营/观测接口）</td>
+<td>R2-02 / R-C02</td>
+</tr>
+<tr>
+<td><code>collect</code></td>
+<td><code>CollectPipeline</code>（采集主链路编排）</td>
+<td>全链路</td>
+</tr>
+<tr>
+<td><code>model</code></td>
+<td><code>CollectedData</code>（五字段载体 + 到 Map 的契约序列化）</td>
+<td>R2-04</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-nlp-servicepython">2.2 nlp-service（Python）<a class="headerlink" href="#22-nlp-servicepython" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>作用</th>
+<th>对应需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app/intent/rules.py</code></td>
+<td>规则引擎，12 场景（关键词 + 正则 + 场景映射）</td>
+<td>R2-07</td>
+</tr>
+<tr>
+<td><code>app/intent/l0_model.py</code></td>
+<td>L0 轻量分类模型</td>
+<td>R2-08</td>
+</tr>
+<tr>
+<td><code>app/intent/cascade.py</code></td>
+<td>双级级联调度（规则优先 → 模型兜底）</td>
+<td>R2-08</td>
+</tr>
+<tr>
+<td><code>app/intent/corpus.py</code></td>
+<td>训练/留出语料</td>
+<td>R2-08</td>
+</tr>
+<tr>
+<td><code>app/ocr.py</code></td>
+<td>OCR 代理，无引擎时诚实上报 <code>available=false</code></td>
+<td>R2-03</td>
+</tr>
+<tr>
+<td><code>tests/test_intent.py</code>、<code>tests/test_ocr.py</code></td>
+<td>19 项测试</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-console">2.3 Console 前端与契约<a class="headerlink" href="#23-console" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>作用</th>
+<th>对应需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>web/console/index.html</code></td>
+<td>感官视图：五感矩阵 + 渠道下钻</td>
+<td>R-C02</td>
+</tr>
+<tr>
+<td><code>web/console/js/provider.js</code></td>
+<td><code>ConsoleDataProvider</code> mock/api 双数据源</td>
+<td>R-C09</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24">2.4 基础设施与工程化<a class="headerlink" href="#24" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>services/java/proto-contracts/pom.xml</code></td>
+<td>protobuf 插件移出默认生命周期，保留 <code>proto-gen</code> profile</td>
+</tr>
+<tr>
+<td><code>services/java/proto-contracts/src/main/java/com/agent/**/v1/*.java</code></td>
+<td>生成源码入库（6 proto / <strong>90 文件</strong>）</td>
+</tr>
+<tr>
+<td><code>scripts/mvn-dev.sh</code></td>
+<td>Maven 直调包装（绕过损坏的 <code>mvn.cmd</code>）</td>
+</tr>
+<tr>
+<td><code>scripts/build-sense.sh</code></td>
+<td>sense-service 单模块构建脚本</td>
+</tr>
+<tr>
+<td><code>docs/demo/Phase2-DEMO.md</code></td>
+<td>阶段验收演示脚本</td>
+</tr>
+<tr>
+<td><code>PROGRESS.md</code>、<code>README.md</code></td>
+<td>进度与说明同步更新</td>
+</tr>
+<tr>
+<td><code>.gitignore</code></td>
+<td>新增忽略 <code>.build/</code>、<code>data/sense-*/</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="25">2.5 本报告目录<a class="headerlink" href="#25" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>README.md</code></td>
+<td>目录索引与维护规范</td>
+</tr>
+<tr>
+<td><code>Phase2-阶段性报告.md</code> / <code>.html</code></td>
+<td>本报告</td>
+</tr>
+<tr>
+<td><code>Phase2-开发执行日志.md</code> / <code>.html</code></td>
+<td>执行流程归档（时间线 + 决策记录）</td>
+</tr>
+<tr>
+<td><code>Phase2-测试验收报告.md</code> / <code>.html</code></td>
+<td>测试与验收证据</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3">3. 需求覆盖情况<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>名称</th>
+<th>优先级</th>
+<th>验收标准</th>
+<th>实现位置</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R2-01</td>
+<td>SenseChannel 渠道抽象</td>
+<td>Must</td>
+<td>渠道可插拔；新增渠道不改核心代码</td>
+<td><code>SenseChannel</code> + <code>ChannelRegistry</code>（Spring Bean 自动发现）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-02</td>
+<td>触觉渠道采集</td>
+<td>Must</td>
+<td>URL/文件/文本三类源可采集并标准化</td>
+<td><code>TouchChannel</code> + <code>TextExtractor</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-03</td>
+<td>视觉渠道 OCR</td>
+<td>Should</td>
+<td>基础 OCR 返回文本</td>
+<td><code>VisualChannel</code> → nlp-service <code>/api/nlp/ocr</code></td>
+<td>⚠️ 待装引擎</td>
+</tr>
+<tr>
+<td>R2-04</td>
+<td>数据标准化打标</td>
+<td>Must</td>
+<td>五字段完整</td>
+<td><code>DataNormalizer</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-05</td>
+<td>R0 默认采集调度</td>
+<td>Must</td>
+<td>定时按规则触发；调度日志完整</td>
+<td><code>R0Scheduler</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-06</td>
+<td>R1 动态采集</td>
+<td>Should</td>
+<td>指令→渠道选择→采集→回传</td>
+<td><code>R1DynamicHandler</code> + <code>SenseCommand</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-07</td>
+<td>意图识别-规则引擎</td>
+<td>Must</td>
+<td>10 个预置场景识别准确</td>
+<td><code>rules.py</code>（12 场景）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-08</td>
+<td>L0 意图分类模型</td>
+<td>Should</td>
+<td>延迟 &lt; 50ms；准确率 ≥ 85%</td>
+<td><code>l0_model.py</code> + <code>cascade.py</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-09</td>
+<td>渠道健康检查与重试</td>
+<td>Must</td>
+<td>宕机自动隔离；恢复自动重连</td>
+<td><code>ChannelHealthMonitor</code> + resilience4j 退避 + <code>DeadLetterStore</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-10</td>
+<td>采集数据隔离暂存</td>
+<td>Should</td>
+<td>低质数据被拦截；批次可回滚</td>
+<td><code>QualityGate</code> + <code>StagingStore</code></td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<p><strong>覆盖率：Must 6/6 = 100%；Should 3/4 完成 + 1 项受外部依赖阻塞；合计 9/10 = 90% 可直接验收。</strong></p>
+<hr />
+<h2 id="4">4. 关键设计落地说明<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41-r2-01">4.1 渠道可插拔（R2-01）<a class="headerlink" href="#41-r2-01" title="Permanent link">&para;</a></h3>
+<p><code>SenseChannel</code> 定义统一契约（<code>type / label / icon / available / healthy / collect / close</code>），
+<code>ChannelRegistry</code> 通过 Spring 容器<strong>自动发现</strong>所有 <code>SenseChannel</code> 实现 Bean 并按 <code>ChannelType</code> 建索引。</p>
+<p><strong>效果</strong>：新增渠道只需新增一个 <code>@Component</code> 实现类，<code>CollectPipeline</code>、<code>SenseController</code>、
+<code>SenseAdminController</code>、Console 感官视图<strong>零改动</strong>即可识别（五感矩阵卡片由 <code>/api/sense/channels</code> 动态渲染）。</p>
+<h3 id="42-r2-02-r2-04r2-09r2-10">4.2 采集主链路（R2-02 ~ R2-04、R2-09、R2-10）<a class="headerlink" href="#42-r2-02-r2-04r2-09r2-10" title="Permanent link">&para;</a></h3>
+<p><code>CollectPipeline</code> 串联完整链路，每步都有明确的失败出口：</p>
+<pre><code>渠道健康检查 → 隔离则直接拒绝
+  → 渠道 collect（resilience4j 指数退避重试，max-attempts=3）
+      失败 → 死信队列 DeadLetterStore（保留 tenant/channel/reason/attempts）
+  → DataNormalizer 五字段打标
+  → QualityGate 质检
+      不通过 → 暂存标记 REJECTED（保留 reject_reason 供下钻查看）
+  → 通过 → StagingStore 落盘（MinIO 优先，不可用回落 local）
+  → SenseEventPublisher 发事件 lifeform.sense.collected（Phase 3 入库消费）
+  → SenseMetrics 计数（批次/通过/拒绝/条目/速率/最近时间）
+</code></pre>
+<p><strong>质检判定采用单一事实来源</strong>：<code>QualityGate.rejectReason(content)</code> 返回拒绝原因或 <code>null</code>，
+<code>pass()</code> 直接委托它（<code>return rejectReason(content) == null</code>），避免"评分通过但硬规则拒绝"这类不一致。</p>
+<p>加权公式：<code>score = 0.45·内容分 + 0.20·长度分 + 0.20·可打印分 + 0.15·信息密度分</code></p>
+<p>拒绝原因枚举：<code>EMPTY_CONTENT</code> / <code>ENCODING_GARBLED</code> / <code>REPETITIVE_GARBAGE</code> / <code>BELOW_QUALITY_THRESHOLD</code></p>
+<h3 id="43-r2-05-r2-06">4.3 双模式采集（R2-05 / R2-06）<a class="headerlink" href="#43-r2-05-r2-06" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>触发方式</th>
+<th>实现</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R0 默认采集</td>
+<td>定时轮询（<code>@Scheduled</code>，默认 60s tick）</td>
+<td><code>R0Scheduler</code> + <code>application.yml</code> 规则表</td>
+<td>规则含 <code>channel / data-source / query / tenant-id / interval-seconds / freshness / enabled</code>，各规则独立间隔；提供 <code>runNow(ruleId)</code> 供演示与验收手动触发</td>
+</tr>
+<tr>
+<td>R1 动态采集</td>
+<td>外部指令（BrainCommand 雏形）</td>
+<td><code>R1DynamicHandler</code> + <code>SenseCommand</code></td>
+<td>支持单渠道或 <code>channels[]</code> 多渠道路由，含单轮渠道上限（默认 3）与条目上限（默认 10），<code>DOWN</code> 渠道自动跳过并计入 <code>skipped</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="44-r2-07-r2-08">4.4 意图识别双级级联（R2-07 / R2-08）<a class="headerlink" href="#44-r2-07-r2-08" title="Permanent link">&para;</a></h3>
+<pre><code>文本 → 规则引擎（rules.py，12 场景，高置信直出）
+        未命中 ↓
+       L0 轻量分类模型（l0_model.py）
+        仍不可判 ↓
+       归入「情感闲聊」（兜底，不返回空意图）
+</code></pre>
+<p>级联结果携带 <code>engine</code> 字段（<code>rule</code> / <code>l0</code>），便于观测各引擎命中占比。</p>
+<hr />
+<h2 id="5">5. 验证结果汇总<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<h3 id="51">5.1 构建<a class="headerlink" href="#51" title="Permanent link">&para;</a></h3>
+<pre><code>[INFO] proto-contracts .................................... SUCCESS
+[INFO] gateway-service .................................... SUCCESS
+[INFO] session-manager .................................... SUCCESS
+[INFO] sense-service ...................................... SUCCESS
+[INFO] body-service ....................................... SUCCESS
+[INFO] BUILD SUCCESS
+[INFO] Total time:  03:04 min
+</code></pre>
+<h3 id="52">5.2 测试<a class="headerlink" href="#52" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>范围</th>
+<th style="text-align: right;">数量</th>
+<th style="text-align: right;">失败</th>
+<th style="text-align: right;">错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 单元测试</td>
+<td>sense-service</td>
+<td style="text-align: right;"><strong>45</strong></td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>Java 单元测试</td>
+<td>session-manager</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>Java 单元测试</td>
+<td>gateway-service</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>Java 单元测试</td>
+<td>body-service</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><strong>Java 合计</strong></td>
+<td></td>
+<td style="text-align: right;"><strong>52</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+<tr>
+<td>Python 测试</td>
+<td>nlp-service 意图识别</td>
+<td style="text-align: right;">15</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>Python 测试</td>
+<td>nlp-service OCR</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><strong>Python 合计</strong></td>
+<td></td>
+<td style="text-align: right;"><strong>19</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+<tr>
+<td><strong>总计</strong></td>
+<td></td>
+<td style="text-align: right;"><strong>71</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="53">5.3 硬指标达标情况<a class="headerlink" href="#53" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>指标</th>
+<th>目标</th>
+<th>实测</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L0 意图识别准确率（留出集 60 样本）</td>
+<td>≥ 85%</td>
+<td><strong>90.0%</strong></td>
+<td>✅ 超出 5.0pp</td>
+</tr>
+<tr>
+<td>L0 意图识别延迟</td>
+<td>P99 &lt; 50ms</td>
+<td><strong>P99 0.052ms</strong></td>
+<td>✅ 大幅超出</td>
+</tr>
+<tr>
+<td>场景覆盖数</td>
+<td>≥ 10</td>
+<td><strong>12</strong></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>契约校验 <code>contract-check.py</code></td>
+<td>0 FAIL</td>
+<td><strong>0 FAIL</strong>（3 项既有 WARN）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>前端语法校验 <code>node --check</code></td>
+<td>通过</td>
+<td>通过</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<h3 id="54">5.4 详细证据<a class="headerlink" href="#54" title="Permanent link">&para;</a></h3>
+<p>完整测试用例清单与验收命令见同目录 <strong><code>Phase2-测试验收报告.md</code></strong>，
+端到端演示脚本见 <strong><code>docs/demo/Phase2-DEMO.md</code></strong>。</p>
+<hr />
+<h2 id="6">6. 当前开发发现的问题与解决思路<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>本节是本阶段复盘的核心。问题按<strong>性质</strong>分为四类：构建工具链、实现缺陷、集成契约、方法论误判。
+每条记录「现象 → 定位过程 → 根因 → 解决 → 教训」，便于后续同类问题快速命中。</p>
+</blockquote>
+<h3 id="a">类别 A：构建工具链<a class="headerlink" href="#a" title="Permanent link">&para;</a></h3>
+<h4 id="a-1maven-protobuf">A-1（阻塞级）Maven 构建永久卡死 —— protobuf 插件删除目录原生阻塞<a class="headerlink" href="#a-1maven-protobuf" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td>构建在 <code>sense-service</code> 之前卡死，<strong>60s+ 到 74s+ 无任何输出</strong>，不报错也不结束；多次重跑同样位置卡住</td>
+</tr>
+<tr>
+<td><strong>定位过程</strong></td>
+<td>① 用 <code>jps</code> 找到 Maven 进程，<code>jcmd &lt;PID&gt; Thread.print</code> 抓主线程栈；② 读到栈底为 <code>java.io.WinNTFileSystem.delete0(Native Method)</code> ← <code>FileUtils.deleteDirectory</code> ← <code>cleanDirectory</code> ← <code>AbstractProtocMojo.makeProtoPathFromJars</code>；③ 逐项排除网络（阿里云镜像 200 正常）、磁盘空间（充足）、Maven 并发（单进程仍复现）、调用通道（Bash 沙箱与 PowerShell 通道均复现）、protoc 子进程残留（无）</td>
+</tr>
+<tr>
+<td><strong>根因</strong></td>
+<td><strong>Windows 文件系统在删除 <code>target/protoc-dependencies</code> 时原生层长时间不返回</strong>。不是网络、不是依赖下载、不是 JVM 死锁，而是 OS 级删除阻塞（杀软实时扫描、目录句柄、NTFS 元数据均可能参与）</td>
+</tr>
+<tr>
+<td><strong>解决思路</strong></td>
+<td><strong>让构建不再调用该插件</strong>，而非继续与 OS 行为对抗：① 用 <code>protoc</code> + <code>protoc-gen-grpc-java</code> 直接生成 <strong>90 个 Java 源文件（6 proto）</strong>；② 把产物落到 <code>proto-contracts/src/main/java</code> 并<strong>提交进仓库</strong>；③ 从默认 <code>&lt;build&gt;&lt;plugins&gt;</code> <strong>移除</strong> <code>protobuf-maven-plugin</code>；④ 保留 <code>proto-gen</code> profile 作为契约变更时的再生入口；⑤ 保留运行时依赖（<code>protobuf-java</code>/<code>grpc-protobuf</code>/<code>grpc-stub</code>/<code>javax.annotation-api</code>）</td>
+</tr>
+<tr>
+<td><strong>结果</strong></td>
+<td>构建从「永久卡死」变为 <strong>3:04 全量通过</strong>；CI 不再依赖网络下载 protoc</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>① Windows 上做大规模目录删除的 Maven 插件是高危卡死点，<strong>jstack 抓栈是最快定位手段</strong>；② 对抗 OS 层阻塞不如<strong>改变构建策略</strong>（生成产物入库）；③ 代价是产物进入代码评审范围，<strong>必须在 README 写清再生命令</strong>，否则后人误以为漏提交而重新启用插件，卡死复现</td>
+</tr>
+<tr>
+<td><strong>沉淀</strong></td>
+<td>已固化为技能 <code>~/.workbuddy/skills/windows-maven-build-hang-repair/SKILL.md</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="a-2-mvncmd">A-2 <code>mvn.cmd</code> 损坏导致无法构建<a class="headerlink" href="#a-2-mvncmd" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td>本机 <code>mvn</code> 命令无输出/报错，构建无法启动</td>
+</tr>
+<tr>
+<td><strong>根因</strong></td>
+<td>本机 Maven 安装的 <code>mvn.cmd</code> 损坏</td>
+</tr>
+<tr>
+<td><strong>解决</strong></td>
+<td>编写 <code>scripts/mvn-dev.sh</code>，通过 <code>plexus-classworlds-2.9.0.jar</code> 直调 <code>org.codehaus.plexus.classworlds.launcher.Launcher</code> 拉起 Maven，绕开 <code>mvn.cmd</code></td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>包装脚本<strong>不要加 <code>-Dstyle.color=never</code> 之类多余参数</strong>——部分 PowerShell 通道会拆分参数导致阶段解析失败</td>
+</tr>
+</tbody>
+</table>
+<h4 id="a-3-pl-could-not-find-the-selected-project-in-the-reactor">A-3 多模块 <code>-pl</code> 报 "Could not find the selected project in the reactor"<a class="headerlink" href="#a-3-pl-could-not-find-the-selected-project-in-the-reactor" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td><code>mvn -pl sense-service test</code> 报找不到模块</td>
+</tr>
+<tr>
+<td><strong>根因</strong></td>
+<td>模块名解析依赖根 <code>pom.xml</code>，而根 pom 在 <code>services/java/</code>，不在执行目录</td>
+</tr>
+<tr>
+<td><strong>解决</strong></td>
+<td><strong>必须在含根 pom 的目录下执行</strong> <code>-pl</code>；命令固定为 <code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh -pl &lt;module&gt; -am test</code></td>
+</tr>
+</tbody>
+</table>
+<h4 id="a-4-rm-rf-target">A-4 <code>rm -rf target</code> 被安全策略拦截<a class="headerlink" href="#a-4-rm-rf-target" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td>手工清理构建目录被 agent 安全策略 fail-closed 拦截</td>
+</tr>
+<tr>
+<td><strong>解决</strong></td>
+<td><strong>改用 Maven 自带 <code>clean</code> 目标</strong>，不做裸删除</td>
+</tr>
+</tbody>
+</table>
+<h3 id="b">类别 B：实现缺陷（由单元测试暴露）<a class="headerlink" href="#b" title="Permanent link">&para;</a></h3>
+<p>三个缺陷的共同价值在于：<strong>它们都不是编译错误，而是"能跑但结果错"的逻辑不一致</strong>——
+若没有测试断言真实行为（而非仅断言"不抛异常"），这三个缺陷会一路带到 Phase 3。</p>
+<h4 id="b-1-qualitygate">B-1 <code>QualityGate</code> 双判定源不一致 → 低质数据被错放<a class="headerlink" href="#b-1-qualitygate" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td><code>QualityGateTest</code> 中「重复乱码」「短低质文本」两个用例失败：应被拒绝的内容却通过了</td>
+</tr>
+<tr>
+<td><strong>根因</strong></td>
+<td><code>pass()</code> 用 <code>score &gt;= threshold</code> 判定，而 <code>rejectReason()</code> 用硬规则（非空/可打印比/重复/长度）判定，<strong>两套逻辑对同一内容给出相反结论</strong></td>
+</tr>
+<tr>
+<td><strong>解决</strong></td>
+<td><strong>以 <code>rejectReason()</code> 为单一事实来源</strong>，<code>pass()</code> 改为委托：<code>return rejectReason(content) == null</code>。这样"是否通过"和"为何拒绝"永远自洽，且拒绝原因可直接透出到 Console 下钻面板</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>同一语义存在两条判定路径时，必然出现不一致；<strong>判定逻辑必须单点收口</strong></td>
+</tr>
+</tbody>
+</table>
+<h4 id="b-2-touchchannel-file">B-2 <code>TouchChannel</code> 的 <code>file://</code> 路径解析返回空<a class="headerlink" href="#b-2-touchchannel-file" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td><code>TouchChannelTest.readsHtmlFileWithBodyExtraction</code> 失败，本地文件采集读不到内容</td>
+</tr>
+<tr>
+<td><strong>根因</strong></td>
+<td>用 <code>URI.create("file://page.html").getPath()</code> 解析——在 <code>file://page.html</code> 这种<strong>无 host 的简写形式</strong>下，<code>page.html</code> 被当作 <strong>host</strong> 而非 path，<code>getPath()</code> 返回空字符串</td>
+</tr>
+<tr>
+<td><strong>解决</strong></td>
+<td>放弃 URI 解析，改为<strong>前缀子串剥离</strong>：依次剥掉 <code>file://</code> / <code>file:</code> / <code>local://</code>，再把反斜杠归一为正斜杠、去掉前导斜杠，最后 <code>root.resolve(raw).normalize()</code> 并校验仍在沙箱根内（防目录穿越）</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td><code>URI</code> 对非标准简写形式的语义与直觉不符；<strong>沙箱路径解析必须自己做白名单前缀处理</strong>，顺带完成越界校验</td>
+</tr>
+</tbody>
+</table>
+<h4 id="b-3-localstagingbackendrollback-directorynotemptyexception">B-3 <code>LocalStagingBackend.rollback</code> 正序删除触发 <code>DirectoryNotEmptyException</code><a class="headerlink" href="#b-3-localstagingbackendrollback-directorynotemptyexception" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td><code>StagingStoreTest.rollbackRemovesWholeBatch</code> 失败，批次回滚返回 <code>false</code></td>
+</tr>
+<tr>
+<td><strong>根因</strong></td>
+<td><code>Files.walk</code> 返回<strong>父目录先于子文件</strong>的顺序，正序删除时先删父目录 → 子项仍在 → <code>DirectoryNotEmptyException</code></td>
+</tr>
+<tr>
+<td><strong>解决</strong></td>
+<td>按路径<strong>逆序排序</strong>（<code>Comparator.reverseOrder()</code>）后再删，保证"先子后父"</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>递归删除的天然顺序陷阱；<strong>逆序删除是安全默认</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="c">类别 C：集成契约<a class="headerlink" href="#c" title="Permanent link">&para;</a></h3>
+<h4 id="c-1-api-x-tenant-id">C-1 前端 API 数据源缺失 <code>X-Tenant-Id</code> 头<a class="headerlink" href="#c-1-api-x-tenant-id" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td>审查 <code>provider.js</code> 与后端 <code>SenseAdminController</code> 契约时发现：前端 <code>request()</code> 只发 <code>Authorization</code>，未发 <code>X-Tenant-Id</code></td>
+</tr>
+<tr>
+<td><strong>影响</strong></td>
+<td>Console 以 <code>?ds=api</code> 接入时，后端会退化为 <code>default</code> 租户分区；多租户场景下<strong>读到别人的数据或读不到自己的数据</strong>，且不会报错（静默错）</td>
+</tr>
+<tr>
+<td><strong>解决</strong></td>
+<td>在 <code>request()</code> 的统一 header 中补 <code>X-Tenant-Id: this.tenantId</code>（并让 <code>opts.headers</code> 可覆盖，保留调用方控制权）；同时清理 <code>collect()</code> 中冗余的重复取 token</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>前后端契约审查要<strong>逐字段比对</strong>而非只看路径；"能返回 200"不等于"取数正确"</td>
+</tr>
+</tbody>
+</table>
+<h4 id="c-2">C-2 文件误置包路径<a class="headerlink" href="#c-2" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td><code>R0Scheduler.java</code>、<code>R1DynamicHandler.java</code>、<code>SenseCommand.java</code> 被创建在 <code>services/java/com/agent/sense/...</code>（缺 <code>sense-service/src/main/java</code> 这一段），不在任何模块源码根内</td>
+</tr>
+<tr>
+<td><strong>影响</strong></td>
+<td>文件存在但<strong>不参与编译</strong>，编译期不报错、运行期类缺失</td>
+</tr>
+<tr>
+<td><strong>解决</strong></td>
+<td>迁移至 <code>services/java/sense-service/src/main/java/com/agent/sense/{schedule,dynamic}/</code></td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>新建文件后<strong>必须验证其落在模块源码根内</strong>；"文件已创建"不等于"已纳入构建"</td>
+</tr>
+</tbody>
+</table>
+<h4 id="c-3-d-1">C-3 网关路由误判（方法论问题，见 D-1）<a class="headerlink" href="#c-3-d-1" title="Permanent link">&para;</a></h4>
+<p>同一现象的契约确认：网关 <code>gateway-service/src/main/resources/application.yml</code> 中路由为统一入口 <code>http://127.0.0.1:8080</code>，
+<code>/api/sense/**</code> → <code>lb://sense-service</code>，前端 <code>provider.js</code> 的 API 路径与之对齐，<strong>链路闭环</strong>。</p>
+<h3 id="d">类别 D：方法论误判与纠正<a class="headerlink" href="#d" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>这一类不产生代码缺陷，但直接决定排查效率，值得单独归档。</p>
+</blockquote>
+<h4 id="d-1-grep-sense">D-1 错误的空结果导致错误结论：grep 路径写错 → 误判"网关缺 sense 路由"<a class="headerlink" href="#d-1-grep-sense" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>经过</strong></td>
+<td>我用 <code>grep -rn "sense" services/java/gateway/src/main/resources/*.yml</code> 检索网关路由，返回空 → <strong>据此下结论"网关缺少 sense 路由，是 Phase2 集成缺口"</strong>。随后 <code>find</code> 目录时才发现模块实际名为 <strong><code>gateway-service</code></strong>，路径写错了，路由其实一直存在</td>
+</tr>
+<tr>
+<td><strong>纠正</strong></td>
+<td>改用 <code>find &lt;模块目录&gt; -type f</code> 先确认真实路径，再 grep 内容</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>① <strong>空结果永远不是结论</strong>——<code>grep</code> 无输出可能是"确实没有"也可能是"路径写错"；② 下判断前要用第二种手段交叉验证（<code>find</code> / <code>ls</code> / <code>git ls-files</code>）</td>
+</tr>
+</tbody>
+</table>
+<h4 id="d-2">D-2 环境依赖不可用时的判断尺度<a class="headerlink" href="#d-2" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td>OCR 测试显示 <code>available=False</code>（未装 PaddleOCR/Tesseract）——是否算"测试失败"？</td>
+</tr>
+<tr>
+<td><strong>决策</strong></td>
+<td><strong>不算失败</strong>。测试断言的正确行为是「<strong>引擎不可用时必须诚实上报 <code>available=false</code>，不伪造识别结果</strong>」，而不是"必须识别出文字"</td>
+</tr>
+<tr>
+<td><strong>落地</strong></td>
+<td><code>VisualChannel</code> 与 <code>app/ocr.py</code> 均按此契约实现；Console 上视觉渠道显示 <code>DEGRADED</code>，不假装 UP</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>设计"能力可选降级"的系统时，<strong>测试应断言降级行为的正确性</strong>，而不是把外部依赖缺失一律当失败</td>
+</tr>
+</tbody>
+</table>
+<h4 id="d-3-git-bash">D-3 本机 Git Bash 工具缺失（环境类）<a class="headerlink" href="#d-3-git-bash" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td><code>ls</code> / <code>head</code> / <code>tail</code> 全部 <code>command not found</code>，<code>paste</code> / <code>bc</code> / <code>dirname</code> 缺失</td>
+</tr>
+<tr>
+<td><strong>纠正</strong></td>
+<td>① 本轮定位到根因是 <strong>PATH 未设置</strong>，<code>export PATH="/usr/bin:/bin:$PATH"</code> <strong>一条命令即恢复</strong>（此前会话曾误判为"Git Bash 精简版不可用"）；② 统计类操作改用托管 Python 绝对路径；③ <code>Glob</code> 工具对带盘符的绝对 <code>path</code> 参数返回空 → 改用 <code>git ls-files</code> / <code>find</code> 替代</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>环境"不可用"要先确认<strong>是不是配置问题</strong>，再判定为能力缺失</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7. 问题归类统计<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th style="text-align: right;">数量</th>
+<th style="text-align: right;">阻塞级</th>
+<th style="text-align: right;">已解决</th>
+<th>沉淀形式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A 构建工具链</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">1（A-1）</td>
+<td style="text-align: right;">4</td>
+<td>技能 <code>windows-maven-build-hang-repair</code> + <code>scripts/mvn-dev.sh</code></td>
+</tr>
+<tr>
+<td>B 实现缺陷</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">3</td>
+<td>单测固化（45 项 sense-service 测试）</td>
+</tr>
+<tr>
+<td>C 集成契约</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">3</td>
+<td>统一 header / 目录规约 / 路由确认</td>
+</tr>
+<tr>
+<td>D 方法论</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">3</td>
+<td>本报告 §6-D</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>13</strong></td>
+<td style="text-align: right;"><strong>1</strong></td>
+<td style="text-align: right;"><strong>13</strong></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>注</strong>：A-1 是唯一阻塞级问题，累计消耗了本阶段最多的排查成本（多轮构建失败 + jstack 取证 + 通道交叉验证）。</p>
+<hr />
+<h2 id="8">8. 风险与遗留项<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>类型</th>
+<th>影响</th>
+<th>建议处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>OCR 引擎未安装（PaddleOCR / Tesseract）</td>
+<td>外部依赖</td>
+<td>R2-03 无法端到端验收；视觉渠道保持 <code>DEGRADED</code></td>
+<td>需要视觉能力时安装引擎，无需改代码</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Docker 运行时端到端冒烟未做</td>
+<td>环境</td>
+<td>真实 MinIO 暂存、NATS 事件推送、<code>lifeform-*</code> 容器未验证（当前 8 个容器为 <code>Exited 255</code>）</td>
+<td>拉起 Docker 引擎与容器后执行 <code>docs/demo/Phase2-DEMO.md</code> §2</td>
+</tr>
+<tr>
+<td>3</td>
+<td>protobuf 生成源码入库带来 diff 噪音</td>
+<td>工程实践</td>
+<td><code>.proto</code> 变更时需手工同步生成产物，存在忘记同步的风险</td>
+<td>建议后续加入 CI 校验：<code>-Pproto-gen</code> 重新生成后 <code>git diff --exit-code</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>L0 模型为轻量实现，非 BERT 级</td>
+<td>设计取舍</td>
+<td>「日程提醒」类场景留出集准确率仅 60%，是 12 场景中最低</td>
+<td>Phase 7（进化期）按设计文档升级模型，本阶段满足 ≥85% 总体指标即可</td>
+</tr>
+<tr>
+<td>5</td>
+<td>本地领先远程 1 个提交未推送</td>
+<td>协作</td>
+<td><code>850f49d</code> 仅在本地</td>
+<td>如需协作再推送</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9">9. 阶段结论与下一步<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<h3 id="91">9.1 结论<a class="headerlink" href="#91" title="Permanent link">&para;</a></h3>
+<p>Phase 2 感官期<strong>达成设计目标</strong>：</p>
+<ul>
+<li>生命体已具备<strong>自主采集能力</strong>（R0 定时 + R1 指令双模式），不再依赖人工灌数据；</li>
+<li>已建立<strong>数据质量防线</strong>（五维质检 + 隔离暂存 + 批次回滚），低质数据在入库前被拦截；</li>
+<li>已建立<strong>渠道韧性</strong>（健康探针 + 自动隔离 + 指数退避重试 + 死信队列），单渠道故障不拖垮整体采集；</li>
+<li>意图识别升级为<strong>双级级联</strong>，准确率 90.0%、P99 0.052ms，均超设计指标；</li>
+<li>采集过程<strong>全程可观测</strong>（<code>/api/sense/*</code> 运营接口 + Console 五感矩阵与渠道下钻）；</li>
+<li>工程质量面：<strong>71 项测试 0 失败</strong>，5 模块全量构建通过，契约校验 0 FAIL。</li>
+</ul>
+<p>唯一未完全闭环的是 R2-03（受本机未装 OCR 引擎限制），属<strong>外部依赖就绪度</strong>问题而非实现缺陷。</p>
+<h3 id="92-phase-3">9.2 下一步（Phase 3 躯体期）<a class="headerlink" href="#92-phase-3" title="Permanent link">&para;</a></h3>
+<p>Phase 3 的核心是<strong>打通感官到躯体的闭环</strong>——让 Phase 2 采集并暂存的数据真正进入知识库、可被语义检索：</p>
+<table>
+<thead>
+<tr>
+<th>方向</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>暂存 → 正式库</td>
+<td>消费 <code>lifeform.sense.collected</code> 事件，实现暂存区 ACCEPTED 批次的入库通道（Phase 2 已预留事件出口）</td>
+</tr>
+<tr>
+<td>知识库能力</td>
+<td>文档切分、向量化、Qdrant 索引，替换 body-service 当前的本地检索 MVP</td>
+</tr>
+<tr>
+<td>检索质量</td>
+<td>语义检索 P99 &lt; 500ms、召回率指标；与 Console 躯体视图对接</td>
+</tr>
+<tr>
+<td>缺口补齐</td>
+<td>安装 OCR 引擎完成 R2-03 端到端验收；CI 增加 proto 生成物同步校验</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="a_1">附录 A：可复现验证命令<a class="headerlink" href="#a_1" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 1. 全量构建 + 测试
+cd services/java
+../../scripts/mvn-dev.sh clean package
+
+# 2. Python 测试
+cd services/python/nlp-service
+../venv/Scripts/python.exe tests/test_intent.py
+../venv/Scripts/python.exe tests/test_ocr.py
+
+# 3. 契约校验
+cd &lt;项目根&gt;
+python scripts/contract-check.py
+
+# 4. 前端语法校验
+node --check web/console/js/provider.js
+</code></pre>
+<h2 id="b_1">附录 B：关联文档<a class="headerlink" href="#b_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>文档</th>
+<th>位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phase2 验收演示脚本</td>
+<td><code>docs/demo/Phase2-DEMO.md</code></td>
+</tr>
+<tr>
+<td>开发执行日志</td>
+<td>本目录 <code>Phase2-开发执行日志.md</code></td>
+</tr>
+<tr>
+<td>测试验收报告</td>
+<td>本目录 <code>Phase2-测试验收报告.md</code></td>
+</tr>
+<tr>
+<td>阶段需求设计文档</td>
+<td><code>E:\ai_workspace\project_space\AI知识库\任务指挥中心知识库\核心知识\AGENT_CONTEXT\Phase2-感官期\需求设计文档.md</code></td>
+</tr>
+<tr>
+<td>开发进度总览</td>
+<td>项目根 <code>PROGRESS.md</code></td>
+</tr>
+<tr>
+<td>构建卡死修复技能</td>
+<td><code>~/.workbuddy/skills/windows-maven-build-hang-repair/SKILL.md</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>报告生成日期：2026-09-12 · 代码基线：<code>850f49d</code> · 编制：WorkBuddy</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

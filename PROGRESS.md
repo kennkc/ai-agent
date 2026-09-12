@@ -84,6 +84,8 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 - gRPC Java generation: 6 proto files, 90 generated Java sources
 - Python proto generation: 12 generated files in services/python/nlp-service/generated
 - Phase demo scripts: `docs/demo/Phase0-DEMO.md`, `docs/demo/Phase1-DEMO.md`, `docs/demo/Phase2-DEMO.md`
+- Phase 2 stage reports archived in `docs/项目进度日志报告/` (stage report, execution log, test & acceptance report; each with a generated HTML twin)
+- `scripts/md2html-report.py` renders those reports to self-contained HTML (requires anaconda Python, which has the `markdown` package)
 
 ## Remaining
 

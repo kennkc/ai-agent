@@ -21,6 +21,7 @@ Phase 2 sensory loop:
 - `contracts/`: executable BFF OpenAPI copies used by `contract-check.py`
 - `web/`: static prototypes (`console` contains the Phase 2 sensory view with mock/api data provider)
 - `docs/demo/`: per-phase acceptance scripts (Phase0 / Phase1 / Phase2)
+- `docs/项目进度日志报告/`: per-phase development process archive — stage report, execution log, test & acceptance report (Markdown + generated HTML)
 
 ## Quick start
 
