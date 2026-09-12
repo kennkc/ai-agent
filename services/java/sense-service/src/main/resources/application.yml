@@ -4,6 +4,65 @@ server:
 grpc:
   port: ${GRPC_PORT:9093}
 
+# ── Phase 2 感官期（R2-01~R2-10）──
+sense:
+  file-root: ${SENSE_FILE_ROOT:data/sense-inbox}
+  max-bytes: 2097152
+  allowed-hosts: ${SENSE_ALLOWED_HOSTS:}
+  timeouts:
+    connect-ms: 5000
+    read-ms: 10000
+  retry:
+    max-attempts: 3
+    initial-ms: 200
+    multiplier: 2.0
+    max-ms: 2000
+  quality:
+    threshold: 0.6
+    min-length: 20
+    min-printable-ratio: 0.8
+  ocr:
+    enabled: ${OCR_ENABLED:true}
+    url: ${OCR_URL:http://127.0.0.1:8000/api/nlp/ocr}
+    timeout-ms: 20000
+    baseline-confidence: 0.55
+  health:
+    probe-ms: 30000
+    initial-delay-ms: 10000
+    degrade-after: 1
+    down-after: 3
+  staging:
+    backend: ${STAGING_BACKEND:auto}
+    minio-endpoint: ${MINIO_ENDPOINT:http://127.0.0.1:9000}
+    minio-access-key: ${MINIO_ACCESS_KEY:agent}
+    minio-secret-key: ${MINIO_SECRET_KEY:agent123456}
+    bucket: ${MINIO_BUCKET:lifeform-staging}
+    local-root: ${STAGING_LOCAL_ROOT:data/sense-staging}
+  r1:
+    max-channels-per-round: 3
+    max-items-per-round: 10
+  r0:
+    enabled: ${R0_ENABLED:true}
+    tick-ms: ${R0_TICK_MS:60000}
+    initial-delay-ms: 30000
+    rules:
+      - id: r0-touch-knowledge
+        channel: TOUCH
+        data-source: "Agent-Lifeform 感官期采集规则示例文本：触觉渠道 R0 默认采集。"
+        query: "知识库增量同步"
+        tenant-id: default
+        interval-seconds: 300
+        freshness: NEAR_REALTIME
+        enabled: true
+      - id: r0-taste-quality
+        channel: TASTE
+        data-source: "staging"
+        query: "暂存区质检复核"
+        tenant-id: default
+        interval-seconds: 600
+        freshness: BATCH
+        enabled: true
+
 spring:
   application:
     name: sense-service
@@ -11,6 +70,7 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        ip: ${NACOS_IP:127.0.0.1}
 
 management:
   endpoints:

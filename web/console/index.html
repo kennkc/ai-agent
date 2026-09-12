@@ -74,10 +74,31 @@ th{text-align:left;padding:8px 10px;background:#f1f5f9;color:var(--text2);font-w
 td{padding:8px 10px;border-bottom:1px solid var(--border)}
 .st{display:inline-block;font-size:11px;padding:2px 8px;border-radius:999px;font-weight:500}
 .st.up{background:#dcfce7;color:#166534}.st.down{background:#fee2e2;color:#991b1b}.st.deg{background:#fef3c7;color:#92400e}
+/* ── D6 五感矩阵（感官视图）── */
+.sensor-grid{display:grid;grid-template-columns:repeat(5,1fr);gap:12px;margin-bottom:14px}
+.sensor{background:var(--panel);border:1px solid var(--border);border-left:4px solid var(--muted);border-radius:12px;padding:14px;cursor:pointer;transition:all .18s}
+.sensor:hover{box-shadow:0 6px 18px rgba(15,47,92,.10);transform:translateY(-2px)}
+.sensor.selected{box-shadow:0 0 0 2px rgba(24,95,165,.45)}
+.sensor.up{border-left-color:#16a34a}
+.sensor.deg{border-left-color:#d97706;background:linear-gradient(180deg,#fffbeb,#fff)}
+.sensor.down{border-left-color:#dc2626;background:linear-gradient(180deg,#fef2f2,#fff)}
+.sensor .head{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.sensor .head .ico{font-size:18px}
+.sensor .head .nm{font-size:13.5px;font-weight:600}
+.sensor .head .st{margin-left:auto}
+.sensor .metric{display:flex;justify-content:space-between;font-size:11.5px;color:var(--text2);margin-top:5px}
+.sensor .metric b{color:var(--text);font-weight:600}
+.sensor .last{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--muted)}
+.sensor-warn{margin-top:6px;font-size:11px;color:#92400e;background:#fef3c7;border-radius:6px;padding:4px 7px}
+.detail-panel{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px}
+.detail-panel h3{font-size:14px;margin-bottom:10px;display:flex;align-items:center;gap:8px}
+.detail-meta{display:flex;gap:18px;flex-wrap:wrap;font-size:11.5px;color:var(--text2);margin-bottom:12px}
+.detail-meta b{color:var(--text)}
+.ds-note{font-size:11.5px;color:var(--text2);background:#eef4fb;border:1px solid #dbe7f5;border-radius:8px;padding:8px 12px;margin-bottom:12px}
 /* 待点亮 */
 .placeholder{border:2px dashed var(--border);border-radius:12px;padding:40px;text-align:center;color:var(--muted);font-size:13px}
 footer{padding:16px 24px;font-size:11.5px;color:var(--muted);text-align:center;border-top:1px solid var(--border);background:var(--panel)}
-@media(max-width:900px){.grid,.grid.c3,.grid.c2{grid-template-columns:repeat(2,1fr)}nav{width:64px}.nav-item span.txt{display:none}}
+@media(max-width:900px){.grid,.grid.c3,.grid.c2,.sensor-grid{grid-template-columns:repeat(2,1fr)}nav{width:64px}.nav-item span.txt{display:none}}
 </style>
 </head>
 <body>
@@ -101,19 +122,20 @@ footer{padding:16px 24px;font-size:11.5px;color:var(--muted);text-align:center;b
     <div class="nav-item" data-view="system"><span class="ico">⚙️</span><span class="txt">系统视图</span><span class="dot on"></span></div>
     <div class="nav-item" data-view="chat"><span class="ico">💬</span><span class="txt">交互终端</span><span class="dot on"></span></div>
     <div class="nav-sep"></div>
-    <div class="nav-hint">Mock 先行原型：8 视图全部以静态测试数据展示，接口契约已定义（见设计文档 §10）。阶段功能完成后将切换 DATA_SOURCE=api。</div>
+    <div class="nav-hint" id="navHint">Mock 先行原型：8 视图以静态测试数据展示，接口契约已定义（见设计文档 §10）。感官视图已支持 DATA_SOURCE=api 接入真实采集数据。</div>
   </nav>
 
   <main id="main"></main>
 </div>
 
-<footer>Agent-Lifeform · Lifeform Console 静态原型（Mock 版）· 依据《LifeformConsole-统一可视化终端设计》v1.1 · 数据为演示用静态测试数据</footer>
+<footer>Agent-Lifeform · Lifeform Console · 依据《LifeformConsole-统一可视化终端设计》· 感官视图数据源：<span id="footDs">MOCK</span></footer>
 
+<script src="js/provider.js"></script>
 <script>
 // ═══════════ Mock 数据（MockDataSource · 契约先行）═══════════
 const MOCK = {
   brain:{ active_sessions:42, intent_dist:[{n:'知识问答',v:58},{n:'工具调用',v:22},{n:'总结报告',v:12},{n:'闲聊',v:8}], queue:['任务T-1024 汇总报告','任务T-1025 舆情采集','任务T-1026 竞品分析'], trend:[8,12,15,13,18,22,28,33,42] },
-  sense:{ channels:[{n:'视觉',s:'UP'},{n:'听觉',s:'UP'},{n:'触觉',s:'UP'},{n:'嗅觉',s:'DEGRADED'},{n:'味觉',s:'UP'}], collect_rate:186, quality_pass_rate:96.2, rate:[120,145,138,168,175,186], quality_trend:[95.1,95.8,96.0,96.4,96.2,96.2] },
+  // sense 视图数据统一由 ConsoleDataProvider 提供（js/provider.js，mock/api 同契约）
   body:{ total:128450, p99:286, hit_rate:94.3, docs:34210, ingest_rate:5.8, retrieve_trend:[310,295,288,290,286,286] },
   limb:{ tool_calls:1520, sandbox:['运行中','运行中','空闲'], success:96.8, dag_running:3, tools:[{n:'calculator',c:620,s:99.2},{n:'http',c:410,s:96.5},{n:'code',c:305,s:94.8},{n:'search',c:185,s:95.1}] },
   immune:{ events:12, circuit:['gateway:关闭','llm-gateway:半开','sense:关闭'], tenants:3, error_rate:0.42, alerts:[{t:'LLM成本激增',l:'P1',s:'已确认'},{t:'渠道降级',l:'P2',s:'处理中'}] },
@@ -147,22 +169,111 @@ function renderBrain(){
   <div class="status-bar"><span>任务队列：<b>${MOCK.brain.queue.map(q=>q).join(' · ')}</b></span><span>多轮上下文：<b>10 轮</b></span><span>语义缓存命中：<b class="ok">24%</b></span></div>`;
 }
 
-function renderSense(){
+function sensorCard(sensor){
+  const cls = sensor.status === 'UP' ? 'up' : (sensor.status === 'DEGRADED' ? 'deg' : 'down');
+  const statusText = sensor.status === 'UP' ? 'UP 正常' : (sensor.status === 'DEGRADED' ? 'DEGRADED 降级' : 'DOWN 隔离');
+  const warn = sensor.status === 'DEGRADED'
+    ? `<div class="sensor-warn">⚠ 降级：${sensor.available ? '上游能力未就绪/探针失败' : '渠道预留未实现'}</div>`
+    : (sensor.status === 'DOWN' ? `<div class="sensor-warn">⛔ 已隔离：采集请求自动降级到可用渠道</div>` : '');
   return `
-  <div class="view-title"><h2>👁️ 感官视图</h2><span class="desc">多渠道采集 · 数据质检（Mock 数据）</span></div>
+  <div class="sensor ${cls}" data-channel="${sensor.type}" onclick="selectSensor('${sensor.type}')">
+    <div class="head"><span class="ico">${sensor.icon || ''}</span><span class="nm">${sensor.name}</span>
+      <span class="st ${cls === 'up' ? 'up' : (cls === 'deg' ? 'deg' : 'down')}">${statusText}</span></div>
+    <div class="metric"><span>采集批次</span><b>${sensor.collect_count}</b></div>
+    <div class="metric"><span>质检通过率</span><b>${sensor.quality_pass_rate}%</b></div>
+    <div class="metric"><span>速率</span><b>${sensor.rate_per_minute}/min</b></div>
+    <div class="last">最近：${sensor.last_record_text || '暂无记录'}</div>
+    ${warn}
+  </div>`;
+}
+
+async function renderSense(){
+  const provider = window.ConsoleDataProvider.source;
+  let matrix, stats;
+  try{
+    [matrix, stats] = await Promise.all([provider.getSenseMatrix(), provider.getSenseStats()]);
+  }catch(err){
+    return `
+    <div class="view-title"><h2>👁️ 感官视图</h2><span class="desc">五感矩阵 · 多渠道采集 · 数据质检</span></div>
+    <div class="placeholder">数据源 <b>${window.ConsoleDataProvider.dataSource.toUpperCase()}</b> 加载失败：${err.message}<br><br>
+      排查：① 网关已启动（scripts/start.sh java）② DEV_TOKEN_ENDPOINT_ENABLED=true ③ ?ds=mock 回退 Mock</div>`;
+  }
+  const s = stats.summary || {};
+  const trend = (stats.collect_rate_trend || []).map(p=>p.value);
+  const labels = (stats.collect_rate_trend || []).map(p=>p.bucket);
+  return `
+  <div class="view-title"><h2>👁️ 感官视图</h2><span class="desc">五感矩阵 · 多渠道采集 · 数据质检</span></div>
+  <div class="ds-note">数据源：<b>${window.ConsoleDataProvider.dataSource.toUpperCase()}</b>
+    ${window.ConsoleDataProvider.dataSource === 'api' ? `（网关 ${window.ConsoleDataProvider.apiBase}）` : '（静态测试数据）'}
+    · 暂存后端：<b>${(stats.staging||{}).active_backend || '-'}</b>
+    · 事件主题：<b>${(stats.event||{}).topic || '-'}</b>
+    · 切换：在地址栏追加 <code>?ds=api</code> 或 <code>?ds=mock</code>（零 UI 改动）</div>
+  <div class="sensor-grid">${(matrix.sensors||[]).map(sensorCard).join('')}</div>
   <div class="grid">
-    ${card('采集速率','186 条/min','b','较昨日 +12%')}
-    ${card('质检通过率','96.2%','g','六维质量体系')}
-    ${card('今日采集量','1.2 万','','触觉渠道为主')}
-    ${card('活跃渠道','4/5','','嗅觉 DEGRADED')}
+    ${card('采集批次总量', s.total_batches ?? 0, 'b', `通过 ${s.accepted ?? 0} · 拒绝 ${s.rejected ?? 0}`)}
+    ${card('质检通过率', (s.quality_pass_rate ?? 0) + '%', 'g', `门槛 ${((stats.config||{}).quality_threshold ?? 0.6)}`)}
+    ${card('五感在线', `${matrix.up_count ?? 0}/5`, matrix.up_count >= 3 ? 'g' : 'r', `降级 ${matrix.degraded_count ?? 0} · 隔离 ${matrix.down_count ?? 0}`)}
+    ${card('死信待处理', (stats.dead_letter||{}).pending ?? 0, ((stats.dead_letter||{}).pending ? 'r' : 'g'), `累计 ${(stats.dead_letter||{}).total ?? 0}`)}
   </div>
   <div class="grid c2">
-    ${chartCard('采集量趋势（近6h）','line',['10:00','11:00','12:00','13:00','14:00','15:00'],MOCK.sense.rate,'#0f6e56')}
-    <div class="card"><div class="k">渠道状态</div><table><tr><th>渠道</th><th>状态</th></tr>${
-      MOCK.sense.channels.map(c=>`<tr><td>${c.n}</td><td><span class="st ${c.s==='UP'?'up':'deg'}">${c.s==='UP'?'正常':'降级'}</span></td></tr>`).join('')
-    }</table></div>
+    <div class="card"><div class="k">采集量趋势（近 6 分钟）</div><div class="chart-box"><canvas id="c-采集量趋势（近6分钟）"></canvas></div>
+      <div class="s" id="senseTrendData" style="display:none"
+           data-labels='${JSON.stringify(labels)}' data-values='${JSON.stringify(trend)}'></div></div>
+    <div class="card"><div class="k">R0 调度与采集配置</div>
+      <table>
+        <tr><th>项</th><th>值</th></tr>
+        <tr><td>R0 调度</td><td><span class="st ${(stats.r0||{}).enabled ? 'up' : 'down'}">${(stats.r0||{}).enabled ? '启用' : '停用'}</span></td></tr>
+        <tr><td>轮询周期</td><td>${Math.round(((stats.r0||{}).tick_ms || 0)/1000)}s</td></tr>
+        <tr><td>R0 规则数</td><td>${(stats.r0||{}).rules ?? 0}</td></tr>
+        <tr><td>重试次数上限</td><td>${(stats.config||{}).retry_max_attempts ?? '-'}</td></tr>
+        <tr><td>R1 单轮渠道上限</td><td>${(stats.config||{}).r1_max_channels_per_round ?? '-'}</td></tr>
+        <tr><td>OCR 开关</td><td>${(stats.config||{}).ocr_enabled ? '启用' : '关闭'}</td></tr>
+      </table></div>
   </div>
-  <div class="status-bar"><span>R0 定时采集：<b>每 5min</b></span><span>R1 动态采集：<b>启用</b></span><span>数据暂存：<b class="ok">MinIO 正常</b></span></div>`;
+  <div id="senseDetail"></div>
+  <div class="status-bar">
+    <span>采集触发：<b>R0 定时 / R1 指令</b></span>
+    <span>质检：<b>非空 · 长度 · 编码 · 重复 · 密度</b></span>
+    <span>暂存：<b class="ok">隔离暂存区（ACCEPTED/REJECTED）</b></span>
+    <span>事件：<b>lifeform.sense.collected</b></span>
+  </div>`;
+}
+
+/* D6 下钻：点击感官卡 → 渠道详情面板 */
+async function selectSensor(type){
+  document.querySelectorAll('.sensor').forEach(el=>el.classList.toggle('selected', el.dataset.channel === type));
+  const host = document.getElementById('senseDetail');
+  if(!host) return;
+  const provider = window.ConsoleDataProvider.source;
+  host.innerHTML = `<div class="detail-panel">正在加载 ${type} 渠道详情…</div>`;
+  try{
+    const detail = await provider.getSenseChannelDetail(type);
+    const cls = detail.status === 'UP' ? 'up' : (detail.status === 'DEGRADED' ? 'deg' : 'down');
+    host.innerHTML = `
+    <div class="detail-panel">
+      <h3>${detail.icon || ''} ${detail.name} 渠道详情 <span class="st ${cls}">${detail.status}</span>
+        <span style="margin-left:auto;font-size:11px;color:var(--text2)">type=${detail.type}</span></h3>
+      <div class="detail-meta">
+        <span>采集批次 <b>${detail.collect_count}</b></span>
+        <span>通过 <b>${detail.accepted_count}</b></span>
+        <span>拒绝 <b>${detail.rejected_count}</b></span>
+        <span>条目 <b>${detail.item_count}</b></span>
+        <span>质检通过率 <b>${detail.quality_pass_rate}%</b></span>
+        <span>速率 <b>${detail.rate_per_minute}/min</b></span>
+        <span>是否隔离 <b>${detail.isolated ? '是' : '否'}</b></span>
+      </div>
+      <table><tr><th>批次</th><th>暂存状态</th><th>质量分</th><th>条目</th><th>尝试</th><th>降级</th><th>拒绝原因</th></tr>
+        ${(detail.recent_batches||[]).length ? (detail.recent_batches||[]).map(b=>`
+          <tr><td>${b.batch_id}</td>
+            <td><span class="st ${b.staging_status === 'ACCEPTED' ? 'up' : 'down'}">${b.staging_status}</span></td>
+            <td>${b.quality_score}</td><td>${b.item_count}</td><td>${b.attempts}</td>
+            <td>${b.degraded ? '是' : '否'}</td><td>${b.reject_reason || '-'}</td></tr>`).join('')
+          : '<tr><td colspan="7" style="text-align:center;color:var(--muted)">该渠道暂无暂存批次</td></tr>'}
+      </table>
+    </div>`;
+  }catch(err){
+    host.innerHTML = `<div class="detail-panel">渠道详情加载失败：${err.message}</div>`;
+  }
 }
 
 function renderBody(){
@@ -278,10 +389,29 @@ function renderChat(){
 // ═══════════ 视图切换 ═══════════
 const views = { brain:renderBrain, sense:renderSense, body:renderBody, limb:renderLimb, immune:renderImmune, evolve:renderEvolve, system:renderSystem, chat:renderChat };
 
-function switchView(name){
+async function switchView(name){
   document.querySelectorAll('.nav-item').forEach(n=>n.classList.toggle('active',n.dataset.view===name));
-  main.innerHTML = views[name]();
-  renderCharts(name);
+  const result = views[name]();
+  if (result && typeof result.then === 'function'){
+    main.innerHTML = `<div class="view-title"><h2>加载中…</h2></div><div class="placeholder">正在从数据源加载视图数据…</div>`;
+    main.innerHTML = await result;
+  } else {
+    main.innerHTML = result;
+  }
+  if (name === 'sense') renderSenseTrend(); else renderCharts(name);
+}
+
+/** 感官趋势图（数据来自 provider，与数据源无关） */
+function renderSenseTrend(){
+  Object.keys(charts).forEach(k=>{try{charts[k].destroy()}catch(e){}}); charts={};
+  const el = document.getElementById('c-采集量趋势（近6分钟）');
+  const holder = document.getElementById('senseTrendData');
+  if(!el || !holder) return;
+  const labels = JSON.parse(holder.dataset.labels || '[]');
+  const values = JSON.parse(holder.dataset.values || '[]');
+  charts.sense = new Chart(el,{type:'line',
+    data:{labels,datasets:[{data:values,label:'采集批次/min',borderColor:'#0f6e56',backgroundColor:'#0f6e5633',borderWidth:2,fill:false,tension:.4}]},
+    options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{font:{size:11},boxWidth:12}}},scales:{y:{beginAtZero:true,ticks:{font:{size:10}}},x:{ticks:{font:{size:10}}}}}});
 }
 
 function renderCharts(name){
@@ -289,7 +419,7 @@ function renderCharts(name){
   const specs = {
     brain:[{id:'c-意图分布',type:'doughnut',data:MOCK.brain.intent_dist.map(x=>x.v),labels:MOCK.brain.intent_dist.map(x=>x.n),colors:['#185fa5','#0f6e56','#c05621','#94a3b8']},
            {id:'c-会话趋势（近7日）',type:'line',data:MOCK.brain.trend,labels:['D1','D2','D3','D4','D5','D6','D7'],color:'#185fa5'}],
-    sense:[{id:'c-采集量趋势（近6h）',type:'line',data:MOCK.sense.rate,labels:['10:00','11:00','12:00','13:00','14:00','15:00'],color:'#0f6e56'}],
+    // sense 视图趋势图由 renderSenseTrend 基于 ConsoleDataProvider 数据绘制（mock/api 双源一致）
     body:[{id:'c-检索延迟趋势（近6日）',type:'line',data:MOCK.body.retrieve_trend,labels:['D1','D2','D3','D4','D5','D6'],color:'#7c5cbf'}],
     limb:[{id:'c-DAG执行耗时（P99）',type:'bar',data:MOCK.limb.dag_running?[4.2,6.8,9.5]:[0],labels:['5节点','8节点','12节点'],color:'#c05621'}],
     evolve:[{id:'c-满意度趋势（近6周）',type:'line',data:MOCK.evolve.satisfaction,labels:['W1','W2','W3','W4','W5','W6'],color:'#0f766e'}],
@@ -321,7 +451,17 @@ function mockReply(){
   body.scrollTop=body.scrollHeight;
 }
 
-switchView('brain');
+// ═══════════ 数据源标识（R-C09 Mock / Api 双数据源）═══════════
+(function initDataSourceTag(){
+  const ds = window.ConsoleDataProvider.dataSource.toUpperCase();
+  const tag = document.getElementById('dsTag');
+  if(tag){ tag.textContent = `DATA_SOURCE = ${ds}`; tag.className = 'tag ' + (ds === 'API' ? 'api' : 'mock'); }
+  const foot = document.getElementById('footDs');
+  if(foot) foot.textContent = ds;
+})();
+
+const initialView = (location.hash || '#brain').replace('#','');
+switchView(views[initialView] ? initialView : 'brain');
 </script>
 </body>
 </html>

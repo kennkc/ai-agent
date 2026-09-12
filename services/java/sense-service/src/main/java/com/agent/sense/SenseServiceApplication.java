@@ -2,7 +2,9 @@ package com.agent.sense;
 
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
+import org.springframework.boot.context.properties.ConfigurationPropertiesScan;
 import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
+import org.springframework.scheduling.annotation.EnableScheduling;
 
 /**
  * 感官渠道服务入口
@@ -11,6 +13,8 @@ import org.springframework.cloud.client.discovery.EnableDiscoveryClient;
  */
 @SpringBootApplication
 @EnableDiscoveryClient
+@EnableScheduling
+@ConfigurationPropertiesScan
 public class SenseServiceApplication {
 
     public static void main(String[] args) {

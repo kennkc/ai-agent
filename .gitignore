@@ -10,6 +10,13 @@ node_modules/
 .next/
 dist/
 
+# 本地调试临时产物（诊断日志 / 基准脚本）
+.build/
+
+# 感官采集运行时目录
+data/sense-inbox/
+data/sense-staging/
+
 # IDE
 .idea/
 .vscode/
