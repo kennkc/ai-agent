@@ -32,3 +32,11 @@ services/python/nlp-service/generated/
 # Vite cache
 **/.vite/
 .env
+
+# Python 虚拟环境（本机 services/python/venv，34MB，不入库）
+venv/
+.venv/
+services/python/venv/
+
+# 感官采集运行时目录（服务工作目录为 services/java，故相对路径带前缀）
+services/java/data/
