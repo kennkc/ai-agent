@@ -1,11 +1,11 @@
 import axios from 'axios'
 import {
   approvals, automations, brainChain, brainDecision, cases, chatMessages, collaboration,
-  connectors, evolution, evolutionMetrics, experts, growthTimeline, healingRecords,
-  metrics, modelCallSeries, modelRuntimeNodes, notifications, optimizationSuggestions, organs, resultArtifacts, searchIndex, senses, serviceHealth, teamWorkflow,
-  skills, tasks, vitalSigns,
+  connectors, evolution, evolutionMetrics, experts, growthTimeline, healingRecords, managedModels,
+  metrics, modelCallSeries, modelRoutes, modelRuntimeNodes, modelTokenTrend, notifications,
+  onlineAgents, optimizationSuggestions, organs, remoteChannels, remoteFlow, resultArtifacts,
+  searchIndex, senses, serviceHealth, skills, tasks, teamWorkflow, todaySummary, vitalSigns,
 } from './mock'
-
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api/wp',
@@ -38,6 +38,7 @@ const mockWorkbench = {
     model_calls: modelCallSeries,
     model_runtime: modelRuntimeNodes,
     optimization_suggestions: optimizationSuggestions,
+    today_summary: todaySummary,
   },
   vitals: vitalSigns,
   organs,
@@ -51,8 +52,13 @@ const mockWorkbench = {
   automations,
   cases,
   approvals,
+  models: managedModels,
+  model_routes: modelRoutes,
+  model_token_trend: modelTokenTrend,
+  remote_channels: remoteChannels,
+  remote_flow: remoteFlow,
+  online_agents: onlineAgents,
 }
-
 export const dataProvider = {
   mode: source,
 
@@ -95,10 +101,11 @@ export const dataProvider = {
       api.get('/senses'), api.get('/evolution'), api.get('/collab/DOM-2048'),
       api.get('/experts'), api.get('/skills'), api.get('/connectors'),
       api.get('/automations'), api.get('/cases'), api.get('/approvals'),
+      api.get('/models'), api.get('/remote-im/channels'), api.get('/agents/online'),
     ]
     const results = await Promise.all(requests.map(request => safe(() => request, { data: { data: null } })))
     const [vitals, organsData, brain, sensesData, evolutionData, collaborationData, expertsData,
-      skillsData, connectorsData, automationsData, casesData, approvalsData] = results.map(item => unwrap(item.data))
+      skillsData, connectorsData, automationsData, casesData, approvalsData, modelsData, remoteChannelsData, onlineAgentsData] = results.map(item => unwrap(item.data))
 
     return {
       vitals: Array.isArray(vitals) ? vitals : (vitals ? vitalSigns.map(item => ({ ...item, ...vitals[item.key] })) : vitalSigns),
@@ -122,6 +129,12 @@ export const dataProvider = {
       automations: automationsData || automations,
       cases: casesData || cases,
       approvals: approvalsData || approvals,
+      models: modelsData || managedModels,
+      model_routes: modelRoutes,
+      model_token_trend: modelTokenTrend,
+      remote_channels: remoteChannelsData || remoteChannels,
+      remote_flow: remoteFlow,
+      online_agents: onlineAgentsData || onlineAgents,
     }
   },
 

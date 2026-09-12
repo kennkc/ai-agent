@@ -23,6 +23,14 @@
           </template>
         </el-menu>
       </el-scrollbar>
+      <div v-if="!store.sidebarCollapsed" class="agent-online-panel">
+        <div class="agent-online-head"><span>Agent 在线</span><strong>{{ activeAgentCount }}/{{ onlineAgents.length }}</strong></div>
+        <button v-for="agent in onlineAgents" :key="agent.agent_id" type="button" class="online-agent-row" @click="router.push('/collab')">
+          <i class="online-agent-dot" :class="agent.state" />
+          <span class="online-agent-copy"><strong>{{ agent.name }}</strong><small>{{ agent.role }} · {{ agent.task }}</small></span>
+          <em>{{ agent.latency_ms }}ms</em>
+        </button>
+      </div>
       <div v-if="!store.sidebarCollapsed" class="aside-footer">
         <span>NODE 01</span><span>v0.2</span>
       </div>
@@ -160,6 +168,7 @@ import {
   Grid, List, Moon, Odometer, Refresh, Search, Share, Sunny, Timer, UserFilled, View,
 } from '@element-plus/icons-vue'
 import { modules } from '../config/modules'
+import { onlineAgents } from '../api/mock'
 import { useAppStore } from '../stores/app'
 import { notifications as notificationSeed, searchIndex, vitalSigns } from '../api/mock'
 import { dataProvider } from '../api/provider'
@@ -187,6 +196,7 @@ const searchInputRef = ref<{ focus: () => void } | null>(null)
 const notificationList = ref<NotificationItem[]>(notificationSeed.map(item => ({ ...item })))
 const online = ref(navigator.onLine)
 const headerVitals = computed(() => vitalSigns.slice(0, 3))
+const activeAgentCount = computed(() => onlineAgents.filter(agent => agent.state === 'run').length)
 const unreadCount = computed(() => notificationList.value.filter(item => item.unread).length)
 const filteredSearchResults = computed(() => searchResults.value.filter(item => activeSearchScope.value === '全部' || item.type === activeSearchScope.value))
 const preferenceDraft = reactive<UserPreferences>({
@@ -292,6 +302,10 @@ onUnmounted(() => {
 <style scoped>
 .platform-shell { min-height: 100vh; background: transparent; }
 .platform-aside {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  overflow: hidden;
   position: relative;
   background: var(--wp-shell-sidebar);
   border-right: 1px solid var(--wp-border);
@@ -307,9 +321,11 @@ onUnmounted(() => {
 .brand-text span { color: var(--wp-sub); font-size: 10px; letter-spacing: .08em; }
 .system-pulse { display: flex; align-items: center; gap: 8px; margin: 14px 18px; color: var(--wp-sub); font-size: 11px; letter-spacing: .12em; }
 .pulse-dot, .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wp-success); box-shadow: 0 0 12px var(--wp-success); animation: breathe 2s ease-in-out infinite; }
-.nav-scroll { height: calc(100vh - 140px); }
+.nav-scroll { flex: 1 1 auto; min-height: 0; }
+.nav-scroll :deep(.el-scrollbar__wrap) { overflow-y: auto; }
+.platform-menu { width: 100%; }
 .platform-menu { padding: 6px 0 18px; }
-.aside-footer { position: absolute; bottom: 14px; left: 0; right: 0; display: flex; justify-content: space-between; padding: 0 20px; color: rgba(148,163,184,.55); font-size: 10px; letter-spacing: .16em; }
+.aside-footer { flex: 0 0 auto; display: flex; justify-content: space-between; padding: 0 20px; color: rgba(148,163,184,.55); font-size: 10px; letter-spacing: .16em; }
 .platform-header {
   display: flex; align-items: center; gap: 10px; height: 72px;
   background: var(--wp-shell-header); border-bottom: 1px solid var(--wp-border);
@@ -358,4 +374,16 @@ onUnmounted(() => {
 @media (max-width: 1500px) { .header-vitals { display: none; } }
 @media (max-width: 1100px) { .tenant-tag, .header-status { display: none; } .global-search-trigger { max-width: 280px; margin-left: auto; } }
 @media (max-width: 900px) { .global-search-trigger, .header-brand { display: none; } .platform-main { padding: 14px; } }
+.agent-online-panel { flex: 0 0 auto; max-height: 240px; margin: 8px 12px 0; padding: 10px 8px; overflow-y: auto; border: 1px solid var(--wp-border); border-radius: 12px; background: rgba(8, 15, 28, .34); }
+.agent-online-head { display: flex; justify-content: space-between; padding: 0 6px 7px; color: var(--wp-sub); font-size: 10px; letter-spacing: .1em; }
+.agent-online-head strong { color: var(--wp-success); }
+.online-agent-row { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; width: 100%; padding: 5px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--wp-text); cursor: pointer; text-align: left; }
+.online-agent-row:hover { background: rgba(148,163,184,.08); }
+.online-agent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wp-success); box-shadow: 0 0 7px rgba(52,211,153,.55); }
+.online-agent-dot.wait { background: var(--wp-gold-soft); box-shadow: 0 0 7px rgba(212,175,55,.45); }
+.online-agent-dot.idle { background: #64748b; box-shadow: none; }
+.online-agent-copy { display: flex; flex-direction: column; min-width: 0; gap: 1px; }
+.online-agent-copy strong { font-size: 10px; }
+.online-agent-copy small { overflow: hidden; color: var(--wp-sub); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.online-agent-row em { color: var(--wp-sub); font-size: 8px; font-style: normal; }
 </style>

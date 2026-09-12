@@ -48,6 +48,7 @@ WP_STAGE_ENDPOINTS = {
     "/experts", "/experts/{expert_id}", "/skills", "/skills/{skill_id}/install",
     "/connectors", "/connectors/{connector_id}/authorize",
     "/automations", "/automations/{automation_id}",
+    "/models", "/models/{model_id}", "/remote-im/channels", "/remote-im/command", "/agents/online",
     "/cases", "/cases/{case_id}/reuse",
     "/approvals", "/approvals/{approval_id}/decision",
 }

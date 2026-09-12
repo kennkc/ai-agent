@@ -121,17 +121,56 @@ components:
         required_approvals: { type: integer, example: 2 }
         decided_by: { type: string }
         at: { type: string }
+    CollaborationAgent:
+      type: object
+      required: [agent_id, name, role, progress, state, current_task, use_case, model, artifact_count, bus_position]
+      properties:
+        agent_id: { type: string, example: AG-02 }
+        name: { type: string, example: 调研 Agent }
+        role: { type: string, example: Researcher }
+        progress: { type: number, example: 84 }
+        state: { type: string, enum: [running, done, waiting, blocked] }
+        current_task: { type: string }
+        use_case: { type: string }
+        model: { type: string }
+        tools: { type: array, items: { type: string } }
+        artifact_count: { type: integer }
+        confidence: { type: number }
+        waiting_for: { type: string }
+        bus_position: { type: number }
+        bus_message: { type: string }
+        bus_kind: { type: string, enum: [dispatch, running, result, waiting] }
+        is_leader: { type: boolean }
     CollabDomain:
       type: object
-      required: [domain_id, task_id, mode, agents, artifacts, gates]
+      required: [domain_id, task_id, mode, protocol, concurrency_current, concurrency_limit, agents, artifacts, gates]
       properties:
         domain_id: { type: string, example: collab-20260812-0042 }
         task_id: { type: string, example: T-1042 }
         mode: { type: string, enum: [fanout, pipeline, negotiation] }
-        agents: { type: array, items: { type: object } }
-        msg_flow: { type: array, items: { type: string } }
+        mode_label: { type: string, example: 扇出 Fan-out }
+        protocol: { type: string, example: MC-P v1 }
+        concurrency_current: { type: integer, example: 5 }
+        concurrency_limit: { type: integer, example: 8 }
+        p99_ms: { type: number, example: 7.8 }
+        ack_rate: { type: number, example: 99.98 }
+        messages_per_sec: { type: number, example: 42 }
+        updated_at: { type: string }
+        agents: { type: array, items: { $ref: '#/components/schemas/CollaborationAgent' } }
+        msg_flow: { type: array, items: { $ref: '#/components/schemas/CollaborationMessage' } }
         artifacts: { type: array, items: { $ref: '#/components/schemas/Artifact' } }
         gates: { type: array, items: { type: object } }
+    CollaborationMessage:
+      type: object
+      required: [message_id, time, type, from, to, text]
+      properties:
+        message_id: { type: string }
+        time: { type: string }
+        type: { type: string, enum: [dispatch, result, heartbeat, negotiate] }
+        from: { type: string }
+        to: { type: string }
+        text: { type: string }
+        payload: { type: object }
     Artifact:
       type: object
       required: [artifact_id, task_id, kind, title, conf_score]
@@ -260,9 +299,37 @@ components:
         evidence: { type: string }
         action: { type: string }
         source: { type: string }
+    TodaySummaryMetric:
+      type: object
+      required: [label, value, trend, tone]
+      properties:
+        label: { type: string }
+        value: { oneOf: [{ type: string }, { type: number }] }
+        unit: { type: string }
+        trend: { type: string }
+        tone: { type: string, enum: [primary, success, warning, danger] }
+    TodaySummaryEvent:
+      type: object
+      required: [time, title, detail, type]
+      properties:
+        time: { type: string }
+        title: { type: string }
+        detail: { type: string }
+        type: { type: string, enum: [task, knowledge, model, governance] }
+    TodaySummary:
+      type: object
+      required: [date, headline, running_index, metrics, events, attention]
+      properties:
+        date: { type: string }
+        headline: { type: string }
+        running_index: { type: integer }
+        metrics: { type: array, items: { $ref: '#/components/schemas/TodaySummaryMetric' } }
+        events: { type: array, items: { $ref: '#/components/schemas/TodaySummaryEvent' } }
+        attention: { type: array, items: { type: string } }
     OverviewDashboard:
       type: object
       properties:
+        today_summary: { $ref: '#/components/schemas/TodaySummary' }
         metrics: { type: array, items: { type: object } }
         services: { type: array, items: { type: object } }
         vitals: { type: array, items: { type: object } }
@@ -271,6 +338,64 @@ components:
         model_calls: { type: array, items: { $ref: '#/components/schemas/ModelCallPoint' } }
         model_runtime: { type: array, items: { $ref: '#/components/schemas/ModelRuntimeNode' } }
         optimization_suggestions: { type: array, items: { $ref: '#/components/schemas/OptimizationSuggestion' } }
+    ManagedModel:
+      type: object
+      required: [model_id, name, provider, tier, state, cost_per_1k, latency_ms, quality, share]
+      properties:
+        model_id: { type: string }
+        name: { type: string }
+        provider: { type: string }
+        tier: { type: string, enum: [L0, L1, L2, L3] }
+        state: { type: string, enum: [active, standby, degraded, disabled] }
+        task_types: { type: array, items: { type: string } }
+        cost_per_1k: { type: number }
+        latency_ms: { type: integer }
+        quality: { type: number }
+        share: { type: number }
+        quota: { type: string }
+    ModelRoute:
+      type: object
+      required: [route_id, task_type, model_id, share]
+      properties:
+        route_id: { type: string }
+        task_type: { type: string }
+        model_id: { type: string }
+        model_name: { type: string }
+        share: { type: number }
+        cost: { type: string }
+        note: { type: string }
+    RemoteChannel:
+      type: object
+      required: [channel_id, name, type, state]
+      properties:
+        channel_id: { type: string }
+        name: { type: string }
+        type: { type: string, enum: [wechat, wecom, feishu, dingtalk, qq] }
+        state: { type: string, enum: [online, available, offline] }
+        account: { type: string }
+        capabilities: { type: array, items: { type: string } }
+        last_message: { type: string }
+    RemoteFlowEvent:
+      type: object
+      required: [event_id, time, direction, channel, message, status]
+      properties:
+        event_id: { type: string }
+        time: { type: string }
+        direction: { type: string, enum: [下发, 执行, 回传] }
+        channel: { type: string }
+        message: { type: string }
+        status: { type: string, enum: [sent, running, done, failed] }
+    OnlineAgent:
+      type: object
+      required: [agent_id, name, role, state, task]
+      properties:
+        agent_id: { type: string }
+        name: { type: string }
+        role: { type: string }
+        state: { type: string, enum: [run, wait, idle] }
+        task: { type: string }
+        model: { type: string }
+        latency_ms: { type: integer }
 paths:
   /overview:
     get:
@@ -516,6 +641,33 @@ paths:
       responses:
         '200':
           description: OK
+  /models:
+    get:
+      summary: 多模型池与运行状态（WB-10）
+      responses:
+        '200': { description: OK }
+  /models/{model_id}:
+    patch:
+      summary: 更新模型启停与路由状态
+      parameters:
+        - { name: model_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+  /remote-im/channels:
+    get:
+      summary: 远程 IM 通道列表（WB-09 / IN8）
+      responses:
+        '200': { description: OK }
+  /remote-im/command:
+    post:
+      summary: 通过 IM 下发远程任务指令
+      responses:
+        '202': { description: Accepted }
+  /agents/online:
+    get:
+      summary: Agent 在线状态与当前任务
+      responses:
+        '200': { description: OK }
   /search:
     get:
       summary: 全局搜索（W4，任务/知识/技能/案例）

@@ -1,6 +1,6 @@
 export type ModuleId =
   | 'overview' | 'vitals' | 'brain' | 'senses' | 'evolution' | 'collab'
-  | 'tasks' | 'chat' | 'experts' | 'skills' | 'connectors' | 'automation'
+  | 'tasks' | 'chat' | 'experts' | 'skills' | 'connectors' | 'automation' | 'models' | 'remote'
   | 'cases' | 'approvals'
 
 export type ModuleGroup = '生命体区' | '工作台区' | '治理区'
@@ -106,10 +106,18 @@ export interface CollaborationAgent {
   name: string
   role: string
   progress: number
-  state: string
+  state: 'running' | 'done' | 'waiting' | 'blocked'
   current_task: string
+  use_case: string
   model: string
-  tool_whitelist: string[]
+  tools: string[]
+  artifact_count: number
+  confidence: number
+  waiting_for?: string
+  bus_position: number
+  bus_message: string
+  bus_kind: 'dispatch' | 'running' | 'result' | 'waiting'
+  is_leader?: boolean
 }
 
 export interface CollaborationMessage {
@@ -122,6 +130,58 @@ export interface CollaborationMessage {
   payload: Record<string, unknown>
 }
 
+export interface ManagedModel {
+  model_id: string
+  name: string
+  provider: string
+  tier: 'L0' | 'L1' | 'L2' | 'L3'
+  state: 'active' | 'standby' | 'degraded' | 'disabled'
+  task_types: string[]
+  cost_per_1k: number
+  latency_ms: number
+  quality: number
+  share: number
+  quota: string
+}
+
+export interface ModelRoute {
+  route_id: string
+  task_type: string
+  model_id: string
+  model_name: string
+  share: number
+  cost: string
+  note: string
+}
+
+export interface RemoteChannel {
+  channel_id: string
+  name: string
+  type: 'wechat' | 'wecom' | 'feishu' | 'dingtalk' | 'qq'
+  state: 'online' | 'available' | 'offline'
+  account: string
+  capabilities: string[]
+  last_message: string
+}
+
+export interface RemoteFlowEvent {
+  event_id: string
+  time: string
+  direction: '下发' | '执行' | '回传'
+  channel: string
+  message: string
+  status: 'sent' | 'running' | 'done' | 'failed'
+}
+
+export interface OnlineAgent {
+  agent_id: string
+  name: string
+  role: string
+  state: 'run' | 'wait' | 'idle'
+  task: string
+  model: string
+  latency_ms: number
+}
 export interface ExpertProfile {
   expert_id: string
   name: string
@@ -291,7 +351,32 @@ export interface OptimizationSuggestion {
   source: string
 }
 
+export interface TodaySummaryMetric {
+  label: string
+  value: string | number
+  unit?: string
+  trend: string
+  tone: 'primary' | 'success' | 'warning' | 'danger'
+}
+
+export interface TodaySummaryEvent {
+  time: string
+  title: string
+  detail: string
+  type: 'task' | 'knowledge' | 'model' | 'governance'
+}
+
+export interface TodaySummary {
+  date: string
+  headline: string
+  running_index: number
+  metrics: TodaySummaryMetric[]
+  events: TodaySummaryEvent[]
+  attention: string[]
+}
+
 export interface OverviewCockpit {
+  today_summary: TodaySummary
   workflow: OverviewWorkflow
   model_calls: ModelCallPoint[]
   model_runtime: ModelRuntimeNode[]

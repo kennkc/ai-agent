@@ -8,7 +8,7 @@ import type { ModuleId } from '../types'
 
 const moduleRoutes = [
   'vitals', 'brain', 'senses', 'evolution', 'collab', 'experts', 'skills',
-  'connectors', 'automation', 'cases', 'approvals',
+  'connectors', 'automation', 'models', 'remote', 'cases', 'approvals',
 ] as ModuleId[]
 
 const router = createRouter({

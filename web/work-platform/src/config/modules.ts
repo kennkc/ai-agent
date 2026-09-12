@@ -13,6 +13,8 @@ export const modules: WorkModule[] = [
   { id: 'skills', path: '/skills', title: '技能市场', group: '工作台区', phase: 'P3', status: 'prototype', description: '技能包注册、安装、审核与版本', icon: 'Grid' },
   { id: 'connectors', path: '/connectors', title: '连接器', group: '工作台区', phase: 'P5', status: 'prototype', description: 'MCP 连接器注册、授权与健康', icon: 'Connection' },
   { id: 'automation', path: '/automation', title: '自动化', group: '工作台区', phase: 'P7', status: 'prototype', description: 'cron 任务、推送与失败重试', icon: 'Timer' },
+  { id: 'models', path: '/models', title: '多模型管理', group: '工作台区', phase: 'P5', status: 'prototype', description: '模型路由、Token 成本、质量与健康度', icon: 'Cpu' },
+  { id: 'remote', path: '/remote', title: '远程 IM 遥控', group: '工作台区', phase: 'P7', status: 'prototype', description: '手机 IM 下发任务与结果回传', icon: 'ChatDotRound' },
   { id: 'cases', path: '/cases', title: '灵感案例', group: '工作台区', phase: 'P8', status: 'prototype', description: '案例模板与“做同款”', icon: 'Collection' },
   { id: 'approvals', path: '/approvals', title: '免疫审批', group: '治理区', phase: 'P7', status: 'prototype', description: 'L1-L4 审批队列与双人复核', icon: 'Checked' },
 ]

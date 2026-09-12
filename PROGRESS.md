@@ -38,10 +38,10 @@ Phase 0 and Phase 1 development scope is implemented on branch `codex/phase0-1-h
 - [x] Vue 3 + Vite + TypeScript + Element Plus work-platform scaffold
 - [x] Vue Router + Pinia + ConsoleDataProvider Mock/API switch
 - [x] Global search, notification center and persisted preferences
-- [x] Overview enhanced cockpit: parallel-lane team activity graph, model call trend, model runtime topology and optimization suggestions`n- [x] Overview vitals summary, service health and growth timeline drill-down
+- [x] Overview enhanced cockpit: life-colony concurrency topology, model call trend, model runtime topology and optimization suggestions`n- [x] Overview vitals summary, service health and growth timeline drill-down
 - [x] Tasks create/retry/archive/reorder and chat result workspace (artifacts/files/diff/preview)
 - [x] Vitals realtime status, organ report, brain trace, senses drill-down and evolution trend
-- [x] Collaboration DAG/protocol flow, expert schema, skill install, connector auth
+- [x] Multi-agent bus topology with mode cards, agent message rails, non-flickering MC-P stream, stacked artifacts and gates
 - [x] Automation cron validation, case assembly and L3/L4 approval workflow displays
 - [x] npm run typecheck passed
 - [x] npm run build passed

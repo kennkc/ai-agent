@@ -131,61 +131,122 @@
 
       <!-- 协作总线 -->
       <template v-else-if="moduleId === 'collab'">
-        <el-card class="section-card" shadow="never">
-          <template #header><strong>协作域 {{ collaborationData.domain_id }}</strong><span class="header-meta">task {{ collaborationData.task_id }} · {{ collaborationData.mode }}</span></template>
-          <div class="agent-grid">
-            <el-popover v-for="agent in collaborationData.agents" :key="agent.agent_id" placement="top" trigger="hover" :width="280">
-              <template #reference>
-                <div class="agent-card">
-                  <div><strong>{{ agent.name }}</strong><span>{{ agent.role }} · {{ agent.agent_id }}</span></div>
-                  <el-progress type="dashboard" :percentage="agent.progress" :width="78" />
-                  <small>{{ agent.current_task }}</small>
-                </div>
-              </template>
-              <strong>{{ agent.name }}</strong>
-              <p>模型：{{ agent.model }}</p>
-              <p>工具：{{ agent.tools.join('、') }}</p>
-              <p>状态：{{ agent.state }}</p>
-            </el-popover>
-          </div>
-        </el-card>
-        <el-card class="section-card dag-card" shadow="never">
-          <template #header><strong>MC DAG 编排</strong><span class="header-meta">C25 规划 → 并行执行 → C27 合并 → 审批门</span></template>
-          <div class="dag-canvas">
-            <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="dag-lines">
-              <line v-for="edge in collaborationData.dag.edges" :key="edge.join('-')" :x1="edgeStart(edge).x" :y1="edgeStart(edge).y" :x2="edgeEnd(edge).x" :y2="edgeEnd(edge).y" />
-            </svg>
-            <button v-for="node in collaborationData.dag.nodes" :key="node.id" class="dag-node" :class="node.state" :style="{ left: `${node.x}%`, top: `${node.y}%` }" type="button" @click="openDagNode(node)">
-              {{ node.label }}
+        <div class="collab-kpi-grid">
+          <div class="collab-kpi"><span>协作域</span><strong>{{ collaborationData.domain_id }}</strong><small>任务 {{ collaborationData.task_id }}</small></div>
+          <div class="collab-kpi"><span>并发负载</span><strong>{{ collaborationData.concurrency_current }}/{{ collaborationData.concurrency_limit }}</strong><small>当前 Agent 并发数</small></div>
+          <div class="collab-kpi"><span>总线 P99</span><strong>{{ collaborationData.p99_ms }}ms</strong><small>目标 &lt; 10ms</small></div>
+          <div class="collab-kpi"><span>消息确认率</span><strong>{{ collaborationData.ack_rate }}%</strong><small>{{ collaborationData.messages_per_sec }} msg/s</small></div>
+        </div>
+
+        <el-card class="section-card collaboration-mode-card" shadow="never">
+          <template #header><strong>协作模式模块</strong><span class="header-meta">MC-02 · 三模式可切换</span></template>
+          <div class="collaboration-mode-grid">
+            <button v-for="(mode, index) in busModes" :key="mode.id" type="button" class="collaboration-mode-item" :class="{ active: busMode === mode.id }" @click="busMode = mode.id">
+              <div class="mode-item-head">
+                <span class="mode-number">0{{ index + 1 }}</span>
+                <span class="mode-title"><strong>{{ mode.label }}</strong><small>{{ mode.english }}</small></span>
+                <el-tag v-if="busMode === mode.id" size="small" type="success">当前模式</el-tag>
+              </div>
+              <p>{{ mode.description }}</p>
+              <div class="mode-use-case"><span>适用</span>{{ mode.use_case }}</div>
+              <div class="mode-mini-topology" :class="mode.id">
+                <i v-for="node in mode.nodes" :key="node">{{ node }}</i>
+              </div>
             </button>
           </div>
+          <div class="active-mode-bar">
+            <span>当前执行模式</span><strong>{{ activeMode.label }}</strong><em>{{ activeMode.description }}</em><el-tag effect="plain">{{ collaborationData.protocol }}</el-tag>
+          </div>
         </el-card>
-        <div class="two-column">
-          <el-card class="section-card" shadow="never">
-            <template #header><strong>MC-P 消息流</strong><span class="header-meta">点击查看协议体</span></template>
-            <el-timeline class="message-flow">
-              <el-timeline-item v-for="message in collaborationData.messages" :key="message.message_id" :timestamp="message.time" :type="messageType(message.type)">
-                <button class="message-pill" type="button" @click="openProtocol(message)"><el-tag size="small">{{ message.type }}</el-tag> {{ message.from }} → {{ message.to }} · {{ message.text }}</button>
-              </el-timeline-item>
-            </el-timeline>
+        <el-card class="section-card bus-topology-card" shadow="never">
+          <template #header>
+            <div class="card-title-row"><strong>多 Agent 协作总线</strong><span class="live-badge"><i /> BUS LIVE</span></div>
+            <span class="header-meta">{{ collaborationData.protocol }} · {{ collaborationData.updated_at }}</span>
+          </template>
+          <div class="bus-topbar">
+            <div class="bus-caption">
+              <strong>生命群落并发拓扑</strong>
+              <span>{{ collaborationData.mode }} · 团长拆解 → 总线扇出 → 成员并行 → 工件合并</span>
+            </div>
+            <el-tag class="bus-active-mode" effect="plain">当前：{{ activeModeLabel }}</el-tag>
+          </div>
+          <div class="agent-bus">
+            <div v-for="agent in collaborationData.agents" :key="agent.agent_id" class="agent-bus-row" :class="[agent.state, { leader: agent.is_leader }]">
+              <button class="bus-agent-node" :class="{ leader: agent.is_leader, worker: !agent.is_leader }" type="button" @click="openDetail(`${agent.name} 协作详情`, agent)">
+                <span class="bus-agent-avatar">{{ agent.name.slice(0, 1) }}</span>
+                <span class="bus-agent-copy"><strong>{{ agent.name }}</strong><small>{{ agent.role }} · {{ agent.use_case }}</small></span>
+                <el-tag size="small" :type="agentTagType(agent.state)">{{ agentStateLabel(agent.state) }}</el-tag>
+              </button>
+              <div class="bus-track">
+                <span class="bus-line-base" />
+                <span class="bus-line-live" :class="agent.bus_kind" :style="{ width: `${agent.progress}%` }" />
+                <span class="bus-packet" :style="{ left: `${agent.bus_position}%` }" />
+                <button class="bus-message-pill" :class="agent.bus_kind" type="button" :style="{ left: `${agent.bus_position}%` }" @click="openProtocol({ message_id: agent.agent_id, type: agent.bus_kind, payload: agent })">
+                  {{ agent.bus_message }}
+                </button>
+              </div>
+              <button class="bus-agent-result" type="button" @click="openDetail(`${agent.name} 结果摘要`, agent)">
+                <strong>{{ agent.artifact_count }} 工件</strong>
+                <span>{{ confidenceText(agent) }}</span>
+                <small>{{ agent.waiting_for || agent.current_task }}</small>
+              </button>
+            </div>
+          </div>
+          <div class="bus-status-bar">
+            <span><i class="status-dot" /> 总线健康</span>
+            <span>扇出全收 5/5</span>
+            <span>重复消息 0</span>
+            <span>心跳超时 0</span>
+            <span class="gold">MC-01~06 协议链路在线</span>
+          </div>
+        </el-card>
+
+        <div class="two-column collab-mid">
+          <el-card class="section-card dag-card" shadow="never">
+            <template #header><strong>并发 DAG 编排</strong><span class="header-meta">C25 规划 → 并行执行 → C27 合并</span></template>
+            <div class="dag-canvas compact-dag">
+              <svg viewBox="0 0 100 100" preserveAspectRatio="none" class="dag-lines">
+                <line v-for="edge in collaborationData.dag.edges" :key="edge.join('-')" :x1="edgeStart(edge).x" :y1="edgeStart(edge).y" :x2="edgeEnd(edge).x" :y2="edgeEnd(edge).y" />
+              </svg>
+              <button v-for="node in collaborationData.dag.nodes" :key="node.id" class="dag-node" :class="node.state" :style="{ left: `${node.x}%`, top: `${node.y}%` }" type="button" @click="openDagNode(node)">{{ node.label }}</button>
+            </div>
           </el-card>
+
+          <el-card class="section-card message-stream-card" shadow="never">
+            <template #header><strong>MC-P 实时消息流</strong><span class="header-meta">点击消息查看协议体</span></template>
+            <div class="message-filter">
+              <button v-for="item in messageFilters" :key="item.id" type="button" :class="{ active: messageFilter === item.id }" @click="messageFilter = item.id">{{ item.label }}</button>
+            </div>
+            <div class="message-pill-flow">
+              <button v-for="message in filteredCollabMessages" :key="message.message_id" class="bus-message-card" :class="message.type" type="button" @click="openProtocol(message)">
+                <span class="message-time">{{ message.time }}</span>
+                <strong>{{ message.type }}</strong>
+                <span class="message-route">{{ message.from }} → {{ message.to }}</span>
+                <p>{{ message.text }}</p>
+              </button>
+            </div>
+          </el-card>
+        </div>
+
+        <div class="two-column collab-bottom-stack">
           <el-card class="section-card" shadow="never">
-            <template #header><strong>共享工件层</strong></template>
+            <template #header><strong>共享工件层</strong><span class="header-meta">{{ collaborationData.artifacts.length }} 个工件</span></template>
             <el-table :data="collaborationData.artifacts" size="small">
               <el-table-column prop="name" label="工件" />
               <el-table-column prop="source" label="来源" />
+              <el-table-column prop="size" label="大小" width="80" />
               <el-table-column prop="state" label="状态" width="90" />
             </el-table>
           </el-card>
+          <el-card class="section-card" shadow="never">
+            <template #header><strong>协作验收门</strong><span class="header-meta">4 重校验</span></template>
+            <div class="gate-grid compact-gates">
+              <button v-for="gate in collaborationData.gates" :key="gate.name" class="gate-card" :class="gate.state.toLowerCase()" type="button" @click="openDetail(gate.name, gate)">
+                <strong>{{ gate.name }}</strong><span>{{ gate.state }}</span><small>{{ gate.detail }}</small>
+              </button>
+            </div>
+          </el-card>
         </div>
-        <el-card class="section-card" shadow="never">
-          <template #header><strong>验收门</strong></template>
-          <div class="gate-grid">
-            <button v-for="gate in collaborationData.gates" :key="gate.name" class="gate-card" :class="gate.state.toLowerCase()" type="button" @click="openDetail(gate.name, gate)">
-              <strong>{{ gate.name }}</strong><span>{{ gate.state }}</span><small>{{ gate.detail }}</small>
-            </button>
-          </div>
-        </el-card>
       </template>
       <!-- 专家团队 -->
       <template v-else-if="moduleId === 'experts'">
@@ -277,6 +338,83 @@
         </el-card>
       </template>
 
+      <!-- 多模型管理 -->
+      <template v-else-if="moduleId === 'models'">
+        <div class="metric-grid model-kpi-grid">
+          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">本月 Token 消耗</div><div class="metric-value">8.42<span class="metric-unit">M</span></div><div class="metric-trend">较上月 -12% · 预算内</div></el-card>
+          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">路由成本节省</div><div class="metric-value">¥6,180</div><div class="metric-trend">70/20/10 分流</div></el-card>
+          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">模型健康度</div><div class="metric-value">99.2<span class="metric-unit">%</span></div><div class="metric-trend">无漂移告警</div></el-card>
+          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">活跃模型</div><div class="metric-value">{{ activeModelCount }}<span class="metric-unit">/ {{ modelData.length }}</span></div><div class="metric-trend">多源路由在线</div></el-card>
+        </div>
+        <el-card class="section-card" shadow="never">
+          <template #header><strong>模型池与运行状态</strong><span class="header-meta">按成本 / 质量 / 延迟动态路由</span></template>
+          <div class="managed-model-grid">
+            <article v-for="model in modelData" :key="model.model_id" class="managed-model-card" :class="model.state">
+              <div class="model-card-head"><div><span class="model-tier">{{ model.tier }}</span><strong>{{ model.name }}</strong><small>{{ model.provider }} · {{ model.model_id }}</small></div><el-tag :type="modelStateType(model.state)">{{ modelStateLabel(model.state) }}</el-tag></div>
+              <div class="model-card-stats"><span>成本<strong>{{ model.cost_per_1k ? `¥${model.cost_per_1k}/1K` : '免费' }}</strong></span><span>延迟<strong>{{ model.latency_ms }}ms</strong></span><span>质量<strong>{{ model.quality }}</strong></span><span>流量<strong>{{ model.share }}%</strong></span></div>
+              <div class="tag-line"><el-tag v-for="task in model.task_types" :key="task" size="small" type="info">{{ task }}</el-tag></div>
+              <div class="model-card-foot"><small>{{ model.quota }}</small><el-button v-if="model.state !== 'active'" size="small" type="primary" @click="activateModel(model)">设为活跃</el-button><el-tag v-else type="success" effect="plain">当前活跃</el-tag></div>
+            </article>
+          </div>
+        </el-card>
+        <div class="two-column model-route-layout">
+          <el-card class="section-card" shadow="never">
+            <template #header><strong>模型路由策略</strong><span class="header-meta">70/20/10 分流</span></template>
+            <el-table :data="modelRouteData" size="small">
+              <el-table-column prop="task_type" label="任务类型" min-width="130" />
+              <el-table-column prop="model_name" label="模型" min-width="180" />
+              <el-table-column label="流量" width="100"><template #default="{ row }"><el-progress :percentage="row.share" :show-text="false" /><small>{{ row.share }}%</small></template></el-table-column>
+              <el-table-column prop="cost" label="成本" width="100" />
+              <el-table-column prop="note" label="策略" width="110" />
+            </el-table>
+          </el-card>
+          <el-card class="section-card" shadow="never">
+            <template #header><strong>Token 用量趋势</strong><span class="header-meta">近 6 周 · 缓存命中持续提升</span></template>
+            <div class="token-trend">
+              <div v-for="item in modelTrendData" :key="item.week" class="token-column">
+                <span>{{ item.tokens }}M</span><div class="token-bar"><i :style="{ height: `${item.tokens / 10 * 100}%` }" /></div><strong>{{ item.week }}</strong><small>缓存 {{ item.cache }}%</small>
+              </div>
+            </div>
+          </el-card>
+        </div>
+      </template>
+
+      <!-- 远程 IM 遥控 -->
+      <template v-else-if="moduleId === 'remote'">
+        <div class="metric-grid remote-kpi-grid">
+          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">在线渠道</div><div class="metric-value">{{ onlineRemoteChannels }}<span class="metric-unit">/ {{ remoteChannelData.length }}</span></div><div class="metric-trend">微信 / 企业微信在线</div></el-card>
+          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">今日遥控消息</div><div class="metric-value">38<span class="metric-unit">条</span></div><div class="metric-trend">下发 12 · 回传 18</div></el-card>
+          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">平均回传时延</div><div class="metric-value">2.4<span class="metric-unit">s</span></div><div class="metric-trend">P95 5.8s</div></el-card>
+          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">待审批推送</div><div class="metric-value">2<span class="metric-unit">项</span></div><div class="metric-trend">企业微信联动</div></el-card>
+        </div>
+        <el-card class="section-card" shadow="never">
+          <template #header><strong>IM 渠道适配器</strong><span class="header-meta">手机遥控桌面 Agent</span></template>
+          <div class="remote-channel-grid">
+            <article v-for="channel in remoteChannelData" :key="channel.channel_id" class="remote-channel-card" :class="channel.state">
+              <div class="channel-head"><span class="channel-icon">{{ channel.name.slice(0, 1) }}</span><div><strong>{{ channel.name }}</strong><small>{{ channel.account }}</small></div><el-tag :type="channelStateType(channel.state)">{{ channelStateLabel(channel.state) }}</el-tag></div>
+              <div class="tag-line"><el-tag v-for="cap in channel.capabilities" :key="cap" size="small" type="info">{{ cap }}</el-tag></div>
+              <small class="channel-last">最近消息：{{ channel.last_message }}</small>
+            </article>
+          </div>
+        </el-card>
+        <el-card class="section-card remote-console-card" shadow="never">
+          <template #header><strong>遥控任务流</strong><span class="header-meta">下发 → 执行 → 结果回传</span></template>
+          <div class="remote-console">
+            <div class="remote-flow">
+              <div v-for="(event, index) in remoteFlowData" :key="event.event_id" class="remote-flow-item" :class="event.direction">
+                <span class="remote-index">{{ index + 1 }}</span>
+                <div class="remote-flow-card"><div><el-tag size="small">{{ event.direction }}</el-tag><strong>{{ event.channel }}</strong><span>{{ event.time }}</span></div><p>{{ event.message }}</p></div>
+              </div>
+            </div>
+            <div class="remote-command-box">
+              <span class="remote-kicker">REMOTE COMMAND</span>
+              <h3>从手机或 IM 下发新任务</h3>
+              <el-input v-model="remoteCommand" type="textarea" :rows="4" placeholder="例如：分析今日科创板行情并生成摘要" @keyup.enter.exact.prevent="sendRemoteCommand" />
+              <div class="remote-actions"><el-select model-value="微信" style="width: 120px"><el-option label="微信" value="微信" /><el-option label="企业微信" value="企业微信" /><el-option label="飞书" value="飞书" /></el-select><el-button type="primary" @click="sendRemoteCommand">发送遥控指令</el-button></div>
+            </div>
+          </div>
+        </el-card>
+      </template>
       <!-- 灵感案例 -->
       <template v-else-if="moduleId === 'cases'">
         <div v-if="caseData.length" class="card-grid">
@@ -412,13 +550,15 @@ import { dataProvider } from '../api/provider'
 import {
   approvals as mockApprovals, automations as mockAutomations, brainChain, brainDecision,
   cases as mockCases, collaboration as mockCollaboration, connectors as mockConnectors,
-  evolution as mockEvolution, experts as mockExperts, organs as mockOrgans,
+  evolution as mockEvolution, experts as mockExperts, managedModels as mockManagedModels,
+  modelRoutes as mockModelRoutes, modelTokenTrend as mockModelTokenTrend, organs as mockOrgans,
+  remoteChannels as mockRemoteChannels, remoteFlow as mockRemoteFlow,
   senses as mockSenses, skills as mockSkills, vitalSigns as mockVitalSigns,
 } from '../api/mock'
 import { moduleMap } from '../config/modules'
 import type {
-  ApprovalItem, AutomationItem, CaseItem, ConnectorItem, ExpertProfile, HealingRecord,
-  ModuleId, OrganHealth, SenseChannel, SkillItem, VitalSign,
+  ApprovalItem, AutomationItem, CaseItem, CollaborationAgent, ConnectorItem, ExpertProfile, HealingRecord,
+  ManagedModel, ModelRoute, ModuleId, OrganHealth, RemoteChannel, RemoteFlowEvent, SenseChannel, SkillItem, VitalSign,
 } from '../types'
 
 const route = useRoute()
@@ -448,6 +588,12 @@ const connectorData = ref<ConnectorItem[]>(mockConnectors.map(item => ({ ...item
 const automationData = ref<AutomationItem[]>(mockAutomations.map(item => ({ ...item, push: [...item.push] })))
 const caseData = ref<CaseItem[]>(mockCases.map(item => ({ ...item })))
 const approvalData = ref<ApprovalItem[]>(mockApprovals.map(item => ({ ...item, approved_by: [...item.approved_by], parameters: { ...item.parameters } })))
+const modelData = ref<ManagedModel[]>(mockManagedModels.map(item => ({ ...item, task_types: [...item.task_types] })))
+const modelRouteData = ref<ModelRoute[]>(mockModelRoutes.map(item => ({ ...item })))
+const modelTrendData = ref(mockModelTokenTrend.map(item => ({ ...item })))
+const remoteChannelData = ref<RemoteChannel[]>(mockRemoteChannels.map(item => ({ ...item, capabilities: [...item.capabilities] })))
+const remoteFlowData = ref<RemoteFlowEvent[]>(mockRemoteFlow.map(item => ({ ...item })))
+const remoteCommand = ref('')
 
 const detailVisible = ref(false)
 const detailTitle = ref('')
@@ -477,6 +623,20 @@ const expertStateFilter = ref('all')
 const skillCategory = ref('all')
 const skillKeyword = ref('')
 const approvalFilter = ref('pending')
+const busMode = ref<'fanout' | 'pipeline' | 'negotiate'>('fanout')
+const messageFilter = ref<'all' | 'dispatch' | 'result' | 'heartbeat' | 'negotiate'>('all')
+const busModes = [
+  { id: 'fanout', label: '扇出', english: 'Fan-out', description: '团长拆解 N 个子任务，并行分派给多个 Agent，最后统一回收结果。', use_case: '竞品调研 / 多文档分析 / 多源采集', nodes: ['团长', 'Agent A', 'Agent B', 'Agent C'] },
+  { id: 'pipeline', label: '流水线', english: 'Pipeline', description: 'Agent 按依赖顺序接力，前一成员的产物作为下一成员输入。', use_case: '检索 → 分析 → 生成 → 质检', nodes: ['检索', '分析', '生成', '质检'] },
+  { id: 'negotiate', label: '协商', english: 'Negotiate', description: '多个 Agent 对同一问题提交方案，由仲裁器按置信度、证据和规则裁决。', use_case: '方案评审 / 冲突消解 / 质量仲裁', nodes: ['Agent A', 'Agent B', '仲裁器', '裁决'] },
+] as const
+const messageFilters = [
+  { id: 'all', label: '全部' },
+  { id: 'dispatch', label: 'dispatch' },
+  { id: 'result', label: 'result' },
+  { id: 'heartbeat', label: 'heartbeat' },
+  { id: 'negotiate', label: 'negotiate' },
+] as const
 
 const degradedSenses = computed(() => senseData.value.filter(item => item.state !== 'UP'))
 const filteredExperts = computed(() => expertStateFilter.value === 'all' ? expertData.value : expertData.value.filter(item => item.state === expertStateFilter.value))
@@ -489,6 +649,11 @@ const filteredApprovals = computed(() => {
   return approvalData.value.filter(item => item.state === 'pending')
 })
 const pendingApprovalCount = computed(() => approvalData.value.filter(item => item.state === 'pending').length)
+const filteredCollabMessages = computed(() => messageFilter.value === 'all' ? collaborationData.value.messages : collaborationData.value.messages.filter((item: any) => item.type === messageFilter.value))
+const activeMode = computed(() => busModes.find(mode => mode.id === busMode.value) || busModes[0])
+const activeModeLabel = computed(() => activeMode.value.label)
+const activeModelCount = computed(() => modelData.value.filter(item => item.state === 'active').length)
+const onlineRemoteChannels = computed(() => remoteChannelData.value.filter(item => item.state === 'online').length)
 const prettyDetail = computed(() => pretty(detailPayload.value))
 
 async function loadWorkbench() {
@@ -508,6 +673,11 @@ async function loadWorkbench() {
     if (Array.isArray(data.automations)) automationData.value = data.automations
     if (Array.isArray(data.cases)) caseData.value = data.cases
     if (Array.isArray(data.approvals)) approvalData.value = data.approvals
+    if (Array.isArray(data.models)) modelData.value = data.models
+    if (Array.isArray(data.model_routes)) modelRouteData.value = data.model_routes
+    if (Array.isArray(data.model_token_trend)) modelTrendData.value = data.model_token_trend
+    if (Array.isArray(data.remote_channels)) remoteChannelData.value = data.remote_channels
+    if (Array.isArray(data.remote_flow)) remoteFlowData.value = data.remote_flow
   } catch {
     loadError.value = true
   } finally {
@@ -549,6 +719,18 @@ function openProtocol(message: any) {
   openDetail(`${message.message_id} · ${message.type} 协议体`, message.payload)
 }
 
+function agentTagType(state: CollaborationAgent['state']) {
+  return { running: 'primary', done: 'success', waiting: 'warning', blocked: 'danger' }[state] as 'primary' | 'success' | 'warning' | 'danger'
+}
+
+function agentStateLabel(state: CollaborationAgent['state']) {
+  return { running: '执行中', done: '已完成', waiting: '等待中', blocked: '阻塞' }[state]
+}
+
+function confidenceText(agent: CollaborationAgent) {
+  if (agent.confidence <= 0) return '等待结果'
+  return `置信度 ${agent.confidence.toFixed(2)}`
+}
 function messageType(type: string) {
   return type === 'result' ? 'success' : type === 'negotiate' ? 'warning' : 'primary'
 }
@@ -575,6 +757,42 @@ function openDetail(title: string, payload: unknown) {
   detailVisible.value = true
 }
 
+function modelStateType(state: ManagedModel['state']) {
+  return { active: 'success', standby: 'info', degraded: 'warning', disabled: 'danger' }[state] as 'success' | 'info' | 'warning' | 'danger'
+}
+
+function modelStateLabel(state: ManagedModel['state']) {
+  return { active: '活跃', standby: '待命', degraded: '降级', disabled: '停用' }[state]
+}
+
+function activateModel(model: ManagedModel) {
+  modelData.value.forEach(item => { item.state = item.model_id === model.model_id ? 'active' : (item.state === 'degraded' ? 'degraded' : 'standby') })
+  ElMessage.success(`${model.name} 已设为活跃模型`)
+}
+
+function channelStateType(state: RemoteChannel['state']) {
+  return { online: 'success', available: 'primary', offline: 'info' }[state] as 'success' | 'primary' | 'info'
+}
+
+function channelStateLabel(state: RemoteChannel['state']) {
+  return { online: '在线', available: '可接入', offline: '离线' }[state]
+}
+
+function sendRemoteCommand() {
+  if (!remoteCommand.value.trim()) {
+    ElMessage.warning('请输入遥控指令')
+    return
+  }
+  const now = new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  const text = remoteCommand.value.trim()
+  remoteFlowData.value.push(
+    { event_id: `RM-${Date.now()}-1`, time: now, direction: '下发', channel: '手机微信', message: text, status: 'done' },
+    { event_id: `RM-${Date.now()}-2`, time: now, direction: '执行', channel: '桌面 Agent', message: '任务已接入，正在规划并调度专家 Agent。', status: 'running' },
+    { event_id: `RM-${Date.now()}-3`, time: now, direction: '回传', channel: '手机微信', message: '任务已受理，结果将通过当前 IM 渠道回传。', status: 'done' },
+  )
+  remoteCommand.value = ''
+  ElMessage.success('遥控指令已下发')
+}
 function pretty(value: unknown) {
   if (value === null || value === undefined) return '--'
   if (typeof value === 'string') return value
@@ -848,4 +1066,144 @@ onMounted(loadWorkbench)
 @media (max-width: 1300px) { .vitals-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .agent-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .gate-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 1100px) { .sense-grid, .card-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .agent-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 @media (max-width: 720px) { .vitals-grid, .sense-grid, .card-grid, .agent-grid, .gate-grid { grid-template-columns: 1fr; } .trend-chart { overflow-x: auto; justify-content: flex-start; gap: 8px; } }
+</style>
+
+<style scoped>
+.collab-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.collab-kpi { display: flex; flex-direction: column; gap: 5px; padding: 15px 16px; border: 1px solid var(--wp-border); border-radius: 14px; background: var(--wp-card); box-shadow: var(--wp-shadow); }
+.collab-kpi span { color: var(--wp-sub); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
+.collab-kpi strong { font-family: "Bodoni MT", serif; font-size: 23px; }
+.collab-kpi small { color: var(--wp-sub); }
+.bus-topology-card :deep(.el-card__body) { padding: 0; }
+.bus-topbar { display: flex; justify-content: space-between; align-items: center; gap: 16px; padding: 14px 18px; border-bottom: 1px solid var(--wp-border); background: linear-gradient(90deg, rgba(94,234,212,.05), rgba(212,175,55,.035)); }
+.bus-caption { display: flex; flex-direction: column; gap: 3px; }
+.bus-caption strong { color: var(--wp-primary); font-size: 13px; }
+.bus-caption span { color: var(--wp-sub); font-size: 10px; }
+.bus-mode-switch, .message-filter { display: flex; gap: 5px; flex-wrap: wrap; }
+.bus-mode-switch button, .message-filter button { padding: 5px 10px; border: 1px solid var(--wp-border); border-radius: 999px; background: transparent; color: var(--wp-sub); cursor: pointer; font-size: 10px; }
+.bus-mode-switch button.active, .message-filter button.active { border-color: rgba(94,234,212,.6); background: rgba(94,234,212,.12); color: var(--wp-primary); box-shadow: 0 0 12px rgba(94,234,212,.12); }
+.agent-bus { padding: 22px 18px 12px; background: linear-gradient(180deg, rgba(3,7,18,.30), rgba(15,23,42,.12)); }
+.agent-bus-row { display: grid; grid-template-columns: minmax(220px, .8fr) minmax(380px, 2fr) minmax(130px, .55fr); align-items: center; gap: 14px; min-height: 72px; }
+.agent-bus-row + .agent-bus-row { border-top: 1px dashed rgba(148,163,184,.12); }
+.agent-bus-row.leader { background: linear-gradient(90deg, rgba(212,175,55,.07), transparent 44%); }
+.bus-agent-node { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 9px; padding: 9px 10px; border: 1px solid transparent; border-radius: 11px; background: transparent; color: var(--wp-text); cursor: pointer; text-align: left; }
+.bus-agent-node:hover { border-color: var(--wp-border); background: rgba(148,163,184,.05); }
+.bus-agent-node.leader { border-color: rgba(212,175,55,.28); }
+.bus-agent-avatar { display: grid; place-items: center; width: 34px; height: 34px; border-radius: 10px; background: linear-gradient(135deg, rgba(94,234,212,.2), rgba(212,175,55,.17)); color: var(--wp-gold-soft); font-weight: 800; }
+.bus-agent-copy { display: flex; flex-direction: column; min-width: 0; gap: 3px; }
+.bus-agent-copy small { overflow: hidden; color: var(--wp-sub); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.bus-track { position: relative; height: 54px; }
+.bus-line-base { position: absolute; left: 0; right: 0; top: 29px; height: 2px; background: repeating-linear-gradient(90deg, rgba(148,163,184,.24) 0 8px, rgba(148,163,184,.08) 8px 14px); }
+.bus-line-live { position: absolute; left: 0; top: 28px; height: 4px; max-width: 100%; border-radius: 4px; background: linear-gradient(90deg, var(--wp-success), var(--wp-primary), var(--wp-gold)); box-shadow: 0 0 14px rgba(94,234,212,.4); transition: width .6s ease; }
+.bus-line-live.dispatch { background: linear-gradient(90deg, rgba(212,175,55,.55), var(--wp-gold-soft)); }
+.bus-line-live.waiting { background: repeating-linear-gradient(90deg, rgba(212,175,55,.55) 0 7px, rgba(212,175,55,.12) 7px 13px); box-shadow: none; }
+.bus-packet { position: absolute; top: 25px; width: 10px; height: 10px; margin-left: -5px; border-radius: 50%; background: #fff; box-shadow: 0 0 0 3px rgba(94,234,212,.20), 0 0 14px rgba(94,234,212,.30); }
+.bus-message-pill { position: absolute; top: 2px; transform: translateX(-50%); padding: 3px 8px; border: 1px solid var(--wp-border); border-radius: 999px; background: var(--wp-card-solid); color: var(--wp-sub); cursor: pointer; font-size: 9px; white-space: nowrap; }
+.bus-message-pill.result { border-color: rgba(52,211,153,.5); color: var(--wp-success); }
+.bus-message-pill.running { border-color: rgba(94,234,212,.5); color: var(--wp-primary); }
+.bus-message-pill.dispatch { border-color: rgba(212,175,55,.6); color: var(--wp-gold-soft); }
+.bus-message-pill.waiting { border-style: dashed; color: #f4d58d; }
+.bus-agent-result { display: flex; flex-direction: column; gap: 4px; padding: 10px; border: 1px solid var(--wp-border); border-radius: 10px; background: rgba(148,163,184,.04); color: var(--wp-text); cursor: pointer; text-align: left; }
+.bus-agent-result strong { color: var(--wp-gold-soft); font-size: 12px; }
+.bus-agent-result span { color: var(--wp-primary); font-size: 10px; }
+.bus-agent-result small { overflow: hidden; color: var(--wp-sub); font-size: 9px; text-overflow: ellipsis; white-space: nowrap; }
+.bus-status-bar { display: flex; gap: 18px; align-items: center; padding: 11px 18px; border-top: 1px solid var(--wp-border); color: var(--wp-sub); font-size: 10px; flex-wrap: wrap; }
+.bus-status-bar span { display: inline-flex; align-items: center; gap: 6px; }
+.bus-status-bar .gold { margin-left: auto; color: var(--wp-gold-soft); }
+.collab-mid { grid-template-columns: 1fr; }
+.compact-dag { height: 280px; }
+.message-stream-card :deep(.el-card__body) { min-height: 330px; }
+.message-stream-card *, .bus-message-card * { animation: none !important; transition: none !important; }
+.collab-bottom-stack { grid-template-columns: 1fr; }
+.message-filter { margin-bottom: 12px; }
+.message-pill-flow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; max-height: 280px; overflow: auto; padding-right: 3px; }
+.bus-message-card { display: grid; grid-template-columns: auto auto 1fr; gap: 6px 9px; padding: 10px; border: 1px solid var(--wp-border); border-radius: 11px; background: rgba(148,163,184,.04); color: var(--wp-text); cursor: pointer; text-align: left; }
+.bus-message-card:hover { border-color: var(--wp-primary); background: rgba(94,234,212,.05); }
+.bus-message-card p { grid-column: 1 / -1; margin: 0; color: var(--wp-sub); font-size: 10px; }
+.message-time { color: var(--wp-sub); font-size: 9px; }
+.bus-message-card strong { color: var(--wp-primary); font-size: 10px; }
+.bus-message-card.result strong { color: var(--wp-success); }
+.bus-message-card.negotiate strong { color: #f59e0b; }
+.message-route { color: var(--wp-sub); font-size: 9px; text-align: right; }
+.compact-gates { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+@keyframes packetTravel { 0%, 100% { transform: translateX(-5px); opacity: .45; } 50% { transform: translateX(5px); opacity: 1; } }
+@media (max-width: 1200px) { .agent-bus-row { grid-template-columns: minmax(180px, .7fr) minmax(320px, 1.6fr); } .bus-agent-result { grid-column: 1 / -1; margin-left: 44px; } .collab-mid { grid-template-columns: 1fr; } }
+@media (max-width: 820px) { .collab-kpi-grid, .message-pill-flow { grid-template-columns: repeat(2, minmax(0, 1fr)); } .agent-bus { overflow-x: auto; } .agent-bus-row { min-width: 720px; } .bus-topbar { align-items: flex-start; flex-direction: column; } }
+@media (max-width: 560px) { .collab-kpi-grid, .message-pill-flow, .compact-gates { grid-template-columns: 1fr; } }
+</style>
+
+<style scoped>
+.collaboration-mode-card :deep(.el-card__body) { padding: 16px 18px; }
+.collaboration-mode-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.collaboration-mode-item { display: flex; flex-direction: column; gap: 10px; padding: 14px; border: 1px solid var(--wp-border); border-radius: 14px; background: rgba(148,163,184,.04); color: var(--wp-text); cursor: pointer; text-align: left; transition: transform .2s ease, border-color .2s ease, box-shadow .2s ease; }
+.collaboration-mode-item:hover { transform: translateY(-2px); border-color: rgba(94,234,212,.62); }
+.collaboration-mode-item.active { border-color: rgba(212,175,55,.65); background: linear-gradient(145deg, rgba(212,175,55,.10), rgba(94,234,212,.045)); box-shadow: 0 0 22px rgba(212,175,55,.10); }
+.mode-item-head { display: grid; grid-template-columns: 32px 1fr auto; align-items: center; gap: 9px; }
+.mode-number { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: rgba(94,234,212,.12); color: var(--wp-primary); font-family: "Bodoni MT", serif; font-size: 15px; }
+.mode-title { display: flex; flex-direction: column; gap: 2px; }
+.mode-title small { color: var(--wp-sub); font-size: 9px; letter-spacing: .08em; }
+.collaboration-mode-item p { min-height: 48px; margin: 0; color: var(--wp-sub); font-size: 10px; line-height: 1.6; }
+.mode-use-case { display: flex; gap: 7px; color: var(--wp-sub); font-size: 9px; }
+.mode-use-case span { color: var(--wp-gold-soft); }
+.mode-mini-topology { display: flex; align-items: center; gap: 4px; min-height: 30px; }
+.mode-mini-topology i { padding: 4px 6px; border: 1px solid var(--wp-border); border-radius: 7px; color: var(--wp-sub); font-size: 8px; font-style: normal; white-space: nowrap; }
+.mode-mini-topology i:not(:last-child)::after { content: "→"; margin-left: 6px; color: var(--wp-primary); }
+.mode-mini-topology.pipeline i:not(:last-child)::after { color: var(--wp-gold-soft); }
+.mode-mini-topology.negotiate i:nth-child(2)::after { content: "⇄"; color: #f59e0b; }
+.active-mode-bar { display: grid; grid-template-columns: auto auto 1fr auto; align-items: center; gap: 10px; margin-top: 13px; padding-top: 12px; border-top: 1px solid var(--wp-border); }
+.active-mode-bar > span { color: var(--wp-sub); font-size: 10px; }
+.active-mode-bar > strong { color: var(--wp-primary); }
+.active-mode-bar > em { color: var(--wp-sub); font-size: 10px; font-style: normal; }
+.bus-active-mode { flex-shrink: 0; }
+@media (max-width: 900px) { .collaboration-mode-grid { grid-template-columns: 1fr; } .collaboration-mode-item p { min-height: auto; } .active-mode-bar { grid-template-columns: 1fr; } }
+</style>
+
+<style scoped>
+.managed-model-grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.managed-model-card { display: flex; flex-direction: column; gap: 11px; padding: 14px; border: 1px solid var(--wp-border); border-radius: 14px; background: rgba(148,163,184,.04); transition: transform .2s ease, border-color .2s ease; }
+.managed-model-card:hover { transform: translateY(-2px); border-color: var(--wp-primary); }
+.managed-model-card.active { border-color: rgba(52,211,153,.5); background: linear-gradient(145deg, rgba(52,211,153,.07), rgba(94,234,212,.025)); }
+.managed-model-card.degraded { border-color: rgba(245,158,11,.55); }
+.model-card-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 10px; }
+.model-card-head > div { display: flex; flex-direction: column; gap: 3px; }
+.model-card-head small { color: var(--wp-sub); font-size: 9px; }
+.model-tier { width: fit-content; padding: 2px 6px; border-radius: 6px; background: rgba(94,234,212,.12); color: var(--wp-primary); font-size: 9px; }
+.model-card-stats { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; }
+.model-card-stats > span { display: flex; flex-direction: column; gap: 2px; color: var(--wp-sub); font-size: 8px; }
+.model-card-stats strong { color: var(--wp-text); font-size: 10px; }
+.model-card-foot { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.model-card-foot small { color: var(--wp-sub); font-size: 9px; }
+.model-route-layout { grid-template-columns: 1.15fr .85fr; }
+.token-trend { display: flex; align-items: flex-end; justify-content: space-around; min-height: 250px; padding-top: 18px; }
+.token-column { display: flex; align-items: center; flex-direction: column; width: 14%; }
+.token-column > span { margin-bottom: 7px; color: var(--wp-gold-soft); font-family: "Bodoni MT", serif; }
+.token-bar { display: flex; align-items: flex-end; width: 28px; height: 145px; border-radius: 8px 8px 2px 2px; background: rgba(148,163,184,.08); }
+.token-bar i { display: block; width: 100%; border-radius: 8px 8px 2px 2px; background: linear-gradient(180deg, var(--wp-primary), var(--wp-gold)); box-shadow: 0 0 14px rgba(94,234,212,.22); }
+.token-column strong { margin-top: 8px; font-size: 10px; }
+.token-column small { color: var(--wp-sub); font-size: 8px; }
+.remote-channel-grid { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 10px; }
+.remote-channel-card { display: flex; flex-direction: column; gap: 9px; padding: 12px; border: 1px solid var(--wp-border); border-radius: 12px; background: rgba(148,163,184,.04); }
+.remote-channel-card.online { border-color: rgba(52,211,153,.38); }
+.remote-channel-card.offline { opacity: .65; }
+.channel-head { display: grid; grid-template-columns: 30px 1fr auto; align-items: center; gap: 8px; }
+.channel-icon { display: grid; place-items: center; width: 30px; height: 30px; border-radius: 9px; background: linear-gradient(135deg, rgba(94,234,212,.18), rgba(212,175,55,.16)); color: var(--wp-gold-soft); font-weight: 800; }
+.channel-head > div { display: flex; flex-direction: column; min-width: 0; gap: 2px; }
+.channel-head small, .channel-last { overflow: hidden; color: var(--wp-sub); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
+.remote-console { display: grid; grid-template-columns: 1.2fr .8fr; gap: 18px; }
+.remote-flow { display: flex; flex-direction: column; gap: 9px; }
+.remote-flow-item { display: grid; grid-template-columns: 28px 1fr; gap: 9px; align-items: start; }
+.remote-index { display: grid; place-items: center; width: 26px; height: 26px; border-radius: 50%; background: var(--wp-primary); color: #04111b; font-size: 10px; font-weight: 800; }
+.remote-flow-item.回传 .remote-index { background: var(--wp-success); }
+.remote-flow-item.执行 .remote-index { background: var(--wp-gold-soft); }
+.remote-flow-card { padding: 10px 12px; border: 1px solid var(--wp-border); border-radius: 10px; background: rgba(148,163,184,.04); }
+.remote-flow-card > div { display: flex; align-items: center; gap: 8px; }
+.remote-flow-card > div span:last-child { margin-left: auto; color: var(--wp-sub); font-size: 9px; }
+.remote-flow-card p { margin: 7px 0 0; color: var(--wp-sub); font-size: 10px; line-height: 1.55; }
+.remote-command-box { display: flex; flex-direction: column; gap: 10px; padding: 16px; border: 1px solid rgba(212,175,55,.38); border-radius: 14px; background: radial-gradient(circle at 85% 10%, rgba(212,175,55,.14), transparent 45%), rgba(148,163,184,.035); }
+.remote-kicker { color: var(--wp-primary); font-size: 9px; letter-spacing: .16em; }
+.remote-command-box h3 { margin: 0; font-family: "Bodoni MT", serif; }
+.remote-actions { display: flex; gap: 8px; }
+.remote-actions .el-button { flex: 1; }
+@media (max-width: 1200px) { .managed-model-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } .remote-channel-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .model-route-layout, .remote-console { grid-template-columns: 1fr; } }
+@media (max-width: 700px) { .managed-model-grid, .remote-channel-grid { grid-template-columns: 1fr; } .model-card-stats { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
 </style>

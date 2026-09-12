@@ -1,6 +1,6 @@
 import type {
   ApprovalItem, AutomationItem, CaseItem, ChatMessage, CollaborationMessage, ConnectorItem,
-  EvolutionMetric, ExpertProfile, HealingRecord, MetricCard, ModelCallPoint, ModelRuntimeNode, NotificationItem, OptimizationSuggestion, OrganHealth, OverviewWorkflow,
+  EvolutionMetric, ExpertProfile, HealingRecord, ManagedModel, MetricCard, ModelCallPoint, ModelRoute, ModelRuntimeNode, NotificationItem, OnlineAgent, OptimizationSuggestion, OrganHealth, OverviewWorkflow, RemoteChannel, RemoteFlowEvent,
   ResultArtifact, SearchItem, SenseChannel, SkillItem, TaskItem, VitalSign,
 } from '../types'
 
@@ -124,20 +124,28 @@ export const evolution = {
 export const collaboration = {
   domain_id: 'DOM-2048',
   task_id: 'T-1042',
-  mode: '扇出 / 流水线混合',
+  mode: 'fanout',
+  mode_label: '扇出 Fan-out',
+  protocol: 'MC-P v1',
+  concurrency_current: 5,
+  concurrency_limit: 8,
+  p99_ms: 7.8,
+  ack_rate: 99.98,
+  messages_per_sec: 42,
+  updated_at: '1.8 秒前',
   agents: [
-    { agent_id: 'AG-01', name: '团长', role: 'Planner / Merger', progress: 72, state: 'running', current_task: 'DAG 规划与结果合并', use_case: '多 Agent 任务编排', model: 'L2-Plan', tools: ['planner', 'merger'] },
-    { agent_id: 'AG-02', name: '调研 Agent', role: 'Researcher', progress: 100, state: 'done', current_task: '竞品资料检索', model: 'L2-LLM', tools: ['search', 'retrieval'] },
-    { agent_id: 'AG-03', name: '数据 Agent', role: 'Analyst', progress: 84, state: 'running', current_task: '增长数据处理', model: 'L2-LLM', tools: ['sql', 'chart'] },
-    { agent_id: 'AG-04', name: '金融 Agent', role: 'Domain Expert', progress: 68, state: 'running', current_task: '风险与监管分析', model: 'L2-LLM', tools: ['financial-api'] },
-    { agent_id: 'AG-05', name: '审查 Agent', role: 'Verifier', progress: 24, state: 'waiting', current_task: '等待交叉验证输入', use_case: '结果质量验收', model: 'L1-Judge', tools: ['diff', 'audit'] },
+    { agent_id: 'AG-01', name: '团长 Agent', role: 'Planner / Merger', progress: 72, state: 'running', current_task: 'DAG 规划与结果合并', use_case: '多 Agent 任务编排', model: 'L2-Plan', tools: ['planner', 'merger'], artifact_count: 1, confidence: 0.96, bus_position: 14, bus_message: 'dispatch ×5', bus_kind: 'dispatch', is_leader: true },
+    { agent_id: 'AG-02', name: '调研 Agent', role: 'Researcher', progress: 100, state: 'done', current_task: '12 份资料已回传', use_case: '竞品资料调研', model: 'L2-LLM', tools: ['search', 'retrieval'], artifact_count: 2, confidence: 0.94, bus_position: 72, bus_message: 'result ✓', bus_kind: 'result' },
+    { agent_id: 'AG-03', name: '数据 Agent', role: 'Analyst', progress: 84, state: 'running', current_task: '增长数据归一化', use_case: '增长数据分析', model: 'L2-LLM', tools: ['sql', 'chart'], artifact_count: 1, confidence: 0.88, bus_position: 84, bus_message: 'running 84%', bus_kind: 'running' },
+    { agent_id: 'AG-04', name: '金融 Agent', role: 'Domain Expert', progress: 68, state: 'running', current_task: '监管风险与口径校验', use_case: '金融合规审查', model: 'L2-LLM', tools: ['financial-api'], artifact_count: 1, confidence: 0.91, bus_position: 68, bus_message: 'negotiate', bus_kind: 'running' },
+    { agent_id: 'AG-05', name: '审查 Agent', role: 'Verifier', progress: 24, state: 'waiting', current_task: '等待交叉验证输入', use_case: '结果质量验收', model: 'L1-Judge', tools: ['diff', 'audit'], artifact_count: 0, confidence: 0, waiting_for: 'C27 合并结果', bus_position: 24, bus_message: 'waiting', bus_kind: 'waiting' },
   ],
   messages: [
-    { message_id: 'M-9001', time: '09:02:18', type: 'dispatch', from: '团长', to: '调研 Agent', text: '派发资料检索任务', payload: { task: 'collect_market_docs', limit: 20, timeout_ms: 60000 } },
-    { message_id: 'M-9002', time: '09:03:42', type: 'heartbeat', from: '调研 Agent', to: '团长', text: '检索进度 60%', payload: { progress: 60, found: 12, failures: 0 } },
-    { message_id: 'M-9003', time: '09:05:06', type: 'result', from: '调研 Agent', to: '团长', text: '回传 12 份有效资料', payload: { artifact_id: 'ART-EVIDENCE', quality: 0.94 } },
-    { message_id: 'M-9004', time: '09:06:31', type: 'negotiate', from: '金融 Agent', to: '团长', text: '请求补充监管口径来源', payload: { reason: 'source_conflict', need: 2, priority: 'P0' } },
-    { message_id: 'M-9005', time: '09:08:12', type: 'heartbeat', from: '数据 Agent', to: '团长', text: '分析阶段 84%', payload: { progress: 84, current: 'growth_normalization' } },
+    { message_id: 'M-9001', time: '09:02:18', type: 'dispatch', from: '团长 Agent', to: '调研 Agent', text: '派发资料检索任务', payload: { task: 'collect_market_docs', limit: 20, timeout_ms: 60000 } },
+    { message_id: 'M-9002', time: '09:03:42', type: 'heartbeat', from: '调研 Agent', to: '团长 Agent', text: '检索进度 60%', payload: { progress: 60, found: 12, failures: 0 } },
+    { message_id: 'M-9003', time: '09:05:06', type: 'result', from: '调研 Agent', to: '团长 Agent', text: '回传 12 份有效资料', payload: { artifact_id: 'ART-EVIDENCE', quality: 0.94 } },
+    { message_id: 'M-9004', time: '09:06:31', type: 'negotiate', from: '金融 Agent', to: '团长 Agent', text: '请求补充监管口径来源', payload: { reason: 'source_conflict', need: 2, priority: 'P0' } },
+    { message_id: 'M-9005', time: '09:08:12', type: 'heartbeat', from: '数据 Agent', to: '团长 Agent', text: '分析阶段 84%', payload: { progress: 84, current: 'growth_normalization' } },
   ],
   dag: {
     nodes: [
@@ -158,7 +166,7 @@ export const collaboration = {
     { name: 'evidence.json', source: '调研 Agent', size: '82KB', state: 'verified' },
     { name: 'growth-model.csv', source: '数据 Agent', size: '126KB', state: 'review' },
     { name: 'analysis.md', source: '金融 Agent', size: '16KB', state: 'review' },
-    { name: 'report-draft.md', source: '团长', size: '42KB', state: 'generating' },
+    { name: 'report-draft.md', source: '团长 Agent', size: '42KB', state: 'generating' },
   ],
   gates: [
     { name: 'Schema 校验', state: 'PASS', detail: '输出符合 report.v2 Schema' },
@@ -167,7 +175,6 @@ export const collaboration = {
     { name: 'L3 审批', state: 'WAITING', detail: '合并完成后进入审批队列' },
   ],
 }
-
 export const experts: ExpertProfile[] = [
   { expert_id: 'E-01', name: '行业研究员', domain: '信息调研', persona: '严谨、来源优先', methodology: '多源检索 → 交叉验证 → 报告', tool_whitelist: ['search', 'retrieval'], output_schema: { type: 'object', required: ['summary', 'evidence', 'confidence'], properties: { summary: 'string', evidence: 'array<source>', confidence: 'number' } }, state: 'active' },
   { expert_id: 'E-02', name: '数据分析师', domain: '数据分析', persona: '冷静的数据洞察者', methodology: '清洗 → 分析 → 可视化 → 结论', tool_whitelist: ['sql', 'chart'], output_schema: { type: 'object', required: ['dataset', 'insights', 'charts'], properties: { dataset: 'string', insights: 'array<string>', charts: 'array<artifact>' } }, state: 'active' },
@@ -331,4 +338,73 @@ export const optimizationSuggestions: OptimizationSuggestion[] = [
     action: 'TTL 分级：L3 30m / L4 10m',
     source: '审批时效 / 免疫审计',
   },
+]
+
+export const todaySummary = {
+  date: '2026-09-12',
+  headline: '生命体运行稳定，5 个 Agent 正在并行处理 P0 调研任务，今日知识质量与模型成本均优于基线。',
+  running_index: 92,
+  metrics: [
+    { label: '完成任务', value: 9, unit: '个', trend: '+3 较昨日', tone: 'success' },
+    { label: '新增知识', value: 36, unit: '篇', trend: '质检通过 97%', tone: 'primary' },
+    { label: 'Token 成本', value: 286, unit: '元', trend: '-12% 较昨日', tone: 'success' },
+    { label: '治理处理', value: 4, unit: '项', trend: '1 项待关注', tone: 'warning' },
+  ],
+  events: [
+    { time: '09:08', title: 'P0 调研进入并行执行', detail: '团长已完成 C25 规划，5 条成员泳道同时运行。', type: 'task' },
+    { time: '08:42', title: '知识自愈完成', detail: '金融竞品文档重新采集并替换，引用校验通过。', type: 'knowledge' },
+    { time: '08:15', title: '模型策略优化生效', detail: '结构化抽取切换 L1 预摘要，P95 延迟下降 9%。', type: 'model' },
+  ],
+  attention: [
+    'L4 外部写接口将在 7 分钟后超时，需要第二人复核。',
+    '舆情嗅觉渠道处于 DEGRADED，采集延迟约 4 分钟。',
+    '分析推理节点负载 82%，建议关注队列深度。',
+  ],
+}
+
+export const managedModels: ManagedModel[] = [
+  { model_id: 'L0-LOCAL', name: '本地轻量模型', provider: 'Local', tier: 'L0', state: 'active', task_types: ['意图识别', '规则路由'], cost_per_1k: 0, latency_ms: 12, quality: 86, share: 100, quota: '不受限' },
+  { model_id: 'EMB-QWEN', name: 'Qwen Embedding', provider: 'Alibaba', tier: 'L1', state: 'active', task_types: ['向量嵌入', '检索路由'], cost_per_1k: 0.08, latency_ms: 86, quality: 91, share: 70, quota: '额度充足' },
+  { model_id: 'DEEPSEEK-V3', name: 'DeepSeek V3', provider: 'DeepSeek', tier: 'L2', state: 'active', task_types: ['分析推理', '内容生成'], cost_per_1k: 1.2, latency_ms: 310, quality: 93, share: 70, quota: '已用 64%' },
+  { model_id: 'QWEN-MAX', name: 'Qwen-Max', provider: 'Alibaba', tier: 'L2', state: 'standby', task_types: ['复杂推理', '中文长文'], cost_per_1k: 6.5, latency_ms: 780, quality: 96, share: 20, quota: '按量计费' },
+  { model_id: 'CLAUDE-SONNET', name: 'Claude Sonnet', provider: 'Anthropic', tier: 'L3', state: 'standby', task_types: ['代码生成', '复杂代理'], cost_per_1k: 4.2, latency_ms: 920, quality: 97, share: 10, quota: '预算内' },
+]
+
+export const modelRoutes: ModelRoute[] = [
+  { route_id: 'RT-01', task_type: '意图识别', model_id: 'L0-LOCAL', model_name: '本地轻量模型', share: 100, cost: '¥0/1K', note: '零成本本地优先' },
+  { route_id: 'RT-02', task_type: '检索路由', model_id: 'EMB-QWEN', model_name: 'Qwen Embedding + DeepSeek', share: 70, cost: '¥0.8/1K', note: '成本优先' },
+  { route_id: 'RT-03', task_type: '内容生成', model_id: 'DEEPSEEK-V3', model_name: 'DeepSeek V3', share: 70, cost: '¥1.2/1K', note: '默认主力' },
+  { route_id: 'RT-04', task_type: '复杂推理', model_id: 'QWEN-MAX', model_name: 'Qwen-Max / Claude', share: 20, cost: '¥6.5/1K', note: '质量优先' },
+  { route_id: 'RT-05', task_type: '代码生成', model_id: 'CLAUDE-SONNET', model_name: 'Claude Sonnet', share: 10, cost: '¥4.2/1K', note: '代码专项' },
+]
+
+export const modelTokenTrend = [
+  { week: 'W1', tokens: 7.1, cost: 1460, cache: 18 },
+  { week: 'W2', tokens: 7.6, cost: 1520, cache: 21 },
+  { week: 'W3', tokens: 7.4, cost: 1480, cache: 24 },
+  { week: 'W4', tokens: 8.0, cost: 1580, cache: 27 },
+  { week: 'W5', tokens: 8.6, cost: 1640, cache: 30 },
+  { week: 'W6', tokens: 8.4, cost: 1590, cache: 34 },
+]
+
+export const remoteChannels: RemoteChannel[] = [
+  { channel_id: 'IM-WX', name: '微信', type: 'wechat', state: 'online', account: 'ClawBot 主通道', capabilities: ['任务下发', '结果回传', '文件接收'], last_message: '2 分钟前' },
+  { channel_id: 'IM-WECOM', name: '企业微信', type: 'wecom', state: 'online', account: '运营协同空间', capabilities: ['审批推送', '进度提醒', '任务下发'], last_message: '8 分钟前' },
+  { channel_id: 'IM-FS', name: '飞书', type: 'feishu', state: 'available', account: '待绑定应用', capabilities: ['适配器', '群机器人'], last_message: '未启用' },
+  { channel_id: 'IM-DT', name: '钉钉', type: 'dingtalk', state: 'available', account: '待绑定应用', capabilities: ['适配器', '审批联动'], last_message: '未启用' },
+  { channel_id: 'IM-QQ', name: 'QQ', type: 'qq', state: 'offline', account: '个人移动入口', capabilities: ['任务下发', '文本回传'], last_message: '3 天前' },
+]
+
+export const remoteFlow: RemoteFlowEvent[] = [
+  { event_id: 'RM-01', time: '09:16:02', direction: '下发', channel: '手机微信', message: '帮我分析今日科创板行情并生成摘要。', status: 'done' },
+  { event_id: 'RM-02', time: '09:16:04', direction: '执行', channel: '桌面 Agent', message: '接收任务，唤醒检索与金融 Agent，执行调研。', status: 'running' },
+  { event_id: 'RM-03', time: '09:18:41', direction: '回传', channel: '手机微信', message: '已生成摘要，3 份来源，置信度 0.93，附报告。', status: 'done' },
+]
+
+export const onlineAgents: OnlineAgent[] = [
+  { agent_id: 'AG-01', name: '团长 Agent', role: 'C25 规划 · 扇出', state: 'run', task: 'T-1042', model: 'L2-Plan', latency_ms: 318 },
+  { agent_id: 'AG-02', name: '检索专家', role: 'Qdrant + Web', state: 'run', task: 'T-1042', model: 'L1-Embed', latency_ms: 286 },
+  { agent_id: 'AG-03', name: '数据专家', role: '分析 · Artifact', state: 'run', task: 'T-1042', model: 'L2-LLM', latency_ms: 1420 },
+  { agent_id: 'AG-04', name: '撰写专家', role: 'L2 生成', state: 'wait', task: '待合并', model: 'L2-LLM', latency_ms: 1810 },
+  { agent_id: 'AG-05', name: '质检 Agent', role: '交叉验证', state: 'idle', task: '空闲', model: 'L1-Judge', latency_ms: 220 },
 ]

@@ -37,63 +37,43 @@
         </button>
       </div>
 
+      <el-card class="section-card today-summary-card" shadow="never">
+        <div class="today-summary-head">
+          <div>
+            <span class="today-kicker">DAILY BRIEF · {{ todaySummary.date }}</span>
+            <h3>今日摘要</h3>
+            <p>{{ todaySummary.headline }}</p>
+          </div>
+          <div class="today-index">
+            <strong>{{ todaySummary.running_index }}</strong>
+            <span>今日运行指数</span>
+            <em>+6 较昨日</em>
+          </div>
+        </div>
+        <div class="today-summary-body">
+          <div class="today-metrics">
+            <button v-for="metric in todaySummary.metrics" :key="metric.label" type="button" class="today-metric" :class="metric.tone" @click="openDetail(`今日指标 · ${metric.label}`, metric)">
+              <span>{{ metric.label }}</span>
+              <strong>{{ metric.value }}<small>{{ metric.unit }}</small></strong>
+              <em>{{ metric.trend }}</em>
+            </button>
+          </div>
+          <div class="today-events">
+            <div v-for="event in todaySummary.events" :key="event.time" class="today-event" :class="event.type">
+              <span class="today-event-time">{{ event.time }}</span>
+              <i />
+              <div><strong>{{ event.title }}</strong><p>{{ event.detail }}</p></div>
+            </div>
+          </div>
+          <div class="today-attention">
+            <div class="today-attention-title"><strong>待关注</strong><span>{{ todaySummary.attention.length }} 项</span></div>
+            <button v-for="(item, index) in todaySummary.attention" :key="item" type="button" @click="openDetail('今日待关注', item)">
+              <span>{{ String(index + 1).padStart(2, '0') }}</span><p>{{ item }}</p>
+            </button>
+          </div>
+        </div>
+      </el-card>
       <div class="cockpit-grid">
-        <el-card class="section-card workflow-card" shadow="never">
-          <template #header>
-            <div class="card-title-row"><strong>团队协作活动图</strong><span class="live-badge"><i /> LIVE</span></div>
-            <span class="header-meta">{{ workflow.domain_id }} · {{ workflow.task_title }}</span>
-          </template>
-          <div class="workflow-summary">
-            <div><span>执行模式</span><strong class="mode-value">{{ workflow.execution_mode }}</strong></div>
-            <el-progress :percentage="Math.round(workflow.progress)" :stroke-width="9" :show-text="false" />
-            <div class="workflow-eta"><span>总进度 {{ Math.round(workflow.progress) }}% · 预计 {{ workflow.eta }}</span><small>{{ workflow.last_update }}</small></div>
-          </div>
-          <div class="activity-legend">
-            <span><i class="done" />已完成</span><span><i class="running" />执行中</span><span><i class="waiting" />等待/排队</span><span><i class="blocked" />阻塞</span>
-            <em>多线并行区 · 成员进度实时汇总</em>
-          </div>
-          <div class="activity-diagram">
-            <div class="activity-stage activity-topology">
-              <button class="activity-node start-node done" type="button" @click="openDetail('活动图起点', { event: 'team_task_created', task: workflow.task_title })"><el-icon><Checked /></el-icon>开始</button>
-              <span class="activity-arrow complete" />
-              <button class="activity-node done" type="button" @click="openDetail('任务接入', stepNode('dispatch'))">任务接入<small>团长</small></button>
-              <span class="activity-arrow complete" />
-              <button class="activity-node done" type="button" @click="openDetail('C25 规划', stepNode('plan'))">C25 规划<small>拆解与 DAG</small></button>
-              <span class="activity-arrow complete" />
-              <button class="activity-node fanout-node done" type="button" @click="openDetail('专家扇出', stepNode('fanout'))">专家扇出<small>并行分派 5 个成员</small></button>
-            </div>
-            <div class="parallel-zone">
-              <div class="parallel-header"><span>PARALLEL ACTIVITY LANES</span><strong>多线并行执行</strong><em>每条泳道 = 团队用况 + 成员 + 活动进度</em></div>
-              <div v-for="agent in workflow.agents" :key="agent.agent_id" class="activity-lane" :class="agent.state">
-                <button class="lane-identity" type="button" @click="openDetail(`${agent.name} 执行详情`, agent)">
-                  <span class="agent-avatar">{{ agent.name.slice(0, 1) }}</span>
-                  <span class="lane-copy"><strong>{{ agent.name }}</strong><small>{{ agent.role }} · {{ agent.use_case }}</small></span>
-                  <el-tag size="small" :type="modelTagType(agent.state === 'done' ? 'healthy' : agent.state === 'running' ? 'busy' : 'healthy')">{{ agentStateLabel(agent.state) }}</el-tag>
-                </button>
-                <div class="lane-track">
-                  <button class="activity-node done" type="button" @click="openDetail(`${agent.name} · 接收任务`, agent)">接收</button>
-                  <span class="lane-connector" :class="agent.state"><i :style="{ width: `${agent.progress}%` }" /></span>
-                  <button class="activity-node activity-work" :class="agent.state" type="button" @click="openDetail(`${agent.name} · 当前活动`, agent)">
-                    <strong>{{ agent.current_task }}</strong><small>{{ agent.progress }}% · {{ agent.model }}</small>
-                  </button>
-                  <span class="lane-connector" :class="agent.progress >= 100 ? 'done' : 'waiting'"><i :style="{ width: `${agent.progress}%` }" /></span>
-                  <button class="activity-node" :class="agent.progress >= 100 ? 'done' : 'waiting'" type="button" @click="openDetail(`${agent.name} · 结果回传`, { progress: agent.progress, output: agent.progress >= 100 ? 'artifact-ready' : 'pending' })">{{ agent.progress >= 100 ? '已回传' : '待回传' }}</button>
-                </div>
-                <div class="lane-progress"><span>{{ agent.progress }}%</span><el-progress :percentage="agent.progress" :stroke-width="5" :show-text="false" /></div>
-              </div>
-            </div>
-            <div class="activity-stage activity-bottom">
-              <button class="activity-node" :class="stepNode('merge')?.state || 'waiting'" type="button" @click="openDetail('C27 合并', stepNode('merge'))">C27 合并<small>汇总并行结果</small></button>
-              <span class="activity-arrow" :class="stepNode('verify')?.state || 'waiting'" />
-              <button class="activity-node" :class="stepNode('verify')?.state || 'waiting'" type="button" @click="openDetail('交叉验证', stepNode('verify'))">交叉验证<small>Schema / 置信度</small></button>
-              <span class="activity-arrow" :class="stepNode('approval')?.state || 'waiting'" />
-              <button class="activity-node" :class="stepNode('approval')?.state || 'waiting'" type="button" @click="openDetail('审批门', stepNode('approval'))">审批门<small>L3 起必审</small></button>
-              <span class="activity-arrow waiting" />
-              <button class="activity-node end-node waiting" type="button" @click="openDetail('活动图终点', { event: 'team_task_delivered', task: workflow.task_title })">交付</button>
-            </div>
-          </div>
-          <div class="workflow-footer"><span>MC-P heartbeat 聚合 · 每位成员进度独立更新</span><el-button text type="primary" @click="router.push('/collab')">进入协作总线 <el-icon><ArrowRight /></el-icon></el-button></div>
-        </el-card>
         <el-card class="section-card model-monitor-card" shadow="never">
           <template #header>
             <div class="card-title-row"><strong>大模型调用监控</strong><span class="header-meta">滚动 45 分钟</span></div>
@@ -218,10 +198,11 @@ import {
   optimizationSuggestions as fallbackSuggestions,
   serviceHealth as fallbackServices,
   teamWorkflow as fallbackWorkflow,
+  todaySummary as fallbackTodaySummary,
   vitalSigns as fallbackVitals,
 } from '../api/mock'
 import type {
-  MetricCard, ModelCallPoint, ModelRuntimeNode, OptimizationSuggestion, OverviewWorkflow, OverviewWorkflowAgent, VitalSign,
+  MetricCard, ModelCallPoint, ModelRuntimeNode, OptimizationSuggestion, OverviewWorkflow, OverviewWorkflowAgent, TodaySummary, VitalSign,
 } from '../types'
 
 type TimelineItem = { phase: string; title: string; desc: string; status: string }
@@ -232,6 +213,7 @@ const loading = ref(true)
 const error = ref('')
 const online = ref(navigator.onLine)
 const refreshCount = ref(0)
+const todaySummary = ref<TodaySummary>(JSON.parse(JSON.stringify(fallbackTodaySummary)))
 const metrics = ref<MetricCard[]>(fallbackMetrics)
 const services = ref<ServiceItem[]>(fallbackServices)
 const vitals = ref<VitalSign[]>(fallbackVitals.map(item => ({ ...item })))
@@ -321,6 +303,7 @@ async function loadOverview() {
       services?: ServiceItem[]
       vitals?: VitalSign[]
       timeline?: TimelineItem[]
+      today_summary?: TodaySummary
       workflow?: OverviewWorkflow
       model_calls?: ModelCallPoint[]
       model_runtime?: ModelRuntimeNode[]
@@ -330,6 +313,7 @@ async function loadOverview() {
     services.value = data.services?.length ? data.services : fallbackServices
     vitals.value = data.vitals?.length ? data.vitals : fallbackVitals
     timeline.value = data.timeline?.length ? data.timeline : fallbackTimeline
+    todaySummary.value = data.today_summary || JSON.parse(JSON.stringify(fallbackTodaySummary))
     workflow.value = data.workflow || JSON.parse(JSON.stringify(fallbackWorkflow))
     modelCalls.value = data.model_calls?.length ? data.model_calls : fallbackModelCalls.map(item => ({ ...item }))
     modelRuntime.value = data.model_runtime?.length ? data.model_runtime : fallbackModelRuntime.map(item => ({ ...item }))
@@ -465,7 +449,7 @@ onUnmounted(stopLiveUpdates)
 .header-meta { color: var(--wp-sub); font-size: 11px; }
 .card-title-row { display: flex; align-items: center; gap: 10px; }
 .live-badge { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px; border: 1px solid rgba(52,211,153,.35); border-radius: 999px; color: var(--wp-success); font-size: 9px; letter-spacing: .16em; }
-.cockpit-grid { display: grid; grid-template-columns: minmax(0, 1.45fr) minmax(0, 1fr); gap: var(--cockpit-gap); align-items: stretch; }
+.cockpit-grid { display: grid; grid-template-columns: 1fr; gap: var(--cockpit-gap); align-items: stretch; }
 .workflow-card, .model-monitor-card { min-height: 510px; }
 .workflow-summary { display: grid; grid-template-columns: auto 1fr auto; gap: 12px; align-items: center; margin: 4px 0 18px; }
 .workflow-summary > div { display: flex; flex-direction: column; gap: 3px; }
@@ -628,4 +612,44 @@ onUnmounted(stopLiveUpdates)
   .activity-lane { min-width: 620px; }
   .parallel-zone { overflow-x: auto; }
 }
+</style>
+
+<style scoped>
+.today-summary-card :deep(.el-card__body) { padding: 20px 22px; }
+.today-summary-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 18px; padding-bottom: 16px; border-bottom: 1px solid var(--wp-border); }
+.today-kicker { color: var(--wp-primary); font-size: 10px; letter-spacing: .18em; }
+.today-summary-head h3 { margin: 6px 0 7px; font-family: "Bodoni MT", serif; font-size: 25px; }
+.today-summary-head p { max-width: 760px; margin: 0; color: var(--wp-sub); line-height: 1.7; }
+.today-index { display: flex; align-items: center; flex-direction: column; min-width: 126px; padding: 10px 14px; border: 1px solid rgba(212,175,55,.38); border-radius: 14px; background: radial-gradient(circle at 50% 20%, rgba(212,175,55,.17), transparent 72%); text-align: center; }
+.today-index strong { color: var(--wp-gold-soft); font-family: "Bodoni MT", serif; font-size: 34px; }
+.today-index span { color: var(--wp-sub); font-size: 10px; }
+.today-index em { margin-top: 5px; color: var(--wp-success); font-size: 9px; font-style: normal; }
+.today-summary-body { display: grid; grid-template-columns: 1.1fr 1.35fr .9fr; gap: 18px; padding-top: 16px; }
+.today-metrics { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+.today-metric { display: flex; flex-direction: column; gap: 4px; padding: 11px; border: 1px solid var(--wp-border); border-radius: 11px; background: rgba(148,163,184,.04); color: var(--wp-text); cursor: pointer; text-align: left; }
+.today-metric:hover, .today-attention button:hover { border-color: var(--wp-primary); background: rgba(94,234,212,.05); }
+.today-metric span { color: var(--wp-sub); font-size: 10px; }
+.today-metric strong { font-family: "Bodoni MT", serif; font-size: 22px; }
+.today-metric small { margin-left: 4px; color: var(--wp-sub); font-size: 10px; }
+.today-metric em { color: var(--wp-success); font-size: 9px; font-style: normal; }
+.today-metric.warning { border-color: rgba(212,175,55,.38); }
+.today-metric.warning em { color: var(--wp-gold-soft); }
+.today-metric.danger { border-color: rgba(255,92,122,.42); }
+.today-events { display: flex; flex-direction: column; gap: 8px; }
+.today-event { display: grid; grid-template-columns: 42px 10px 1fr; gap: 8px; align-items: start; }
+.today-event-time { color: var(--wp-sub); font-size: 9px; }
+.today-event > i { width: 8px; height: 8px; margin-top: 4px; border-radius: 50%; background: var(--wp-primary); box-shadow: 0 0 10px rgba(94,234,212,.45); }
+.today-event.knowledge > i { background: var(--wp-success); }
+.today-event.model > i { background: var(--wp-gold-soft); }
+.today-event.governance > i { background: var(--wp-danger); }
+.today-event strong { font-size: 11px; }
+.today-event p { margin: 3px 0 0; color: var(--wp-sub); font-size: 10px; line-height: 1.55; }
+.today-attention { padding-left: 16px; border-left: 1px solid var(--wp-border); }
+.today-attention-title { display: flex; justify-content: space-between; margin-bottom: 8px; }
+.today-attention-title span { color: var(--wp-sub); font-size: 10px; }
+.today-attention button { display: grid; grid-template-columns: 24px 1fr; gap: 7px; width: 100%; padding: 8px 6px; border: 1px solid transparent; border-radius: 9px; background: transparent; color: var(--wp-text); cursor: pointer; text-align: left; }
+.today-attention button > span { color: var(--wp-gold-soft); font-family: "Bodoni MT", serif; font-size: 14px; }
+.today-attention p { margin: 0; color: var(--wp-sub); font-size: 10px; line-height: 1.5; }
+@media (max-width: 1180px) { .today-summary-body { grid-template-columns: 1fr; } .today-attention { padding-left: 0; border-left: 0; border-top: 1px solid var(--wp-border); padding-top: 12px; } }
+@media (max-width: 720px) { .today-summary-head { flex-direction: column; } .today-index { width: 100%; } .today-metrics { grid-template-columns: 1fr; } }
 </style>
