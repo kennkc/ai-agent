@@ -9,6 +9,8 @@ from __future__ import annotations
 import base64
 import io
 import logging
+from importlib.util import find_spec
+from shutil import which
 import time
 from dataclasses import dataclass
 from typing import Optional
@@ -39,15 +41,15 @@ class PaddleOcrEngine(OcrEngine):
 
     def __init__(self) -> None:
         self._engine = None
-        try:
-            from paddleocr import PaddleOCR  # type: ignore
-            self._engine = PaddleOCR(use_angle_cls=False, lang="ch", show_log=False)
-        except Exception as exc:  # noqa: BLE001
-            logger.info("PaddleOCR unavailable: %s", exc)
-            self._engine = None
 
     def available(self) -> bool:
-        return self._engine is not None
+        return find_spec("paddleocr") is not None and find_spec("numpy") is not None and find_spec("PIL") is not None
+
+    def _ensure_engine(self):
+        if self._engine is None:
+            from paddleocr import PaddleOCR  # type: ignore
+            self._engine = PaddleOCR(use_angle_cls=False, lang="ch")
+        return self._engine
 
     def recognize(self, image_bytes: bytes) -> OcrResult:
         import numpy as np  # type: ignore
@@ -55,7 +57,7 @@ class PaddleOcrEngine(OcrEngine):
 
         started = time.perf_counter()
         image = Image.open(io.BytesIO(image_bytes)).convert("RGB")
-        result = self._engine.ocr(np.array(image))
+        result = self._ensure_engine().ocr(np.array(image))
         lines, scores = [], []
         for page in result or []:
             for entry in page or []:
@@ -68,37 +70,25 @@ class PaddleOcrEngine(OcrEngine):
         return OcrResult(text="\n".join(lines).strip(), confidence=confidence,
                          engine=self.name, latency_ms=(time.perf_counter() - started) * 1000)
 
-
 class TesseractOcrEngine(OcrEngine):
     name = "tesseract"
 
     def __init__(self) -> None:
-        self._available = False
-        try:
-            import pytesseract  # type: ignore
-            from PIL import Image  # type: ignore  # noqa: F401
-            from shutil import which
-
-            if which("tesseract"):
-                self._module = pytesseract
-                self._available = True
-        except Exception as exc:  # noqa: BLE001
-            logger.info("pytesseract unavailable: %s", exc)
+        self._module = None
 
     def available(self) -> bool:
-        return self._available
+        return find_spec("pytesseract") is not None and find_spec("PIL") is not None and which("tesseract") is not None
 
     def recognize(self, image_bytes: bytes) -> OcrResult:
+        import pytesseract  # type: ignore
         from PIL import Image  # type: ignore
 
         started = time.perf_counter()
         image = Image.open(io.BytesIO(image_bytes))
-        text = self._module.image_to_string(image, lang="chi_sim+eng")
-        # Tesseract 不直接给出整体置信度，按下游质检兜底，这里给保守基线
+        text = pytesseract.image_to_string(image, lang="chi_sim+eng")
         confidence = 0.6 if text.strip() else 0.0
         return OcrResult(text=text.strip(), confidence=confidence, engine=self.name,
                          latency_ms=(time.perf_counter() - started) * 1000)
-
 
 class UnavailableOcrEngine(OcrEngine):
     name = "unavailable"

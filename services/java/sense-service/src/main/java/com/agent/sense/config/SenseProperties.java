@@ -78,8 +78,8 @@ public class SenseProperties {
         /** auto / minio / local */
         private String backend = "auto";
         private String minioEndpoint = "http://127.0.0.1:9000";
-        private String minioAccessKey = "agent";
-        private String minioSecretKey = "agent123456";
+        private String minioAccessKey = "";
+        private String minioSecretKey = "";
         private String bucket = "lifeform-staging";
         private String localRoot = System.getProperty("user.dir") + "/data/sense-staging";
     }

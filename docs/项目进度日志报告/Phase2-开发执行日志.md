@@ -23,11 +23,11 @@
         ↓
 [Phase C] 构建卡死攻坚            jstack 取证 → 排除清单 → protobuf 生成源码入库 → pom 改造
         ↓
-[Phase D] 缺陷修复与测试收敛       3 处实现缺陷修复 → 45 项单测全绿
+[Phase D] 缺陷修复与测试收敛       3 处实现缺陷修复 → 47 项单测全绿
         ↓
 [Phase E] nlp-service 与 Console  意图双级级联验证 → 感官视图契约核对 → 补齐 X-Tenant-Id
         ↓
-[Phase F] 全量验收                 clean package 5 模块通过 52 测试 → contract-check → 文档 → 提交
+[Phase F] 全量验收                 clean package 5 模块通过 54 测试 → contract-check → 文档 → 提交
 ```
 
 ---
@@ -170,7 +170,7 @@ protoc \
 **修复后**：
 
 ```
-[INFO] Tests run: 45, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 47, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
 [INFO] Total time:  39.283 s
 ```
@@ -206,8 +206,8 @@ protoc \
 
 | 序 | 动作 | 结果 |
 |---|---|---|
-| F-1 | 全量 `clean package` | 5 模块全 SUCCESS，`Total time: 03:04 min`，**52 测试 0 失败** |
-| F-2 | 汇总 surefire 报告（Python 脚本，本机无 `paste`/`bc`） | gateway 2 / session-manager 4 / **sense-service 45** / body-service 1 |
+| F-1 | 全量 `clean package` | 5 模块全 SUCCESS，`Total time: 03:04 min`，**54 测试 0 失败** |
+| F-2 | 汇总 surefire 报告（Python 脚本，本机无 `paste`/`bc`） | gateway 2 / session-manager 4 / **sense-service 47** / body-service 1 |
 | F-3 | `scripts/contract-check.py` | **0 FAIL** / 3 WARN（`Message.tenant_id`/`updated_at`/`version` 通用字段缺失，既有告警，与 Phase 2 无关） |
 | F-4 | 新增 `docs/demo/Phase2-DEMO.md` | 端到端演示脚本 + R2-01~R2-10 达标对照 + 拒绝原因枚举 + 故障排查表 |
 | F-5 | 更新 `PROGRESS.md` / `README.md` | 补齐 Phase 2 章节、验证结果、构建约定说明 |

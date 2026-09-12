@@ -1,6 +1,6 @@
 # Agent-Lifeform · AI Agent 生命体架构
 
-> 当前基线：Phase 0 / Phase 1 / Phase 2 开发完成，VS1 垂直切片已打通（52 Java tests + 19 Python tests green）。  
+> 当前基线：Phase 0 / Phase 1 / Phase 2 开发完成，VS1 垂直切片已打通（54 Java tests + 19 Python tests green）。
 > 技术栈：Java 21 + Spring Cloud Alibaba + Python 3.12 + FastAPI + Vue 3 + Vite + Element Plus。
 
 ---
@@ -81,6 +81,16 @@ ai-agent/
 ---
 
 ## 4. 快速启动
+
+首次启动基础设施前，复制并填写本地环境变量：
+
+```bash
+cp .env.example .env
+# 设置 MINIO_ROOT_USER / MINIO_ROOT_PASSWORD
+# 以及服务侧 MINIO_ACCESS_KEY / MINIO_SECRET_KEY
+```
+
+> `.env`、本地暂存数据、Vite 缓存和构建产物均不会提交到仓库。
 
 ### 4.1 Linux / macOS
 

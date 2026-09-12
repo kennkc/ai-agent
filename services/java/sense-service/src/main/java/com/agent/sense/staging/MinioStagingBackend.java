@@ -2,6 +2,7 @@ package com.agent.sense.staging;
 
 import com.agent.sense.config.SenseProperties;
 import com.agent.sense.model.CollectedData;
+import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.minio.BucketExistsArgs;
 import io.minio.GetObjectArgs;
@@ -49,6 +50,11 @@ public class MinioStagingBackend implements StagingBackend {
         }
         try {
             SenseProperties.Staging cfg = properties.getStaging();
+        if (cfg.getMinioAccessKey() == null || cfg.getMinioAccessKey().isBlank()
+                || cfg.getMinioSecretKey() == null || cfg.getMinioSecretKey().isBlank()) {
+            log.warn("MinIO credentials are not configured; staging will degrade to local backend");
+            return;
+        }
             client = MinioClient.builder()
                     .endpoint(cfg.getMinioEndpoint())
                     .credentials(cfg.getMinioAccessKey(), cfg.getMinioSecretKey())
@@ -161,7 +167,7 @@ public class MinioStagingBackend implements StagingBackend {
     private CollectedData readObject(String key) {
         try (var stream = client.getObject(GetObjectArgs.builder().bucket(bucket()).object(key).build())) {
             String json = new String(stream.readAllBytes(), StandardCharsets.UTF_8);
-            return LocalStagingBackend.fromMap(objectMapper.readValue(json, Map.class));
+            return LocalStagingBackend.fromMap(objectMapper.readValue(json, new TypeReference<Map<String, Object>>() {}));
         } catch (Exception e) {
             log.debug("read staging object failed {}: {}", key, e.getMessage());
             return null;

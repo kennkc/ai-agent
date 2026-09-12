@@ -29,3 +29,6 @@ logs/
 # Generated Python proto code
 services/python/nlp-service/generated/
 
+# Vite cache
+**/.vite/
+.env

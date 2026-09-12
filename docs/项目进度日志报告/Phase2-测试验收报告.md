@@ -46,23 +46,23 @@
 
 | 层次 | 范围 | 用例数 | 通过 | 失败 | 错误 | 跳过 |
 |---|---|---:|---:|---:|---:|---:|
-| Java | sense-service | **45** | 45 | 0 | 0 | 0 |
+| Java | sense-service | **47** | 47 | 0 | 0 | 0 |
 | Java | session-manager | 4 | 4 | 0 | 0 | 0 |
 | Java | gateway-service | 2 | 2 | 0 | 0 | 0 |
 | Java | body-service | 1 | 1 | 0 | 0 | 0 |
-| **Java 小计** | | **52** | **52** | **0** | **0** | **0** |
+| **Java 小计** | | **54** | **54** | **0** | **0** | **0** |
 | Python | nlp-service 意图识别 | 15 | 15 | 0 | 0 | 0 |
 | Python | nlp-service OCR | 4 | 4 | 0 | 0 | 0 |
 | **Python 小计** | | **19** | **19** | **0** | **0** | **0** |
-| **合计** | | **71** | **71** | **0** | **0** | **0** |
+| **合计** | | **73** | **73** | **0** | **0** | **0** |
 
-**通过率：71/71 = 100%**
+**通过率：73/73 = 100%**
 
 ### 3.1 Java 分测试类明细
 
 | 测试类 | 用例数 | 失败 | 错误 | 耗时 |
 |---|---:|---:|---:|---:|
-| `com.agent.sense.channel.TouchChannelTest` | 10 | 0 | 0 | 0.569s |
+| `com.agent.sense.channel.TouchChannelTest` | 12 | 0 | 0 | 0.569s |
 | `com.agent.sense.collect.CollectPipelineTest` | 6 | 0 | 0 | 0.308s |
 | `com.agent.sense.health.ChannelHealthMonitorTest` | 4 | 0 | 0 | 0.011s |
 | `com.agent.sense.normalize.DataNormalizerTest` | 6 | 0 | 0 | 0.006s |
@@ -213,7 +213,7 @@
 | L0 意图识别准确率 | ≥ 85% | **90.0%**（60 样本留出集） | +5.0pp | ✅ |
 | L0 意图识别延迟 | P99 < 50 ms | **P99 0.052 ms** | ≈ 960× | ✅ |
 | 意图场景覆盖 | ≥ 10 | **12** | +2 | ✅ |
-| Java 测试通过率 | 100% | **52/52** | — | ✅ |
+| Java 测试通过率 | 100% | **54/54** | — | ✅ |
 | Python 测试通过率 | 100% | **19/19** | — | ✅ |
 | 全量构建 | 成功 | **5 模块 SUCCESS / 03:04** | — | ✅ |
 | 契约校验 | 0 FAIL | **0 FAIL**（3 既有 WARN） | — | ✅ |
@@ -258,16 +258,24 @@
 **回归结论**：修复后重跑 `-pl sense-service -am test` →
 
 ```
-[INFO] Tests run: 45, Failures: 0, Errors: 0, Skipped: 0
+[INFO] Tests run: 47, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
 [INFO] Total time:  39.283 s
 ```
 
-**缺陷密度**：4 个功能缺陷 / 45 个 sense-service 用例，均被**单元测试在构建期捕获**，无一泄漏到运行期。
+**缺陷密度**：4 个功能缺陷 / 47 个 sense-service 用例，均被**单元测试在构建期捕获**，无一泄漏到运行期。
 
 > **另发现一处非功能性瑕疵**：`TextExtractorTest` 中存在用例名拼写错误
 > `decodesGbkWitoutHeader`（应为 `Without`）。仅影响可读性，不影响功能，建议后续随代码整理一并改名。
 
+### 7.1 合并后代码审核补充（2026-09-12）
+
+| # | 问题 | 风险 | 修复 | 回归 |
+|---|---|---|---|---|
+| AUD-P2-01 | `app.ocr` 导入时立即初始化 PaddleOCR | pytest collection 和服务启动可能长时间阻塞 | PaddleOCR/Tesseract 改为延迟加载，仅在识别时初始化 | `pytest --collect-only` 0.20s；19/19 通过 |
+| AUD-P2-02 | URL 重定向由 HttpClient 自动跟随 | 初始公网 URL 可重定向到私网，绕过 SSRF 校验 | 禁止自动重定向，逐跳重新执行 SSRF 校验，限制 3 跳并禁止 HTTPS→HTTP 降级 | `TouchChannelTest` 新增回归 |
+| AUD-P2-03 | MinIO 默认账号密码硬编码 | 开发凭据可被误用于部署 | 移除默认凭据；Compose 和服务配置改为环境变量，缺失时降级本地暂存 | `docker compose config` 通过；暂存测试通过 |
+| AUD-P2-04 | 地址拦截未覆盖 IPv6 unique-local 与 CGNAT | 少数内网地址可能绕过 | 增加 `fc00::/7`、`100.64.0.0/10` 拦截 | 新增 2 项测试，sense-service 47/47 通过 |
 ---
 
 ## 8. 未通过 / 待补验证项
@@ -303,7 +311,7 @@
 | 阶段 DoD 5 条 | **5/5 全部达成** |
 | Must 级需求 6 项 | **6/6 通过** |
 | Should 级需求 4 项 | 3 项通过 + 1 项（OCR）待外部引擎就绪补验 |
-| 测试通过率 | **71/71 = 100%** |
+| 测试通过率 | **73/73 = 100%** |
 | 硬指标（准确率/延迟） | 全部超出目标 |
 | 已知功能缺陷遗留 | **0**（4 个已全部修复并回归） |
 
@@ -320,7 +328,7 @@
 
 | 角色 | 结论 | 日期 |
 |---|---|---|
-| 开发（WorkBuddy） | 实现完成，71 项测试全绿，提交 `850f49d` | 2026-09-12 |
+| 开发（WorkBuddy） | 实现完成，73 项测试全绿，提交 `850f49d` | 2026-09-12 |
 | 验收（自检） | **通过**（1 项环境依赖待补验） | 2026-09-12 |
 
 ---

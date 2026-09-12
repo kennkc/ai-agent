@@ -44,6 +44,18 @@ public final class OutboundGuard {
         }
     }
 
+    private static boolean isExtendedBlockedAddress(InetAddress address) {
+        byte[] bytes = address.getAddress();
+        if (bytes.length == 16 && (bytes[0] & 0xfe) == 0xfc) {
+            return true; // IPv6 unique local fc00::/7
+        }
+        if (bytes.length == 4) {
+            int first = bytes[0] & 0xff;
+            int second = bytes[1] & 0xff;
+            return first == 100 && second >= 64 && second <= 127; // IPv4 CGNAT 100.64/10
+        }
+        return false;
+    }
     public static void assertPublicHttpUrl(URI uri, Set<String> allowedHosts) {        String scheme = uri.getScheme();
         String host = uri.getHost();
         if (scheme == null || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))) {
@@ -59,7 +71,7 @@ public final class OutboundGuard {
             for (InetAddress address : InetAddress.getAllByName(host)) {
                 if (address.isAnyLocalAddress() || address.isLoopbackAddress()
                         || address.isLinkLocalAddress() || address.isSiteLocalAddress()
-                        || address.isMulticastAddress()) {
+                        || address.isMulticastAddress() || isExtendedBlockedAddress(address)) {
                     throw new BizException(ErrorCode.AGENT_BAD_REQUEST, "private or local network targets are forbidden");
                 }
             }

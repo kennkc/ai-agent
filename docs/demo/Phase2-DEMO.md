@@ -30,11 +30,11 @@ cd services/java
 |------|-------:|-----:|-----:|-------:|
 | gateway-service | 2 | 0 | 0 | 1 |
 | session-manager | 4 | 0 | 0 | 2 |
-| **sense-service** | **45** | **0** | **0** | **7** |
+| **sense-service** | **47** | **0** | **0** | **7** |
 | body-service | 1 | 0 | 0 | 1 |
-| **合计** | **52** | **0** | **0** | **11** |
+| **合计** | **54** | **0** | **0** | **11** |
 
-sense-service 的 7 个测试类覆盖：`TouchChannelTest`、`CollectPipelineTest`、`ChannelHealthMonitorTest`、`DataNormalizerTest`、`QualityGateTest`、`StagingStoreTest`、`TextExtractorTest`。
+sense-service 的 7 个测试类覆盖（含新增 IPv6 unique-local / CGNAT SSRF 回归）：`TouchChannelTest`、`CollectPipelineTest`、`ChannelHealthMonitorTest`、`DataNormalizerTest`、`QualityGateTest`、`StagingStoreTest`、`TextExtractorTest`。
 
 ### 1.2 Python 意图识别与 OCR
 
@@ -78,6 +78,13 @@ node --check web/console/js/provider.js
 
 ---
 
+### 1.4 Phase2 审核修复
+
+- OCR 引擎改为惰性初始化，避免 `app.ocr` 导入时加载 PaddleOCR 导致测试/服务启动阻塞。
+- URL 采集关闭 HttpClient 自动重定向，逐跳重新执行 SSRF 校验，并禁止 HTTPS → HTTP 降级。
+- SSRF 防护新增 IPv6 unique-local（fc00::/7）和 IPv4 CGNAT（100.64.0.0/10）拦截。
+- MinIO 默认凭据移除；Docker Compose 和 sense-service 改为从环境变量读取，缺少凭据时自动降级到本地暂存。
+- 新增 2 项安全回归测试后，Java 测试总数由 52 增至 54，全部通过。
 ## 二、端到端演示（需 Docker 基础设施）
 
 ### 2.0 启动
@@ -279,7 +286,7 @@ start "web/console/index.html?ds=api&tenant=default"
 
 ## 五、演示完成标准
 
-- [x] Java 全量 `clean package` 通过，52 测试 0 失败
+- [x] Java 全量 `clean package` 通过，54 测试 0 失败
 - [x] Python 意图识别 15 项 + OCR 4 项全通过
 - [x] 意图识别准确率 ≥ 85%、P99 < 50ms（R2-08 硬指标）
 - [x] 五渠道抽象落地，低质数据被质检拦截，批次可回滚

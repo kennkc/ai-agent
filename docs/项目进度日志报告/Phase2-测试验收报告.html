@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-12 13:38 · 源文件 Phase2-测试验收报告.md</span>
+  <span class="meta">生成于 2026-09-12 16:12 · 源文件 Phase2-测试验收报告.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -145,7 +145,10 @@
 <li><a href="#61">6.1 意图识别场景分项准确率</a></li>
 </ul>
 </li>
-<li><a href="#7">7. 缺陷记录与回归验证</a></li>
+<li><a href="#7">7. 缺陷记录与回归验证</a><ul>
+<li><a href="#71-2026-09-12">7.1 合并后代码审核补充（2026-09-12）</a></li>
+</ul>
+</li>
 <li><a href="#8">8. 未通过 / 待补验证项</a></li>
 <li><a href="#9">9. 静态与契约校验</a></li>
 <li><a href="#10">10. 验收结论</a><ul>
@@ -304,8 +307,8 @@
 <tr>
 <td>Java</td>
 <td>sense-service</td>
-<td style="text-align: right;"><strong>45</strong></td>
-<td style="text-align: right;">45</td>
+<td style="text-align: right;"><strong>47</strong></td>
+<td style="text-align: right;">47</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
@@ -340,8 +343,8 @@
 <tr>
 <td><strong>Java 小计</strong></td>
 <td></td>
-<td style="text-align: right;"><strong>52</strong></td>
-<td style="text-align: right;"><strong>52</strong></td>
+<td style="text-align: right;"><strong>54</strong></td>
+<td style="text-align: right;"><strong>54</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
@@ -376,15 +379,15 @@
 <tr>
 <td><strong>合计</strong></td>
 <td></td>
-<td style="text-align: right;"><strong>71</strong></td>
-<td style="text-align: right;"><strong>71</strong></td>
+<td style="text-align: right;"><strong>73</strong></td>
+<td style="text-align: right;"><strong>73</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 </tbody>
 </table>
-<p><strong>通过率：71/71 = 100%</strong></p>
+<p><strong>通过率：73/73 = 100%</strong></p>
 <h3 id="31-java">3.1 Java 分测试类明细<a class="headerlink" href="#31-java" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -399,7 +402,7 @@
 <tbody>
 <tr>
 <td><code>com.agent.sense.channel.TouchChannelTest</code></td>
-<td style="text-align: right;">10</td>
+<td style="text-align: right;">12</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0.569s</td>
@@ -920,7 +923,7 @@
 <tr>
 <td>Java 测试通过率</td>
 <td>100%</td>
-<td><strong>52/52</strong></td>
+<td><strong>54/54</strong></td>
 <td>—</td>
 <td>✅</td>
 </tr>
@@ -1100,16 +1103,64 @@
 </tbody>
 </table>
 <p><strong>回归结论</strong>：修复后重跑 <code>-pl sense-service -am test</code> →</p>
-<pre><code>[INFO] Tests run: 45, Failures: 0, Errors: 0, Skipped: 0
+<pre><code>[INFO] Tests run: 47, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
 [INFO] Total time:  39.283 s
 </code></pre>
-<p><strong>缺陷密度</strong>：4 个功能缺陷 / 45 个 sense-service 用例，均被<strong>单元测试在构建期捕获</strong>，无一泄漏到运行期。</p>
+<p><strong>缺陷密度</strong>：4 个功能缺陷 / 47 个 sense-service 用例，均被<strong>单元测试在构建期捕获</strong>，无一泄漏到运行期。</p>
 <blockquote>
 <p><strong>另发现一处非功能性瑕疵</strong>：<code>TextExtractorTest</code> 中存在用例名拼写错误
 <code>decodesGbkWitoutHeader</code>（应为 <code>Without</code>）。仅影响可读性，不影响功能，建议后续随代码整理一并改名。</p>
 </blockquote>
-<hr />
+<h3 id="71-2026-09-12">7.1 合并后代码审核补充（2026-09-12）<a class="headerlink" href="#71-2026-09-12" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>问题</th>
+<th>风险</th>
+<th>修复</th>
+<th>回归</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>AUD-P2-01</td>
+<td><code>app.ocr</code> 导入时立即初始化 PaddleOCR</td>
+<td>pytest collection 和服务启动可能长时间阻塞</td>
+<td>PaddleOCR/Tesseract 改为延迟加载，仅在识别时初始化</td>
+<td><code>pytest --collect-only</code> 0.20s；19/19 通过</td>
+</tr>
+<tr>
+<td>AUD-P2-02</td>
+<td>URL 重定向由 HttpClient 自动跟随</td>
+<td>初始公网 URL 可重定向到私网，绕过 SSRF 校验</td>
+<td>禁止自动重定向，逐跳重新执行 SSRF 校验，限制 3 跳并禁止 HTTPS→HTTP 降级</td>
+<td><code>TouchChannelTest</code> 新增回归</td>
+</tr>
+<tr>
+<td>AUD-P2-03</td>
+<td>MinIO 默认账号密码硬编码</td>
+<td>开发凭据可被误用于部署</td>
+<td>移除默认凭据；Compose 和服务配置改为环境变量，缺失时降级本地暂存</td>
+<td><code>docker compose config</code> 通过；暂存测试通过</td>
+</tr>
+<tr>
+<td>AUD-P2-04</td>
+<td>地址拦截未覆盖 IPv6 unique-local 与 CGNAT</td>
+<td>少数内网地址可能绕过</td>
+<td>增加 <code>fc00::/7</code>、<code>100.64.0.0/10</code> 拦截</td>
+<td>新增 2 项测试，sense-service 47/47 通过</td>
+</tr>
+<tr>
+<td>---</td>
+<td></td>
+<td></td>
+<td></td>
+<td></td>
+</tr>
+</tbody>
+</table>
 <h2 id="8">8. 未通过 / 待补验证项<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -1211,7 +1262,7 @@
 </tr>
 <tr>
 <td>测试通过率</td>
-<td><strong>71/71 = 100%</strong></td>
+<td><strong>73/73 = 100%</strong></td>
 </tr>
 <tr>
 <td>硬指标（准确率/延迟）</td>
@@ -1243,7 +1294,7 @@
 <tbody>
 <tr>
 <td>开发（WorkBuddy）</td>
-<td>实现完成，71 项测试全绿，提交 <code>850f49d</code></td>
+<td>实现完成，73 项测试全绿，提交 <code>850f49d</code></td>
 <td>2026-09-12</td>
 </tr>
 <tr>

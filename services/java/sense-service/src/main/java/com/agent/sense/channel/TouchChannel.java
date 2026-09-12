@@ -28,6 +28,8 @@ import java.util.UUID;
 @Slf4j
 @Component
 public class TouchChannel implements SenseChannel {
+    private static final int MAX_REDIRECTS = 3;
+
 
     /** 采集类型，用于区分同一渠道内的数据源形态 */
     public enum SourceKind { URL, FILE, TEXT }
@@ -42,7 +44,7 @@ public class TouchChannel implements SenseChannel {
         this.allowedHosts = OutboundGuard.parseAllowedHosts(properties.getAllowedHosts());
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofMillis(properties.getTimeouts().getConnectMs()))
-                .followRedirects(HttpClient.Redirect.NORMAL)
+                .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
     }
 
@@ -101,24 +103,42 @@ public class TouchChannel implements SenseChannel {
     /** 抓取公网 URL 并抽取正文（供同包渠道复用，含 SSRF 守卫与大小上限） */
     String fetchUrlContent(String dataSource) throws Exception {
         URI uri = URI.create(dataSource);
-        OutboundGuard.assertPublicHttpUrl(uri, allowedHosts);
-        HttpRequest request = HttpRequest.newBuilder()
-                .uri(uri)
-                .timeout(Duration.ofMillis(properties.getTimeouts().getReadMs()))
-                .header("User-Agent", "agent-lifeform-sense/0.2")
-                .GET()
-                .build();
-        HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
-        if (response.statusCode() < 200 || response.statusCode() >= 300) {
-            throw new IllegalStateException("HTTP " + response.statusCode());
+        for (int redirect = 0; redirect <= MAX_REDIRECTS; redirect++) {
+            OutboundGuard.assertPublicHttpUrl(uri, allowedHosts);
+            HttpRequest request = HttpRequest.newBuilder()
+                    .uri(uri)
+                    .timeout(Duration.ofMillis(properties.getTimeouts().getReadMs()))
+                    .header("User-Agent", "agent-lifeform-sense/0.2")
+                    .GET()
+                    .build();
+            HttpResponse<byte[]> response = httpClient.send(request, HttpResponse.BodyHandlers.ofByteArray());
+            if (isRedirect(response.statusCode())) {
+                if (redirect == MAX_REDIRECTS) throw new IllegalStateException("too many redirects");
+                String location = response.headers().firstValue("Location")
+                        .orElseThrow(() -> new IllegalStateException("redirect without Location"));
+                URI next = uri.resolve(location);
+                if ("https".equalsIgnoreCase(uri.getScheme()) && "http".equalsIgnoreCase(next.getScheme())) {
+                    throw new IllegalStateException("HTTPS downgrade redirect is forbidden");
+                }
+                uri = next;
+                continue;
+            }
+            if (response.statusCode() < 200 || response.statusCode() >= 300) {
+                throw new IllegalStateException("HTTP " + response.statusCode());
+            }
+            if (response.body().length > properties.getMaxBytes()) {
+                throw new IllegalArgumentException("response exceeds max size: " + response.body().length);
+            }
+            String contentType = response.headers().firstValue("Content-Type").orElse("");
+            return TextExtractor.decode(response.body(), contentType);
         }
-        if (response.body().length > properties.getMaxBytes()) {
-            throw new IllegalArgumentException("response exceeds max size: " + response.body().length);
-        }
-        String contentType = response.headers().firstValue("Content-Type").orElse("");
-        return TextExtractor.decode(response.body(), contentType);
+        throw new IllegalStateException("redirect limit exceeded");
     }
 
+    private static boolean isRedirect(int statusCode) {
+        return statusCode == 301 || statusCode == 302 || statusCode == 303
+                || statusCode == 307 || statusCode == 308;
+    }
     /** 读取 file-root 白名单目录内的本地文件 */
     private String readFile(String dataSource) throws IOException {
         byte[] bytes = readBinaryForChannel(dataSource, properties.getMaxBytes());

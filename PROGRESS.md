@@ -5,7 +5,7 @@
 ## Current milestone
 
 Phase 0, Phase 1 and Phase 2 development scope is implemented on branch `workbuddy/main`.
-Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12 with 52 Java tests green.
+Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12 with 54 Java tests green.
 
 ## Phase 0
 
@@ -70,6 +70,7 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 ### Build hardening
 
 - [x] protobuf plugin deadlock fixed: generated Java sources (90 files, 6 proto) committed into `proto-contracts/src/main/java`; `protobuf-maven-plugin` removed from default lifecycle, kept behind the `proto-gen` profile
+- [x] Audit hardening: lazy OCR engine initialization, redirect-safe SSRF validation, MinIO credentials required from environment
 - [x] `scripts/mvn-dev.sh` wrapper (direct Maven launcher) works around broken `mvn.cmd` on this host
 
 ## Frontend
@@ -88,10 +89,13 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 
 ## Verification completed
 
-- `mvn clean package`: passed, 52 tests / 0 failures / 0 errors
-  - gateway-service 2 | session-manager 4 | **sense-service 45** | body-service 1
+- `mvn clean package`: passed, 54 tests / 0 failures / 0 errors
+  - gateway-service 2 | session-manager 4 | **sense-service 47** | body-service 1
 - Python `tests/test_intent.py`: 15 passed (L0 holdout 90.0%, P99 0.052 ms)
 - Python `tests/test_ocr.py`: 4 passed
+- `python -m pytest`: 19 passed
+- `docker compose config`: passed with required MinIO environment variables
+- OCR module import no longer initializes PaddleOCR at import time
 - `node --check web/console/js/provider.js`: passed
 - `contract-check.py`: 0 FAIL
 - `work-platform` contract check: passed

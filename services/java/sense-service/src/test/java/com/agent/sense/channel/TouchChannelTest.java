@@ -42,6 +42,21 @@ class TouchChannelTest {
     }
 
     @Test
+    void blocksIpv6UniqueLocalUrl() {
+        TouchChannel channel = new TouchChannel();
+        SenseChannel.CollectRequest request = new SenseChannel.CollectRequest();
+        request.setDataSource("http://[fc00::1]/admin");
+        assertFalse(channel.collect(request).isAccepted());
+    }
+
+    @Test
+    void blocksCarrierGradeNatUrl() {
+        TouchChannel channel = new TouchChannel();
+        SenseChannel.CollectRequest request = new SenseChannel.CollectRequest();
+        request.setDataSource("http://100.64.0.1/admin");
+        assertFalse(channel.collect(request).isAccepted());
+    }
+    @Test
     void acceptsPlainText() {
         TouchChannel channel = new TouchChannel();
         SenseChannel.CollectRequest request = new SenseChannel.CollectRequest();

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-12 13:38 · 源文件 Phase2-开发执行日志.md</span>
+  <span class="meta">生成于 2026-09-12 16:12 · 源文件 Phase2-开发执行日志.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -197,11 +197,11 @@
         ↓
 [Phase C] 构建卡死攻坚            jstack 取证 → 排除清单 → protobuf 生成源码入库 → pom 改造
         ↓
-[Phase D] 缺陷修复与测试收敛       3 处实现缺陷修复 → 45 项单测全绿
+[Phase D] 缺陷修复与测试收敛       3 处实现缺陷修复 → 47 项单测全绿
         ↓
 [Phase E] nlp-service 与 Console  意图双级级联验证 → 感官视图契约核对 → 补齐 X-Tenant-Id
         ↓
-[Phase F] 全量验收                 clean package 5 模块通过 52 测试 → contract-check → 文档 → 提交
+[Phase F] 全量验收                 clean package 5 模块通过 54 测试 → contract-check → 文档 → 提交
 </code></pre>
 <hr />
 <h2 id="_2">二、分阶段执行记录<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
@@ -478,7 +478,7 @@ protoc \
 </tbody>
 </table>
 <p><strong>修复后</strong>：</p>
-<pre><code>[INFO] Tests run: 45, Failures: 0, Errors: 0, Skipped: 0
+<pre><code>[INFO] Tests run: 47, Failures: 0, Errors: 0, Skipped: 0
 [INFO] BUILD SUCCESS
 [INFO] Total time:  39.283 s
 </code></pre>
@@ -566,12 +566,12 @@ grep 返回空 → 误判"网关缺 sense 路由"。改用 <code>find</code> 确
 <tr>
 <td>F-1</td>
 <td>全量 <code>clean package</code></td>
-<td>5 模块全 SUCCESS，<code>Total time: 03:04 min</code>，<strong>52 测试 0 失败</strong></td>
+<td>5 模块全 SUCCESS，<code>Total time: 03:04 min</code>，<strong>54 测试 0 失败</strong></td>
 </tr>
 <tr>
 <td>F-2</td>
 <td>汇总 surefire 报告（Python 脚本，本机无 <code>paste</code>/<code>bc</code>）</td>
-<td>gateway 2 / session-manager 4 / <strong>sense-service 45</strong> / body-service 1</td>
+<td>gateway 2 / session-manager 4 / <strong>sense-service 47</strong> / body-service 1</td>
 </tr>
 <tr>
 <td>F-3</td>
