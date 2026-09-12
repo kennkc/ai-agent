@@ -1,0 +1,46 @@
+:root {
+  --wp-bg: #f5f7fb;
+  --wp-card: #ffffff;
+  --wp-border: #e5eaf2;
+  --wp-text: #1f2937;
+  --wp-sub: #64748b;
+  --wp-primary: #2563eb;
+  --wp-primary-weak: #eff6ff;
+  color-scheme: light;
+}
+html.dark {
+  --wp-bg: #0f172a;
+  --wp-card: #1e293b;
+  --wp-border: #334155;
+  --wp-text: #e2e8f0;
+  --wp-sub: #94a3b8;
+  --wp-primary-weak: #1e3a8a;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+html, body, #app { width: 100%; height: 100%; margin: 0; }
+body {
+  background: var(--wp-bg);
+  color: var(--wp-text);
+  font-family: "Segoe UI", "Microsoft YaHei", "PingFang SC", sans-serif;
+}
+.page { display: flex; flex-direction: column; gap: 16px; }
+.page-title { margin: 0; font-size: 20px; }
+.page-sub { margin: 4px 0 0; color: var(--wp-sub); font-size: 13px; }
+.metric-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 14px; }
+.metric-label { color: var(--wp-sub); font-size: 13px; }
+.metric-value { margin-top: 8px; font-size: 28px; font-weight: 700; }
+.metric-unit { margin-left: 4px; color: var(--wp-sub); font-size: 13px; font-weight: 400; }
+.metric-trend { margin-top: 8px; color: var(--wp-sub); font-size: 12px; }
+.two-column { display: grid; grid-template-columns: 1.3fr 0.7fr; gap: 16px; }
+.section-card { border: 1px solid var(--wp-border) !important; background: var(--wp-card) !important; }
+.el-card { background: var(--wp-card) !important; color: var(--wp-text) !important; }
+.el-table { --el-table-bg-color: var(--wp-card); --el-table-tr-bg-color: var(--wp-card); --el-table-header-bg-color: var(--wp-bg); }
+.el-menu { border-right: none !important; }
+@media (max-width: 1100px) {
+  .metric-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .two-column { grid-template-columns: 1fr; }
+}
+@media (max-width: 720px) {
+  .metric-grid { grid-template-columns: 1fr; }
+}

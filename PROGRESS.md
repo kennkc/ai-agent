@@ -33,6 +33,13 @@ Phase 0 and Phase 1 development scope is implemented on branch `codex/phase0-1-h
 - [x] SSRF guard for URL collection
 - [x] VS1: session -> intent -> local retrieval -> template answer
 
+## Frontend
+
+- [x] Vue 3 + Vite + TypeScript + Element Plus work-platform scaffold
+- [x] Vue Router + Pinia + ConsoleDataProvider Mock/API switch
+- [x] npm run typecheck passed
+- [x] npm run build passed
+
 ## Verification completed
 
 - `mvn test`: passed
@@ -47,5 +54,6 @@ Phase 0 and Phase 1 development scope is implemented on branch `codex/phase0-1-h
 - Full Docker/Jaeger runtime smoke test requires Docker daemon.
 - Work Platform still uses Mock data; BFF/API mode is Phase 2+ work.
 - Phase 2-8 still pending.
+
 
 

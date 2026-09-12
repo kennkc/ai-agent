@@ -34,6 +34,23 @@ python-lint:
     - cd services/python
     - ruff check .
 
+frontend-build:
+  stage: build
+  image: node:20
+  cache:
+    key: frontend-work-platform
+    paths:
+      - web/work-platform/node_modules/
+  script:
+    - cd web/work-platform
+    - npm ci
+    - npm run typecheck
+    - npm run build
+  artifacts:
+    paths:
+      - web/work-platform/dist/
+    expire_in: 1 week
+
 # ── 阶段2: 测试 ──
 java-test:
   stage: test
@@ -72,3 +89,4 @@ python-package:
     - echo "镜像构建完成 (推送逻辑 Phase 7 完善)"
   only:
     - main
+

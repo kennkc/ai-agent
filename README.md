@@ -1,6 +1,6 @@
 # Agent-Lifeform · AI Agent 生命体架构
 
-> Phase 0/1 hardening + VS1 vertical slice. Java 21 + Python 3.12 + TypeScript prototype.
+> Phase 0/1 hardening + VS1 vertical slice. Java 21 + Python 3.12 + Vue 3 + Element Plus.
 
 ## Architecture overview
 
@@ -15,7 +15,8 @@
 - `services/java/body-service`: local retrieval MVP for VS1
 - `services/python/nlp-service`: rule-based intent MVP
 - `contracts/`: executable BFF OpenAPI copies used by `contract-check.py`
-- `web/`: static Mock prototypes
+- web/work-platform/: Vue 3 + Vite + TypeScript + Element Plus main workbench
+- web/console/: legacy static Mock console
 
 ## Quick start
 
@@ -64,13 +65,22 @@ python scripts/contract-check.py
 python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
 ```
 
+## Frontend verification
+
+cd web/work-platform
+npm install
+npm run typecheck
+npm run build
+
 ## Status
 
 - [x] Phase 0 skeleton and core security hardening
 - [x] Phase 1 gateway/JWT/NATS/Kafka/NATS health baseline
 - [x] VS1: session -> intent -> local retrieval -> template answer
 - [x] Java and Python proto/gRPC contract generation
+- [x] Vue 3 + Element Plus frontend scaffold and production build
 - [ ] Real BFF/UI API mode
 - [ ] Phase 2-8 features
+
 
 
