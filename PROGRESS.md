@@ -89,8 +89,18 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 
 ## Verification completed
 
-- `mvn clean package`: passed, 54 tests / 0 failures / 0 errors
-  - gateway-service 2 | session-manager 4 | **sense-service 47** | body-service 1
+- **D-1 fixed (2026-09-13)**: cross-service calls were failing because the JDK `HttpClient` default
+  (HTTP/2) sends an h2c upgrade handshake that uvicorn/h11 rejects, which dropped the request body
+  (FastAPI replied 422, Java surfaced 503). All outbound clients now go through a shared HTTP/1.1
+  factory (`OutboundHttp` in session-manager, `HttpClients` in sense-service) with connect/read
+  timeouts, graceful degradation (intent -> FALLBACK, retrieval -> empty) and a dedicated
+  `AGENT_UPSTREAM_UNAVAILABLE` error code. Regression guards: `OutboundHttpTest`,
+  `UpstreamDegradeTest`, `HttpClientsTest`.
+  End-to-end re-verified: `POST /api/session/{id}/ask` -> 200 in 875 ms, Redis
+  `session:{id}:messages` LLEN=2, and `ask` still returns 200 (FALLBACK) with nlp-service stopped.
+- `mvn clean package`: passed, **61 tests / 0 failures / 0 errors**
+  - gateway-service 2 | session-manager 10 | **sense-service 48** | body-service 1
+  - (was 54 before the D-1 fix; +7 regression cases)
 - Python `tests/test_intent.py`: 15 passed (L0 holdout 90.0%, P99 0.052 ms)
 - Python `tests/test_ocr.py`: 4 passed
 - `python -m pytest`: 19 passed
@@ -107,7 +117,9 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 
 ## Remaining
 
-- Full Docker/Jaeger runtime smoke test requires Docker daemon.
+- ~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:
+  8 infrastructure containers + 4 Java services + nlp-service + work-platform all running,
+  `healthcheck.sh` 16/16 OK, business chain (token -> session -> ask -> Redis/Kafka) green.
 - OCR end-to-end acceptance requires installing PaddleOCR or Tesseract; until then the
   visual channel stays `DEGRADED` and the API truthfully reports `available=false`.
 - Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration,

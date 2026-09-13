@@ -2,6 +2,7 @@ package com.agent.sense.channel;
 
 import com.agent.sense.config.SenseProperties;
 import com.agent.sense.security.OutboundGuard;
+import com.agent.sense.util.HttpClients;
 import com.agent.sense.util.TextExtractor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -42,8 +43,7 @@ public class TouchChannel implements SenseChannel {
     public TouchChannel(SenseProperties properties) {
         this.properties = properties;
         this.allowedHosts = OutboundGuard.parseAllowedHosts(properties.getAllowedHosts());
-        this.httpClient = HttpClient.newBuilder()
-                .connectTimeout(Duration.ofMillis(properties.getTimeouts().getConnectMs()))
+        this.httpClient = HttpClients.builder(Duration.ofMillis(properties.getTimeouts().getConnectMs()))
                 .followRedirects(HttpClient.Redirect.NEVER)
                 .build();
     }

@@ -1,6 +1,6 @@
 # Agent-Lifeform · AI Agent 生命体架构
 
-> 当前基线：Phase 0 / Phase 1 / Phase 2 开发完成，VS1 垂直切片已打通（54 Java tests + 19 Python tests green）。
+> 当前基线：Phase 0 / Phase 1 / Phase 2 开发完成，VS1 垂直切片已打通（61 Java tests + 19 Python tests green）。
 > 技术栈：Java 21 + Spring Cloud Alibaba + Python 3.12 + FastAPI + Vue 3 + Vite + Element Plus。
 
 ---
@@ -335,7 +335,7 @@ npm run build
 - [x] Vue 3 + Element Plus 工作平台工程
 - [x] Phase 2：五感渠道、R0/R1 采集、质检、隔离暂存、意图级联（R2-01~R2-10）
 - [ ] OCR 端到端验收（需安装 PaddleOCR 或 Tesseract）
-- [ ] Docker 运行时冒烟
+- [x] Docker 运行时冒烟（2026-09-13：8 容器 + 4 Java + Python + 前端，healthcheck 16/16，问答链路 200）
 - [ ] Phase 3：Qdrant/pgvector 正式知识库
 - [ ] Phase 4：LLM Gateway 与 M1 问答 MVP
 - [ ] Phase 5-8：工具、编排、免疫、自进化

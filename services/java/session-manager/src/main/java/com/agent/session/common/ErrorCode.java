@@ -14,6 +14,7 @@ public enum ErrorCode {
     AGENT_DUPLICATE("AGENT_DUPLICATE", "资源已存在"),
     AGENT_TIMEOUT("AGENT_TIMEOUT", "调用超时"),
     AGENT_BUS_UNAVAILABLE("AGENT_BUS_UNAVAILABLE", "总线通道不可用"),
+    AGENT_UPSTREAM_UNAVAILABLE("AGENT_UPSTREAM_UNAVAILABLE", "上游服务不可用"),
     AGENT_INTERNAL_ERROR("AGENT_INTERNAL_ERROR", "服务内部错误");
 
     private final String code;

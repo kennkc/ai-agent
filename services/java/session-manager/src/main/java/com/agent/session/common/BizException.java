@@ -29,6 +29,13 @@ public class BizException extends RuntimeException {
         this.details = details == null ? new HashMap<>() : details;
     }
 
+    /** 携带根因的构造：上游调用失败时保留 cause，避免排障时只剩一个包装后的错误码。 */
+    public BizException(ErrorCode errorCode, String message, Throwable cause) {
+        super(message, cause);
+        this.errorCode = errorCode;
+        this.details = new HashMap<>();
+    }
+
     public ErrorCode errorCode() { return errorCode; }
     public Map<String, String> details() { return details; }
 }

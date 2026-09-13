@@ -4,8 +4,11 @@ server:
 app:
   nlp:
     base-url: ${NLP_BASE_URL:http://127.0.0.1:8000}
+    # true：意图识别不可用时降级为 FALLBACK（问答仍返回模板回答）；false：直接返回 502 上游不可用
+    degrade-on-failure: ${NLP_DEGRADE_ON_FAILURE:true}
   body:
     base-url: ${BODY_BASE_URL:http://127.0.0.1:8083}
+    degrade-on-failure: ${BODY_DEGRADE_ON_FAILURE:true}
 
 grpc:
   port: ${GRPC_PORT:9092}

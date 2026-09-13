@@ -24,6 +24,7 @@ public class GlobalExceptionHandler {
             case AGENT_CONFLICT, AGENT_DUPLICATE -> HttpStatus.CONFLICT;
             case AGENT_TIMEOUT -> HttpStatus.GATEWAY_TIMEOUT;
             case AGENT_BUS_UNAVAILABLE -> HttpStatus.SERVICE_UNAVAILABLE;
+            case AGENT_UPSTREAM_UNAVAILABLE -> HttpStatus.BAD_GATEWAY;
             default -> HttpStatus.BAD_REQUEST;
         };
         return ResponseEntity.status(status).body(body(e.errorCode().code(), e.getMessage(), e.details()));
