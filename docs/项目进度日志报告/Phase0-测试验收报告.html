@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 0 胚胎期 · 测试验收报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-15 20:32 · 源文件 Phase0-测试验收报告.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 验收方式</a></li>
+<li><a href="#2">2. 逐项验收证据</a><ul>
+<li><a href="#21-scriptsstartsh-all-scriptshealthchecksh">2.1 启动与健康检查（scripts/start.sh all + scripts/healthcheck.sh）</a></li>
+<li><a href="#22-nacos">2.2 Nacos 注册</a></li>
+<li><a href="#23-phase0-demo-3">2.3 冒烟命令（Phase0-DEMO §第3步）</a></li>
+<li><a href="#24-ci">2.4 CI 与契约</a></li>
+</ul>
+</li>
+<li><a href="#3-dod">3. DoD 对照总表</a></li>
+<li><a href="#4">4. 已知瑕疵（诚实留痕）</a></li>
+<li><a href="#5">5. 结论</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-0">Phase 0 胚胎期 · 测试验收报告<a class="headerlink" href="#phase-0" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 0 · 胚胎期</td>
+</tr>
+<tr>
+<td>验收日期</td>
+<td>2026-08-30（源机验收）；<strong>2026-09-13 本机容器级复测通过</strong></td>
+</tr>
+<tr>
+<td>报告性质</td>
+<td>追溯性补档（编制于 2026-09-15）</td>
+</tr>
+<tr>
+<td>验收结论</td>
+<td><strong>通过</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 验收方式<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>Phase 0 无业务逻辑，验收以<strong>启动/注册/健康/冒烟</strong>四类可观测证据为主，辅以 CI 流水线与契约校验。</p>
+<h2 id="2">2. 逐项验收证据<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-scriptsstartsh-all-scriptshealthchecksh">2.1 启动与健康检查（<code>scripts/start.sh all</code> + <code>scripts/healthcheck.sh</code>）<a class="headerlink" href="#21-scriptsstartsh-all-scriptshealthchecksh" title="Permanent link">&para;</a></h3>
+<p>2026-09-13 本机复测（Docker Desktop 4.4.4 / JDK 21 / Maven 3.9.11）：</p>
+<pre><code>[infrastructure]   redis 6379 / postgres 5432 / qdrant 6333 / nats 4222 /
+                   nacos 8848 / minio 9000 / kafka 9092 / jaeger 16686    8/8 OK
+[java services]    gateway 8080 / session 8081 / sense 8082 / body 8083    4/4 HTTP 200
+[grpc health]      9091 / 19092 / 9093 / 9094                              应答正常
+[python+frontend]  nlp-service 8000 / work-platform 3001                   OK
+合计 16/16 OK
+</code></pre>
+<h3 id="22-nacos">2.2 Nacos 注册<a class="headerlink" href="#22-nacos" title="Permanent link">&para;</a></h3>
+<p><code>http://127.0.0.1:8848/nacos</code> 服务列表可见 gateway-service / session-manager / sense-service / body-service，
+4 个服务互相可见（DoD 要求 ≥3，实际 4）。</p>
+<h3 id="23-phase0-demo-3">2.3 冒烟命令（Phase0-DEMO §第3步）<a class="headerlink" href="#23-phase0-demo-3" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>命令</th>
+<th>预期</th>
+<th>实测</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST :8081/api/session</code></td>
+<td>200，返回 <code>session_id</code>/<code>ACTIVE</code></td>
+<td>✅（2026-09-13 经网关复测亦通过）</td>
+</tr>
+<tr>
+<td><code>POST :8082/api/sense/collect</code></td>
+<td>200，<code>source_channel=TOUCH</code></td>
+<td>✅（URL 采集链路可用）</td>
+</tr>
+<tr>
+<td><code>POST :8000/api/nlp/intent</code></td>
+<td>200，返回意图</td>
+<td>✅（骨架端点；规则级联为 Phase 2 内容）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24-ci">2.4 CI 与契约<a class="headerlink" href="#24-ci" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>.gitlab-ci.yml</code> 三段流水线（build → test → package）</td>
+<td>骨架跑通</td>
+</tr>
+<tr>
+<td><code>contract-check.py</code></td>
+<td>FAIL 0（2026-09-13 复测 FAIL 0 / WARN 3，WARN 为格式提示）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-dod">3. DoD 对照总表<a class="headerlink" href="#3-dod" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>DoD（规划 §1.4 P0）</th>
+<th style="text-align: center;">判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>3 服务 + 基础栈一键启动，健康检查全绿</td>
+<td style="text-align: center;">✅（4 服务，超出要求）</td>
+</tr>
+<tr>
+<td>3 服务注册，gRPC 健康 SERVING</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>演示时间 &lt; 10 分钟</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>演示脚本可重复执行（Phase0-DEMO.md）</td>
+<td style="text-align: center;">✅</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 已知瑕疵（诚实留痕）<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>影响</th>
+<th>处置建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>healthcheck.sh</code> 中 <code>check_port session-grpc 9092</code> 实际探到 Kafka；session gRPC 真实端口为 19092</td>
+<td>检查项名不符实（非漏检：19092 已在 gRPC 分组覆盖）</td>
+<td>Phase 3 顺带修正</td>
+</tr>
+<tr>
+<td>2</td>
+<td>健康检查仅探端口/actuator，<strong>不触发跨服务调用</strong></td>
+<td>后续证明会掩盖集成级缺陷（Phase 1 的 D-1 即因此漏网）</td>
+<td>教训沉淀：验收必须包含业务链路冒烟，Phase 1 起执行</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5">5. 结论<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<p>Phase 0 验收<strong>通过</strong>。骨架、注册、健康、CI 四类证据齐备且在本机可复现。</p>
+<hr />
+<p><em>追溯性补档编制：WorkBuddy · 2026-09-15 · 复测证据引自 <code>docs/dev分支代码分析与进度验证-2026-09-12.md</code> §八（2026-09-13）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

@@ -28,6 +28,24 @@
 
 ## 文件清单
 
+### Phase 0 · 胚胎期（2026-08-30 验收 · 2026-09-15 追溯补档）
+
+| 文件 | 说明 |
+|---|---|
+| `Phase0-阶段性报告.md` · `.html` | 骨架目标、交付物清单、DoD 对照、5 项问题记录（os-maven 扩展 / .env / 端口冲突 / 环境变量污染 / 产物入库）、遗留项 |
+| `Phase0-开发执行日志.md` · `.html` | `7ceb5d9→db0cc27` 提交时间线、4 条 ADR、命令台账、环境侧记录 |
+| `Phase0-测试验收报告.md` · `.html` | 16/16 健康检查、3 条冒烟命令、CI/契约证据、2 项诚实登记的瑕疵（探针名不符实 / 健康检查不含业务链路） |
+
+### Phase 1 · 神经期（2026-09-11 收尾 · 2026-09-13 动态验证 · 2026-09-15 追溯补档）
+
+| 文件 | 说明 |
+|---|---|
+| `Phase1-阶段性报告.md` · `.html` | 脊柱总线交付物（网关 JWT/BusProxy/NATS/Kafka/Trace）、10/10 需求覆盖、VS1 设计、**D-1 缺陷完整复盘**（h2c 升级打挂 Python 调用） |
+| `Phase1-开发执行日志.md` · `.html` | `075f8cb→30644bc` 提交时间线（含 codex 前端线合并）、6 条 ADR、命令台账 |
+| `Phase1-测试验收报告.md` · `.html` | 13 项单测、10 步业务链路冒烟实录（8 链路全通过）、3 项负向安全用例、D-1 修复前后对照、P99 待补实测诚实登记 |
+
+**阶段数据速览**：Phase 1 代码基线 `db0cc27`（56 文件 +2013/-562）· 加固 `701aa3f` · 相关模块测试 **13/13 通过** · 业务链路冒烟 **8/8 通过** · 健康检查 **16/16 OK**
+
 ### Phase 2 · 感官期（2026-09-12）
 
 | 文件 | 说明 |
@@ -61,15 +79,20 @@ Phase<N>-测试验收报告.md     + .html
 本目录的 HTML 由脚本统一生成（样式一致、含目录导航）：
 
 ```bash
-# 从项目根执行；必须使用 anaconda Python（含 markdown 3.4.1，托管 Python 无此包）
-E:/software/anaconda3/python.exe scripts/md2html-report.py "docs/项目进度日志报告/Phase2-阶段性报告.md"
+# 从项目根执行；Python 需带 markdown 包（≥3.4）
+# 2026-09-15 更新：本机已无 anaconda，改用托管 Python + PYTHONPATH 指向 markdown 包目录：
+PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py --all "docs/项目进度日志报告"
 
-# 批量转换整个目录
-E:/software/anaconda3/python.exe scripts/md2html-report.py --all "docs/项目进度日志报告"
+# 单文件模式
+PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py "docs/项目进度日志报告/Phase2-阶段性报告.md"
 ```
 
 > **注意事项**（踩坑记录）：
-> - 必须用 **anaconda Python**：`E:/software/anaconda3/python.exe`；托管 Python 未安装 `markdown` 包。
+> - markdown 包通过 `pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown` 安装（不污染系统环境）。
 > - 中文字符路径需加引号。
 > - `--all` 批量模式**自动排除 `README.md`**（索引页保留纯 Markdown 即可），如需转换用单文件模式。
 > - 修改 `.md` 后**需重新生成对应 `.html`**，两者一并提交，避免版本漂移。

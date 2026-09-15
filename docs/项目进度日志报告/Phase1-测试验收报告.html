@@ -1,0 +1,389 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 1 神经期 · 测试验收报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-15 20:32 · 源文件 Phase1-测试验收报告.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 构建证据</a></li>
+<li><a href="#2-phase-1-d-1-2026-09-13">2. 单元测试（Phase 1 相关模块，D-1 修复后 2026-09-13）</a></li>
+<li><a href="#3">3. 健康检查（容器级）</a></li>
+<li><a href="#4-2026-09-1310">4. 端到端业务链路冒烟（2026-09-13，10 步实录）</a></li>
+<li><a href="#5-phase1-demo">5. 负向安全用例（Phase1-DEMO）</a></li>
+<li><a href="#6">6. 缺陷记录与回归</a></li>
+<li><a href="#7-dod">7. DoD 对照总表</a></li>
+<li><a href="#8">8. 待补验证项（诚实留痕）</a></li>
+<li><a href="#9">9. 结论</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-1">Phase 1 神经期 · 测试验收报告<a class="headerlink" href="#phase-1" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 1 · 神经期</td>
+</tr>
+<tr>
+<td>验收日期</td>
+<td>静态走查 2026-09-12；<strong>动态验证与业务链路冒烟 2026-09-13</strong>（本机）</td>
+</tr>
+<tr>
+<td>报告性质</td>
+<td>追溯性补档（编制于 2026-09-15）</td>
+</tr>
+<tr>
+<td>验收结论</td>
+<td><strong>通过</strong>（集成缺陷 D-1 已修复并复测，回归用例固化）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 构建证据<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<pre><code>mvn clean package（services/java，2026-09-13 本机）
+[INFO] proto-contracts / gateway-service / session-manager / sense-service / body-service
+[INFO] BUILD SUCCESS
+</code></pre>
+<h2 id="2-phase-1-d-1-2026-09-13">2. 单元测试（Phase 1 相关模块，D-1 修复后 2026-09-13）<a class="headerlink" href="#2-phase-1-d-1-2026-09-13" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>测试类</th>
+<th style="text-align: right;">用例数</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gateway-service</td>
+<td><code>JwtServiceTest</code></td>
+<td style="text-align: right;">2</td>
+<td>✅ 0 失败</td>
+</tr>
+<tr>
+<td>session-manager</td>
+<td><code>BusProxyTest</code> / <code>SessionControllerTest</code> / <code>OutboundHttpTest</code> / <code>UpstreamDegradeTest</code></td>
+<td style="text-align: right;">10</td>
+<td>✅ 0 失败</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td><code>BodyStoreTest</code></td>
+<td style="text-align: right;">1</td>
+<td>✅ 0 失败</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td></td>
+<td style="text-align: right;"><strong>13</strong></td>
+<td><strong>0 失败 0 错误</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>回归用例说明：<code>OutboundHttpTest</code> 用裸 socket 断言出站请求为 HTTP/1.1 且不含 <code>h2c</code>/<code>HTTP2-Settings</code> 头；
+<code>UpstreamDegradeTest</code> 断言上游不可用时默认降级（意图→FALLBACK、检索→空结果）与 <code>degrade-on-failure=false</code> 时 502 语义。</p>
+</blockquote>
+<h2 id="3">3. 健康检查（容器级）<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<pre><code>[infrastructure]   8/8 OK（redis/postgres/qdrant/nats/nacos/minio/kafka/jaeger）
+[java services]    4/4 HTTP 200（gateway 8080 / session 8081 / sense 8082 / body 8083）
+[grpc health]      9091 / 19092 / 9093 / 9094
+[python+frontend]  nlp-service 8000 / work-platform 3001
+healthcheck.sh 合计 16/16 OK；Nacos 服务发现 4 服务互见
+</code></pre>
+<h2 id="4-2026-09-1310">4. 端到端业务链路冒烟（2026-09-13，10 步实录）<a class="headerlink" href="#4-2026-09-1310" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>步骤</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>POST /api/auth/token?tenantId=default</code>（dev 端点）</td>
+<td>✅ 200，HS384 JWT（loopback-only 校验生效）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>无 token 调 <code>POST /api/session</code></td>
+<td>✅ 401 <code>AGENT_UNAUTHORIZED</code>（鉴权生效）</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>POST /api/session</code>（带 token）</td>
+<td>✅ 200 返回 <code>session_id</code>；Redis <code>session:{id}</code> 哈希 6 字段、TTL 2h</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>GET /api/session/{id}</code></td>
+<td>✅ 200，<code>status=ACTIVE</code>、<code>message_count=0</code>，租户归属校验生效</td>
+</tr>
+<tr>
+<td>5</td>
+<td>NATS 总线 <code>lifeform.rpc.sense.ping</code></td>
+<td>✅ <code>bus_reply={"service":"sense-service","status":"pong","channel":"TOUCH"}</code>；停总线优雅降级 <code>direct</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Kafka 事件 <code>lifeform.session.created</code></td>
+<td>✅ 生产 offset=0，KafkaEventConsumer 消费到同一 payload</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>POST /api/body/ingest</code></td>
+<td>✅ 200，<code>chunk_count=3</code>（直连与经网关均通过）</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>POST /api/body/retrieve</code></td>
+<td>✅ 200，命中 2 个 chunk</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>POST /api/session/{id}/ask</code></td>
+<td>✅ <strong>200 / 875ms</strong>，<code>intent=闲聊</code> + 模板回答 + 1 条 citations（D-1 修复前 503）</td>
+</tr>
+<tr>
+<td>10</td>
+<td>消息落库 <code>session:{id}:messages</code></td>
+<td>✅ <code>LLEN=2</code>、<code>message_count=2</code>（user+assistant，latency_ms=171）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论：8 条链路（会话生命周期 / 租户隔离 / JWT 鉴权 / NATS 总线 / Kafka 收发 / 知识入库检索 / 意图问答 / 消息落库）全部实测通过。</strong></p>
+<h2 id="5-phase1-demo">5. 负向安全用例（Phase1-DEMO）<a class="headerlink" href="#5-phase1-demo" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>预期</th>
+<th>实测</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>无 token 访问受保护端点</td>
+<td>401</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>跨租户读会话</td>
+<td>403</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>SSRF：采集 loopback 地址（<code>http://127.0.0.1:8080/actuator/health</code>）</td>
+<td>拒绝</td>
+<td>✅（出站守卫拦截）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6">6. 缺陷记录与回归<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>缺陷</th>
+<th>修复</th>
+<th>回归证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-1</td>
+<td>JDK HttpClient 默认 HTTP/2 对明文连接发 <code>Upgrade: h2c</code>，uvicorn(h11) 判为非法并丢弃 body → Java 侧 503（影响意图识别与 OCR 调用链）</td>
+<td>统一出口锁定 HTTP/1.1（<code>OutboundHttp</code>/<code>HttpClients</code>）+ 超时 + 降级 + <code>AGENT_UPSTREAM_UNAVAILABLE</code></td>
+<td>冒烟步骤 9/10 修复前后对照（503→200/875ms，LLEN 0→2）；杀掉 nlp-service 后 ask 仍 200（FALLBACK）；Java 测试 54→61 全绿；契约校验 FAIL 0 无漂移</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7-dod">7. DoD 对照总表<a class="headerlink" href="#7-dod" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>DoD（规划 §1.4 P1）</th>
+<th style="text-align: center;">判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>请求从浏览器/网关 → 总线 → 服务返回，链路可追踪</td>
+<td style="text-align: center;">✅（Jaeger 16686 可视化）</td>
+</tr>
+<tr>
+<td>链路 4 节点可见</td>
+<td style="text-align: center;">✅（gateway→session→nlp/body）</td>
+</tr>
+<tr>
+<td>P99 &lt; 500ms</td>
+<td style="text-align: center;">⚠️ 单次实测 875ms（含首次冷启动与容器网络）；系统性 P99 待 Phase 3 压测基线（V1-1 性能基准实验室）校准，<strong>诚实登记为待补实测</strong></td>
+</tr>
+<tr>
+<td>演示脚本可重复执行（Phase1-DEMO.md）</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>业务链路冒烟纳入验收（D-1 教训沉淀）</td>
+<td style="text-align: center;">✅（本报告 §4）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="8">8. 待补验证项（诚实留痕）<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>原因</th>
+<th>计划</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>链路 P99 系统性实测</td>
+<td>需压测工具与场景（V1-1 设计已备）</td>
+<td>Phase 3 起建立压测基线</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>git push</code> 真实 GitHub 凭据</td>
+<td>本机直连 GitHub 不通</td>
+<td>需要远程协作时验证</td>
+</tr>
+</tbody>
+</table>
+<h2 id="9">9. 结论<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<p>Phase 1 验收<strong>通过</strong>。13 项单测全绿、16/16 健康检查通过、8 条业务链路冒烟实测通过、3 项负向安全用例通过；
+唯一集成缺陷 D-1 已修复并固化 7 个回归用例。</p>
+<hr />
+<p><em>追溯性补档编制：WorkBuddy · 2026-09-15 · 动态证据引自 <code>docs/dev分支代码分析与进度验证-2026-09-12.md</code> §八（2026-09-13）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

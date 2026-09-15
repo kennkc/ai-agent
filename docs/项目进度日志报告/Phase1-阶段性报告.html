@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 1 神经期 · 阶段性报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-15 20:32 · 源文件 Phase1-阶段性报告.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 阶段目标回顾</a></li>
+<li><a href="#2">2. 交付物清单</a><ul>
+<li><a href="#21-gateway-service">2.1 gateway-service（脊柱入口）</a></li>
+<li><a href="#22-session-manager-vs1">2.2 session-manager（会话与 VS1 编排）</a></li>
+<li><a href="#23-sense-service-body-service">2.3 sense-service / body-service（总线接入侧）</a></li>
+<li><a href="#24">2.4 可观测性与基础设施</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 需求覆盖情况</a></li>
+<li><a href="#4">4. 关键设计落地说明</a><ul>
+<li><a href="#41-busproxy">4.1 脊柱总线：BusProxy 抽象 + 双通道降级</a></li>
+<li><a href="#42-vs1">4.2 VS1 垂直切片（先纵后横的第一次落地）</a></li>
+<li><a href="#43">4.3 安全三件套在入口收口</a></li>
+</ul>
+</li>
+<li><a href="#5-d-12026-09-13">5. 重大缺陷复盘：D-1（阶段后复测发现，2026-09-13 修复）</a></li>
+<li><a href="#6">6. 其他问题记录</a></li>
+<li><a href="#7">7. 验证结果汇总</a><ul>
+<li><a href="#71">7.1 构建</a></li>
+<li><a href="#72-2026-09-13d-1">7.2 测试（2026-09-13，D-1 修复后）</a></li>
+<li><a href="#73-2026-09-1310">7.3 端到端业务链路冒烟（2026-09-13，10 步）</a></li>
+</ul>
+</li>
+<li><a href="#8">8. 风险与遗留项</a></li>
+<li><a href="#9">9. 阶段结论</a></li>
+<li><a href="#_1">附录：关联文档</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-1">Phase 1 神经期 · 阶段性报告<a class="headerlink" href="#phase-1" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 1 · 神经期（Neural Stage）</td>
+</tr>
+<tr>
+<td>项目</td>
+<td>Agent-Lifeform · AI Agent 生命体架构</td>
+</tr>
+<tr>
+<td>仓库</td>
+<td><code>E:\AI\ai-agent</code>（GitHub: kennkc/ai-agent）</td>
+</tr>
+<tr>
+<td>分支</td>
+<td><code>workbuddy/main</code>（开发主线）→ 2026-09-12 起本地跟踪分支 <code>dev</code></td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td><code>075f8cb feat(phase1): 神经期脊柱数据总线</code>（2026-08-30）→ <code>db0cc27 feat: complete phase0 and phase1 development</code>（2026-09-11，56 文件 +2013/-562）</td>
+</tr>
+<tr>
+<td>事后加固</td>
+<td><code>701aa3f fix(d1)</code>（2026-09-13，跨服务调用统一 HTTP/1.1，见 §5）</td>
+</tr>
+<tr>
+<td>报告性质</td>
+<td><strong>追溯性补档</strong>（编制于 2026-09-15；动态验证证据来自 2026-09-12/13 本机复跑）</td>
+</tr>
+<tr>
+<td>阶段结论</td>
+<td><strong>通过</strong>（1 个集成缺陷 D-1 于阶段后复测中发现并修复，不影响阶段目标达成，复盘见 §5）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 阶段目标回顾<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>Phase 0 立起了骨架，但器官之间"没有神经"——服务各自为政。Phase 1 的目标是<strong>铺设脊柱神经（数据总线）</strong>：
+让请求经统一网关进入、鉴权与租户身份随链路透传、服务间经 NATS 总线通信、事件经 Kafka 发布、
+全链路可追踪，并交付第一个垂直切片 <strong>VS1：session → intent → 本地检索 → 模板回答</strong>。</p>
+<p>验收口径（规划 §1.4 P1 演示）：请求从浏览器 → 网关 → 总线 → 服务返回，Jaeger 链路可视化，P99 &lt; 500ms。</p>
+<hr />
+<h2 id="2">2. 交付物清单<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-gateway-service">2.1 gateway-service（脊柱入口）<a class="headerlink" href="#21-gateway-service" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>交付物</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>路由配置</td>
+<td><code>/api/session/**</code> <code>/api/sense/**</code> <code>/api/nlp/**</code> <code>/api/body/**</code> 四路由统一入口 8080</td>
+</tr>
+<tr>
+<td>JWT 体系</td>
+<td><code>JwtService</code>（HS384 签发/校验）、<code>JwtAuthFilter</code>（过滤器链）、<code>AuthController</code>（dev token 端点，<strong>仅 loopback 可用</strong>）、<code>AuthProperties</code></td>
+</tr>
+<tr>
+<td>租户透传</td>
+<td>JWT claims → <code>X-Tenant-Id</code>，下游服务据此做租户分区与跨租户 403 拦截</td>
+</tr>
+<tr>
+<td>测试</td>
+<td><code>JwtServiceTest</code>（2 用例）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-session-manager-vs1">2.2 session-manager（会话与 VS1 编排）<a class="headerlink" href="#22-session-manager-vs1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>交付物</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SessionController</code></td>
+<td>会话生命周期（创建/查询/发消息/ask），Redis 会话哈希（TTL 2h）+ 消息列表落库</td>
+</tr>
+<tr>
+<td><code>BusProxy</code></td>
+<td><strong>总线抽象</strong>：<code>bus_channel=nats</code> 时走 NATS 请求/回应，不可用时优雅降级 <code>direct</code> 直连</td>
+</tr>
+<tr>
+<td><code>NatsClient</code></td>
+<td>NATS 同步请求/回应客户端</td>
+</tr>
+<tr>
+<td><code>KafkaEventPublisher</code> / <code>KafkaEventConsumer</code></td>
+<td>事件发布/消费基线（如 <code>lifeform.session.created</code>）</td>
+</tr>
+<tr>
+<td><code>NlpClient</code> / <code>BodyClient</code></td>
+<td>意图识别与知识检索的跨服务客户端（VS1 编排依赖）</td>
+</tr>
+<tr>
+<td>VS1 问答链路</td>
+<td>ask → 意图 → 检索 → 模板回答 + citations</td>
+</tr>
+<tr>
+<td>统一错误模型</td>
+<td><code>ErrorCode</code> / <code>BizException</code> / <code>GlobalExceptionHandler</code>（HTTP 状态映射）</td>
+</tr>
+<tr>
+<td>测试</td>
+<td><code>BusProxyTest</code> / <code>SessionControllerTest</code> 等（10 用例）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-sense-service-body-service">2.3 sense-service / body-service（总线接入侧）<a class="headerlink" href="#23-sense-service-body-service" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>交付物</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NatsBusServer</code> + <code>MinimalNatsClient</code></td>
+<td>sense-service 挂载总线，响应 <code>lifeform.rpc.sense.ping</code>（<code>bus_reply</code> 携带服务/渠道信息）</td>
+</tr>
+<tr>
+<td>统一错误模型</td>
+<td>与 session-manager 同构的 <code>ErrorCode</code>/<code>BizException</code>/<code>GlobalExceptionHandler</code></td>
+</tr>
+<tr>
+<td>body-service 本地检索 MVP</td>
+<td><code>BodyController</code>（ingest/retrieve）+ <code>BodyStore</code>（内存/本地打分检索），支撑 VS1</td>
+</tr>
+<tr>
+<td>gRPC 健康</td>
+<td>四服务 <code>GrpcHealthServer</code> 齐备</td>
+</tr>
+</tbody>
+</table>
+<h3 id="24">2.4 可观测性与基础设施<a class="headerlink" href="#24" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>交付物</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OpenTelemetry OTLP 配置</td>
+<td>四个 Java 服务统一导出链路</td>
+</tr>
+<tr>
+<td>Jaeger</td>
+<td>docker-compose 服务，链路可视化（16686）</td>
+</tr>
+<tr>
+<td>docker-compose 增补</td>
+<td>Kafka/Jaeger 等服务定义（+33 行）</td>
+</tr>
+<tr>
+<td><code>healthcheck.sh</code></td>
+<td>分组健康检查脚本增强</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3">3. 需求覆盖情况<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<p>对照 <code>PROGRESS.md</code> Phase 1 checklist（10/10）：</p>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>实现位置</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>网关路由（session/sense/nlp/body）</td>
+<td>gateway <code>application.yml</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>JWT 鉴权 + 租户透传（已验证）</td>
+<td><code>JwtAuthFilter</code> + 冒烟步骤 2/3/4（401/200/租户归属校验）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>BusProxy 总线抽象</td>
+<td><code>session/bus/BusProxy.java</code> + <code>BusProxyTest</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>NATS 请求/回应基线</td>
+<td><code>NatsClient</code> + 冒烟步骤 5（bus_reply pong / direct 降级）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>Kafka 生产/消费基线</td>
+<td><code>KafkaEventPublisher</code>/<code>Consumer</code> + 冒烟步骤 6（offset=0 自产自销）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>OTLP 配置 + Jaeger</td>
+<td>compose 服务 + 四服务 yml</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>统一错误模型与状态映射</td>
+<td>各服务 <code>common</code> 包</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>跨租户访问保护</td>
+<td>冒烟负向检查（跨租户读会话 → 403）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>SSRF 防护（URL 采集）</td>
+<td>网关/感官侧校验，loopback 采集被拒（DEMO 负向检查）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>VS1 垂直切片</strong></td>
+<td>ask 主链路，冒烟步骤 9/10 实测 200/875ms</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<p><strong>覆盖率：10/10 = 100%。</strong></p>
+<hr />
+<h2 id="4">4. 关键设计落地说明<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41-busproxy">4.1 脊柱总线：BusProxy 抽象 + 双通道降级<a class="headerlink" href="#41-busproxy" title="Permanent link">&para;</a></h3>
+<p><code>BusProxy</code> 把"服务间通信"收口为一个抽象：<code>bus_channel=nats</code> 走 NATS 请求/回应；
+总线不可用自动降级 <code>direct</code> 直连。生命体的神经不是单点依赖——总线挂了，反射仍在。</p>
+<h3 id="42-vs1">4.2 VS1 垂直切片（先纵后横的第一次落地）<a class="headerlink" href="#42-vs1" title="Permanent link">&para;</a></h3>
+<pre><code>ask → 意图识别(NlpClient→nlp-service) → 知识检索(BodyClient→body-service) → 模板回答 + citations
+      ↓ 失败降级：意图→FALLBACK 闲聊；检索→空结果（不阻断会话）
+</code></pre>
+<h3 id="43">4.3 安全三件套在入口收口<a class="headerlink" href="#43" title="Permanent link">&para;</a></h3>
+<p>JWT 鉴权（401）→ 租户透传与归属校验（403）→ 出站 SSRF 校验（loopback/metadata 拒绝），
+全部在 Phase 1 落地并有负向用例，为后续阶段提供安全底座。</p>
+<hr />
+<h2 id="5-d-12026-09-13">5. 重大缺陷复盘：D-1（阶段后复测发现，2026-09-13 修复）<a class="headerlink" href="#5-d-12026-09-13" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>这是本阶段唯一的功能性缺陷，也是整个项目至今最有价值的教训：<strong>全绿的健康检查掩盖了集成缺陷</strong>。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>现象</strong></td>
+<td><code>curl</code> 直连 nlp-service 200，但 session-manager 调用恒 503；nlp 日志 <code>422 Unprocessable Entity</code> + <code>Unsupported upgrade request</code></td>
+</tr>
+<tr>
+<td><strong>定位</strong></td>
+<td>JDK 21 单文件最小复现：同一 URL 同一 JSON，HTTP/2 → 422，HTTP/1.1 → 200</td>
+</tr>
+<tr>
+<td><strong>根因</strong></td>
+<td><code>RestClient</code> 默认 <code>JdkClientHttpRequestFactory</code>（<code>HttpClient</code> 默认 HTTP/2），对明文连接发 <code>Upgrade: h2c</code> 升级握手；uvicorn(h11) 不支持 h2c，将请求判非法并<strong>丢弃 body</strong> → FastAPI <code>422</code> → Java 包装 503。影响 <code>NlpClient</code>（意图）与 <code>VisualChannel</code> OCR；<code>BodyClient</code> 打 Tomcat 从未受影响（根因再校准，见 dev 分析文档 §8.6）</td>
+</tr>
+<tr>
+<td><strong>修复</strong></td>
+<td>统一出口：session-manager 新增 <code>OutboundHttp</code>（HTTP/1.1 + connect 3s/read 10s），<code>NlpClient</code>/<code>BodyClient</code> 改走该工厂并带降级语义（新错误码 <code>AGENT_UPSTREAM_UNAVAILABLE</code>→502）；sense-service 新增 <code>HttpClients</code>，<code>TouchChannel</code>/<code>VisualChannel</code> 同步切换；新增 3 个回归测试类（7 用例：裸 socket 断言无 h2c 头、降级语义、超时断言）</td>
+</tr>
+<tr>
+<td><strong>验证</strong></td>
+<td>Java 测试 54→<strong>61 全绿</strong>；<code>ask</code> 从 503 → <strong>200/875ms</strong>（模板回答+citations）；消息落库 <code>LLEN=0</code>→<strong>2</strong>；杀掉 nlp-service 后 ask 仍 200（FALLBACK 降级）；契约校验无漂移</td>
+</tr>
+<tr>
+<td><strong>教训</strong></td>
+<td>① 健康检查只探端口/actuator 不足以证明链路可用，<strong>验收必须含业务链路冒烟</strong>（已沉淀为流程要求）；② 跨语言服务调用（Java↔Python/uvicorn）必须显式锁定 HTTP 版本；③ 新增跨服务调用统一走 <code>OutboundHttp</code>/<code>HttpClients</code>，禁止各自 new RestClient</td>
+</tr>
+</tbody>
+</table>
+<h2 id="6">6. 其他问题记录<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>问题</th>
+<th>解决</th>
+<th>教训</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1-1</td>
+<td><code>os.detected.classifier</code> 未解析导致构建失败</td>
+<td><code>78aba15</code>：os-maven-plugin 注册为 Maven 扩展</td>
+<td>platform 插件先注册扩展</td>
+</tr>
+<tr>
+<td>P1-2</td>
+<td>dev token 端点的暴露面</td>
+<td>设计为<strong>仅 loopback 可用</strong>（<code>DEV_TOKEN_ENDPOINT_ENABLED=true</code> 时）</td>
+<td>开发便利端点必须有网络层护栏</td>
+</tr>
+<tr>
+<td>P1-3</td>
+<td><code>healthcheck.sh</code> session-grpc 探 9092（实为 Kafka）</td>
+<td>已登记 Phase 0 验收报告瑕疵项，Phase 3 顺带修</td>
+<td>端口预算要集中维护</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7. 验证结果汇总<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<h3 id="71">7.1 构建<a class="headerlink" href="#71" title="Permanent link">&para;</a></h3>
+<p><code>mvn clean package</code> → BUILD SUCCESS（2026-09-12/13 本机复跑），全模块 5 个 SUCCESS。</p>
+<h3 id="72-2026-09-13d-1">7.2 测试（2026-09-13，D-1 修复后）<a class="headerlink" href="#72-2026-09-13d-1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th style="text-align: right;">用例</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gateway-service</td>
+<td style="text-align: right;">2</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>session-manager</td>
+<td style="text-align: right;">10（含 D-1 回归 2 类 4 用例）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td style="text-align: right;">1</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>Phase 1 相关模块合计</strong></td>
+<td style="text-align: right;"><strong>13</strong></td>
+<td><strong>0 失败</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="73-2026-09-1310">7.3 端到端业务链路冒烟（2026-09-13，10 步）<a class="headerlink" href="#73-2026-09-1310" title="Permanent link">&para;</a></h3>
+<p>会话生命周期、租户隔离、JWT 鉴权、NATS 同步总线、Kafka 生产/消费、知识入库与检索、
+意图识别与问答主链路、消息落库——<strong>8 条链路全部实测通过</strong>（明细见《Phase1-测试验收报告》§4）。
+链路延迟：ask 200 / 875ms（目标 P99 &lt; 500ms 为规划口径，实测单次 875ms 含冷启动，后续随压测基线校准）。</p>
+<hr />
+<h2 id="8">8. 风险与遗留项<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>类型</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>健康检查不含业务链路探测</td>
+<td>流程</td>
+<td>已在验收规范中补"业务链路冒烟"要求</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>healthcheck.sh</code> 9092 探针名不符实</td>
+<td>脚本</td>
+<td>Phase 3 顺带修正</td>
+</tr>
+<tr>
+<td>3</td>
+<td>跨语言调用的 HTTP 版本约束依赖约定</td>
+<td>工程</td>
+<td>依赖统一出口类规避；可考虑加 ArchUnit 规则</td>
+</tr>
+<tr>
+<td>4</td>
+<td>检索为 body-service 本地 MVP，非语义检索</td>
+<td>规划内</td>
+<td>Phase 3 躯体期替换</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9">9. 阶段结论<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<p>Phase 1 神经期<strong>达成设计目标</strong>：</p>
+<ul>
+<li>脊柱数据总线贯通：网关 → 鉴权 → 租户透传 → NATS/Kafka 双通道 → 四服务挂载；</li>
+<li>生命体第一次有了<strong>端到端反射弧</strong>（VS1：问 → 意图 → 检索 → 答）；</li>
+<li>安全三件套（JWT/租户/SSRF）与统一错误模型就位；</li>
+<li>唯一集成缺陷 D-1 在本机动态验证中暴露并已修复，回归用例固化，教训沉淀为验收流程要求。</li>
+</ul>
+<hr />
+<h2 id="_1">附录：关联文档<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>文档</th>
+<th>位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>演示脚本</td>
+<td><code>docs/demo/Phase1-DEMO.md</code></td>
+</tr>
+<tr>
+<td>开发执行日志</td>
+<td>本目录 <code>Phase1-开发执行日志.md</code></td>
+</tr>
+<tr>
+<td>测试验收报告</td>
+<td>本目录 <code>Phase1-测试验收报告.md</code></td>
+</tr>
+<tr>
+<td>D-1 完整分析</td>
+<td><code>docs/dev分支代码分析与进度验证-2026-09-12.md</code> §8.4–8.6</td>
+</tr>
+<tr>
+<td>进度总览</td>
+<td>项目根 <code>PROGRESS.md</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>追溯性补档编制：WorkBuddy · 2026-09-15 · 代码基线 <code>db0cc27</code>（加固 <code>701aa3f</code>）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

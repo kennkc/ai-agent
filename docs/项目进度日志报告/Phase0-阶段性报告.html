@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 0 胚胎期 · 阶段性报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-15 20:32 · 源文件 Phase0-阶段性报告.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 阶段目标回顾</a></li>
+<li><a href="#2">2. 交付物清单</a></li>
+<li><a href="#3">3. 验收对照</a></li>
+<li><a href="#4">4. 本阶段问题与解决记录</a></li>
+<li><a href="#5">5. 风险与遗留项</a></li>
+<li><a href="#6">6. 阶段结论</a></li>
+<li><a href="#_1">附录：关联文档</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-0">Phase 0 胚胎期 · 阶段性报告<a class="headerlink" href="#phase-0" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 0 · 胚胎期（Embryonic Stage）</td>
+</tr>
+<tr>
+<td>项目</td>
+<td>Agent-Lifeform · AI Agent 生命体架构</td>
+</tr>
+<tr>
+<td>仓库</td>
+<td><code>E:\AI\ai-agent</code>（GitHub: kennkc/ai-agent）</td>
+</tr>
+<tr>
+<td>分支</td>
+<td><code>workbuddy/main</code>（开发主线）→ 2026-09-12 起本地跟踪分支 <code>dev</code></td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td><code>c4a842f feat(phase0): 骨架运行验证与修复——Phase0 胚胎期全量验收通过</code>（2026-08-30）</td>
+</tr>
+<tr>
+<td>验收日期</td>
+<td>2026-08-30（源机）；2026-09-13 本机容器级复测通过</td>
+</tr>
+<tr>
+<td>报告性质</td>
+<td><strong>追溯性补档</strong>（编制于 2026-09-15；本目录三件套规范建立于 Phase 2，此前阶段按同格式补齐）</td>
+</tr>
+<tr>
+<td>阶段结论</td>
+<td><strong>通过</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 阶段目标回顾<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>Phase 0 是生命体的"胚胎期"——<strong>不追求任何业务能力，只把骨架立起来</strong>：
+Monorepo 结构 + Maven 多模块构建 + 四类服务（网关/会话/感官/躯体）空壳 + Python FastAPI 骨架 +
+docker-compose 基础设施 + 注册与健康检查链路。</p>
+<p>验收口径（规划 §1.4 P0 演示）：<code>./scripts/start.sh</code> 一键启动，3 服务注册 Nacos，gRPC 健康 SERVING，健康检查全绿。</p>
+<hr />
+<h2 id="2">2. 交付物清单<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>交付物</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工程</td>
+<td>Monorepo 顶层结构（<code>proto/ contracts/ services/ web/ infra/ scripts/ docs/</code>）</td>
+<td>单仓多模块，契约与实现同仓</td>
+</tr>
+<tr>
+<td>工程</td>
+<td>Maven 多模块构建（<code>services/java</code> 根 pom）</td>
+<td>gateway-service / session-manager / sense-service / body-service / proto-contracts</td>
+</tr>
+<tr>
+<td>工程</td>
+<td>Python FastAPI 骨架（<code>services/python/nlp-service</code>）</td>
+<td>uvicorn 启动，<code>/api/nlp/intent</code> 骨架端点</td>
+</tr>
+<tr>
+<td>基础设施</td>
+<td><code>docker-compose.yml</code>（8 中间件）</td>
+<td>redis / postgres-pgvector / qdrant / nats / nacos / minio / jaeger / kafka</td>
+</tr>
+<tr>
+<td>基础设施</td>
+<td><code>infra/README.md</code></td>
+<td>基础设施启动与端口说明</td>
+</tr>
+<tr>
+<td>服务</td>
+<td>Nacos 注册配置（4 个 Java 服务）</td>
+<td><code>application.yml</code> 统一 NACOS_ADDR</td>
+</tr>
+<tr>
+<td>服务</td>
+<td>gRPC 健康服务（端口 9091–9094）</td>
+<td>4 服务各一个 <code>GrpcHealthServer</code>，标准 health 协议</td>
+</tr>
+<tr>
+<td>契约</td>
+<td>proto/gRPC 生成（Java + Python 双侧）</td>
+<td>6 个 <code>.proto</code>，Java 90 生成源、Python 12 生成文件</td>
+</tr>
+<tr>
+<td>CI</td>
+<td><code>.gitlab-ci.yml</code>（build → test → package 三段）</td>
+<td>contract-check 纳入 CI</td>
+</tr>
+<tr>
+<td>运维</td>
+<td><code>scripts/start.sh</code>（一键启动）、<code>scripts/healthcheck.sh</code></td>
+<td>分段启动 + 分组健康检查</td>
+</tr>
+<tr>
+<td>文档</td>
+<td><code>docs/demo/Phase0-DEMO.md</code></td>
+<td>阶段验收演示脚本</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3">3. 验收对照<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>DoD 项（规划 §1.4 P0）</th>
+<th>目标</th>
+<th>实测</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>一键启动</td>
+<td><code>start.sh all</code> 拉起全部</td>
+<td>基础设施 + 4 Java + nlp-service 全部拉起</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>服务注册</td>
+<td>3 服务注册 Nacos</td>
+<td>gateway / session / sense（后续 body 也注册）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>gRPC 健康</td>
+<td>SERVING</td>
+<td>9091 / 9093 / 9094（+session 19092）应答正常</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>健康检查</td>
+<td>全绿</td>
+<td><code>healthcheck.sh</code> 分组检查全 OK；2026-09-13 复测 <strong>16/16 OK</strong></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>CI</td>
+<td>骨架跑通</td>
+<td>build/test/package 三段 + contract-check</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>3 条冒烟命令</td>
+<td>全部返回预期</td>
+<td>建会话 / 采集 / 意图识别均 200</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4">4. 本阶段问题与解决记录<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>问题</th>
+<th>根因</th>
+<th>解决</th>
+<th>教训</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P0-1</td>
+<td>Maven 构建报 <code>os.detected.classifier</code> 未解析</td>
+<td>protobuf/grpc 插件需要 <code>os-maven-plugin</code> 提供 <code>${os.detected.classifier}</code>，未注册为 Maven 扩展</td>
+<td><code>78aba15</code>（2026-09-03）：在根 pom 将 os-maven-plugin 激活为 <code>&lt;extensions&gt;</code></td>
+<td>platform-dependent 插件必须先注册扩展再引用</td>
+</tr>
+<tr>
+<td>P0-2</td>
+<td><code>docker compose up -d</code> 直接失败</td>
+<td><code>docker-compose.yml</code> 引用 <code>MINIO_ROOT_USER</code> 等 4 个变量，缺 <code>.env</code></td>
+<td>从 <code>.env.example</code> 生成本地 <code>.env</code>；compose 配置校验通过</td>
+<td>引入环境变量依赖时同步提供 <code>.env.example</code> 并在 README 声明</td>
+</tr>
+<tr>
+<td>P0-3</td>
+<td>session-manager 启动失败</td>
+<td>Kafka 占用宿主 9092，与 session gRPC 端口冲突</td>
+<td>启动时设 <code>GRPC_PORT=19092</code>（配置支持 <code>${GRPC_PORT:9092}</code>）</td>
+<td>容器端口与宿主服务端口要做全局端口预算</td>
+</tr>
+<tr>
+<td>P0-4</td>
+<td>4 个 Java 服务同时抢同一端口</td>
+<td>宿主残留 <code>SERVER__PORT</code> 环境变量被 Spring 宽松绑定识别</td>
+<td>启动脚本先清除 <code>SERVER__*</code> 再拉起服务</td>
+<td>环境变量污染是 Spring 宽松绑定的隐蔽坑</td>
+</tr>
+<tr>
+<td>P0-5</td>
+<td><code>.pyc</code> 缓存曾被误提交</td>
+<td>构建产物混入仓库</td>
+<td><code>c4a842f</code> 清理并完善 <code>.gitignore</code></td>
+<td>生成物不入库（proto 生成源码是 Phase 2 A-1 的例外决策）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>P0-2 ~ P0-4 在 2026-08-30（源机）即已解决并固化进启动脚本；2026-09-13 本机复测确认同样规避有效。</p>
+</blockquote>
+<hr />
+<h2 id="5">5. 风险与遗留项<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>类型</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>healthcheck.sh</code> 的 <code>check_port session-grpc 9092</code> 实际探到的是 Kafka（应为 19092）</td>
+<td>脚本缺陷</td>
+<td>建议随 Phase 3 一并修正</td>
+</tr>
+<tr>
+<td>2</td>
+<td>本机直连 GitHub 不通，clone/fetch 需走镜像</td>
+<td>环境</td>
+<td><code>git push</code> 尚未验证</td>
+</tr>
+<tr>
+<td>3</td>
+<td>nlp-service 仅有骨架端点，意图识别为 Phase 1/2 内容</td>
+<td>规划内</td>
+<td>按阶段推进</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6">6. 阶段结论<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<p>Phase 0 胚胎期<strong>达成设计目标</strong>：骨架立起、4 类服务可一键启动、注册与健康检查链路完整、CI 可跑。
+生命体自此"有了身体形态"，进入 Phase 1 神经期铺设数据总线。</p>
+<hr />
+<h2 id="_1">附录：关联文档<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>文档</th>
+<th>位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>演示脚本</td>
+<td><code>docs/demo/Phase0-DEMO.md</code></td>
+</tr>
+<tr>
+<td>开发执行日志</td>
+<td>本目录 <code>Phase0-开发执行日志.md</code></td>
+</tr>
+<tr>
+<td>测试验收报告</td>
+<td>本目录 <code>Phase0-测试验收报告.md</code></td>
+</tr>
+<tr>
+<td>进度总览</td>
+<td>项目根 <code>PROGRESS.md</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>追溯性补档编制：WorkBuddy · 2026-09-15 · 代码基线 <code>c4a842f</code></em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

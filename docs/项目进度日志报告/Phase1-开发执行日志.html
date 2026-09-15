@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 1 神经期 · 开发执行日志</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-15 20:32 · 源文件 Phase1-开发执行日志.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 执行时间线</a></li>
+<li><a href="#2-adr">2. 关键决策记录（ADR 摘录）</a></li>
+<li><a href="#3">3. 命令台账（可复现）</a></li>
+<li><a href="#4">4. 环境侧记录</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-1">Phase 1 神经期 · 开发执行日志<a class="headerlink" href="#phase-1" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 1 · 神经期</td>
+</tr>
+<tr>
+<td>日志性质</td>
+<td><strong>追溯性补档</strong>（编制于 2026-09-15，依据 git 提交历史、PROGRESS.md、dev 分支分析文档及 2026-09-12/13 本机复跑记录还原）</td>
+</tr>
+<tr>
+<td>覆盖区间</td>
+<td>2026-08-30（主干落地）→ 2026-09-11（阶段收尾）→ 2026-09-13（动态验证与 D-1 修复）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 执行时间线<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>日期</th>
+<th>提交</th>
+<th>事件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-08-30</td>
+<td><code>075f8cb</code></td>
+<td><strong>神经期主干首批落地</strong>（22 文件 +900/-6）：gateway JWT 体系（AuthController/JwtAuthFilter/JwtUtil）、session-manager 总线（BusProxy/NatsClient/KafkaEventPublisher）、sense-service 总线接入（MinimalNatsClient/NatsBusServer）、三服务统一错误模型、compose 增补 Kafka</td>
+</tr>
+<tr>
+<td>2026-09-03</td>
+<td><code>78aba15</code></td>
+<td>构建修复：os-maven-plugin 激活为 Maven 扩展（<code>os.detected.classifier</code> 未解析）</td>
+</tr>
+<tr>
+<td>2026-09-11</td>
+<td><code>db0cc27</code></td>
+<td><strong>P0/P1 收尾</strong>（56 文件 +2013/-562）：body-service MVP（ingest/retrieve + BodyStore）、四服务 gRPC health 齐备、JWT 重构（JwtService/AuthProperties，dev token 仅 loopback）、VS1 垂直切片（SessionController ask 编排 + NlpClient/BodyClient）、KafkaEventConsumer、测试补齐（BusProxyTest/SessionControllerTest/JwtServiceTest/BodyStoreTest/TouchChannelTest）</td>
+</tr>
+<tr>
+<td>2026-09-12</td>
+<td>—（分支）</td>
+<td><code>git checkout -b dev origin/workbuddy/main</code>：创建本地跟踪分支 dev（基线 <code>9385f23</code>），并完成静态代码走查（确认真实现非占位，无 TODO 残留）</td>
+</tr>
+<tr>
+<td>2026-09-12</td>
+<td>—</td>
+<td>本机工具链装齐（JDK 21.0.12.1 / Maven 3.9.11 / Node 22.23.2 / Docker Desktop 4.4.4），首次本机构建通过</td>
+</tr>
+<tr>
+<td>2026-09-13</td>
+<td><code>c5f11cd</code> 前后</td>
+<td><strong>容器级动态验证</strong>：8 基础设施容器 + 4 Java + nlp-service + work-platform 全部起通，healthcheck 16/16 OK；业务链路冒烟发现 <strong>D-1</strong>（Java→Python 调用 422/503）</td>
+</tr>
+<tr>
+<td>2026-09-13</td>
+<td><code>701aa3f</code></td>
+<td><strong>D-1 修复</strong>：跨服务调用统一锁定 HTTP/1.1（新增 <code>OutboundHttp</code>/<code>HttpClients</code>），补齐超时/降级/错误码（<code>AGENT_UPSTREAM_UNAVAILABLE</code>）与 3 个回归测试类；<code>ask</code> 冒烟复测 200/875ms</td>
+</tr>
+<tr>
+<td>2026-09-13</td>
+<td><code>717d778</code></td>
+<td>文档归档：端到端动态验证结果与 D-1 分析补入 dev 分支分析文档 §八</td>
+</tr>
+<tr>
+<td>2026-09-13</td>
+<td><code>30644bc</code></td>
+<td>合并 <code>codex/phase0-1-hardening</code>：前端工作平台迁移 Vue3 + Element Plus（含 Overview 驾驶舱等模块展示）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-adr">2. 关键决策记录（ADR 摘录）<a class="headerlink" href="#2-adr" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>决策</th>
+<th>依据 / 后果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>BusProxy 抽象 + 双通道降级</strong>（nats/direct）</td>
+<td>神经总线不做单点依赖；实测总线不可用时自动回落直连</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>JWT 用 HS384 + dev token 仅 loopback</strong></td>
+<td>单机开发阶段对称签名够用；开发便利端点加网络层护栏</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>统一错误模型在 Phase 1 收口</strong>（ErrorCode/BizException/GlobalExceptionHandler 三服务同构）</td>
+<td>后续服务直接复用；跨服务错误语义统一（Phase 1 末补 <code>AGENT_UPSTREAM_UNAVAILABLE</code>→502）</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>跨服务 HTTP 客户端统一出口</strong>（session <code>OutboundHttp</code>、sense <code>HttpClients</code>）</td>
+<td>D-1 教训的工程化落地：HTTP/1.1 + 超时 + 降级默认开</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>VS1 先纵后横</strong>：先打穿"输入→处理→输出"再补横切面</td>
+<td>规划 §1.3 原则的首次执行；VS2+ 在此骨架上叠加</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>前端主线并入</strong>（codex/phase0-1-hardening → workbuddy/main）</td>
+<td>结束双线分叉；work-platform 成为统一入口基线</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3">3. 命令台账（可复现）<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 构建 + 测试（Phase 1 相关模块）
+cd services/java &amp;&amp; ../../scripts/mvn-dev.sh clean package
+
+# 端到端演示（需 Docker 基础设施）
+./scripts/start.sh all &amp;&amp; ./scripts/healthcheck.sh
+# 按 docs/demo/Phase1-DEMO.md：dev token → 建会话 → ingest → ask → 负向检查（401/403/SSRF）
+
+# Jaeger 链路
+# http://127.0.0.1:16686
+</code></pre>
+<h2 id="4">4. 环境侧记录<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>记录</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Docker Desktop</td>
+<td>本机 Win10 19041，最高可用 4.4.4，<strong>勿升级</strong>（4.49+ 需 19044/19045）</td>
+</tr>
+<tr>
+<td>宿主端口</td>
+<td>Kafka 9092 与 session gRPC 冲突 → <code>GRPC_PORT=19092</code></td>
+</tr>
+<tr>
+<td>宿主污染</td>
+<td>启动前清除 <code>SERVER__*</code> 环境变量</td>
+</tr>
+<tr>
+<td>网络</td>
+<td>直连 GitHub 不通，fetch 走镜像；push 需真实凭据（未验证）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>追溯性补档编制：WorkBuddy · 2026-09-15 · 依据提交 <code>075f8cb…30644bc</code> 与动态验证记录</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
