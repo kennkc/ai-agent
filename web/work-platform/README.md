@@ -6,11 +6,12 @@
 
 ## 1. 定位
 
-`web/work-platform` 是 Agent-Lifeform 的统一前台入口，承载三区 16 模块：
+`web/work-platform` 是 Agent-Lifeform 的统一前台入口，承载三区 18 模块：
 
 - 生命体区：总览、生命体征、决策沙盘、五感矩阵、进化视图、协作总线
 - 工作台区：任务中心、任务对话、专家团队、技能市场、连接器、自动化、多模型管理、远程 IM 遥控、灵感案例
 - 治理区：免疫审批
+- **观测区（2026-09-15 新增，已接真实数据）**：中间件监控、链路追踪
 - 全局层：Agent 在线侧栏、全局搜索、通知中心、偏好设置、生命体征迷你条、Mock/API 数据源切换
 
 当前版本已完成设计文档 §2 的阶段性展示覆盖，并补齐全局元素、模块四态中的关键空态/失败态、任务创建与重试、五感下钻、决策归因、协作 DAG、自愈详情、专家 Schema、技能安装、连接器授权、自动化创建、案例装配和 L4 双人审批展示。
@@ -37,6 +38,9 @@
 | 远程 IM 遥控 | 微信/企业微信/飞书/钉钉/QQ 渠道、任务下发、执行和结果回传 | IM adapter + remote command API |
 | 灵感案例 | Prompt/专家/技能装配流、复用计数 | case-library |
 | 免疫审批 | L1-L4 队列、TTL、原因、参数/目标/影响、L4 双人复核 | Approval API + WS |
+| **中间件监控**（观测区） | 8 个中间件实时探针状态与指标、单卡片启动/终止、**一键串行启动/一键串行终止**（等健康检查通过再处理下一个，带进度横幅）、控制台外链、未启用占位页 | **已接 wp-bff 真实探针**（`GET /api/wp/middleware`、`POST /middleware/:key/start|stop`） |
+| **链路追踪**（观测区） | 服务注册统计（span 数/错误率/P99）、最近链路表、Jaeger UI 内嵌与新窗口打开、业务服务未注册提示 | **已接 wp-bff 真实数据**（`GET /api/wp/tracing`，数据源自 Jaeger API） |
+| 总览·优化执行闭环 | 优化建议「应用优化」进入执行队列（分步步骤条 + 实时日志 + 完成回执） | `POST /suggestions/:id/apply`（待 BFF 实现当前为本地模拟执行单） |
 
 > Mock 与 API 共用 `dataProvider` 结构。切换 `VITE_DATA_SOURCE=api` 后，页面结构无需调整。
 
@@ -86,7 +90,9 @@ web/work-platform/
         ├── OverviewView.vue
         ├── TasksView.vue
         ├── ChatView.vue
-        └── ModuleView.vue
+        ├── ModuleView.vue
+        ├── MiddlewareView.vue
+        └── TracingView.vue
 ```
 
 ---
@@ -96,10 +102,10 @@ web/work-platform/
 ```bash
 cd web/work-platform
 npm install
-npm run dev
+npm run dev        # 双栈监听（IPv4 + IPv6），localhost / 127.0.0.1 / 局域网 IP 均可访问
 ```
 
-默认地址：`http://127.0.0.1:3001`
+默认地址：`http://localhost:3001`。开发期 Vite 代理：`/api/wp` → `http://127.0.0.1:8090`（wp-bff），`/api` → `http://127.0.0.1:8080`（网关）。
 
 ---
 
@@ -112,9 +118,11 @@ VITE_TENANT_ID=default
 ```
 
 - `mock`：使用 `src/api/mock.ts`
-- `api`：通过 `src/api/provider.ts` 请求 BFF
+- `api`：通过 `src/api/provider.ts` 请求 BFF（**当前开发 `.env` 已设为 `api`**）
 - `VITE_API_BASE`：BFF 基础路径
 - `VITE_TENANT_ID`：默认租户
+
+> API 模式下已实现的 BFF 端点（middleware / tracing / middleware 启停）返回真实数据；未实现的端点自动回落 Mock 数据，不弹报错。
 
 ---
 
@@ -171,7 +179,7 @@ npm run build
 
 ## 10. 后续计划
 
-- 接入真实 BFF 与 WS 事件，移除阶段性 Mock 数据。
+- ~~接入真实 BFF 与 WS 事件~~ 最小 Ops BFF（`services/node/wp-bff`，中间件观测/启停 + 链路追踪观测）已于 2026-09-15 落地；其余端点（tasks/approvals/models 等）按阶段迁入 wp-bff。
 - 将轻量 SVG DAG 替换为 Vue Flow，并接入消息超过 50 条的虚拟滚动。
 - 增加 Vitest / Vue Test Utils 组件测试与 Playwright 视觉回归。
 - 使用 Element Plus 按需导入降低首屏包体。

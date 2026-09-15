@@ -4,6 +4,8 @@ import OverviewView from '../views/OverviewView.vue'
 import TasksView from '../views/TasksView.vue'
 import ChatView from '../views/ChatView.vue'
 import ModuleView from '../views/ModuleView.vue'
+import MiddlewareView from '../views/MiddlewareView.vue'
+import TracingView from '../views/TracingView.vue'
 import type { ModuleId } from '../types'
 
 const moduleRoutes = [
@@ -22,6 +24,8 @@ const router = createRouter({
         { path: 'overview', name: 'overview', component: OverviewView },
         { path: 'tasks', name: 'tasks', component: TasksView },
         { path: 'chat', name: 'chat', component: ChatView },
+        { path: 'middleware', name: 'middleware', component: MiddlewareView },
+        { path: 'tracing', name: 'tracing', component: TracingView },
         ...moduleRoutes.map(id => ({
           path: id,
           name: id,

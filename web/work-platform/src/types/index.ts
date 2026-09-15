@@ -2,8 +2,9 @@ export type ModuleId =
   | 'overview' | 'vitals' | 'brain' | 'senses' | 'evolution' | 'collab'
   | 'tasks' | 'chat' | 'experts' | 'skills' | 'connectors' | 'automation' | 'models' | 'remote'
   | 'cases' | 'approvals'
+  | 'middleware' | 'tracing'
 
-export type ModuleGroup = '生命体区' | '工作台区' | '治理区'
+export type ModuleGroup = '生命体区' | '工作台区' | '治理区' | '观测区'
 export type ThemeMode = 'dark' | 'light' | 'system'
 
 export interface WorkModule {
@@ -349,6 +350,74 @@ export interface OptimizationSuggestion {
   evidence: string
   action: string
   source: string
+  target?: string
+}
+
+export type SuggestionExecutionState = 'queued' | 'running' | 'done' | 'failed'
+
+export interface SuggestionExecutionStep {
+  name: string
+  state: 'pending' | 'running' | 'done'
+  detail?: string
+}
+
+export interface SuggestionExecution {
+  execution_id: string
+  suggestion_id: string
+  title: string
+  action: string
+  category: OptimizationSuggestion['category']
+  state: SuggestionExecutionState
+  progress: number
+  steps: SuggestionExecutionStep[]
+  logs: Array<{ time: string; text: string }>
+  started_at: string
+  finished_at: string | null
+  result: string | null
+}
+
+export interface MiddlewareNode {
+  key: string
+  name: string
+  role: string
+  port: number
+  state: 'up' | 'down' | 'starting' | 'stopping'
+  console_url?: string
+  console_label?: string
+  metrics: Array<{ label: string; value: string }>
+  last_check: string
+}
+
+export interface MiddlewareOverview {
+  enabled: boolean
+  items: MiddlewareNode[]
+  summary: { total: number; up: number; down: number }
+  checked_at: string
+}
+
+export interface TracingServiceStat {
+  name: string
+  spans_24h: number
+  error_rate: number
+  p99_ms: number
+}
+
+export interface TracingRecentTrace {
+  trace_id: string
+  service: string
+  operation: string
+  duration_ms: number
+  spans: number
+  time: string
+  status: 'ok' | 'error'
+}
+
+export interface TracingOverview {
+  enabled: boolean
+  ui_url: string
+  services: TracingServiceStat[]
+  recent: TracingRecentTrace[]
+  checked_at: string
 }
 
 export interface TodaySummaryMetric {

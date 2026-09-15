@@ -1,7 +1,7 @@
 import type {
   ApprovalItem, AutomationItem, CaseItem, ChatMessage, CollaborationMessage, ConnectorItem,
-  EvolutionMetric, ExpertProfile, HealingRecord, ManagedModel, MetricCard, ModelCallPoint, ModelRoute, ModelRuntimeNode, NotificationItem, OnlineAgent, OptimizationSuggestion, OrganHealth, OverviewWorkflow, RemoteChannel, RemoteFlowEvent,
-  ResultArtifact, SearchItem, SenseChannel, SkillItem, TaskItem, VitalSign,
+  EvolutionMetric, ExpertProfile, HealingRecord, ManagedModel, MetricCard, MiddlewareOverview, ModelCallPoint, ModelRoute, ModelRuntimeNode, NotificationItem, OnlineAgent, OptimizationSuggestion, OrganHealth, OverviewWorkflow, RemoteChannel, RemoteFlowEvent,
+  ResultArtifact, SearchItem, SenseChannel, SkillItem, SuggestionExecution, TaskItem, TracingOverview, VitalSign, MiddlewareNode,
 } from '../types'
 
 export const metrics: MetricCard[] = [
@@ -298,6 +298,7 @@ export const optimizationSuggestions: OptimizationSuggestion[] = [
     evidence: '近 7 天存在 1,284 次相似请求，缓存命中潜力 31.8%。',
     action: '会话级语义缓存 0.95',
     source: 'LLM 调用监控 / 成本分析',
+    target: '/models',
   },
   {
     suggestion_id: 'OPT-2402',
@@ -311,6 +312,7 @@ export const optimizationSuggestions: OptimizationSuggestion[] = [
     evidence: '结构抽取任务占比 42%，不需要完整 L2 推理能力。',
     action: '任务路由策略：structured_extract → L1',
     source: '模型状态拓扑 / 路由审计',
+    target: '/models',
   },
   {
     suggestion_id: 'OPT-2403',
@@ -324,6 +326,7 @@ export const optimizationSuggestions: OptimizationSuggestion[] = [
     evidence: '近 3 次金融 Agent 协商均请求补充监管口径来源。',
     action: '知识缺口采集 + 引用校验',
     source: '协作工作流 / 自校验记录',
+    target: '/senses',
   },
   {
     suggestion_id: 'OPT-2404',
@@ -337,8 +340,43 @@ export const optimizationSuggestions: OptimizationSuggestion[] = [
     evidence: 'L4 审批平均剩余 7 分钟，低风险等待占用明显。',
     action: 'TTL 分级：L3 30m / L4 10m',
     source: '审批时效 / 免疫审计',
+    target: '/approvals',
   },
 ]
+
+const executionStepTemplates: Record<OptimizationSuggestion['category'], string[]> = {
+  成本优化: ['评估影响面', '下发缓存策略', '灰度验证命中', '全量生效'],
+  性能优化: ['采集基线指标', '切换路由策略', '压测验证', '基线对比报告'],
+  质量优化: ['标记知识缺口', '触发补采指令', '引用校验', '质量复评'],
+  安全优化: ['解析审批策略', '生成变更工单', '治理复核', '策略生效'],
+}
+
+const executionLogTemplates: Record<OptimizationSuggestion['category'], string[]> = {
+  成本优化: ['分析近 7 天相似请求聚类，确认缓存收益范围', '语义缓存策略 0.95 已下发至路由层', '灰度 20% 流量，命中率 31.2% 达标', '缓存策略全量生效，成本基线更新'],
+  性能优化: ['基线采集完成：P95 / 队列深度 / 吞吐入档', '路由策略 structured_extract → L1 已生效', '压测通过：队列深度下降 36%', '对比报告已生成并归档至知识库'],
+  质量优化: ['已定位 3 个监管口径知识缺口', 'R1 补采指令已下发至感官层', '新增片段引用校验通过，来源可溯', '复评通过：事实冲突率回落至阈值内'],
+  安全优化: ['审批 TTL 策略解析完成，等待治理确认', '变更工单 GP-2091 已生成', 'L3/L4 双人复核通过', '新 TTL 分级策略已生效，审计已留痕'],
+}
+
+export function buildSuggestionExecution(suggestion: OptimizationSuggestion, seq: number): SuggestionExecution {
+  const now = () => new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  return {
+    execution_id: `EXE-${suggestion.suggestion_id}-${String(seq).padStart(3, '0')}`,
+    suggestion_id: suggestion.suggestion_id,
+    title: suggestion.title,
+    action: suggestion.action,
+    category: suggestion.category,
+    state: 'queued',
+    progress: 0,
+    steps: executionStepTemplates[suggestion.category].map(name => ({ name, state: 'pending' })),
+    logs: [{ time: now(), text: '优化任务已入列，等待执行器调度' }],
+    started_at: now(),
+    finished_at: null,
+    result: null,
+  }
+}
+
+export { executionLogTemplates }
 
 export const todaySummary = {
   date: '2026-09-12',
@@ -408,3 +446,86 @@ export const onlineAgents: OnlineAgent[] = [
   { agent_id: 'AG-04', name: '撰写专家', role: 'L2 生成', state: 'wait', task: '待合并', model: 'L2-LLM', latency_ms: 1810 },
   { agent_id: 'AG-05', name: '质检 Agent', role: '交叉验证', state: 'idle', task: '空闲', model: 'L1-Judge', latency_ms: 220 },
 ]
+
+const middlewareDefaultMetrics: Record<string, Array<{ label: string; value: string }>> = {
+  redis: [ { label: '连接数', value: '12' }, { label: '内存', value: '21 MB' }, { label: '命中率', value: '—' } ],
+  postgres: [ { label: '活跃连接', value: '3' }, { label: '库大小', value: '212 MB' }, { label: '慢查询', value: '0' } ],
+  qdrant: [ { label: '集合', value: '3' }, { label: '向量数', value: '18.2K' }, { label: '检索 P99', value: '—' } ],
+  nats: [ { label: '连接', value: '0' }, { label: '主题', value: '11' }, { label: '消息/分', value: '0' } ],
+  nacos: [ { label: '注册服务', value: '0' }, { label: '健康实例', value: '0' }, { label: '配置数', value: '6' } ],
+  minio: [ { label: '桶', value: '2' }, { label: '对象', value: '348' }, { label: '占用', value: '96 MB' } ],
+  jaeger: [ { label: '服务', value: '0' }, { label: 'Span/分', value: '0' }, { label: '保留', value: '72h' } ],
+  kafka: [ { label: '主题', value: '5' }, { label: '分区', value: '5' }, { label: 'Lag', value: '0' } ],
+}
+
+// 模拟运行时：演示启动流程将 jaeger / kafka 置为未启用，真实状态以 API 模式为准
+const middlewareRuntime: MiddlewareOverview = {
+  enabled: true,
+  checked_at: '21:29:40',
+  summary: { total: 8, up: 6, down: 2 },
+  items: [
+    { key: 'redis', name: 'Redis', role: '会话热存储 · L1 缓存', port: 6379, state: 'up', metrics: [ { label: '连接数', value: '24' }, { label: '内存', value: '38 MB' }, { label: '命中率', value: '97.2%' } ], last_check: '5 秒前' },
+    { key: 'postgres', name: 'PostgreSQL', role: '关系库 · pgvector 冷存储', port: 5432, state: 'up', metrics: [ { label: '活跃连接', value: '9' }, { label: '库大小', value: '212 MB' }, { label: '慢查询', value: '0' } ], last_check: '5 秒前' },
+    { key: 'qdrant', name: 'Qdrant', role: '向量库 · 温存储检索', port: 6333, state: 'up', console_url: 'http://127.0.0.1:6333/dashboard', console_label: '控制台', metrics: [ { label: '集合', value: '3' }, { label: '向量数', value: '18.2K' }, { label: '检索 P99', value: '42ms' } ], last_check: '6 秒前' },
+    { key: 'nats', name: 'NATS', role: '神经总线 · 请求/回应', port: 4222, state: 'up', metrics: [ { label: '连接', value: '4' }, { label: '主题', value: '11' }, { label: '消息/分', value: '128' } ], last_check: '5 秒前' },
+    { key: 'nacos', name: 'Nacos', role: '服务注册与发现', port: 8848, state: 'up', console_url: 'http://127.0.0.1:8848/nacos', console_label: '控制台', metrics: [ { label: '注册服务', value: '4' }, { label: '健康实例', value: '4' }, { label: '配置数', value: '6' } ], last_check: '6 秒前' },
+    { key: 'minio', name: 'MinIO', role: '对象存储 · 采集暂存区', port: 9000, state: 'up', console_url: 'http://127.0.0.1:9001', console_label: '控制台', metrics: [ { label: '桶', value: '2' }, { label: '对象', value: '348' }, { label: '占用', value: '96 MB' } ], last_check: '7 秒前' },
+    { key: 'jaeger', name: 'Jaeger', role: '分布式链路追踪', port: 16686, state: 'down', console_url: 'http://127.0.0.1:16686', console_label: 'Jaeger UI', metrics: [ { label: '服务', value: '4' }, { label: 'Span/分', value: '86' }, { label: '保留', value: '72h' } ], last_check: '6 秒前' },
+    { key: 'kafka', name: 'Kafka', role: '事件流 · 发布订阅', port: 9092, state: 'down', metrics: [ { label: '主题', value: '5' }, { label: '分区', value: '5' }, { label: 'Lag', value: '0' } ], last_check: '7 秒前' },
+  ],
+}
+
+export function getMiddlewareOverview(): MiddlewareOverview {
+  const up = middlewareRuntime.items.filter(item => item.state === 'up').length
+  return {
+    enabled: middlewareRuntime.enabled,
+    checked_at: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    summary: { total: middlewareRuntime.items.length, up, down: middlewareRuntime.items.length - up },
+    items: JSON.parse(JSON.stringify(middlewareRuntime.items)),
+  }
+}
+
+export function startMiddlewareMock(key: string): MiddlewareNode | null {
+  const item = middlewareRuntime.items.find(entry => entry.key === key)
+  if (!item) return null
+  if (item.state !== 'down') return JSON.parse(JSON.stringify(item))
+  item.state = 'starting'
+  item.last_check = '刚刚'
+  window.setTimeout(() => {
+    item.state = 'up'
+    item.metrics = middlewareDefaultMetrics[key] || [{ label: '状态', value: 'OK' }]
+    item.last_check = '刚刚'
+  }, 4200)
+  return JSON.parse(JSON.stringify(item))
+}
+
+export function stopMiddlewareMock(key: string): MiddlewareNode | null {
+  const item = middlewareRuntime.items.find(entry => entry.key === key)
+  if (!item) return null
+  if (item.state !== 'up') return JSON.parse(JSON.stringify(item))
+  item.state = 'stopping'
+  item.last_check = '刚刚'
+  window.setTimeout(() => {
+    item.state = 'down'
+    item.last_check = '刚刚'
+  }, 3000)
+  return JSON.parse(JSON.stringify(item))
+}
+
+export const tracingSeed: TracingOverview = {
+  enabled: true,
+  ui_url: 'http://127.0.0.1:16686',
+  checked_at: '21:29:41',
+  services: [
+    { name: 'gateway-service', spans_24h: 4821, error_rate: 0.2, p99_ms: 128 },
+    { name: 'session-manager', spans_24h: 3960, error_rate: 0.4, p99_ms: 312 },
+    { name: 'sense-service', spans_24h: 2140, error_rate: 1.1, p99_ms: 486 },
+    { name: 'body-service', spans_24h: 1876, error_rate: 0.1, p99_ms: 95 },
+  ],
+  recent: [
+    { trace_id: '4cf1a9b2e7d83a10', service: 'session-manager', operation: 'POST /api/session/{id}/ask', duration_ms: 875, spans: 6, time: '21:27:12', status: 'ok' },
+    { trace_id: '9b30d5e1c4a27f68', service: 'sense-service', operation: 'POST /api/sense/collect', duration_ms: 1204, spans: 8, time: '21:24:48', status: 'ok' },
+    { trace_id: '77e2c8a4d1b95c03', service: 'gateway-service', operation: 'POST /api/auth/token', duration_ms: 34, spans: 2, time: '21:22:31', status: 'ok' },
+    { trace_id: '1a8f3d6b9c05e247', service: 'session-manager', operation: 'POST /api/session/{id}/ask', duration_ms: 502, spans: 6, time: '21:18:05', status: 'error' },
+  ],
+}

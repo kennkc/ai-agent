@@ -17,6 +17,8 @@ export const modules: WorkModule[] = [
   { id: 'remote', path: '/remote', title: '远程 IM 遥控', group: '工作台区', phase: 'P7', status: 'prototype', description: '手机 IM 下发任务与结果回传', icon: 'ChatDotRound' },
   { id: 'cases', path: '/cases', title: '灵感案例', group: '工作台区', phase: 'P8', status: 'prototype', description: '案例模板与“做同款”', icon: 'Collection' },
   { id: 'approvals', path: '/approvals', title: '免疫审批', group: '治理区', phase: 'P7', status: 'prototype', description: 'L1-L4 审批队列与双人复核', icon: 'Checked' },
+  { id: 'middleware', path: '/middleware', title: '中间件监控', group: '观测区', phase: 'P1', status: 'prototype', description: '基础设施中间件启用状态与运行指标', icon: 'Monitor' },
+  { id: 'tracing', path: '/tracing', title: '链路追踪', group: '观测区', phase: 'P1', status: 'prototype', description: 'Jaeger 分布式链路、服务延迟与错误率', icon: 'Guide' },
 ]
 
 export const moduleMap = Object.fromEntries(modules.map(item => [item.id, item])) as Record<WorkModule['id'], WorkModule>

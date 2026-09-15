@@ -2,10 +2,11 @@ import axios from 'axios'
 import {
   approvals, automations, brainChain, brainDecision, cases, chatMessages, collaboration,
   connectors, evolution, evolutionMetrics, experts, growthTimeline, healingRecords, managedModels,
-  metrics, modelCallSeries, modelRoutes, modelRuntimeNodes, modelTokenTrend, notifications,
+  metrics, getMiddlewareOverview, modelCallSeries, modelRoutes, modelRuntimeNodes, modelTokenTrend, notifications,
   onlineAgents, optimizationSuggestions, organs, remoteChannels, remoteFlow, resultArtifacts,
-  searchIndex, senses, serviceHealth, skills, tasks, teamWorkflow, todaySummary, vitalSigns,
+  searchIndex, senses, serviceHealth, skills, startMiddlewareMock, stopMiddlewareMock, buildSuggestionExecution, tasks, teamWorkflow, todaySummary, tracingSeed, vitalSigns,
 } from './mock'
+import type { MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SuggestionExecution, TracingOverview } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api/wp',
@@ -16,6 +17,13 @@ const api = axios.create({
 })
 
 const unwrap = (payload: any) => payload?.data ?? payload ?? {}
+// BFF 响应为 {data: {...}} 且 axios 又包一层 .data —— unwrapBody 连剥两层
+const unwrapBody = (payload: any) => {
+  const once = unwrap(payload)
+  return once && typeof once === 'object' && 'data' in once && once.data && typeof once.data === 'object'
+    ? once.data
+    : once
+}
 const asArray = (payload: any) => {
   const value = unwrap(payload)
   return Array.isArray(value) ? value : (value.items || value.list || [])
@@ -59,12 +67,16 @@ const mockWorkbench = {
   remote_flow: remoteFlow,
   online_agents: onlineAgents,
 }
+let executionSeq = 0
+
 export const dataProvider = {
   mode: source,
 
   async getOverview() {
     if (source === 'mock') return mockWorkbench.overview
-    return unwrap(await api.get('/overview'))
+    // BFF 未实现 /overview 时回落 mock 数据，避免整页报错（已实现端点：middleware / tracing）
+    const fallback = await safe(() => api.get('/overview'), { data: { data: mockWorkbench.overview } })
+    return unwrap(fallback)
   },
 
   async getTasks() {
@@ -90,6 +102,39 @@ export const dataProvider = {
         { title: '任务上下文 T-1042', source: 'session-manager' },
         { title: '知识检索结果', source: 'body-service' },
       ],
+    }
+  },
+
+  async getMiddleware(): Promise<MiddlewareOverview> {
+    if (source === 'mock') return getMiddlewareOverview()
+    // API 模式：BFF 未就绪或中间件观测服务未启动时，返回 enabled=false 触发"未启用"页
+    const fallback: MiddlewareOverview = { enabled: false, items: [], summary: { total: 0, up: 0, down: 0 }, checked_at: '' }
+    try {
+      const payload = unwrapBody(await api.get('/middleware'))
+      return payload && typeof payload === 'object' && 'enabled' in payload ? payload as MiddlewareOverview : fallback
+    } catch {
+      return fallback
+    }
+  },
+
+  async startMiddleware(key: string): Promise<MiddlewareNode | null> {
+    if (source === 'api') return unwrapBody(await api.post(`/middleware/${key}/start`))
+    return startMiddlewareMock(key)
+  },
+
+  async stopMiddleware(key: string): Promise<MiddlewareNode | null> {
+    if (source === 'api') return unwrapBody(await api.post(`/middleware/${key}/stop`))
+    return stopMiddlewareMock(key)
+  },
+
+  async getTracing(): Promise<TracingOverview> {
+    if (source === 'mock') return tracingSeed
+    const fallback: TracingOverview = { enabled: false, ui_url: '', services: [], recent: [], checked_at: '' }
+    try {
+      const payload = unwrapBody(await api.get('/tracing'))
+      return payload && typeof payload === 'object' && 'enabled' in payload ? payload as TracingOverview : fallback
+    } catch {
+      return fallback
     }
   },
 
@@ -189,6 +234,11 @@ export const dataProvider = {
   async decideApproval(approvalId: string, decision: 'approved' | 'rejected', reason = '') {
     if (source === 'api') return unwrap(await api.post(`/approvals/${approvalId}/decision`, { decision, reason }))
     return { approval_id: approvalId, state: decision, reason }
+  },
+
+  async applySuggestion(suggestion: OptimizationSuggestion): Promise<SuggestionExecution> {
+    if (source === 'api') return unwrap(await api.post(`/suggestions/${suggestion.suggestion_id}/apply`))
+    return buildSuggestionExecution(suggestion, (executionSeq += 1))
   },
 
   async updatePreferences(payload: Record<string, unknown>) {

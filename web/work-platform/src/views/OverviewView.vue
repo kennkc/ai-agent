@@ -142,14 +142,44 @@
               <p>{{ item.impact }}</p>
               <div class="suggestion-meta"><span>投入 {{ item.effort }}</span><span>{{ item.source }}</span></div>
               <div class="suggestion-actions">
-                <el-button v-if="item.status === 'pending'" size="small" type="primary" @click="applySuggestion(item)">应用优化</el-button>
-                <el-tag v-else type="success">已应用</el-tag>
-                <el-button size="small" text type="primary" @click="openDetail(`${item.suggestion_id} 优化依据`, item)">查看依据</el-button>
+                <div class="suggestion-btns">
+                  <el-button v-if="item.status === 'pending' && !executingIds.has(item.suggestion_id)" size="small" type="primary" @click="applySuggestion(item)">应用优化</el-button>
+                  <el-tag v-else-if="executingIds.has(item.suggestion_id)" type="warning">执行中</el-tag>
+                  <el-tag v-else type="success">已应用</el-tag>
+                  <el-button v-if="item.status === 'pending' && item.target" size="small" text type="warning" @click="goHandle(item)">去处理</el-button>
+                  <el-button size="small" text type="primary" @click="openDetail(`${item.suggestion_id} 优化依据`, item)">查看依据</el-button>
+                </div>
               </div>
             </article>
           </div>
         </el-card>
       </div>
+
+      <el-card v-if="executions.length" class="section-card execution-card" shadow="never">
+        <template #header><strong>优化执行队列</strong><span class="header-meta">建议应用后的自动化处理进度</span></template>
+        <div class="execution-list">
+          <article v-for="exec in executions" :key="exec.execution_id" class="execution-item" :class="exec.state">
+            <div class="execution-head">
+              <div class="execution-title">
+                <el-tag size="small" :type="execTagType(exec.state)">{{ execStateLabel(exec.state) }}</el-tag>
+                <strong>{{ exec.title }}</strong>
+                <span class="execution-action">{{ exec.action }}</span>
+              </div>
+              <span class="execution-time">{{ exec.execution_id }} · {{ exec.started_at }}</span>
+            </div>
+            <div class="execution-steps">
+              <div v-for="(step, index) in exec.steps" :key="step.name" class="execution-step" :class="step.state">
+                <i>{{ step.state === 'done' ? '✓' : index + 1 }}</i><span>{{ step.name }}</span>
+              </div>
+            </div>
+            <el-progress :percentage="Math.round(exec.progress)" :stroke-width="6" :show-text="false" :class="exec.state" />
+            <div class="execution-log">
+              <p v-for="(log, index) in exec.logs.slice(-3)" :key="index"><span>{{ log.time }}</span>{{ log.text }}</p>
+            </div>
+            <div v-if="exec.result" class="execution-result"><el-tag type="success" size="small">回执</el-tag><span>{{ exec.result }}</span></div>
+          </article>
+        </div>
+      </el-card>
 
       <div class="two-column">
         <el-card class="section-card metric-card" shadow="never">
@@ -191,6 +221,7 @@ import { ElMessage } from 'element-plus'
 import { ArrowRight, Checked, Refresh } from '@element-plus/icons-vue'
 import { dataProvider } from '../api/provider'
 import {
+  executionLogTemplates,
   growthTimeline as fallbackTimeline,
   metrics as fallbackMetrics,
   modelCallSeries as fallbackModelCalls,
@@ -202,7 +233,7 @@ import {
   vitalSigns as fallbackVitals,
 } from '../api/mock'
 import type {
-  MetricCard, ModelCallPoint, ModelRuntimeNode, OptimizationSuggestion, OverviewWorkflow, OverviewWorkflowAgent, TodaySummary, VitalSign,
+  MetricCard, ModelCallPoint, ModelRuntimeNode, OptimizationSuggestion, OverviewWorkflow, OverviewWorkflowAgent, SuggestionExecution, TodaySummary, VitalSign,
 } from '../types'
 
 type TimelineItem = { phase: string; title: string; desc: string; status: string }
@@ -222,6 +253,9 @@ const workflow = ref<OverviewWorkflow>(JSON.parse(JSON.stringify(fallbackWorkflo
 const modelCalls = ref<ModelCallPoint[]>(fallbackModelCalls.map(item => ({ ...item })))
 const modelRuntime = ref<ModelRuntimeNode[]>(fallbackModelRuntime.map(item => ({ ...item })))
 const suggestions = ref<OptimizationSuggestion[]>(fallbackSuggestions.map(item => ({ ...item })))
+const executions = ref<SuggestionExecution[]>([])
+let execTimer: number | undefined
+const executingIds = computed(() => new Set(executions.value.filter(item => item.state === 'queued' || item.state === 'running').map(item => item.suggestion_id)))
 const detailVisible = ref(false)
 const detailTitle = ref('')
 const detailPayload = ref<unknown>(null)
@@ -382,9 +416,90 @@ function pretty(value: unknown) {
   return JSON.stringify(value, null, 2)
 }
 
-function applySuggestion(item: OptimizationSuggestion) {
-  item.status = 'applied'
+async function applySuggestion(item: OptimizationSuggestion) {
+  const execution = await dataProvider.applySuggestion(item)
+  executions.value = [execution, ...executions.value]
   ElMessage.success(`${item.title} 已进入优化执行队列`)
+  startExecLoop()
+}
+
+function execStamp() {
+  return new Date().toLocaleTimeString('zh-CN', { hour12: false })
+}
+
+function startExecLoop() {
+  if (execTimer) return
+  execTimer = window.setInterval(tickExecutions, 900)
+}
+
+function stopExecLoop() {
+  if (execTimer) window.clearInterval(execTimer)
+  execTimer = undefined
+}
+
+function tickExecutions() {
+  if (!executingIds.value.size) {
+    stopExecLoop()
+    return
+  }
+  const finished: SuggestionExecution[] = []
+  executions.value = executions.value.map(exec => {
+    if (exec.state === 'done' || exec.state === 'failed') return exec
+    const steps = exec.steps.map(step => ({ ...step }))
+    const logs = [...exec.logs]
+    const perStep = 100 / steps.length
+    let progress = Math.min(100, exec.progress + 4 + Math.random() * 5)
+    let index = steps.findIndex(step => step.state === 'running')
+    if (index === -1) {
+      index = Math.min(steps.length - 1, Math.floor(progress / perStep))
+      steps[index].state = 'running'
+      logs.push({ time: execStamp(), text: `开始执行：${steps[index].name}` })
+    }
+    while (progress >= (index + 1) * perStep - 0.01 && steps[index].state === 'running') {
+      steps[index].state = 'done'
+      logs.push({ time: execStamp(), text: executionLogTemplates[exec.category][index] || `${steps[index].name} 完成` })
+      index += 1
+      if (index < steps.length) {
+        steps[index].state = 'running'
+        logs.push({ time: execStamp(), text: `开始执行：${steps[index].name}` })
+      } else {
+        break
+      }
+    }
+    const done = steps.every(step => step.state === 'done')
+    if (done) {
+      progress = 100
+      finished.push(exec)
+    }
+    return {
+      ...exec,
+      state: done ? 'done' as const : 'running' as const,
+      progress,
+      steps,
+      logs,
+      finished_at: done ? execStamp() : null,
+      result: done ? (suggestions.value.find(entry => entry.suggestion_id === exec.suggestion_id)?.impact || `${exec.action} 已生效`) : null,
+    }
+  })
+  finished.forEach(exec => {
+    const suggestion = suggestions.value.find(entry => entry.suggestion_id === exec.suggestion_id)
+    if (suggestion) suggestion.status = 'applied'
+    ElMessage.success(`「${exec.title}」优化执行完成`)
+  })
+}
+
+function execStateLabel(state: SuggestionExecution['state']) {
+  return { queued: '排队中', running: '执行中', done: '已完成', failed: '失败' }[state]
+}
+
+function execTagType(state: SuggestionExecution['state']) {
+  return { queued: 'info', running: 'primary', done: 'success', failed: 'danger' }[state] as 'info' | 'primary' | 'success' | 'danger'
+}
+
+function goHandle(item: OptimizationSuggestion) {
+  if (!item.target) return
+  router.push(item.target)
+  ElMessage.info(`已跳转到「${item.title}」的处理模块`)
 }
 
 function priorityLabel(priority: OptimizationSuggestion['priority']) {
@@ -424,7 +539,10 @@ onMounted(async () => {
   startLiveUpdates()
 })
 
-onUnmounted(stopLiveUpdates)
+onUnmounted(() => {
+  stopLiveUpdates()
+  stopExecLoop()
+})
 </script>
 
 <style scoped>
@@ -540,6 +658,28 @@ onUnmounted(stopLiveUpdates)
 .suggestion-item p { margin: 0; color: var(--wp-sub); font-size: 11px; line-height: 1.65; }
 .suggestion-meta { display: flex; justify-content: space-between; gap: 8px; margin-top: 9px; color: var(--wp-sub); font-size: 9px; }
 .suggestion-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 11px; }
+.suggestion-btns { display: flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.execution-card { margin-top: var(--cockpit-gap); }
+.execution-list { display: flex; flex-direction: column; gap: 12px; }
+.execution-item { padding: 14px 16px; border: 1px solid var(--wp-border); border-radius: 14px; background: linear-gradient(135deg, rgba(94,234,212,.045), rgba(148,163,184,.05)); }
+.execution-item.done { border-color: rgba(52,211,153,.4); }
+.execution-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; }
+.execution-title { display: flex; align-items: center; gap: 9px; flex-wrap: wrap; }
+.execution-title strong { font-size: 13px; }
+.execution-action { color: var(--wp-sub); font-size: 10px; padding: 2px 8px; border: 1px solid var(--wp-border); border-radius: 999px; }
+.execution-time { color: var(--wp-sub); font-size: 10px; }
+.execution-steps { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 8px; margin: 12px 0 10px; }
+.execution-step { display: flex; align-items: center; gap: 7px; padding: 7px 9px; border: 1px solid var(--wp-border); border-radius: 10px; background: rgba(148,163,184,.05); color: var(--wp-sub); font-size: 11px; }
+.execution-step i { display: grid; place-items: center; width: 18px; height: 18px; border-radius: 50%; border: 1px solid var(--wp-border); font-size: 9px; font-style: normal; }
+.execution-step.running { border-color: rgba(94,234,212,.6); color: var(--wp-text); }
+.execution-step.running i { border-color: rgba(94,234,212,.8); color: var(--wp-primary); }
+.execution-step.done { border-color: rgba(52,211,153,.35); color: var(--wp-text); }
+.execution-step.done i { border-color: rgba(52,211,153,.6); color: var(--wp-success); }
+.execution-log { display: flex; flex-direction: column; gap: 4px; margin-top: 10px; }
+.execution-log p { margin: 0; color: var(--wp-sub); font-size: 10px; line-height: 1.6; }
+.execution-log p span { margin-right: 8px; color: var(--wp-gold-soft); font-size: 9px; }
+.execution-result { display: flex; align-items: center; gap: 9px; margin-top: 10px; color: var(--wp-text); font-size: 11px; }
+@media (max-width: 760px) { .execution-steps { grid-template-columns: 1fr; } }
 .command-pre { margin: 0; padding: 14px; border: 1px solid var(--wp-border); border-radius: 12px; background: var(--wp-bg-soft); color: var(--wp-text); white-space: pre-wrap; line-height: 1.7; }
 .detail-text { color: var(--wp-sub); }
 .timeline-node { display: flex; flex-direction: column; gap: 4px; width: 100%; padding: 0; border: 0; background: transparent; color: var(--wp-text); cursor: pointer; text-align: left; }

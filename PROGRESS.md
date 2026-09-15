@@ -1,6 +1,13 @@
 # Agent-Lifeform Development Progress
 
-> Last updated: 2026-09-12
+> Last updated: 2026-09-15
+
+## Archived stage reports
+
+Phase 0 / Phase 1 / Phase 2 stage reports (stage report + execution log + test &
+acceptance report, each with an HTML twin) are archived in
+`docs/项目进度日志报告/`. Phase 0/1 reports were added retroactively on
+2026-09-15 (the three-doc convention was established at Phase 2).
 
 ## Current milestone
 
@@ -113,7 +120,27 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 - Python proto generation: 12 generated files in services/python/nlp-service/generated
 - Phase demo scripts: `docs/demo/Phase0-DEMO.md`, `docs/demo/Phase1-DEMO.md`, `docs/demo/Phase2-DEMO.md`
 - Phase 2 stage reports archived in `docs/项目进度日志报告/` (stage report, execution log, test & acceptance report; each with a generated HTML twin)
-- `scripts/md2html-report.py` renders those reports to self-contained HTML (requires anaconda Python, which has the `markdown` package)
+- `scripts/md2html-report.py` renders those reports to self-contained HTML (managed Python + `markdown` installed via `pip install --target E:\AI\核心知识\.workbuddy\tmp\pylibs`; run with `PYTHONPATH` pointing there)
+
+## 2026-09-15 Work Platform Observability Update (dev branch)
+
+- New "观测区" group in work-platform: **MiddlewareView** + **TracingView**, backed by a minimal
+  Ops BFF (`services/node/wp-bff`, zero-dependency Node, port 8090):
+  - `GET /api/wp/middleware` — live TCP probes of all 8 middleware containers (state/latency/metrics)
+  - `POST /api/wp/middleware/:key/start|stop` — real `docker compose up -d / stop` behind a strict
+    8-key whitelist, fixed command shapes, in-memory ops tracking (starting/stopping) with watchdog,
+    audit log at `logs/wp-bff-audit.log`. Unlisted keys -> 403.
+  - `GET /api/wp/tracing` — real Jaeger data: registered services + per-service aggregation of the
+    latest 20 traces (traces/spans/error rate/P99) + 12 most recent traces overall.
+- Middleware page: per-card start/stop (down -> starting/stopping -> up, polled), plus **one-click
+  serial start/stop** buttons — each middleware is confirmed healthy/stopped before moving to the
+  next, with a progress banner. Full cycle verified on real containers: serial stop 8/8 down,
+  serial start 8/8 up.
+- Overview page: optimization suggestions now run a real execution loop (queued -> step progress +
+  live log -> receipt) instead of flipping status; API contract `POST /suggestions/:id/apply` reserved.
+- Dev environment: `.env` switched to `VITE_DATA_SOURCE=api`; vite dev server dual-stack listening
+  (localhost / 127.0.0.1 / LAN IP all reachable, `host: true` + `allowedHosts: true` in config —
+  note the dev script previously overrode config via `--host 0.0.0.0`).
 
 ## Remaining
 
@@ -122,6 +149,8 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
   `healthcheck.sh` 16/16 OK, business chain (token -> session -> ask -> Redis/Kafka) green.
 - OCR end-to-end acceptance requires installing PaddleOCR or Tesseract; until then the
   visual channel stays `DEGRADED` and the API truthfully reports `available=false`.
-- Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration,
-  Work Platform BFF/API mode).
+- Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration).
+- Work Platform BFF/API mode: **minimal Ops subset done** (2026-09-15, see above) — middleware
+  observe/start/stop + tracing observe are real; remaining endpoints (tasks/approvals/models/
+  vitals/overview aggregation, WebSocket events) still pending and currently fall back to Mock.
 
