@@ -71,8 +71,10 @@ ai-agent/
 │   │   ├── session-manager/       # 会话、BusProxy、NATS/Kafka、VS1 编排
 │   │   ├── sense-service/         # 五感渠道、R0/R1 采集、质检、暂存、死信
 │   │   └── body-service/          # 本地知识检索 MVP
-│   └── python/
-│       └── nlp-service/           # 规则+L0 级联意图识别、OCR 代理
+│   ├── python/
+│   │   └── nlp-service/           # 规则+L0 级联意图识别、OCR 代理
+│   └── node/
+│       └── wp-bff/                # work-platform BFF 最小 Ops（:8090 中间件探针/真实启停、链路追踪观测）
 └── web/
     ├── work-platform/             # Vue 3 + Element Plus 主工作平台
     └── console/                   # 旧静态 Mock 运维参考（Phase 2 感官视图）
@@ -127,15 +129,22 @@ scripts\start-dev.bat python
 scripts\start-dev.bat frontend
 ```
 
-### 4.3 单独启动 Vue 工作平台
+### 4.3 单独启动 Vue 工作平台（含观测区）
 
 ```bash
+# 1) 启动 BFF（观测区的中间件探针/启停与链路追踪数据源，零依赖 Node >= 20）
+node services/node/wp-bff/server.js        # 监听 127.0.0.1:8090
+
+# 2) 启动前端（双栈监听，localhost / 127.0.0.1 / 局域网 IP 均可访问）
 cd web/work-platform
 npm install
 npm run dev
 ```
 
-默认地址：`http://127.0.0.1:3001`
+默认地址：`http://localhost:3001`。开发期 Vite 代理 `/api/wp` → `http://127.0.0.1:8090`。
+
+数据源切换：`web/work-platform/.env` 中 `VITE_DATA_SOURCE=mock|api`（当前开发环境为 `api`）。
+API 模式下观测区两页展示真实数据：**中间件监控**（8 容器实时探针、单卡片启停、一键串行启动/终止，真实执行 `docker compose up -d / stop`，8-key 白名单）与**链路追踪**（真实 Jaeger 服务统计与最近链路）；BFF 未覆盖的端点自动回落 Mock。详见 `services/node/wp-bff/README.md`。
 
 ---
 
