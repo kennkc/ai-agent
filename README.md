@@ -356,11 +356,13 @@ npm run build
 
 | 分支 | 角色与约定 |
 |---|---|
-| `workbuddy/main` | 主开发线（Phase 0/1/2 + 工作平台 + Java 服务文档集）；**由协作方机器推进**，本机不主动推送 |
 | `codex/phase0-1-hardening` | 本机主开发分支，日常改动先落这里 |
-| `dev` | **另一台远端开发机的工作分支**；本机向它推送前必须先 `git fetch` 确认对方进度，避免覆盖对方进行中的工作 |
+| `dev` | 另一台远端开发机的工作分支，与主线保持同内容 |
+| `workbuddy/main` | 主开发线（Phase 0/1/2 + 工作平台 + Java 服务文档集），与主线保持同内容 |
 
-> **2026-09-16 决策**：三分支在阶段收口时通过 `git merge --ff-only` 对齐；本机日常只推进 `codex/phase0-1-hardening` 并按需同步 `dev`；`workbuddy/main` 的提交按「时间 + 语义」逐项吸收，不做覆盖式合并。
+> **2026-09-16 决策**：三支保持内容对齐 —— 每次收口时用 `git merge --ff-only` 把
+> `codex/phase0-1-hardening` 同步到 `dev` 与 `workbuddy/main`（推送前必须先 `git fetch`
+> 确认对方进度）；吸收其他分支的提交时按「时间 + 语义」逐项合并，不做覆盖式合并。
 
 
 约定：
