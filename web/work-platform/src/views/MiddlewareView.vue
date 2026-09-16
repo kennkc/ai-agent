@@ -4,9 +4,11 @@
       <div>
         <span class="view-kicker">OBSERVABILITY</span>
         <h2>中间件监控</h2>
-        <p class="view-sub">基础设施启用情况与运行指标 · 检测于 {{ overview?.checked_at || '—' }}</p>
+        <p class="view-sub">基础设施真实启停状态（TCP 探针） · 检测于 {{ overview?.checked_at || '—' }}</p>
       </div>
       <div class="head-actions">
+        <el-tag v-if="liveData" type="success" effect="dark">真实探针</el-tag>
+        <el-tag v-else-if="overview" type="warning" effect="dark">演示数据 · BFF 未连接</el-tag>
         <el-tag :type="store.dataSource === 'api' ? 'success' : 'info'" effect="plain">{{ store.dataSource.toUpperCase() }}</el-tag>
         <el-button size="small" type="success" plain :icon="VideoPlay" :disabled="batchRunning || !downCount" @click="runBatch('start')">
           一键启动（{{ downCount }} 个未启用）
@@ -17,6 +19,16 @@
         <el-button size="small" :loading="loading" @click="refresh">刷新检测</el-button>
       </div>
     </header>
+
+    <el-alert
+      v-if="overview && !liveData"
+      :closable="false"
+      class="fallback-alert"
+      type="warning"
+      show-icon
+      title="当前卡片为演示回落数据，并非中间件真实状态"
+      description="未检测到 wp-bff 观测服务（127.0.0.1:8090）。启动 BFF 后卡片将自动切换为真实探针结果：cd services/node/wp-bff && npm start"
+    />
 
     <el-alert v-if="batch" :closable="false" class="batch-alert" :type="batch.action === 'start' ? 'success' : 'warning'" show-icon>
       <template #title>
@@ -121,6 +133,8 @@ const batch = ref<{ action: 'start' | 'stop', current: string, done: number, tot
 const batchRunning = computed(() => batch.value !== null)
 const upCount = computed(() => overview.value?.summary.up ?? 0)
 const downCount = computed(() => overview.value?.summary.down ?? 0)
+// live=wp-bff 真实探针数据；false 表示 BFF 不可达、正在展示演示回落数据
+const liveData = computed(() => overview.value?.data_source !== 'mock')
 const upRatio = computed(() => {
   if (!overview.value || !overview.value.summary.total) return 0
   return Math.round((overview.value.summary.up / overview.value.summary.total) * 100)
@@ -287,6 +301,8 @@ onUnmounted(() => {
 .view-sub { margin: 0; color: var(--wp-sub); font-size: 12px; }
 .head-actions { display: flex; align-items: center; gap: 10px; }
 .batch-alert { border-radius: 10px; }
+.fallback-alert { border-radius: 10px; }
+.fallback-alert :deep(.el-alert__description) { font-size: 12px; }
 .batch-alert :deep(.el-alert__title) { display: flex; align-items: center; gap: 6px; width: 100%; }
 .batch-hint { color: var(--wp-sub); font-size: 11px; font-weight: 400; }
 .batch-alert :deep(.el-progress) { margin-top: 6px; }
