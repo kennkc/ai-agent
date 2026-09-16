@@ -359,7 +359,6 @@ npm run build
 | `codex/main` | 本机主开发分支（2026-09-16 起），日常改动先落这里 |
 | `dev` | 另一台远端开发机的工作分支，与主线保持同内容 |
 | `workbuddy/main` | 主开发线（Phase 0/1/2 + 工作平台 + Java 服务文档集），与主线保持同内容 |
-| `codex/phase0-1-hardening` | **历史归档**：Phase 0-2 期间使用的旧主线名，只读保留，不再接续开发 |
 
 > **2026-09-16 决策**：三支保持内容对齐 —— 每次收口时用 `git merge --ff-only` 把
 > `codex/main` 同步到 `dev` 与 `workbuddy/main`（推送前必须先 `git fetch`
@@ -369,8 +368,9 @@ npm run build
 约定：
 
 1. 任一分支上的改动，收口时通过 `git merge --ff-only` 同步到另两个分支，保持三分支内容一致。
-2. 分支名与内容出现偏差时，在阶段收口时新建语义正确的分支并归档，不做历史重写。
-   —— 2026-09-16 已按此约定执行：`codex/phase0-1-hardening` 归档，主线切换为 `codex/main`。
+2. 分支名与内容出现偏差时，在阶段收口时新建语义正确的分支，不做历史重写。
+   —— 2026-09-16 已按此约定执行：主线切换为 `codex/main`；旧名 `codex/phase0-1-hardening`
+   在确认其提交已全部包含后删除（本机工作副本 / 本地 origin 仓库 / GitHub 三处同步清理）。
 3. 每次合并后必须重跑全量验证（Java / Python / 契约 / wp-bff / Vue typecheck+build）再推送。
 4. 冲突处理按「时间 + 语义」逐项合并，禁止直接覆盖对方改动。
 
