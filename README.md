@@ -232,6 +232,29 @@ npm run build
 
 README 不仅是说明文档，也是项目更新流程入口。后续每次修改项目时，必须按以下顺序执行。
 
+### 8.0 通用前置：变更前先同步远端（强制）
+
+任何仓库的内容变更（代码 / 文档 / 配置）之前，必须先同步并**解读**远端改动，避免覆盖协作者的工作：
+
+1. **拉取**：`git fetch <remote>` —— 不要直接 `git pull`，先在无副作用状态下解读
+2. **判断**：`git rev-list --left-right --count @{u}...HEAD`（输出为 `落后 领先`）
+3. **落后 > 0 时必须解读**：
+   - `git log --oneline HEAD..@{u}` —— 对方提交主题
+   - `git diff --stat HEAD..@{u}` —— 涉及哪些文件
+   - 触及本任务相关文件时用 `git show <sha>` 读具体改动
+4. **形成结论再动手**：对方改了什么 / 是否与本任务重叠 / 采取何种处理
+5. **合并后复验**：merge 或 rebase 之后重跑受影响范围的验证，再继续开发
+
+多仓库一键扫描（只读，不改动工作区）：
+
+```powershell
+pwsh -File "$env:USERPROFILE\.agents\skills\git-sync-before-change\scripts\scan-remote-updates.ps1" -Repo "E:\ai_workspace\project_space\ai-agent-lifeform\codex\ai-agent","E:\ai_workspace\project_space\AI知识库\任务指挥中心知识库"
+```
+
+该约定已登记为 Codex 技能 `git-sync-before-change`（变更前先同步远端并解读对方改动）。
+
+**冲突处理红线**：按「时间 + 语义」逐项合并，禁止整文件覆盖任一侧。
+
 ### 8.1 设计文档更新
 
 文档源目录：
@@ -263,7 +286,7 @@ git commit -m "docs: <中文更新说明>"
 
 ### 8.2 代码更新
 
-1. 从任一长期分支（默认 `workbuddy/main`）拉取最新代码；三分支内容一致，无需跨分支比对。
+1. 先执行 §8.0 的同步检查（fetch + 解读远端改动），再从 `codex/phase0-1-hardening` 接续开发。
 2. 按阶段或垂直切片修改服务代码。
 3. 同步更新对应阶段文档：
    - 需求设计文档
