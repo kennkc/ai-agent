@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>07 · 运行时配置与横切约定</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-16 14:36 · 源文件 07-运行时配置与横切约定.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 端口与实例对照</a></li>
+<li><a href="#2">2. 各服务配置要点</a><ul>
+<li><a href="#21-gateway-service">2.1 gateway-service</a></li>
+<li><a href="#22-session-manager">2.2 session-manager</a></li>
+<li><a href="#23-sense-service">2.3 sense-service</a></li>
+<li><a href="#24-body-service">2.4 body-service</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 环境变量总表</a><ul>
+<li><a href="#31-envdocker-compose">3.1 根目录 .env（docker compose 用）</a></li>
+</ul>
+</li>
+<li><a href="#4">4. 多租户契约（最关键的横切约定）</a></li>
+<li><a href="#5">5. 统一响应与错误码</a></li>
+<li><a href="#6">6. 消息通道与主题命名</a></li>
+<li><a href="#7-grpc">7. gRPC 健康探针</a></li>
+<li><a href="#8">8. 观测</a><ul>
+<li><a href="#81-actuator">8.1 Actuator</a></li>
+<li><a href="#82-otlp-jaeger">8.2 链路追踪（OTLP → Jaeger）</a></li>
+<li><a href="#83">8.3 业务侧可观测</a></li>
+</ul>
+</li>
+<li><a href="#9-http-d-1">9. HTTP 客户端约定（缺陷 D-1）</a></li>
+<li><a href="#10">10. 已知缺口与待办</a></li>
+<li><a href="#11">11. 本地启动顺序</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="07">07 · 运行时配置与横切约定<a class="headerlink" href="#07" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>本文汇总四个 Java 服务的<strong>配置、端口、环境变量</strong>，以及跨模块的<strong>横切约定</strong>
+（多租户、错误码、观测、消息主题、HTTP 客户端）。部署、联调、排障时看这一篇。</p>
+</blockquote>
+<h2 id="1">1. 端口与实例对照<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th style="text-align: right;">HTTP</th>
+<th style="text-align: right;">gRPC</th>
+<th>Nacos 服务名</th>
+<th>声明位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gateway-service</code></td>
+<td style="text-align: right;">8080</td>
+<td style="text-align: right;">9091</td>
+<td><code>gateway-service</code></td>
+<td>各自 <code>application.yml</code></td>
+</tr>
+<tr>
+<td><code>session-manager</code></td>
+<td style="text-align: right;">8081</td>
+<td style="text-align: right;">9092</td>
+<td><code>session-manager</code></td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td style="text-align: right;">8082</td>
+<td style="text-align: right;">9093</td>
+<td><code>sense-service</code></td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>body-service</code></td>
+<td style="text-align: right;">8083</td>
+<td style="text-align: right;">9094</td>
+<td><code>body-service</code></td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>nlp-service</code>（Python）</td>
+<td style="text-align: right;">8000</td>
+<td style="text-align: right;">—</td>
+<td><code>nlp-service</code></td>
+<td>FastAPI 配置</td>
+</tr>
+<tr>
+<td><code>wp-bff</code>（Node，中间件观测）</td>
+<td style="text-align: right;">8090</td>
+<td style="text-align: right;">—</td>
+<td>未注册 Nacos</td>
+<td><code>services/node/wp-bff</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>gRPC 端口目前只提供 Health 服务</strong>（见 §5），业务 gRPC 尚未启用，因此端口占用不是部署瓶颈。</p>
+<p>端口全部可在 <code>application.yml</code> 中通过 <code>GRPC_PORT</code> 等环境变量覆盖；
+<strong>HTTP 端口是写死的字面值</strong>（如 <code>server.port: 8082</code>），没有做环境变量占位 ——
+多实例部署时需要另行处理。</p>
+<h2 id="2">2. 各服务配置要点<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-gateway-service">2.1 <code>gateway-service</code><a class="headerlink" href="#21-gateway-service" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>值 / 默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server.port</code></td>
+<td>8080</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>app.auth.secret</code></td>
+<td><code>${JWT_SECRET:}</code></td>
+<td><strong>必填且 ≥ 32 字节</strong>，否则启动失败</td>
+</tr>
+<tr>
+<td><code>app.auth.token-ttl</code></td>
+<td><code>PT24H</code></td>
+<td>令牌有效期（ISO-8601 Duration）</td>
+</tr>
+<tr>
+<td><code>app.auth.dev-token-endpoint-enabled</code></td>
+<td><code>${DEV_TOKEN_ENDPOINT_ENABLED:false}</code></td>
+<td><strong>生产必须保持 false</strong></td>
+</tr>
+<tr>
+<td><code>spring.cloud.gateway.routes</code></td>
+<td>4 条（session / sense / nlp / body）</td>
+<td>见下</td>
+</tr>
+<tr>
+<td><code>spring.cloud.gateway.discovery.locator.enabled</code></td>
+<td><code>true</code></td>
+<td>按服务名自动建路由</td>
+</tr>
+<tr>
+<td><code>management.endpoints.web.exposure.include</code></td>
+<td><code>health,info,metrics</code></td>
+<td><strong>比其他服务多暴露 <code>metrics</code></strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>路由表</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>id</th>
+<th>路径</th>
+<th>目标</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>session-manager</code></td>
+<td><code>/api/session/**</code></td>
+<td><code>lb://session-manager</code></td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td><code>/api/sense/**</code></td>
+<td><code>lb://sense-service</code></td>
+</tr>
+<tr>
+<td><code>nlp-service</code></td>
+<td><code>/api/nlp/**</code></td>
+<td><code>lb://nlp-service</code></td>
+</tr>
+<tr>
+<td><code>body-service</code></td>
+<td><code>/api/body/**</code></td>
+<td><code>lb://body-service</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-session-manager">2.2 <code>session-manager</code><a class="headerlink" href="#22-session-manager" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server.port</code></td>
+<td>8081</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>app.nlp.base-url</code></td>
+<td><code>http://127.0.0.1:8000</code></td>
+<td>nlp-service 地址</td>
+</tr>
+<tr>
+<td><code>app.nlp.degrade-on-failure</code></td>
+<td><code>true</code></td>
+<td>意图识别降级开关</td>
+</tr>
+<tr>
+<td><code>app.body.base-url</code></td>
+<td><code>http://127.0.0.1:8083</code></td>
+<td>body-service 地址</td>
+</tr>
+<tr>
+<td><code>app.body.degrade-on-failure</code></td>
+<td><code>true</code></td>
+<td>检索降级开关</td>
+</tr>
+<tr>
+<td><code>spring.data.redis.host</code> / <code>port</code></td>
+<td><code>127.0.0.1</code> / <code>6379</code></td>
+<td>会话状态存储</td>
+</tr>
+<tr>
+<td><code>management.endpoints.web.exposure.include</code></td>
+<td><code>health,info</code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-sense-service">2.3 <code>sense-service</code><a class="headerlink" href="#23-sense-service" title="Permanent link">&para;</a></h3>
+<p>配置最复杂（<code>sense.*</code> 前缀，8 个嵌套组）。<strong>完整表格见
+<a href="05-sense-service.md">05-sense-service</a> §5.4</strong>，此处只列最易踩坑的几项：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sense.file-root</code></td>
+<td><code>data/sense-inbox</code></td>
+<td>本地文件采集根目录，<strong>沙箱边界</strong></td>
+</tr>
+<tr>
+<td><code>sense.staging.backend</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code> 会自动在 MinIO/本地之间选择</td>
+</tr>
+<tr>
+<td><code>sense.health.degrade-after</code></td>
+<td><code>1</code></td>
+<td>连续失败 1 次即 DEGRADED（敏感度高）</td>
+</tr>
+<tr>
+<td><code>sense.health.down-after</code></td>
+<td><code>3</code></td>
+<td>连续失败 3 次即 DOWN 并隔离</td>
+</tr>
+<tr>
+<td><code>sense.r0.enabled</code></td>
+<td><code>true</code></td>
+<td>R0 定时采集总开关</td>
+</tr>
+<tr>
+<td><code>nacos.discovery.ip</code></td>
+<td><code>127.0.0.1</code></td>
+<td><strong>本模块显式指定</strong>（多网卡时避免注册错网卡）</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>sense.file-root</code> 与 <code>sense.staging.local-root</code> 是相对路径</strong>，相对于<strong>进程工作目录</strong>。
+从仓库根启动时它们是 <code>&lt;repo&gt;/data/...</code>；从 <code>services/java</code> 启动时是 <code>&lt;repo&gt;/services/java/data/...</code>。
+<code>.gitignore</code> 中两个路径都有覆盖（<code>data/sense-*</code> 与 <code>services/java/data/</code>），因此不会误入库。</p>
+<h3 id="24-body-service">2.4 <code>body-service</code><a class="headerlink" href="#24-body-service" title="Permanent link">&para;</a></h3>
+<p>只有端口与 Nacos 地址。<strong>注意它缺少 OTLP 追踪配置</strong>（见 §5.2 的缺口清单）。</p>
+<h2 id="3">3. 环境变量总表<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>变量</th>
+<th>使用方</th>
+<th>默认</th>
+<th>必填性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>JWT_SECRET</code></td>
+<td>gateway</td>
+<td>空</td>
+<td><strong>必填</strong>（否则网关启动失败）</td>
+</tr>
+<tr>
+<td><code>DEV_TOKEN_ENDPOINT_ENABLED</code></td>
+<td>gateway</td>
+<td><code>false</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>NACOS_ADDR</code></td>
+<td>全部 Java 服务</td>
+<td><code>127.0.0.1:8848</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>NACOS_IP</code></td>
+<td>sense</td>
+<td><code>127.0.0.1</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>GRPC_PORT</code></td>
+<td>全部</td>
+<td>9091~9094</td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>OTLP_ENDPOINT</code></td>
+<td>gateway / session / sense</td>
+<td><code>http://localhost:4318/v1/traces</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>REDIS_HOST</code> / <code>REDIS_PORT</code></td>
+<td>session</td>
+<td><code>127.0.0.1</code> / <code>6379</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>NLP_BASE_URL</code> / <code>NLP_DEGRADE_ON_FAILURE</code></td>
+<td>session</td>
+<td>见 §2.2</td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>BODY_BASE_URL</code> / <code>BODY_DEGRADE_ON_FAILURE</code></td>
+<td>session</td>
+<td>见 §2.2</td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>NATS_URL</code></td>
+<td>session / sense</td>
+<td><code>nats://127.0.0.1:4222</code></td>
+<td>可选（<strong>只读环境变量</strong>）</td>
+</tr>
+<tr>
+<td><code>KAFKA_BOOTSTRAP</code></td>
+<td>session / sense</td>
+<td><code>127.0.0.1:9092</code></td>
+<td>可选（<strong>只读环境变量</strong>）</td>
+</tr>
+<tr>
+<td><code>KAFKA_CONSUMER_ENABLED</code></td>
+<td>session</td>
+<td><code>true</code></td>
+<td>可选（<strong>只读环境变量</strong>）</td>
+</tr>
+<tr>
+<td><code>SENSE_FILE_ROOT</code> / <code>SENSE_ALLOWED_HOSTS</code></td>
+<td>sense</td>
+<td>见 §2.3</td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>SENSE_INTEL_FEEDS</code></td>
+<td>sense（嗅觉渠道）</td>
+<td>空</td>
+<td>不设则嗅觉渠道 DOWN</td>
+</tr>
+<tr>
+<td><code>OCR_ENABLED</code> / <code>OCR_URL</code></td>
+<td>sense</td>
+<td><code>true</code> / <code>127.0.0.1:8000/api/nlp/ocr</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>STAGING_BACKEND</code> / <code>STAGING_LOCAL_ROOT</code></td>
+<td>sense</td>
+<td><code>auto</code> / <code>data/sense-staging</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>MINIO_ENDPOINT</code> / <code>MINIO_ACCESS_KEY</code> / <code>MINIO_SECRET_KEY</code> / <code>MINIO_BUCKET</code></td>
+<td>sense</td>
+<td>见 §2.3</td>
+<td>可选（缺失则降级本地）</td>
+</tr>
+<tr>
+<td><code>R0_ENABLED</code> / <code>R0_TICK_MS</code></td>
+<td>sense</td>
+<td><code>true</code> / <code>60000</code></td>
+<td>可选</td>
+</tr>
+</tbody>
+</table>
+<p><strong>重要区别</strong>：标记「只读环境变量」的项是通过 <code>System.getenv()</code> 直接读取的
+（<code>NATS_URL</code>、<code>KAFKA_*</code>、<code>SENSE_INTEL_FEEDS</code>），<strong>不经 <code>application.yml</code></strong>。
+改这些值只能改环境变量或重启进程；在 yml 里写同名键<strong>不会生效</strong>。</p>
+<h3 id="31-envdocker-compose">3.1 根目录 <code>.env</code>（docker compose 用）<a class="headerlink" href="#31-envdocker-compose" title="Permanent link">&para;</a></h3>
+<p>仓库根的 <code>.env</code> 供 <code>docker compose</code> 使用，<strong>不入库</strong>（<code>.gitignore</code> 已覆盖，只有 <code>.env.example</code> 入库）：</p>
+<table>
+<thead>
+<tr>
+<th>变量</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>COMPOSE_PROJECT_NAME=agent-lifeform</code></td>
+<td><strong>必须有</strong>：仓库目录改名（<code>agent-lifeform</code> → <code>ai-agent</code>）后 compose 默认项目名会变，与存量容器（<code>lifeform-*</code>）/数据卷（<code>agent-lifeform_*</code>）命名冲突，并可能误建空卷</td>
+</tr>
+<tr>
+<td><code>MINIO_ROOT_USER</code> / <code>MINIO_ROOT_PASSWORD</code> / <code>MINIO_ACCESS_KEY</code> / <code>MINIO_SECRET_KEY</code></td>
+<td>MinIO 凭据</td>
+</tr>
+</tbody>
+</table>
+<p>首次使用执行 <code>cp .env.example .env</code>。</p>
+<h2 id="4">4. 多租户契约（最关键的横切约定）<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<p><strong>数据流</strong>：JWT 声明里的 <code>tenant_id</code> → 网关注入请求头 <code>X-Tenant-Id</code> → 各业务服务从请求头读取。</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>责任</th>
+<th>实现位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>令牌签发</td>
+<td>把 <code>tenant_id</code> 写入 JWT 自定义声明</td>
+<td><code>gateway/security/JwtService.sign</code></td>
+</tr>
+<tr>
+<td>身份校验 + 注入</td>
+<td>解析令牌，<strong>覆写</strong> <code>X-Tenant-Id</code> 请求头</td>
+<td><code>gateway/security/JwtAuthFilter</code></td>
+</tr>
+<tr>
+<td>业务读取</td>
+<td>只信任请求头，忽略请求体内同名字段</td>
+<td>各 Controller 的 <code>@RequestHeader("X-Tenant-Id")</code></td>
+</tr>
+<tr>
+<td>数据隔离</td>
+<td>会话/暂存/知识均按租户分区</td>
+<td><code>SessionController.requireOwnedSession</code>、<code>BodyStore.tenantChunks</code>、<code>StagingStore</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>三条不可违反的规则</strong>：</p>
+<ol>
+<li><strong>业务服务不得信任请求参数里的租户 ID</strong>。<code>sense-service</code> 的 <code>SenseController.collect</code>
+   从请求体收到 <code>tenant_id</code> 也会<strong>忽略</strong>，只用请求头的值（见
+   <a href="05-sense-service.md">05-sense-service</a> §5.5）。</li>
+<li><strong>按 ID 访问租户资源必须校验归属</strong>。<code>SessionController</code> 的 <code>requireOwnedSession</code>
+   返回 403 而非 404（明确告知无权访问）。新增接口必须复用该模式。</li>
+<li><strong><code>defaultValue = "default"</code> 是个隐患</strong>。所有 <code>@RequestHeader("X-Tenant-Id")</code> 都带默认值，
+   因此<strong>绕过网关直连服务时，请求会自动落入 <code>default</code> 租户而不报错</strong>。
+   开发期方便，生产环境应确保业务服务端口不对外暴露，或考虑移除默认值。</li>
+</ol>
+<h2 id="5">5. 统一响应与错误码<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<p><strong>成功响应</strong>：各接口自定义结构（无统一包装层）。</p>
+<p><strong>错误响应</strong>（三个服务一致）：</p>
+<pre><code class="language-json">{ &quot;code&quot;: &quot;AGENT_NOT_FOUND&quot;, &quot;message&quot;: &quot;session not found: xxx&quot;, &quot;details&quot;: {} }
+</code></pre>
+<p><strong>错误码表</strong>（<code>session-manager</code> 与 <code>sense-service</code> 各有一份<strong>内容完全相同</strong>的 <code>ErrorCode</code> 枚举）：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th style="text-align: right;">HTTP</th>
+<th>默认消息</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AGENT_BAD_REQUEST</code></td>
+<td style="text-align: right;">400</td>
+<td>请求参数不合法</td>
+</tr>
+<tr>
+<td><code>AGENT_UNAUTHORIZED</code></td>
+<td style="text-align: right;">401</td>
+<td>未认证或 Token 无效</td>
+</tr>
+<tr>
+<td><code>AGENT_FORBIDDEN</code></td>
+<td style="text-align: right;">403</td>
+<td>无权限访问</td>
+</tr>
+<tr>
+<td><code>AGENT_NOT_FOUND</code></td>
+<td style="text-align: right;">404</td>
+<td>资源不存在</td>
+</tr>
+<tr>
+<td><code>AGENT_CONFLICT</code></td>
+<td style="text-align: right;">409</td>
+<td>资源冲突</td>
+</tr>
+<tr>
+<td><code>AGENT_DUPLICATE</code></td>
+<td style="text-align: right;">409</td>
+<td>资源已存在</td>
+</tr>
+<tr>
+<td><code>AGENT_TIMEOUT</code></td>
+<td style="text-align: right;">504</td>
+<td>调用超时</td>
+</tr>
+<tr>
+<td><code>AGENT_BUS_UNAVAILABLE</code></td>
+<td style="text-align: right;">503</td>
+<td>总线通道不可用</td>
+</tr>
+<tr>
+<td><code>AGENT_UPSTREAM_UNAVAILABLE</code></td>
+<td style="text-align: right;">502</td>
+<td>上游服务不可用</td>
+</tr>
+<tr>
+<td><code>AGENT_INTERNAL_ERROR</code></td>
+<td style="text-align: right;">500</td>
+<td>服务内部错误</td>
+</tr>
+</tbody>
+</table>
+<p><strong>注意</strong>：<code>gateway-service</code> <strong>不实现</strong> <code>GlobalExceptionHandler</code> ——
+它在 <code>JwtAuthFilter.reject()</code> 里手写同样格式的 JSON，以保持客户端只需一套解析逻辑。
+新增网关侧错误响应时请沿用 <code>{"code","message","details":{}}</code> 格式。</p>
+<p><strong><code>body-service</code> 未接入该体系</strong>：它没有 <code>common</code> 包，也没有全局异常处理。
+错误会以 Spring 默认的 500 响应返回 —— 这是 MVP 的实现缺口。</p>
+<h2 id="6">6. 消息通道与主题命名<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<p>两条通道职责不同，<strong>不要混用</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>通道</th>
+<th>实现</th>
+<th>用途</th>
+<th>可靠性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>NATS</strong></td>
+<td>session 用 jnats；sense 用自研 <code>MinimalNatsClient</code></td>
+<td>同步请求-应答（RPC）</td>
+<td><strong>尽力而为</strong>，失败即降级</td>
+</tr>
+<tr>
+<td><strong>Kafka</strong></td>
+<td>Kafka clients</td>
+<td>领域事件（持久化）</td>
+<td><code>acks=all</code>，是<strong>权威事件通道</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>已使用的主题/学科</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>通道</th>
+<th>名称</th>
+<th>生产者</th>
+<th>消费者</th>
+<th>语义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NATS</td>
+<td><code>lifeform.rpc.sense.ping</code></td>
+<td>session</td>
+<td>sense</td>
+<td>总线健康探测（返回 <code>pong</code>）</td>
+</tr>
+<tr>
+<td>NATS</td>
+<td><code>lifeform.rpc.sense.collect</code></td>
+<td>（预留）</td>
+<td>sense</td>
+<td>R1 动态采集指令</td>
+</tr>
+<tr>
+<td>Kafka</td>
+<td><code>lifeform.session.created</code></td>
+<td>session</td>
+<td>session（审计打印）</td>
+<td>会话创建事件</td>
+</tr>
+<tr>
+<td>Kafka</td>
+<td><code>lifeform.sense.collected</code></td>
+<td>sense</td>
+<td><strong>Phase 3 入库消费者</strong></td>
+<td>采集完成（仅 ACCEPTED）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>命名约定</strong>：Kafka 为 <code>lifeform.{domain}.{event}</code>，NATS RPC 为 <code>lifeform.rpc.{target}.{action}</code>。</p>
+<p><strong>两个实现细节</strong>：</p>
+<ul>
+<li><strong>NATS 主题用具体名而非通配</strong>。<code>NatsBusServer</code> 的注释指出：Docker NATS 环境下通配订阅投递失效，
+  因此显式订阅两个具体主题，新增 RPC 必须显式登记。相反，<code>session-manager</code> 用的是 jnats，不受此限制。</li>
+<li><strong><code>lifeform.sense.collected</code> 的负载不含正文</strong>，只有元数据与 <code>staging_ref</code>；
+  Phase 3 消费时需按引用回暂存区取内容。</li>
+</ul>
+<h2 id="7-grpc">7. gRPC 健康探针<a class="headerlink" href="#7-grpc" title="Permanent link">&para;</a></h2>
+<p>四个 Java 服务各有一个<strong>逻辑完全相同</strong>的 <code>grpc/GrpcHealthServer</code>（仅端口不同）：</p>
+<ul>
+<li>实现 <code>SmartLifecycle</code>，容器启停时管理 <code>Server</code>；</li>
+<li>读 <code>${grpc.port:0}</code>，<strong>端口 ≤ 0 时跳过启动</strong>（便于本地关闭）；</li>
+<li>用 <code>HealthStatusManager</code> 把空服务名 <code>""</code>（代表整个服务器）注册为 <code>SERVING</code>；</li>
+<li>启动失败抛 <code>IllegalStateException</code>（让容器启动失败，不静默降级）；</li>
+<li>不依赖 Spring Boot 的 gRPC 自动配置（官方无此能力，手写 30 行更轻）。</li>
+</ul>
+<p><strong>为什么四个模块各写一份而不抽公共类</strong>：为避免在 <code>proto-contracts</code> 里引入 Spring 依赖 ——
+该模块是被所有服务依赖的编译期基础，保持"零 Spring 依赖"比复用 30 行代码更重要。</p>
+<h2 id="8">8. 观测<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<h3 id="81-actuator">8.1 Actuator<a class="headerlink" href="#81-actuator" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>暴露端点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gateway-service</code></td>
+<td><code>health,info,metrics</code></td>
+</tr>
+<tr>
+<td>其余三个</td>
+<td><code>health,info</code></td>
+</tr>
+</tbody>
+</table>
+<p>全部配置 <code>management.endpoint.health.show-details: always</code>（<strong>生产环境建议收紧</strong>，会暴露组件细节）。</p>
+<h3 id="82-otlp-jaeger">8.2 链路追踪（OTLP → Jaeger）<a class="headerlink" href="#82-otlp-jaeger" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>采样率</th>
+<th>OTLP 端点</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gateway-service</code></td>
+<td>1.0</td>
+<td>有</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>session-manager</code></td>
+<td>1.0</td>
+<td>有</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td>1.0</td>
+<td>有</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>body-service</code></td>
+<td>—</td>
+<td><strong>无</strong></td>
+<td>⚠️ <strong>缺口</strong></td>
+</tr>
+</tbody>
+</table>
+<p>采样率 1.0 意味着全量采集，适合开发环境；生产需下调。</p>
+<p><strong>已知缺口</strong>：<code>body-service</code> 缺 <code>management.otlp.tracing.endpoint</code> 配置，
+其内部调用不会出现在 Jaeger 链路中。补齐只需在它的 <code>application.yml</code> 加两行
+（照抄 <code>sense-service</code> 的 <code>management.tracing</code> 与 <code>management.otlp</code> 段）。</p>
+<h3 id="83">8.3 业务侧可观测<a class="headerlink" href="#83" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>入口</th>
+<th>服务</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/sense/stats</code></td>
+<td>sense</td>
+<td>采集量、质检通过率、趋势、暂存后端、死信、事件发布统计</td>
+</tr>
+<tr>
+<td><code>GET /api/sense/channels-health</code></td>
+<td>sense</td>
+<td>渠道状态、隔离、连续失败数、探测/恢复时间</td>
+</tr>
+<tr>
+<td><code>GET /api/sense/deadletters</code></td>
+<td>sense</td>
+<td>死信明细</td>
+</tr>
+<tr>
+<td><code>GET /api/sense/rules</code></td>
+<td>sense</td>
+<td>R0 规则与最近执行时间</td>
+</tr>
+<tr>
+<td><code>/middleware</code>（前端）</td>
+<td>wp-bff</td>
+<td>中间件真实启停状态（TCP 探针）</td>
+</tr>
+</tbody>
+</table>
+<h2 id="9-http-d-1">9. HTTP 客户端约定（缺陷 D-1）<a class="headerlink" href="#9-http-d-1" title="Permanent link">&para;</a></h2>
+<p><strong>这是本项目最容易重复踩的坑，两个模块都做了统一收口</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>收口类</th>
+<th>用法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>session-manager</code></td>
+<td><code>orchestration/OutboundHttp</code></td>
+<td><code>OutboundHttp.restClient(baseUrl)</code></td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td><code>util/HttpClients</code></td>
+<td><code>HttpClients.builder(timeout)</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>绝对不要直接写 <code>RestClient.builder().build()</code> 或 <code>HttpClient.newHttpClient()</code></strong>。</p>
+<p>根因回顾：JDK <code>HttpClient</code> 默认协商 HTTP/2，对明文连接会先发 <code>Upgrade: h2c</code> + <code>HTTP2-Settings</code>；
+<strong>uvicorn(h11) 不兼容该升级，会丢弃请求体</strong>，于是 FastAPI 报 422「body Field required」，
+Java 侧只看到"上游不可用"。</p>
+<p><strong>这个缺陷的隐蔽性极高</strong>：TCP 可连、健康检查通过、HTTP 状态码正常 ——
+只有请求体丢了。因此两侧都有专门的回归守卫测试（<code>OutboundHttpTest</code>、<code>HttpClientsTest</code>），
+用裸 <code>ServerSocket</code> 抓原始报文断言请求行是 <code>HTTP/1.1</code> 且无升级头。</p>
+<p><strong>新增跨服务调用时</strong>：一律经上述收口类构建客户端，并确认目标服务是 HTTP/1.1 兼容的。</p>
+<h2 id="10">10. 已知缺口与待办<a class="headerlink" href="#10" title="Permanent link">&para;</a></h2>
+<p>按影响程度排序：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">#</th>
+<th>缺口</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td><strong><code>wp-bff</code> 无网关路由</strong></td>
+<td><code>/api/wp/**</code> 生产路径不可用，前端只能靠 Vite 代理</td>
+<td>网关加一条 <code>uri: http://&lt;wp-bff&gt;</code> 路由（wp-bff 未注册 Nacos，需用静态 URI）</td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td><strong><code>body-service</code> 无 OTLP 配置</strong></td>
+<td>检索调用不在链路追踪中</td>
+<td>补 <code>management.otlp.tracing.endpoint</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td><strong><code>body-service</code> 未接入统一错误码体系</strong></td>
+<td>异常返回 Spring 默认 500 结构，与其余服务不一致</td>
+<td>引入 <code>common</code> 包三件套</td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td><code>ErrorCode</code> 在两模块重复定义</td>
+<td>新增错误码需人工同步，易漏</td>
+<td>考虑下沉到 <code>proto-contracts</code> 或新建 <code>common-java</code> 模块</td>
+</tr>
+<tr>
+<td style="text-align: right;">5</td>
+<td>租户头 <code>defaultValue="default"</code></td>
+<td>绕过网关直连时静默落入 default 租户</td>
+<td>生产环境限制业务端口访问；或移除默认值</td>
+</tr>
+<tr>
+<td style="text-align: right;">6</td>
+<td>HTTP 端口写死</td>
+<td>不便多实例部署</td>
+<td>改为 <code>${SERVER_PORT:8082}</code> 形式</td>
+</tr>
+<tr>
+<td style="text-align: right;">7</td>
+<td><code>body-service</code> 的 <code>BodyStore</code> 用 <code>ArrayList</code> 存片段</td>
+<td>同一租户高并发写入可能丢数据</td>
+<td>Phase 3 换向量库时一并解决</td>
+</tr>
+<tr>
+<td style="text-align: right;">8</td>
+<td><code>sense-service</code> 死信/指标为内存态</td>
+<td>重启即丢，不能做长期审计</td>
+<td>需要时落 Redis 或持久化</td>
+</tr>
+<tr>
+<td style="text-align: right;">9</td>
+<td>Kafka / 死信消费者未实现</td>
+<td><code>lifeform.sense.collected</code> 无消费者（Phase 3 待做）</td>
+<td>Phase 3 躯体期实现</td>
+</tr>
+<tr>
+<td style="text-align: right;">10</td>
+<td>TextExtractorTest 有用例名拼写错误</td>
+<td>仅可读性</td>
+<td>后续代码整理时改为 <code>decodesGbkWithoutHeader</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="11">11. 本地启动顺序<a class="headerlink" href="#11" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># ① 基础设施（仓库根）
+cp .env.example .env          # 首次
+docker compose up -d          # 8 个中间件：postgres/redis/nats/kafka/qdrant/minio/nacos/jaeger
+
+# ② 校验引擎与容器
+docker version --format '{{.Server.Version}}'
+docker ps --format '{{.Names}}\t{{.Status}}'
+
+# ③ Python 意图服务（可选，缺失时 session 会降级为 FALLBACK）
+cd services/python/nlp-service
+../venv/Scripts/python.exe -m uvicorn app.main:app --port 8000
+
+# ④ Java 服务（四个终端，或用 IDE 启动）
+cd services/java
+../../scripts/mvn-dev.sh clean package
+JWT_SECRET=&lt;至少32字节的密钥&gt; ../../scripts/mvn-dev.sh -pl gateway-service spring-boot:run
+../../scripts/mvn-dev.sh -pl session-manager spring-boot:run
+../../scripts/mvn-dev.sh -pl sense-service spring-boot:run
+../../scripts/mvn-dev.sh -pl body-service spring-boot:run
+
+# ⑤ 中间件观测（前端 /middleware 依赖它）
+cd services/node/wp-bff &amp;&amp; node server.js      # 127.0.0.1:8090
+
+# ⑥ 前端
+cd web/work-platform &amp;&amp; npm run dev            # 默认 3001
+</code></pre>
+<p><strong>依赖顺序说明</strong>：</p>
+<ul>
+<li><code>gateway-service</code> 必须在 <code>JWT_SECRET</code> 有值时可启动 —— <strong>不设则启动失败</strong>（这是刻意的安全设计）。</li>
+<li>业务服务可以<strong>先于</strong>其上游启动：<code>session-manager</code> 在 <code>nlp-service</code> / <code>body-service</code>
+  未就绪时会降级（默认开关开启），不会启动失败。</li>
+<li><code>sense-service</code> 在 MinIO / NATS / Kafka 任一不可用时都能启动（各自独立降级），
+  但功能会相应受限：</li>
+<li>MinIO 不可用 → 暂存降级到本地文件；</li>
+<li>OCR 不可用 → 视觉渠道 DEGRADED；</li>
+<li>未配情报源 → 嗅觉渠道 DOWN；</li>
+<li>NATS 不可用 → 总线指令通道失效（HTTP 采集路径仍可用）。</li>
+<li><code>body-service</code> 只依赖 Nacos，最简单。</li>
+</ul>
+<p><strong>健康检查命令</strong>：</p>
+<pre><code class="language-bash">curl -s http://127.0.0.1:8080/actuator/health | python -m json.tool     # 网关（免鉴权）
+curl -s http://127.0.0.1:8082/api/sense/health                          # ⚠ 需经网关+令牌，或直连 8082
+curl -s http://127.0.0.1:8083/api/body/health                           # body 自带健康端点
+</code></pre>
+<p>注意 <code>/actuator/**</code> 与 <code>/api/auth/**</code> 是网关的免鉴权前缀，其余路径都需要 Bearer 令牌。</p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

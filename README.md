@@ -59,6 +59,7 @@ ai-agent/
 ├── contracts/                     # BFF OpenAPI 契约可执行副本
 ├── docs/
 │   ├── demo/                      # 各阶段验收演示脚本（Phase0/1/2）
+│   ├── java-services/             # Java 服务源码逐文件说明（模块总览/契约/各服务/配置约定，MD+HTML）
 │   ├── 项目进度日志报告/           # 阶段报告、执行日志、测试验收报告（MD+HTML）
 │   └── ...
 ├── infra/                         # 基础设施说明

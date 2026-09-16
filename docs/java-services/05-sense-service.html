@@ -1,0 +1,2684 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>05 · sense-service 感官服务</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-16 14:36 · 源文件 05-sense-service.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 模块职责</a></li>
+<li><a href="#2">2. 五感渠道的语义映射</a></li>
+<li><a href="#3">3. 关键设计约束（改代码前必读）</a><ul>
+<li><a href="#31">3.1 未实现的渠道必须诚实上报，不能伪造结果</a></li>
+<li><a href="#32">3.2 质检判定必须单一事实来源</a></li>
+<li><a href="#33-outboundguard-httpclients">3.3 出站请求一律经 OutboundGuard + HttpClients</a></li>
+<li><a href="#34">3.4 路由降级顺序固定为「触觉优先」</a></li>
+<li><a href="#35">3.5 本地文件读取有双层边界</a></li>
+</ul>
+</li>
+<li><a href="#4">4. 文件清单</a><ul>
+<li><a href="#41-35">4.1 主代码（35 个）</a></li>
+<li><a href="#42-8-48">4.2 测试（8 个类 · 48 个用例）</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 逐文件说明</a><ul>
+<li><a href="#51">5.1 启动类</a><ul>
+<li><a href="#senseserviceapplicationjava-23">SenseServiceApplication.java · 23 行</a></li>
+</ul>
+</li>
+<li><a href="#52-channel">5.2 channel 包 — 渠道抽象与五感实现</a><ul>
+<li><a href="#sensechanneljava-83">SenseChannel.java · 接口 · 83 行</a></li>
+<li><a href="#channelregistryjava-66">ChannelRegistry.java · 组件 · 66 行</a></li>
+<li><a href="#touchchanneljava-194">TouchChannel.java · 渠道 · 194 行</a></li>
+<li><a href="#visualchanneljava-143">VisualChannel.java · 渠道 · 143 行</a></li>
+<li><a href="#nosechanneljava-102">NoseChannel.java · 渠道 · 102 行</a></li>
+<li><a href="#tastechanneljava-75">TasteChannel.java · 渠道 · 75 行</a></li>
+<li><a href="#audiochanneljava-39">AudioChannel.java · 渠道 · 39 行</a></li>
+</ul>
+</li>
+<li><a href="#53-collect">5.3 collect 包 — 采集主流程</a><ul>
+<li><a href="#collectpipelinejava-181">CollectPipeline.java · 组件 · 181 行</a></li>
+</ul>
+</li>
+<li><a href="#54-config">5.4 config 包</a><ul>
+<li><a href="#sensepropertiesjava-116">SenseProperties.java · 配置类 · 116 行</a></li>
+</ul>
+</li>
+<li><a href="#55-controller">5.5 controller 包</a><ul>
+<li><a href="#sensecontrollerjava-124">SenseController.java · 控制器 · 124 行</a></li>
+<li><a href="#senseadmincontrollerjava-225">SenseAdminController.java · 控制器 · 225 行</a></li>
+</ul>
+</li>
+<li><a href="#56-deadletter">5.6 deadletter 包</a><ul>
+<li><a href="#deadletterstorejava-84">DeadLetterStore.java · 组件 · 84 行</a></li>
+</ul>
+</li>
+<li><a href="#57-dynamic-r1">5.7 dynamic 包 — R1 动态采集</a><ul>
+<li><a href="#sensecommandjava-record-23">SenseCommand.java · record · 23 行</a></li>
+<li><a href="#r1dynamichandlerjava-111">R1DynamicHandler.java · 组件 · 111 行</a></li>
+</ul>
+</li>
+<li><a href="#58-event">5.8 event 包</a><ul>
+<li><a href="#senseeventpublisherjava-95">SenseEventPublisher.java · 组件 · 95 行</a></li>
+</ul>
+</li>
+<li><a href="#59-health">5.9 health 包</a><ul>
+<li><a href="#channelhealthmonitorjava-119">ChannelHealthMonitor.java · 组件 · 119 行</a></li>
+</ul>
+</li>
+<li><a href="#510-metrics">5.10 metrics 包</a><ul>
+<li><a href="#sensemetricsjava-125">SenseMetrics.java · 组件 · 125 行</a></li>
+</ul>
+</li>
+<li><a href="#511-model">5.11 model 包</a><ul>
+<li><a href="#collecteddatajava-78">CollectedData.java · 模型 · 78 行</a></li>
+</ul>
+</li>
+<li><a href="#512-nats">5.12 nats 包</a><ul>
+<li><a href="#minimalnatsclientjava-143">MinimalNatsClient.java · 客户端 · 143 行</a></li>
+<li><a href="#natsbusserverjava-67">NatsBusServer.java · 组件 · 67 行</a></li>
+</ul>
+</li>
+<li><a href="#513-normalize">5.13 normalize 包</a><ul>
+<li><a href="#datanormalizerjava-68">DataNormalizer.java · 组件 · 68 行</a></li>
+</ul>
+</li>
+<li><a href="#514-quality">5.14 quality 包</a><ul>
+<li><a href="#qualitygatejava-116">QualityGate.java · 组件 · 116 行</a></li>
+</ul>
+</li>
+<li><a href="#515-schedule">5.15 schedule 包</a><ul>
+<li><a href="#r0schedulerjava-133">R0Scheduler.java · 组件 · 133 行</a></li>
+</ul>
+</li>
+<li><a href="#516-security">5.16 security 包</a><ul>
+<li><a href="#outboundguardjava-84">OutboundGuard.java · 工具类 · 84 行</a></li>
+</ul>
+</li>
+<li><a href="#517-staging">5.17 staging 包</a><ul>
+<li><a href="#stagingbackendjava-34">StagingBackend.java · 接口 · 34 行</a></li>
+<li><a href="#stagingstorejava-68">StagingStore.java · 组件 · 68 行</a></li>
+<li><a href="#miniostagingbackendjava-188">MinioStagingBackend.java · 后端 · 188 行</a></li>
+<li><a href="#localstagingbackendjava-188">LocalStagingBackend.java · 后端 · 188 行</a></li>
+</ul>
+</li>
+<li><a href="#518-util">5.18 util 包</a><ul>
+<li><a href="#httpclientsjava-24">HttpClients.java · 工具类 · 24 行</a></li>
+<li><a href="#textextractorjava-117">TextExtractor.java · 工具类 · 117 行</a></li>
+</ul>
+</li>
+<li><a href="#519-common">5.19 common 包</a><ul>
+<li><a href="#errorcodejava-29">ErrorCode.java · 枚举 · 29 行</a></li>
+<li><a href="#bizexceptionjava-34">BizException.java · 异常 · 34 行</a></li>
+<li><a href="#globalexceptionhandlerjava-53">GlobalExceptionHandler.java · 切面 · 53 行</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#6-http">6. HTTP 端点汇总</a></li>
+<li><a href="#7">7. 配置项</a></li>
+<li><a href="#8-48">8. 测试基线（48 个用例）</a><ul>
+<li><a href="#touchchanneltest-12">TouchChannelTest · 12 个</a></li>
+<li><a href="#qualitygatetest-7">QualityGateTest · 7 个</a></li>
+<li><a href="#collectpipelinetest-6">CollectPipelineTest · 6 个</a></li>
+<li><a href="#datanormalizertest-6">DataNormalizerTest · 6 个</a></li>
+<li><a href="#stagingstoretest-6">StagingStoreTest · 6 个</a></li>
+<li><a href="#channelhealthmonitortest-4">ChannelHealthMonitorTest · 4 个</a></li>
+<li><a href="#httpclientstest-1">HttpClientsTest · 1 个</a></li>
+<li><a href="#textextractortest-6">TextExtractorTest · 6 个</a></li>
+</ul>
+</li>
+<li><a href="#9">9. 故障排查速查</a></li>
+<li><a href="#10">10. 修改指引</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="05-sense-service">05 · sense-service 感官服务<a class="headerlink" href="#05-sense-service" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>模块路径：<code>services/java/sense-service/</code>
+源文件：<strong>35 个主代码 + 8 个测试</strong>（主代码约 2,900 行；全项目最大模块）
+HTTP 端口：<strong>8082</strong> · gRPC 端口：<strong>9093</strong>
+主要依赖：Spring Web、jsoup（HTML 正文提取）、MinIO SDK、resilience4j-retry、Kafka clients、Lombok</p>
+</blockquote>
+<h2 id="1">1. 模块职责<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p><code>sense-service</code> 是生命体的<strong>五感采集器官</strong>，是 Phase 2（感官期）的主体交付物，对应需求 <strong>R2-01 ~ R2-10</strong>。</p>
+<p>它负责一条完整的管道：</p>
+<pre><code class="language-text">触发（R0 定时 / R1 指令）
+  → 渠道路由（含故障降级）
+  → 采集（指数退避重试）
+  → 标准化五字段打标（R2-04）
+  → 质检（硬规则 + 软评分）
+  → 隔离暂存（MinIO / 本地，可回滚）
+  → 事件发布（lifeform.sense.collected）
+  → 指标登记
+重试耗尽 / 质检拒绝 → 死信队列
+</code></pre>
+<p>治理设施环绕这条管道：<code>ChannelHealthMonitor</code>（探针 / 隔离 / 恢复）、<code>DeadLetterStore</code>、<code>SenseMetrics</code>
+（供 Console 感官视图使用）。<strong>注意：本模块不做知识入库</strong> —— 采集结果落暂存区后由 Phase 3 躯体期消费。</p>
+<h2 id="2">2. 五感渠道的语义映射<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<p>「五感」不是装饰性命名，每个渠道对应一类<strong>真实的采集形态</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>渠道</th>
+<th>语义</th>
+<th>实现状态</th>
+<th>数据源形态</th>
+<th>时效标记</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TOUCH</code> 触觉</td>
+<td>文档 / 网页 / 文本</td>
+<td>✅ 已实现</td>
+<td>URL、<code>file://</code> 本地文件、纯文本</td>
+<td>文件=BATCH，其余=NEAR_REALTIME</td>
+</tr>
+<tr>
+<td><code>VISUAL</code> 视觉</td>
+<td>图片 → OCR → 文本</td>
+<td>✅ 已实现（依赖 OCR 引擎）</td>
+<td>图片 URL、本地图片</td>
+<td>NEAR_REALTIME</td>
+</tr>
+<tr>
+<td><code>NOSE</code> 嗅觉</td>
+<td>舆情 / 情报采集</td>
+<td>✅ 已实现（依赖情报源配置）</td>
+<td>多个 RSS/页面/API 批量抓取</td>
+<td>NEAR_REALTIME</td>
+</tr>
+<tr>
+<td><code>TASTE</code> 味觉</td>
+<td><strong>数据质检</strong>（向内）</td>
+<td>✅ 已实现</td>
+<td>暂存区批次抽样</td>
+<td>BATCH</td>
+</tr>
+<tr>
+<td><code>AUDIO</code> 听觉</td>
+<td>语音 → 转写</td>
+<td>⏳ 预留（Phase 3 接 ASR）</td>
+<td>—</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p>两点特别值得注意：</p>
+<ol>
+<li><strong>味觉是唯一「向内」的渠道</strong> —— 它不采集外部数据，而是对暂存区已采集的批次做<strong>质检复核</strong>，
+   产出质量报告。五感矩阵里它的数据源是「系统自己」，所以 <code>healthy()</code> 恒为 <code>true</code>。</li>
+<li><strong>嗅觉是「聚合渠道」</strong> —— 它复用 <code>TouchChannel.fetchUrlContent</code> 抓取多个情报源，把结果合并为一条采集结果，
+   <code>qualityScore</code> 定义为「成功抓取的源占比」（<code>ok / sources.size()</code>）。未配置任何情报源时，它 <code>available()=false</code>
+   → 被健康监控标记为 DOWN。</li>
+</ol>
+<h2 id="3">3. 关键设计约束（改代码前必读）<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<h3 id="31">3.1 未实现的渠道必须诚实上报，不能伪造结果<a class="headerlink" href="#31" title="Permanent link">&para;</a></h3>
+<p>预留渠道（<code>AudioChannel</code>）的标准写法：</p>
+<pre><code class="language-java">@Override public boolean available() { return false; }   // 参与路由判定
+@Override public boolean healthy()  { return false; }    // 参与健康判定
+// collect() 返回 accepted=false + 明确 error 说明，不返回假数据
+</code></pre>
+<p>这条约定贯穿全模块：<strong>能力不可用时如实返回 <code>available=false</code> / <code>DEGRADED</code></strong>，
+让 Console 五感矩阵能显示真实状态。这条约束同样适用于 OCR（<code>VisualChannel.healthy()</code> 探到引擎未装时返回 false）。</p>
+<h3 id="32">3.2 质检判定必须单一事实来源<a class="headerlink" href="#32" title="Permanent link">&para;</a></h3>
+<p><code>QualityGate</code> 有两条判定路径：硬规则 <code>rejectReason()</code> 与软评分 <code>score()</code>。
+<strong><code>pass()</code> 必须委托 <code>rejectReason()</code>，不能用 <code>score() &gt;= threshold</code> 代替</strong>。</p>
+<p>原因（这是实现期踩过的真实缺陷）：如果 <code>pass()</code> 用评分判定、<code>rejectReason()</code> 用硬规则判定，
+两者会在「内容重复乱码」这类场景<strong>给出不一致结论</strong> —— 评分因内容非空而偏高，硬规则却已判定为垃圾，
+结果就是 <code>pass()</code> 放行、落库时 <code>rejectReason()</code> 又不为空，状态自相矛盾。当前实现：</p>
+<pre><code class="language-java">public boolean pass(String content) { return rejectReason(content) == null; }  // 单一事实来源
+</code></pre>
+<p><strong>新增任何质检规则时，只加到 <code>rejectReason()</code> 里，不要另开判定分支。</strong></p>
+<h3 id="33-outboundguard-httpclients">3.3 出站请求一律经 <code>OutboundGuard</code> + <code>HttpClients</code><a class="headerlink" href="#33-outboundguard-httpclients" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>作用</th>
+<th>强制原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>OutboundGuard.assertPublicHttpUrl(uri, allowedHosts)</code></td>
+<td>拦截 loopback / 私网 / link-local / multicast / CGNAT / IPv6 ULA / 非 http(s)</td>
+<td><strong>SSRF 防护</strong>，<code>dataSource</code> 是用户输入</td>
+</tr>
+<tr>
+<td><code>OutboundGuard.assertInternalHttpUrl(uri)</code></td>
+<td>仅校验 http(s) + host 可解析</td>
+<td>用于<strong>配置来源</strong>的可信端点（如 OCR 服务）</td>
+</tr>
+<tr>
+<td><code>HttpClients.builder(timeout)</code></td>
+<td>预置 <strong>HTTP/1.1</strong> + 连接超时</td>
+<td>缺陷 D-1：默认 h2c 升级会导致 uvicorn 丢弃请求体 → 422</td>
+</tr>
+</tbody>
+</table>
+<p><strong>两个断言函数不可混用</strong>：<code>assertInternalHttpUrl</code> 允许私网地址（因为 OCR 服务就在本机），
+若误用于用户提交的 <code>dataSource</code>，等于开放 SSRF。反之用 <code>assertPublicHttpUrl</code> 检查内部端点会因私网被拦而必然失败。</p>
+<h3 id="34">3.4 路由降级顺序固定为「触觉优先」<a class="headerlink" href="#34" title="Permanent link">&para;</a></h3>
+<p><code>CollectPipeline.route()</code> 在目标渠道不可用或被隔离时，按固定顺序找替代渠道：
+<strong><code>TOUCH</code> 永远排第一</strong>，其余按枚举声明顺序（VISUAL / AUDIO / NOSE / TASTE）。</p>
+<p>选择触觉优先的理由：它是唯一<strong>不依赖任何外部引擎或配置</strong>的渠道（URL/文件/文本三种形态都能处理），
+最可能成功。若所有渠道都不可用，返回 <code>failFast</code>（记录死信 + 落暂存 REJECTED），而不是抛异常 —— 保证调用方始终能拿到结构化结果。</p>
+<h3 id="35">3.5 本地文件读取有双层边界<a class="headerlink" href="#35" title="Permanent link">&para;</a></h3>
+<p><code>TouchChannel.resolveInFileRoot()</code> 是唯一的文件访问入口，防护两层：</p>
+<ol>
+<li><strong>前缀剥离</strong>：把 <code>file://</code> / <code>file:</code> / <code>local://</code> 前缀去掉，反斜杠归一，去前导斜杠。
+   <strong>注意不能用 <code>URI.getPath()</code></strong> —— 对 <code>file://page.html</code> 这种无 host 写法，<code>page.html</code> 会被当作 host、<code>path</code> 返回空，
+   导致读取失败。这是实现期修复过的缺陷。</li>
+<li><strong>规范化 + 白名单校验</strong>：<code>root.resolve(raw).normalize()</code> 后必须 <code>startsWith(root)</code>，否则抛
+   <code>SecurityException("path escapes sense file-root")</code>，拦截 <code>../../etc/passwd</code> 类穿越。</li>
+</ol>
+<h2 id="4">4. 文件清单<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41-35">4.1 主代码（35 个）<a class="headerlink" href="#41-35" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>类型</th>
+<th style="text-align: right;">行数</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SenseServiceApplication.java</code></td>
+<td>启动类</td>
+<td style="text-align: right;">23</td>
+<td>入口 + 服务发现 + <code>@EnableScheduling</code> + 配置扫描</td>
+</tr>
+<tr>
+<td><strong>channel/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>channel/SenseChannel.java</code></td>
+<td>接口</td>
+<td style="text-align: right;">83</td>
+<td>渠道抽象契约 + <code>ChannelType</code> 枚举 + 请求/结果 DTO</td>
+</tr>
+<tr>
+<td><code>channel/ChannelRegistry.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">66</td>
+<td>渠道注册表（Spring 自动注入全部实现）</td>
+</tr>
+<tr>
+<td><code>channel/TouchChannel.java</code></td>
+<td>渠道</td>
+<td style="text-align: right;">194</td>
+<td>触觉：URL / 文件 / 文本三源</td>
+</tr>
+<tr>
+<td><code>channel/VisualChannel.java</code></td>
+<td>渠道</td>
+<td style="text-align: right;">143</td>
+<td>视觉：取图 → OCR → 文本</td>
+</tr>
+<tr>
+<td><code>channel/NoseChannel.java</code></td>
+<td>渠道</td>
+<td style="text-align: right;">102</td>
+<td>嗅觉：多情报源批量抓取聚合</td>
+</tr>
+<tr>
+<td><code>channel/TasteChannel.java</code></td>
+<td>渠道</td>
+<td style="text-align: right;">75</td>
+<td>味觉：暂存区批次质检复核</td>
+</tr>
+<tr>
+<td><code>channel/AudioChannel.java</code></td>
+<td>渠道</td>
+<td style="text-align: right;">39</td>
+<td>听觉：预留（Phase 3 接 ASR）</td>
+</tr>
+<tr>
+<td><strong>collect/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>collect/CollectPipeline.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">181</td>
+<td><strong>采集主流程</strong>（路由/重试/质检/暂存/事件/死信）</td>
+</tr>
+<tr>
+<td><strong>config/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>config/SenseProperties.java</code></td>
+<td>配置类</td>
+<td style="text-align: right;">116</td>
+<td><code>sense.*</code> 全部配置绑定（R2-01~R2-10）</td>
+</tr>
+<tr>
+<td><strong>controller/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>controller/SenseController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">124</td>
+<td>采集入口（collect / command / health）</td>
+</tr>
+<tr>
+<td><code>controller/SenseAdminController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">225</td>
+<td>运营观测接口（Console 感官视图数据面）</td>
+</tr>
+<tr>
+<td><strong>deadletter/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>deadletter/DeadLetterStore.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">84</td>
+<td>死信队列（重试耗尽登记）</td>
+</tr>
+<tr>
+<td><strong>dynamic/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>dynamic/SenseCommand.java</code></td>
+<td>record</td>
+<td style="text-align: right;">23</td>
+<td>R1 动态采集指令（BrainCommand 雏形）</td>
+</tr>
+<tr>
+<td><code>dynamic/R1DynamicHandler.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">111</td>
+<td>R1 指令 → 渠道选择 → 采集 → 摘要回传</td>
+</tr>
+<tr>
+<td><strong>event/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>event/SenseEventPublisher.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">95</td>
+<td>Kafka 采集事件发布（<code>lifeform.sense.collected</code>）</td>
+</tr>
+<tr>
+<td><strong>grpc/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>grpc/GrpcHealthServer.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">32</td>
+<td>gRPC Health 探针</td>
+</tr>
+<tr>
+<td><strong>health/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>health/ChannelHealthMonitor.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">119</td>
+<td>渠道探针 / DEGRADED / 隔离 / 恢复</td>
+</tr>
+<tr>
+<td><strong>metrics/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>metrics/SenseMetrics.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">125</td>
+<td>采集指标聚合（Console 数据来源）</td>
+</tr>
+<tr>
+<td><strong>model/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>model/CollectedData.java</code></td>
+<td>模型</td>
+<td style="text-align: right;">78</td>
+<td>采集数据模型（五字段 + 状态 + 统计）</td>
+</tr>
+<tr>
+<td><strong>nats/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>nats/MinimalNatsClient.java</code></td>
+<td>客户端</td>
+<td style="text-align: right;">143</td>
+<td><strong>自研</strong>最小 NATS 协议实现</td>
+</tr>
+<tr>
+<td><code>nats/NatsBusServer.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">67</td>
+<td>总线应答服务（ping / collect 两类主题）</td>
+</tr>
+<tr>
+<td><strong>normalize/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>normalize/DataNormalizer.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">68</td>
+<td>五字段标准化打标（R2-04）</td>
+</tr>
+<tr>
+<td><strong>quality/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>quality/QualityGate.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">116</td>
+<td>质检门槛（硬规则 + 加权评分）</td>
+</tr>
+<tr>
+<td><strong>schedule/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>schedule/R0Scheduler.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">133</td>
+<td>R0 定时调度（规则驱动 + 调度日志）</td>
+</tr>
+<tr>
+<td><strong>security/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>security/OutboundGuard.java</code></td>
+<td>工具类</td>
+<td style="text-align: right;">84</td>
+<td>SSRF 出站守卫</td>
+</tr>
+<tr>
+<td><strong>staging/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>staging/StagingBackend.java</code></td>
+<td>接口</td>
+<td style="text-align: right;">34</td>
+<td>暂存后端抽象</td>
+</tr>
+<tr>
+<td><code>staging/StagingStore.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">68</td>
+<td>暂存入口（自动选后端 + 实时降级）</td>
+</tr>
+<tr>
+<td><code>staging/MinioStagingBackend.java</code></td>
+<td>后端</td>
+<td style="text-align: right;">188</td>
+<td>MinIO 实现（主）</td>
+</tr>
+<tr>
+<td><code>staging/LocalStagingBackend.java</code></td>
+<td>后端</td>
+<td style="text-align: right;">188</td>
+<td>本地文件实现（降级）</td>
+</tr>
+<tr>
+<td><strong>util/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>util/HttpClients.java</code></td>
+<td>工具类</td>
+<td style="text-align: right;">24</td>
+<td>HTTP/1.1 客户端构建器（缺陷 D-1）</td>
+</tr>
+<tr>
+<td><code>util/TextExtractor.java</code></td>
+<td>工具类</td>
+<td style="text-align: right;">117</td>
+<td>HTML 正文提取 + 编码嗅探解码</td>
+</tr>
+<tr>
+<td><strong>common/</strong></td>
+<td></td>
+<td style="text-align: right;"></td>
+<td></td>
+</tr>
+<tr>
+<td><code>common/ErrorCode.java</code></td>
+<td>枚举</td>
+<td style="text-align: right;">29</td>
+<td>统一错误码</td>
+</tr>
+<tr>
+<td><code>common/BizException.java</code></td>
+<td>异常</td>
+<td style="text-align: right;">34</td>
+<td>业务异常</td>
+</tr>
+<tr>
+<td><code>common/GlobalExceptionHandler.java</code></td>
+<td>切面</td>
+<td style="text-align: right;">53</td>
+<td>统一异常响应</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-8-48">4.2 测试（8 个类 · 48 个用例）<a class="headerlink" href="#42-8-48" title="Permanent link">&para;</a></h3>
+<p>（路径前缀 <code>src/test/java/com/agent/sense/</code>）</p>
+<table>
+<thead>
+<tr>
+<th>测试类</th>
+<th style="text-align: right;">用例数</th>
+<th>覆盖需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>channel/TouchChannelTest.java</code></td>
+<td style="text-align: right;">12</td>
+<td>R2-01 / R2-02 / R2-06</td>
+</tr>
+<tr>
+<td><code>quality/QualityGateTest.java</code></td>
+<td style="text-align: right;">7</td>
+<td>R2-04 / R2-10</td>
+</tr>
+<tr>
+<td><code>collect/CollectPipelineTest.java</code></td>
+<td style="text-align: right;">6</td>
+<td>R2-02 / R2-06 / R2-09 / R2-10</td>
+</tr>
+<tr>
+<td><code>normalize/DataNormalizerTest.java</code></td>
+<td style="text-align: right;">6</td>
+<td>R2-04</td>
+</tr>
+<tr>
+<td><code>staging/StagingStoreTest.java</code></td>
+<td style="text-align: right;">6</td>
+<td>R2-10</td>
+</tr>
+<tr>
+<td><code>util/TextExtractorTest.java</code></td>
+<td style="text-align: right;">6</td>
+<td>R2-02</td>
+</tr>
+<tr>
+<td><code>health/ChannelHealthMonitorTest.java</code></td>
+<td style="text-align: right;">4</td>
+<td>R2-09</td>
+</tr>
+<tr>
+<td><code>util/HttpClientsTest.java</code></td>
+<td style="text-align: right;">1</td>
+<td>缺陷 D-1 回归守卫</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5">5. 逐文件说明<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<h3 id="51">5.1 启动类<a class="headerlink" href="#51" title="Permanent link">&para;</a></h3>
+<h4 id="senseserviceapplicationjava-23"><code>SenseServiceApplication.java</code> · 23 行<a class="headerlink" href="#senseserviceapplicationjava-23" title="Permanent link">&para;</a></h4>
+<pre><code class="language-java">@SpringBootApplication
+@EnableDiscoveryClient
+@EnableScheduling            // 必需：R0Scheduler 与 ChannelHealthMonitor 都依赖 @Scheduled
+@ConfigurationPropertiesScan // 必需：自动发现 SenseProperties（无需在别处显式登记）
+</code></pre>
+<ul>
+<li>两个注解是<strong>功能性的</strong>，不是可选配置：去掉 <code>@EnableScheduling</code> 会导致 R0 调度与健康探针静默失效
+  （不报错、只是不执行）；去掉 <code>@ConfigurationPropertiesScan</code> 会导致 <code>sense.*</code> 配置全部不生效。</li>
+<li><strong>对比</strong>：<code>gateway-service</code> 用 <code>@EnableConfigurationProperties(XxxProperties.class)</code> 显式登记，
+  本模块用扫描。新增配置类时本模块无需改动启动类。</li>
+</ul>
+<h3 id="52-channel">5.2 channel 包 — 渠道抽象与五感实现<a class="headerlink" href="#52-channel" title="Permanent link">&para;</a></h3>
+<h4 id="sensechanneljava-83"><code>SenseChannel.java</code> · 接口 · 83 行<a class="headerlink" href="#sensechanneljava-83" title="Permanent link">&para;</a></h4>
+<p>渠道可插拔的核心契约（需求 R2-01）。包含一个接口 + 一个枚举 + 两个 DTO。</p>
+<p><strong>接口方法</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ChannelType type()</code></td>
+<td>渠道类型（注册表的 key）</td>
+</tr>
+<tr>
+<td><code>boolean register(Map&lt;String,String&gt; config)</code></td>
+<td>注册（幂等）</td>
+</tr>
+<tr>
+<td><code>CollectResult collect(CollectRequest)</code></td>
+<td>执行采集（<strong>核心</strong>）</td>
+</tr>
+<tr>
+<td><code>boolean healthy()</code></td>
+<td>健康检查（供探针调用）</td>
+</tr>
+<tr>
+<td><code>void close()</code></td>
+<td>资源释放</td>
+</tr>
+<tr>
+<td><code>boolean available()</code></td>
+<td><strong>默认 <code>true</code></strong>：渠道是否已实现。预留渠道覆写为 <code>false</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>healthy()</code> 与 <code>available()</code> 的区别是理解本模块的关键：</p>
+<ul>
+<li><code>available()</code> = <strong>静态属性</strong>（这个渠道实现了吗），不该随运行状态变化；</li>
+<li><code>healthy()</code> = <strong>动态状态</strong>（现在能用吗），随外部依赖变化。</li>
+</ul>
+<p>路由层两个都检查：<code>channel.available() &amp;&amp; !healthMonitor.isIsolated(type)</code>。</p>
+<p><strong><code>ChannelType</code> 枚举</strong>：五个值各带中文 <code>label</code> 与 emoji <code>icon</code>（供 Console 五感矩阵直接使用）。</p>
+<p><code>parse(String)</code> 的容错行为值得注意：</p>
+<table>
+<thead>
+<tr>
+<th>输入</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>null</code> / 空白</td>
+<td><strong>默认返回 <code>TOUCH</code></strong>（不报错）</td>
+</tr>
+<tr>
+<td>枚举名（如 <code>"visual"</code>，大小写不敏感）</td>
+<td>对应渠道</td>
+</tr>
+<tr>
+<td><strong>中文名</strong>（如 <code>"视觉"</code>）</td>
+<td>对应渠道 —— 兼容 Console 中文传参</td>
+</tr>
+<tr>
+<td>其他</td>
+<td>抛 <code>IllegalArgumentException</code></td>
+</tr>
+</tbody>
+</table>
+<p>在 <code>parse</code> 之外调用（如 <code>R0Scheduler.run</code>、<code>R1DynamicHandler</code>）时，非法渠道名会向上抛异常。</p>
+<p><strong><code>CollectRequest</code></strong>（<code>@Data</code>）：<code>dataSource</code>、<code>query</code>、<code>params</code>、<code>tenantId</code>、<code>mode</code>（<code>R0_DEFAULT</code> / <code>R1_DYNAMIC</code>）。</p>
+<p><strong><code>CollectResult</code></strong>（<code>@Data</code>）—— 渠道的返回值契约，两个字段有<strong>哨兵默认值</strong>需要留意：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>默认</th>
+<th>约定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>confidence</code></td>
+<td><strong><code>-1</code></strong></td>
+<td>负数表示「渠道未上报」，标准化层据此改用 <code>qualityScore</code></td>
+</tr>
+<tr>
+<td><code>freshness</code></td>
+<td><code>null</code></td>
+<td>空表示「渠道未上报」，标准化层按 <code>mode</code> 推断</td>
+</tr>
+<tr>
+<td><code>accepted</code></td>
+<td><code>false</code></td>
+<td>采集是否成功（<strong>驱动重试与质检两条分支</strong>）</td>
+</tr>
+<tr>
+<td><code>error</code></td>
+<td>—</td>
+<td>失败原因，同时用于死信登记与错误信息</td>
+</tr>
+<tr>
+<td><code>failed()</code></td>
+<td>派生</td>
+<td><code>!accepted</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>confidence = -1</code> 这个设计很重要</strong>：它让「渠道报了 0 分」与「渠道没报」可区分 ——
+若用 <code>0</code> 表示未上报，标准化层就无法判断该不该回退到 <code>qualityScore</code>。</p>
+<h4 id="channelregistryjava-66"><code>ChannelRegistry.java</code> · 组件 · 66 行<a class="headerlink" href="#channelregistryjava-66" title="Permanent link">&para;</a></h4>
+<ul>
+<li><strong>职责</strong>：渠道注册表。构造器注入 Spring 容器里<strong>全部</strong> <code>SenseChannel</code> Bean，
+  按 <code>type()</code> 放入 <code>EnumMap</code>，并逐个调用 <code>register(Map.of())</code>。</li>
+<li><strong>可插拔性的实现点</strong>：新增渠道只需「实现 <code>SenseChannel</code> + 标注 <code>@Component</code>」，
+  <strong>本类无需修改</strong> —— 这正是 R2-01 要求的效果。</li>
+<li><strong>线程安全</strong>：<code>Collections.synchronizedMap(EnumMap)</code>。注册只发生在构造期，实际并发压力在读取，够用。</li>
+<li><strong>方法</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>find(type)</code></td>
+<td>返回 <code>Optional&lt;SenseChannel&gt;</code></td>
+</tr>
+<tr>
+<td><code>require(type)</code></td>
+<td>不存在则抛 <code>IllegalStateException</code></td>
+</tr>
+<tr>
+<td><code>all()</code></td>
+<td>全部渠道（返回不可变副本）</td>
+</tr>
+<tr>
+<td><code>types()</code></td>
+<td>已注册的渠道类型</td>
+</tr>
+<tr>
+<td><code>available()</code></td>
+<td><strong>只返回 <code>available()==true</code> 的渠道</strong>（用于 Console 区分「预留」与「可用」）</td>
+</tr>
+<tr>
+<td><code>healthSnapshot()</code></td>
+<td><code>ChannelType → healthy()</code> 快照，<strong>单个渠道抛异常会被捕获为 <code>false</code></strong></td>
+</tr>
+<tr>
+<td><code>size()</code></td>
+<td>注册数量</td>
+</tr>
+</tbody>
+</table>
+<h4 id="touchchanneljava-194"><code>TouchChannel.java</code> · 渠道 · 194 行<a class="headerlink" href="#touchchanneljava-194" title="Permanent link">&para;</a></h4>
+<p><strong>主渠道实现</strong>（R2-02），三种数据源形态。这是唯一在无外部依赖时也能工作的渠道，因此被路由层设为降级首选。</p>
+<p><strong>数据源判定</strong>（<code>kindOf</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>前缀</th>
+<th><code>SourceKind</code></th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>http://</code> / <code>https://</code></td>
+<td><code>URL</code></td>
+<td>SSRF 守卫 + 重定向跟随 + 大小上限 + 正文提取</td>
+</tr>
+<tr>
+<td><code>file://</code> / <code>file:</code> / <code>local://</code></td>
+<td><code>FILE</code></td>
+<td>file-root 白名单读取</td>
+</tr>
+<tr>
+<td>其他</td>
+<td><code>TEXT</code></td>
+<td>直接当作文本处理</td>
+</tr>
+</tbody>
+</table>
+<p>空白 <code>dataSource</code> 抛 <code>IllegalArgumentException</code>。</p>
+<p><strong>置信度与时效的自报值</strong>（体现「渠道最了解自己的数据质量」）：</p>
+<table>
+<thead>
+<tr>
+<th>数据源</th>
+<th>confidence</th>
+<th>freshness</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>TEXT</code></td>
+<td>0.8</td>
+<td>NEAR_REALTIME</td>
+</tr>
+<tr>
+<td><code>URL</code></td>
+<td>0.9</td>
+<td>NEAR_REALTIME</td>
+</tr>
+<tr>
+<td><code>FILE</code></td>
+<td>0.9</td>
+<td><strong>BATCH</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>collect()</code> 的异常处理</strong>：捕获所有异常 → <code>accepted=false</code> + <code>error=e.getMessage()</code>。
+这意味着<strong>采集失败不会抛异常</strong>，而是以结构化结果返回，交由 <code>CollectPipeline</code> 决定重试与降级。</p>
+<p><strong>公开与包内方法</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>可见性</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>collect(CollectRequest)</code></td>
+<td>public</td>
+<td>接口实现</td>
+</tr>
+<tr>
+<td><code>assertPublicHttpUrl(URI)</code></td>
+<td>public</td>
+<td><strong>仅为兼容 Phase 1 单测保留</strong>，委托 <code>OutboundGuard</code></td>
+</tr>
+<tr>
+<td><code>fetchUrlContent(String)</code></td>
+<td>包内</td>
+<td>供<strong>同包渠道</strong>（<code>NoseChannel</code>）复用</td>
+</tr>
+<tr>
+<td><code>readBinaryForChannel(String, long)</code></td>
+<td>包内</td>
+<td>供 <code>VisualChannel</code> 取图</td>
+</tr>
+<tr>
+<td><code>kindOf(String)</code></td>
+<td>包内</td>
+<td>数据源类型判定（测试可访问）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>HTTP 客户端的三个约束</strong>：</p>
+<ol>
+<li><code>HttpClients.builder(...)</code> → 锁定 <strong>HTTP/1.1</strong>（缺陷 D-1）。</li>
+<li><code>followRedirects(NEVER)</code> → <strong>手动处理重定向</strong>，而非交给 HttpClient。</li>
+<li>手动重定向带来的安全能力：<strong>每跳都重新做 SSRF 校验</strong>（<code>assertPublicHttpUrl</code> 在循环内），
+   防止「公网 URL 重定向到内网地址」这种绕过手法。同时限制最多 <code>MAX_REDIRECTS = 3</code> 跳，
+   并<strong>禁止 HTTPS → HTTP 降级</strong>（<code>"HTTPS downgrade redirect is forbidden"</code>）。</li>
+</ol>
+<p><strong>大小上限</strong>：响应体超过 <code>sense.max-bytes</code>（默认 2 MiB）抛 <code>IllegalArgumentException</code>。</p>
+<p><strong><code>resolveInFileRoot</code> 的实现细节</strong>（见 §3.5）：前缀剥离而非 <code>URI.getPath()</code>，
+因为后者对 <code>file://page.html</code> 返回空 path。规范化后做 <code>startsWith(root)</code> 校验，
+并用 <code>Files.isRegularFile</code> 排除目录与特殊文件。</p>
+<p><strong><code>sniffContentType</code></strong>：按扩展名给出 Content-Type 提示（<code>.html/.htm</code> → <code>text/html; charset=UTF-8</code>；
+<code>.txt/.md/.csv/.json</code> → <code>text/plain; charset=UTF-8</code>；其他返回空串让编码嗅探自行判断）。
+这让本地 HTML 文件也能走正文提取路径。</p>
+<p><strong>构造器有两个</strong>：<code>@Autowired TouchChannel(SenseProperties)</code> 与无参 <code>TouchChannel()</code>
+（后者用默认配置，供测试与独立使用）。</p>
+<h4 id="visualchanneljava-143"><code>VisualChannel.java</code> · 渠道 · 143 行<a class="headerlink" href="#visualchanneljava-143" title="Permanent link">&para;</a></h4>
+<p><strong>视觉渠道</strong>（R2-03）：图片 → OCR → 文本。</p>
+<p><strong>职责边界是刻意的</strong>：Java 侧只做「取图 → Base64 编码 → 调用 → 置信度回填」，
+<strong>OCR 引擎本身在 Python <code>nlp-service</code></strong>（PaddleOCR）。这样 Java 侧不引入重型依赖，
+且换引擎只需改 Python 侧。</p>
+<p><strong>没有覆写 <code>available()</code></strong> → 恒为 <code>true</code>（视觉渠道是已实现的）。
+<strong>健康状态完全取决于 OCR 探针</strong>（<code>healthy()</code>）：</p>
+<pre><code class="language-text">① 配置 sense.ocr.enabled = false        → false
+② 距上次探测 &lt; sense.health.probe-ms    → 返回缓存的 ocrReachable（避免频繁探测）
+③ 探测 nlp-service 的 /ocr/health
+   要求 HTTP 200 且响应体含 &quot;available&quot;:true
+</code></pre>
+<p>探测用 <code>assertInternalHttpUrl</code>（OCR 服务是本机可信端点，允许私网）—— 与用户提交的 <code>dataSource</code>
+走 <code>assertPublicHttpUrl</code> 形成对比。</p>
+<p><strong>URL 拼接细节</strong>：从配置的 <code>sense.ocr.url</code>（默认 <code>.../api/nlp/ocr</code>）<strong>剥掉 <code>/ocr</code> 后缀</strong>再拼 <code>/ocr/health</code>，
+得到 <code>.../api/nlp/ocr/health</code>。<code>stripSuffix</code> 就是这个用途。</p>
+<p><strong><code>collect()</code> 流程</strong>：</p>
+<pre><code class="language-text">loadImage(dataSource)
+  ├─ http(s):// → assertPublicHttpUrl 校验 → GET 字节流（读超时）→ 校验大小上限
+  └─ 其他       → touchChannel.readBinaryForChannel(...)（复用 file-root 白名单）
+invokeOcr(image, source)
+  ├─ ocr.enabled=false → 抛异常（enabled 关闭时不静默返回空）
+  ├─ POST { image_base64, source } 到 OCR 端点（OCR 超时 20s）
+  └─ 非 200 → 抛异常
+组装结果：
+  content = ocr.text().strip()
+  accepted = !text.isBlank()
+  confidence = ocr.confidence() &gt; 0 ? 该值 : sense.ocr.baseline-confidence（默认 0.55）
+  error（当 text 为空）= &quot;OCR returned empty text (engine=...)&quot;   ← 带上引擎名便于定位
+</code></pre>
+<p><code>baselineConfidence</code> 的存在理由：OCR 基线准确率有限，给一个「可接受但不高」的默认置信度，
+而不是让未上报置信度的结果变成 0 分。</p>
+<p><strong>依赖 <code>TouchChannel</code></strong>：因为取图（无论 URL 还是本地文件）的<strong>安全校验逻辑与触觉渠道完全相同</strong>，
+直接复用比复制一份 SSRF 与路径穿越防护更安全。</p>
+<h4 id="nosechanneljava-102"><code>NoseChannel.java</code> · 渠道 · 102 行<a class="headerlink" href="#nosechanneljava-102" title="Permanent link">&para;</a></h4>
+<p><strong>嗅觉渠道</strong>：舆情 / 情报采集，是唯一的「聚合型」渠道。</p>
+<p><strong>情报源解析顺序</strong>（<code>feeds()</code>）：</p>
+<ol>
+<li>环境变量 <code>SENSE_INTEL_FEEDS</code>（逗号分隔）；</li>
+<li>若为空，回退到 <strong>R0 规则里 <code>channel=NOSE</code> 且已启用的规则的 <code>dataSource</code></strong>。</li>
+</ol>
+<p>第二级回退是个实用设计：无需额外配环境变量，直接在 <code>application.yml</code> 的 R0 规则里写情报源即可。</p>
+<p><strong>可用性定义</strong>：<code>available()</code> 与 <code>healthy()</code> <strong>都</strong>返回 <code>!feeds().isEmpty()</code> ——
+<strong>没配情报源 = 渠道不可用</strong>。这不违反「诚实上报」，反而正是它的体现：
+渠道没有可用数据源时不该假装健康。</p>
+<p><strong><code>collect()</code> 的聚合语义</strong>：</p>
+<pre><code class="language-text">sources = request.dataSource（若指定）否则 feeds()
+  ├─ 空 → accepted=false, error=&quot;no intelligence feed configured (SENSE_INTEL_FEEDS)&quot;
+  └─ 逐个 touchChannel.fetchUrlContent(url)
+       ├─ 成功且非空 → 追加内容，ok++
+       └─ 失败/空     → failed++（记录 WARN，不中断循环）
+结果：
+  itemCount     = ok
+  qualityScore  = ok / sources.size()     ← 用「成功率」当质量分
+  accepted      = ok &gt; 0
+  confidence    = 0.75（成功时）
+  全部失败时 error = &quot;all intelligence feeds failed (N failed)&quot;
+</code></pre>
+<p><strong>注意单源失败不会让整体失败</strong> —— 部分成功即接受。这是聚合语义与单源语义的取舍。</p>
+<h4 id="tastechanneljava-75"><code>TasteChannel.java</code> · 渠道 · 75 行<a class="headerlink" href="#tastechanneljava-75" title="Permanent link">&para;</a></h4>
+<p><strong>味觉渠道 = 数据质检</strong>（模块内唯一「向内」的渠道）。</p>
+<ul>
+<li><strong>常量</strong> <code>SAMPLE_LIMIT = 20</code>：每次抽样最多 20 条，避免全量扫描暂存区。</li>
+<li><strong><code>available()</code> / <code>healthy()</code> 恒为 <code>true</code></strong> —— 它的数据源是系统内部（暂存区），不依赖外部能力。</li>
+<li><strong><code>collect()</code> 流程</strong>：</li>
+</ul>
+<pre><code class="language-text">samples = stagingStore.list(tenantId, null, 20)      ← status=null 表示不限状态
+  ├─ 空 → accepted=false, error=&quot;no staged data to inspect&quot;
+  └─ 非空
+       accepted = 样本中 stagingStatus==ACCEPTED 的条数
+       avg      = 各样本 qualityGate.score(content) 的平均值
+       content  = &quot;质检复核：样本 N 条，通过 X 条，拒绝 Y 条，平均质量分 Z。&quot;
+       itemCount = samples.size()
+       qualityScore = avg
+       confidence   = 0.95（自家数据，置信度给高）
+</code></pre>
+<ul>
+<li><strong>它是唯一会对「已暂存数据」重新打分的渠道</strong>（调用 <code>qualityGate.score</code> 而非复用暂存时的分数），
+  因此可作为质检策略变更后的<strong>回归复核手段</strong>。</li>
+<li><strong>异常处理</strong>：捕获异常后返回 <code>accepted=false</code> + <code>error</code>，与其他渠道一致。</li>
+</ul>
+<h4 id="audiochanneljava-39"><code>AudioChannel.java</code> · 渠道 · 39 行<a class="headerlink" href="#audiochanneljava-39" title="Permanent link">&para;</a></h4>
+<p><strong>预留渠道的范本</strong>（R2-03）：Phase 2 只占位，Phase 3 接 ASR。</p>
+<p>三个刻意的返回值：</p>
+<table>
+<thead>
+<tr>
+<th>成员</th>
+<th>值</th>
+<th>目的</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>available()</code></td>
+<td><code>false</code></td>
+<td>路由层不会选中它</td>
+</tr>
+<tr>
+<td><code>healthy()</code></td>
+<td><code>false</code></td>
+<td>健康监控标记为 <strong>DOWN</strong> 并隔离</td>
+</tr>
+<tr>
+<td><code>collect()</code></td>
+<td><code>accepted=false</code>，<code>error="AUDIO channel is reserved for Phase 3 (ASR not wired)"</code></td>
+<td>若被强行调用，如实说明原因</td>
+</tr>
+</tbody>
+</table>
+<p><strong>正确做法就是「不实现但如实上报」</strong> —— 而不是返回空内容假装成功。
+Console 五感矩阵因此能对听觉渠道显示正确的「DOWN / 预留」状态。</p>
+<h3 id="53-collect">5.3 collect 包 — 采集主流程<a class="headerlink" href="#53-collect" title="Permanent link">&para;</a></h3>
+<h4 id="collectpipelinejava-181"><code>CollectPipeline.java</code> · 组件 · 181 行<a class="headerlink" href="#collectpipelinejava-181" title="Permanent link">&para;</a></h4>
+<p><strong>全模块的心脏</strong>，把渠道、标准化、质检、暂存、事件、死信、指标串成一条管道。
+它依赖 <strong>9 个组件</strong>（构造器注入）：<code>ChannelRegistry</code>、<code>ChannelHealthMonitor</code>、<code>DataNormalizer</code>、
+<code>QualityGate</code>、<code>StagingStore</code>、<code>SenseMetrics</code>、<code>SenseEventPublisher</code>、<code>DeadLetterStore</code>、<code>SenseProperties</code>。</p>
+<p><strong><code>collect(requested, request)</code> 的完整分支</strong>（改这里前务必读懂）：</p>
+<pre><code class="language-text">① route(requested)
+     └─ 无可用渠道 → failFast(...) 并直接返回
+
+② collectWithRetry(channel, effective)   ← resilience4j 退避重试
+
+③ normalizer.normalize(result, request)  → 五字段打标
+   data.batchId   = result.batchId ?? 新 UUID
+   data.degraded  = route.degraded          ← 是否走了降级渠道
+   data.attempts  = 实际尝试次数
+   data.collectTimeMs = 总耗时
+
+④ 分支 A：result.accepted == false（采集失败）
+     stagingStatus = REJECTED
+     rejectReason  = result.error ?? &quot;COLLECT_FAILED&quot;
+     confidence    = 0
+     deadLetterId  = deadLetterStore.add(..., &quot;COLLECT_FAILED 类原因&quot;, attempts, mode)
+
+   分支 B：result.accepted == true
+     qualityGate.apply(data)                ← 质检落状态
+     if (stagingStatus == REJECTED)
+        deadLetterId = deadLetterStore.add(..., &quot;QUALITY_REJECTED:&quot; + rejectReason, ...)
+
+⑤ stagingStore.put(data)                   ← 无论 ACCEPTED 还是 REJECTED 都落暂存区
+⑥ metrics.record(channel.type(), data)     ← 无论成败都记指标
+⑦ if (stagingStatus == ACCEPTED) eventPublisher.publishCollected(data)
+</code></pre>
+<p><strong>三个容易误读的点</strong>：</p>
+<ol>
+<li><strong>被拒绝的数据也会落暂存区</strong>（第 ⑤ 步无条件执行）。暂存区按状态分区存放，
+   拒绝数据保留下来供人工复核与质检策略调优 —— 不是"丢弃"。</li>
+<li><strong>质检失败与采集失败都进死信，但原因前缀不同</strong>：<code>COLLECT_FAILED</code> 类 vs <code>QUALITY_REJECTED:</code> 前缀，
+   便于运维区分「渠道坏了」与「数据脏了」。</li>
+<li><strong>只有 ACCEPTED 才发事件</strong>（第 ⑦ 步）。这是 Phase 3 入库的唯一入口条件。</li>
+</ol>
+<p><strong><code>collectWithRetry</code> 的重试配置</strong>（resilience4j）：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>来源</th>
+<th>默认</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>maxAttempts</code></td>
+<td><code>sense.retry.max-attempts</code></td>
+<td>3</td>
+</tr>
+<tr>
+<td>退避间隔</td>
+<td><code>IntervalFunction.ofExponentialBackoff(initialMs, multiplier, maxMs)</code></td>
+<td>200ms × 2.0，封顶 2000ms</td>
+</tr>
+<tr>
+<td>重试条件</td>
+<td><code>retryOnResult(未 accepted)</code> <strong>和</strong> <code>retryExceptions(Exception)</code></td>
+<td>两种都重试</td>
+</tr>
+</tbody>
+</table>
+<p><strong>双重包装的意义</strong>：渠道的 <code>collect()</code> 理论上不抛异常（内部已捕获），
+但 supplier 仍包了一层 try/catch 把异常转成 <code>CollectResult(accepted=false)</code> ——
+保证重试机制<strong>看到的永远是结果而非异常</strong>，逻辑单一。</p>
+<p><strong><code>Retry</code> 实例按渠道名创建</strong>（<code>"sense-" + channel.type().name()</code>），
+<code>attempts</code> 用 <code>AtomicInteger</code> 统计真实尝试次数；重试耗尽后构造 <code>error="retry exhausted: ..."</code>。</p>
+<p><strong><code>route()</code> 的判定</strong>（包内可见，便于测试）：</p>
+<pre><code class="language-text">primary = registry.find(requested)
+if (primary != null &amp;&amp; primary.available() &amp;&amp; !healthMonitor.isIsolated(requested))
+    → 直接用，degraded=false
+
+否则按 fallbackOrder 找替代（顺序：TOUCH 优先，其余按枚举顺序，跳过 requested 自身）
+    找到 → degraded=true（并用 WARN 记录&quot;降级到 X&quot;）
+    找不到 → Route(null, false) → 触发 failFast
+</code></pre>
+<p><strong><code>failFast</code></strong>：构造一个「五字段齐但全为最差值」的 <code>CollectedData</code>（<code>freshness=STALE</code>、<code>confidence=0</code>、
+<code>qualityScore=0</code>、<code>stagingStatus=REJECTED</code>），登记死信、落暂存、记指标。
+<strong>它不抛异常</strong> —— 调用方（HTTP 或 NATS）始终能收到结构化结果。</p>
+<p><strong>内部 record</strong>：<code>Route(channel, degraded)</code>、<code>Attempt(result, attempts)</code> —— 都只在本类内使用。</p>
+<h3 id="54-config">5.4 config 包<a class="headerlink" href="#54-config" title="Permanent link">&para;</a></h3>
+<h4 id="sensepropertiesjava-116"><code>SenseProperties.java</code> · 配置类 · 116 行<a class="headerlink" href="#sensepropertiesjava-116" title="Permanent link">&para;</a></h4>
+<p>绑定前缀 <code>sense</code> 的全部配置（R2-01~R2-10）。用嵌套静态类分组，可读性好。</p>
+<p><strong>顶层字段</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>属性</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fileRoot</code></td>
+<td><code>${user.dir}/data/sense-inbox</code></td>
+<td>本地文件采集根目录（<strong>沙箱边界</strong>）</td>
+</tr>
+<tr>
+<td><code>maxBytes</code></td>
+<td>2 MiB</td>
+<td>单次采集字节上限</td>
+</tr>
+<tr>
+<td><code>allowedHosts</code></td>
+<td><code>""</code>（空 = 不限制域名，<strong>仍受 SSRF 私网拦截</strong>）</td>
+<td>域名白名单，逗号分隔</td>
+</tr>
+</tbody>
+</table>
+<p><strong>嵌套配置组</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>组</th>
+<th>关键项</th>
+<th>默认</th>
+<th>需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timeouts</code></td>
+<td><code>connectMs</code> / <code>readMs</code></td>
+<td>5000 / 10000</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>retry</code></td>
+<td><code>maxAttempts</code> / <code>initialMs</code> / <code>multiplier</code> / <code>maxMs</code></td>
+<td>3 / 200 / 2.0 / 2000</td>
+<td>R2-09</td>
+</tr>
+<tr>
+<td><code>quality</code></td>
+<td><code>threshold</code> / <code>minLength</code> / <code>minPrintableRatio</code></td>
+<td>0.6 / 20 / 0.8</td>
+<td>R2-04/R2-10</td>
+</tr>
+<tr>
+<td><code>ocr</code></td>
+<td><code>enabled</code> / <code>url</code> / <code>timeoutMs</code> / <code>baselineConfidence</code></td>
+<td>true / <code>127.0.0.1:8000/api/nlp/ocr</code> / 20000 / 0.55</td>
+<td>R2-03</td>
+</tr>
+<tr>
+<td><code>health</code></td>
+<td><code>probeMs</code> / <code>degradeAfter</code> / <code>downAfter</code></td>
+<td>30000 / <strong>1</strong> / <strong>3</strong></td>
+<td>R2-09</td>
+</tr>
+<tr>
+<td><code>staging</code></td>
+<td><code>backend</code>(auto/minio/local) / <code>minioEndpoint</code> / <code>bucket</code> / <code>localRoot</code></td>
+<td>auto / <code>127.0.0.1:9000</code> / <code>lifeform-staging</code> / <code>{user.dir}/data/sense-staging</code></td>
+<td>R2-10</td>
+</tr>
+<tr>
+<td><code>r1</code></td>
+<td><code>maxChannelsPerRound</code> / <code>maxItemsPerRound</code></td>
+<td>3 / 10</td>
+<td>R2-06</td>
+</tr>
+<tr>
+<td><code>r0</code></td>
+<td><code>enabled</code> / <code>tickMs</code> / <code>rules[]</code></td>
+<td>true / 60000 / 空</td>
+<td>R2-05</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>health.degradeAfter = 1</code> 的含义</strong>：连续失败 <strong>1</strong> 次即变为 DEGRADED，<strong>3</strong> 次变 DOWN。
+即「一次失败就报警，三次失败就隔离」—— 敏感度高，适合演示与早期发现。
+生产环境可按需调大。</p>
+<p><strong><code>R0.Rule</code></strong>：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>id</code></td>
+<td>规则标识（手动触发与日志用）</td>
+</tr>
+<tr>
+<td><code>channel</code></td>
+<td>渠道名（字符串形式，运行时 <code>ChannelType.parse</code>）</td>
+</tr>
+<tr>
+<td><code>dataSource</code> / <code>query</code> / <code>tenantId</code></td>
+<td>传给渠道的采集参数</td>
+</tr>
+<tr>
+<td><code>intervalSeconds</code></td>
+<td>周期（秒），<strong><code>0</code> 表示每 tick 都触发</strong></td>
+</tr>
+<tr>
+<td><code>enabled</code></td>
+<td>是否启用</td>
+</tr>
+<tr>
+<td><code>freshness</code></td>
+<td>该规则采集内容的时效标记（写入 <code>params</code>）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="55-controller">5.5 controller 包<a class="headerlink" href="#55-controller" title="Permanent link">&para;</a></h3>
+<h4 id="sensecontrollerjava-124"><code>SenseController.java</code> · 控制器 · 124 行<a class="headerlink" href="#sensecontrollerjava-124" title="Permanent link">&para;</a></h4>
+<p><strong>采集入口</strong>（R2-02 / R2-06），前缀 <code>/api/sense</code>。</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>collect</code></td>
+<td><code>POST /collect</code></td>
+<td>单渠道采集</td>
+</tr>
+<tr>
+<td><code>command</code></td>
+<td><code>POST /command</code></td>
+<td>R1 动态采集指令</td>
+</tr>
+<tr>
+<td><code>health</code></td>
+<td><code>GET /health</code></td>
+<td>渠道健康总览</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>collect</code> 细节</strong>：</p>
+<ul>
+<li>请求体是 <code>Map&lt;String,String&gt;</code>（非强类型 DTO），字段：<code>data_source</code>、<code>query</code>、<code>channel</code>、<code>mode</code>。</li>
+<li><code>tenantId</code> 一律取 <code>X-Tenant-Id</code> 请求头，<strong>忽略请求体里的 <code>tenant_id</code></strong> ——
+  与 <code>DataNormalizer</code> 的约定一致（多租户安全边界）。</li>
+<li><code>params</code> 复用整个请求 Map（便于渠道读取自定义参数，如 <code>freshness</code>）。</li>
+<li>响应在 <code>data.toMap()</code> 基础上<strong>移除 <code>content</code></strong>（避免把正文全量回传），
+  改为 <code>content_preview</code>（截断 200 字）+ <code>five_fields_complete</code> 布尔值。
+  <strong>这是刻意的响应瘦身</strong>，也让 R2-04 的五字段完整性可被外部直接断言。</li>
+<li>非法渠道名 → 捕获 <code>IllegalArgumentException</code> 转 <code>BizException(AGENT_BAD_REQUEST)</code>（400 而非 500）。</li>
+</ul>
+<p><strong><code>command</code> 细节</strong>：</p>
+<ul>
+<li>渠道来源三种写法都支持：<code>channels: [...]</code>（数组）、<code>channel: "..."</code>（单值）、都没有（默认触觉）。</li>
+<li><code>params</code> 收集：<strong>除 <code>data_source</code> / <code>query</code> / <code>channel</code> / <code>tenant_id</code> 之外的所有字符串字段</strong>。
+  这是个宽松约定 —— 新增自定义参数无需改控制器。</li>
+<li><code>command_id</code> 为空时由 <code>R1DynamicHandler</code> 补 UUID。</li>
+</ul>
+<p><strong><code>health</code> 细节</strong>：</p>
+<ul>
+<li>遍历注册表，逐渠道取 <code>healthMonitor.status(...)</code>。</li>
+<li><strong>任一渠道非 UP 则整体 <code>DEGRADED</code></strong>，<code>healthy</code> 取布尔与。</li>
+<li>响应含 <code>channel: "TOUCH"</code>（<strong>Phase 1 兼容字段</strong>，硬编码）与 <code>request_id</code>（随机 UUID）。</li>
+<li>注意与 <code>SenseAdminController.channelsHealth()</code> 的区别：此接口是<strong>服务健康语义</strong>，
+  后者是<strong>运营观测语义</strong>（含隔离状态与失败计数）。</li>
+</ul>
+<h4 id="senseadmincontrollerjava-225"><code>SenseAdminController.java</code> · 控制器 · 225 行<a class="headerlink" href="#senseadmincontrollerjava-225" title="Permanent link">&para;</a></h4>
+<p><strong>运营观测数据面</strong>（R-C02 感官视图 / R-C09 统一数据模块），前缀同为 <code>/api/sense</code>，
+<strong>字段统一 snake_case</strong>，与前端 Console 的 Mock 数据结构一一同构。</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>channels</code></td>
+<td><code>GET /channels</code></td>
+<td>D6 五感矩阵：五个渠道卡片</td>
+</tr>
+<tr>
+<td><code>channelDetail</code></td>
+<td><code>GET /channels/{type}</code></td>
+<td>下钻：单渠道详情（最近批次 + 指标）</td>
+</tr>
+<tr>
+<td><code>channelsHealth</code></td>
+<td><code>GET /channels-health</code></td>
+<td>健康快照（含隔离与恢复状态）</td>
+</tr>
+<tr>
+<td><code>stats</code></td>
+<td><code>GET /stats</code></td>
+<td>采集总量 / 质检通过率 / 近 6 分钟趋势 / 暂存后端 / 死信 / 事件</td>
+</tr>
+<tr>
+<td><code>batches</code></td>
+<td><code>GET /batches</code></td>
+<td>暂存批次列表（按状态过滤）</td>
+</tr>
+<tr>
+<td><code>rollback</code></td>
+<td><code>POST /batches/{batchId}/rollback</code></td>
+<td>批次回滚（R2-10 验收点）</td>
+</tr>
+<tr>
+<td><code>rules</code></td>
+<td><code>GET /rules</code></td>
+<td>R0 规则清单</td>
+</tr>
+<tr>
+<td><code>runRule</code></td>
+<td><code>POST /rules/{ruleId}/run</code></td>
+<td>手动触发某条 R0 规则（演示/验收）</td>
+</tr>
+<tr>
+<td><code>deadLetters</code></td>
+<td><code>GET /deadletters?limit=20</code></td>
+<td>死信队列</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>租户过滤</strong>：<code>channelDetail</code> / <code>batches</code> / <code>rollback</code> 三个接口按 <code>X-Tenant-Id</code> 过滤数据；
+  <code>channels</code> / <code>channelsHealth</code> / <code>stats</code> / <code>rules</code> / <code>deadLetters</code> 是<strong>全局视角</strong>（不按租户切分）。
+  这是有意的：运营看板关心全局健康，而下钻数据必须按租户隔离。</li>
+<li><strong>私有辅助方法</strong>：<code>card(channel)</code>（组装单张渠道卡片）、<code>parse(type)</code>、<code>format(ts)</code>（时间格式化）、
+  <code>preview(content)</code>（截断预览）。</li>
+<li><strong>与前端契约</strong>：字段名（<code>sensors</code> / <code>up_count</code> / <code>degraded_count</code> / <code>summary</code> / <code>collect_rate_trend</code> /
+  <code>staging</code> / <code>dead_letter</code> 等）与 <code>web/console</code> 的 Mock 数据结构同构，
+  因此切换到真实 API 时前端无需改动。<strong>改动响应字段前请先确认前端消费方</strong>。</li>
+</ul>
+<h3 id="56-deadletter">5.6 deadletter 包<a class="headerlink" href="#56-deadletter" title="Permanent link">&para;</a></h3>
+<h4 id="deadletterstorejava-84"><code>DeadLetterStore.java</code> · 组件 · 84 行<a class="headerlink" href="#deadletterstorejava-84" title="Permanent link">&para;</a></h4>
+<p><strong>死信队列</strong>（R2-09）：重试耗尽或质检拒绝的记录登记处，供人工与后续阶段补偿。</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>add(channel, tenantId, dataSource, error, attempts, mode)</code></td>
+<td>登记一条，<strong>返回死信 ID</strong>（写回 <code>CollectedData.deadLetterId</code>）</td>
+</tr>
+<tr>
+<td><code>list(limit)</code></td>
+<td>最近若干条</td>
+</tr>
+<tr>
+<td><code>size()</code> / <code>total()</code></td>
+<td>当前条数 / 累计条数</td>
+</tr>
+<tr>
+<td><code>stats()</code></td>
+<td>统计信息</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>内存实现</strong>：数据在进程内，重启即丢。Phase 2 可以接受（死信主要供当日排障与验收），
+  但<strong>不应作为长期审计手段</strong>。</li>
+<li><strong>内部类名为 <code>Record</code></strong> —— 与 <code>java.lang.Record</code> 同名。在类内部引用 <code>Record</code> 时要留意可能的选择性遮蔽，
+  新增代码时建议使用全限定名或显式导入。</li>
+<li><strong>协作</strong>：被 <code>CollectPipeline</code> 在三条路径写入（采集失败、质检拒绝、无可用渠道的 failFast）。</li>
+</ul>
+<h3 id="57-dynamic-r1">5.7 dynamic 包 — R1 动态采集<a class="headerlink" href="#57-dynamic-r1" title="Permanent link">&para;</a></h3>
+<h4 id="sensecommandjava-record-23"><code>SenseCommand.java</code> · record · 23 行<a class="headerlink" href="#sensecommandjava-record-23" title="Permanent link">&para;</a></h4>
+<p>R1 动态采集指令（BrainCommand 雏形 · R2-06），由大脑 / Console / 运维发起。</p>
+<p>字段：<code>commandId</code>、<code>channels</code>（列表）、<code>dataSource</code>、<code>query</code>、<code>tenantId</code>、<code>params</code>。</p>
+<p>静态工厂 <code>of(channel, dataSource, query, tenantId)</code>：把单个渠道名包装成列表
+（渠道为空白时给空列表 —— 后续由 <code>R1DynamicHandler</code> 补默认值）。</p>
+<p><strong>设计意图</strong>：字段形状刻意贴近「大脑下发的采集意图」，
+将来接入真正的 <code>BrainService</code>（契约已在 <code>proto/brain/v1/brain.proto</code>）时，
+gRPC 消息可以直接映射到本 record。</p>
+<h4 id="r1dynamichandlerjava-111"><code>R1DynamicHandler.java</code> · 组件 · 111 行<a class="headerlink" href="#r1dynamichandlerjava-111" title="Permanent link">&para;</a></h4>
+<p><strong>R1 指令处理器</strong>（R2-06）：指令 → 渠道选择 → 逐个采集 → 回传批次摘要。</p>
+<p><strong><code>dispatch(command)</code> 流程</strong>：</p>
+<pre><code class="language-text">① 补默认值：commandId（空则 UUID）、tenantId（空则 &quot;default&quot;）
+② resolveChannels(command) → 渠道集合（含上限保护，见下）
+③ 逐渠道：构造 CollectRequest
+     mode = &quot;R1_DYNAMIC&quot;
+     params 追加 command_id
+     pipeline.collect(type, req)
+     收集结果项：channel / batch_id / source_channel / staging_status /
+                 item_count / quality_score / confidence / degraded / reject_reason
+④ 汇总响应：command_id / tenant_id / channel_count / batch_ids[] / results[] / duration_ms / mode
+</code></pre>
+<p><strong><code>resolveChannels</code> 的三条规则</strong>（防采集风暴的核心）：</p>
+<table>
+<thead>
+<tr>
+<th>规则</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>显式指定优先</td>
+<td>解析 <code>command.channels()</code>，<strong>无法识别的渠道名跳过并记 WARN</strong>（不中断整条指令）</td>
+</tr>
+<tr>
+<td>未指定则默认</td>
+<td>空集合 → 默认 <code>TOUCH</code></td>
+</tr>
+<tr>
+<td><strong>单轮上限</strong></td>
+<td>超过 <code>sense.r1.max-channels-per-round</code>（默认 3）则<strong>截断</strong>并记 WARN</td>
+</tr>
+</tbody>
+</table>
+<p>用 <code>LinkedHashSet</code> 保证顺序稳定且去重。</p>
+<p><strong><code>dispatchJson(payload)</code></strong>：从 NATS 总线收到的 JSON 字符串入口。
+解析失败时返回 <code>{"status":"error","message":"..."}</code>（<strong>消息中的双引号会被替换为单引号</strong>，
+避免破坏 JSON 结构）—— 即总线调用永远能拿到可解析的响应。</p>
+<p><strong>协作</strong>：被 <code>SenseController.command</code>（HTTP）与 <code>NatsBusServer.handleRequest</code>（总线）两处调用。</p>
+<h3 id="58-event">5.8 event 包<a class="headerlink" href="#58-event" title="Permanent link">&para;</a></h3>
+<h4 id="senseeventpublisherjava-95"><code>SenseEventPublisher.java</code> · 组件 · 95 行<a class="headerlink" href="#senseeventpublisherjava-95" title="Permanent link">&para;</a></h4>
+<p><strong>采集事件发布</strong>（Phase 2 → Phase 3 入库消费的桥梁）。</p>
+<ul>
+<li><strong>主题常量</strong> <code>TOPIC = "lifeform.sense.collected"</code> —— 与 Phase 1 的 <code>lifeform.{domain}.{event}</code> 命名一致。</li>
+<li><strong>初始化</strong>：<code>@PostConstruct</code> 连接 Kafka（<code>KAFKA_BOOTSTRAP</code>，默认 <code>127.0.0.1:9092</code>），
+  <code>acks=all</code>，并设置 <strong><code>max.block.ms=3000</code></strong> —— 这个值很关键：Kafka 不可达时最多阻塞 3 秒，
+  避免把采集请求拖死（默认 60 秒会造成明显卡顿）。</li>
+<li><strong>降级</strong>：初始化失败只记 WARN，<code>producer == null</code> 时 <code>publishCollected</code> 直接返回 <code>false</code>。
+  <strong>事件丢失不影响采集成功</strong> —— 这是有意的可用性取舍。</li>
+<li><strong>事件负载</strong>（snake_case，与 Console 字段风格一致）：
+  <code>batch_id</code> / <code>tenant_id</code> / <code>source_channel</code> / <code>timestamp</code> / <code>freshness</code> / <code>confidence</code> /
+  <code>item_count</code> / <code>quality_score</code> / <code>staging_status</code> / <code>staging_ref</code> / <code>mode</code>。
+  <strong>注意负载里没有 <code>content</code></strong> —— 只传元数据与暂存引用，正文由 Phase 3 按 <code>staging_ref</code> 去暂存区取。
+  这是刻意的解耦：事件轻量化，避免大正文塞进消息通道。</li>
+<li><strong>可观测</strong>：<code>publishedCount()</code>（累计成功数）、<code>available()</code>、<code>stats()</code>
+  （返回 <code>topic</code> / <code>available</code> / <code>published</code>，供 <code>/api/sense/stats</code> 展示）。</li>
+<li><strong><code>@PreDestroy close()</code></strong> 关闭 producer。</li>
+</ul>
+<h3 id="59-health">5.9 health 包<a class="headerlink" href="#59-health" title="Permanent link">&para;</a></h3>
+<h4 id="channelhealthmonitorjava-119"><code>ChannelHealthMonitor.java</code> · 组件 · 119 行<a class="headerlink" href="#channelhealthmonitorjava-119" title="Permanent link">&para;</a></h4>
+<p><strong>渠道健康治理</strong>（R2-09）：探针 → 降级 → 隔离 → 自动恢复。</p>
+<p><strong>状态机</strong>：</p>
+<pre><code class="language-text">                    连续失败 ≥ degradeAfter(默认 1)
+        UP ─────────────────────────────────▶ DEGRADED
+         ▲                                      │ 连续失败 ≥ downAfter(默认 3)
+         │                                      ▼
+         └──────────── 探针成功 ────────────  DOWN（隔离：不参与路由）
+</code></pre>
+<p><strong>关键实现细节</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>细节</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>healthy() &amp;&amp; available()</code> 才判定成功</td>
+<td>预留渠道即使 <code>healthy()</code> 抛异常也算失败</td>
+</tr>
+<tr>
+<td><strong>不可用渠道直接 DOWN</strong></td>
+<td><code>if (!channel.available() \|\| fail &gt;= downAfter) now = DOWN</code> —— <code>AudioChannel</code> 一次探测即 DOWN</td>
+</tr>
+<tr>
+<td>探针异常被吞掉</td>
+<td><code>catch (Exception e) { ok = false; }</code> —— 探针本身出问题不该让监控线程挂掉</td>
+</tr>
+<tr>
+<td>恢复计数</td>
+<td>从非 UP 回到 UP 时 <code>recoveries++</code> 并记录 <code>lastRecoverAt</code>，同时<strong>清零失败计数</strong></td>
+</tr>
+<tr>
+<td>定时探针</td>
+<td><code>@Scheduled(fixedDelayString = "${sense.health.probe-ms:30000}", initialDelayString = "${sense.health.initial-delay-ms:10000}")</code></td>
+</tr>
+<tr>
+<td>启动即探</td>
+<td><code>@PostConstruct init()</code> 调一次 <code>probeAll()</code>，避免启动后 10 秒内状态未知</td>
+</tr>
+</tbody>
+</table>
+<p><strong>注意</strong>：<code>@Scheduled</code> 上的默认值（30000 / 10000）是<strong>硬编码在注解里的</strong>，
+而 <code>SenseProperties.Health</code> 也有同名字段（<code>probeMs</code>、<code>degradeAfter</code>、<code>downAfter</code>）。
+<code>probeMs</code> 通过 yml 占位符 <code>${sense.health.probe-ms:30000}</code> 生效（<strong>yml 未配时用注解默认值</strong>），
+<code>degradeAfter</code> / <code>downAfter</code> 从 <code>SenseProperties</code> 读取。</p>
+<p><strong>方法</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>probe(channel)</code></td>
+<td>探测单个渠道，返回新状态</td>
+</tr>
+<tr>
+<td><code>probeAll()</code></td>
+<td>探测全部（定时任务与启动时调用）</td>
+</tr>
+<tr>
+<td><code>status(type)</code></td>
+<td>当前状态（默认 <code>UP</code>，未探测过也返回 UP）</td>
+</tr>
+<tr>
+<td><code>isIsolated(type)</code></td>
+<td><code>status == DOWN</code> —— <strong>路由层据此跳过渠道</strong></td>
+</tr>
+<tr>
+<td><code>snapshot()</code></td>
+<td>每个渠道的 <code>status</code> / <code>isolated</code> / <code>consecutive_failures</code> / <code>last_probe_at</code> / <code>last_recover_at</code> / <code>available</code></td>
+</tr>
+<tr>
+<td><code>allStatuses()</code></td>
+<td>状态映射副本</td>
+</tr>
+<tr>
+<td><code>recoveries()</code></td>
+<td>累计恢复次数</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>status()</code> 默认返回 UP 而非未知状态</strong>：这是刻意的宽松设计 —— 未探测过的渠道不应被误判为故障而拦在路由外。</p>
+<h3 id="510-metrics">5.10 metrics 包<a class="headerlink" href="#510-metrics" title="Permanent link">&para;</a></h3>
+<h4 id="sensemetricsjava-125"><code>SenseMetrics.java</code> · 组件 · 125 行<a class="headerlink" href="#sensemetricsjava-125" title="Permanent link">&para;</a></h4>
+<p><strong>采集指标聚合</strong>，是 Console 感官视图（R-C02 / D6 五感矩阵）的数据来源。</p>
+<ul>
+<li><strong>按渠道维护 <code>Counter</code></strong>：累计批次、通过数、拒绝数、条目数、最近记录时间、连续失败数。</li>
+<li><strong>核心方法</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>record(type, data)</code></td>
+<td>登记一次采集结果（<code>CollectPipeline</code> 在成功路径与 failFast 路径都会调用）</td>
+</tr>
+<tr>
+<td><code>counter(type)</code></td>
+<td>取某渠道计数器</td>
+</tr>
+<tr>
+<td><code>totalBatches()</code></td>
+<td>总批次</td>
+</tr>
+<tr>
+<td><code>overallQualityPassRate()</code></td>
+<td>整体质检通过率</td>
+</tr>
+<tr>
+<td><code>summary()</code></td>
+<td>汇总（供 <code>/api/sense/stats</code>）</td>
+</tr>
+<tr>
+<td><code>rateTrend()</code></td>
+<td><strong>近 6 分钟按分钟采集体量</strong>（供前端趋势图）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong><code>Counter</code> 的派生指标</strong>：<code>passRate()</code>（通过率）、<code>recentRatePerMinute()</code>（近期速率）、
+  <code>consecutiveFailures()</code>（连续失败）。</li>
+<li><strong>内存实现</strong>：进程内累计，重启归零。这是观测指标而非审计数据，可接受。</li>
+<li><strong><code>rateTrend()</code> 的 6 分钟窗口是硬编码的</strong>，前端 <code>collect_rate_trend</code> 图表与之绑定；
+  若要调整窗口需同时改前端。</li>
+</ul>
+<h3 id="511-model">5.11 model 包<a class="headerlink" href="#511-model" title="Permanent link">&para;</a></h3>
+<h4 id="collecteddatajava-78"><code>CollectedData.java</code> · 模型 · 78 行<a class="headerlink" href="#collecteddatajava-78" title="Permanent link">&para;</a></h4>
+<p><strong>采集数据模型</strong>（R2-04 五字段标准化打标）。整条管道传输的就是这个对象。</p>
+<p><strong>两个枚举</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>枚举</th>
+<th>取值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>StagingStatus</code></td>
+<td><code>ACCEPTED</code> / <code>REJECTED</code> / <code>PENDING</code>（默认 <code>PENDING</code>）</td>
+</tr>
+<tr>
+<td><code>Freshness</code></td>
+<td><code>REALTIME</code> / <code>NEAR_REALTIME</code> / <code>BATCH</code> / <code>STALE</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>五字段</strong>（R2-04 的核心）：<code>sourceChannel</code>、<code>tenantId</code>、<code>timestamp</code>、<code>freshness</code>、<code>confidence</code>。</p>
+<p><strong>其余字段</strong>：<code>batchId</code>、<code>content</code>、<code>title</code>、<code>mode</code>、<code>stagingStatus</code>、<code>qualityScore</code>、<code>itemCount</code>、
+<code>rejectReason</code>、<code>collectTimeMs</code>、<code>stagingRef</code>、<code>attempts</code>（默认 1）、<code>degraded</code>、<code>deadLetterId</code>。</p>
+<p><strong>三个方法</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fiveFieldsComplete()</code></td>
+<td>五字段完整性校验（R2-04 验收口径：缺失率 = 0）。注意 <code>confidence &gt;= 0</code> 也算"完整"，因为 -1 是未上报哨兵值</td>
+</tr>
+<tr>
+<td><code>missingFields()</code></td>
+<td>返回缺失字段的明细 Map（键为 snake_case 字段名）</td>
+</tr>
+<tr>
+<td><code>toMap()</code></td>
+<td>转 snake_case Map（供 HTTP/NATS 响应）。<strong>注意这里会把 <code>content</code> 一起输出</strong> —— 需要瘦身的调用方自行移除</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>toMap()</code> 的字段顺序</strong>：用 <code>LinkedHashMap</code> 保持声明顺序，让响应体稳定可读（也便于前端调试）。</p>
+<h3 id="512-nats">5.12 nats 包<a class="headerlink" href="#512-nats" title="Permanent link">&para;</a></h3>
+<h4 id="minimalnatsclientjava-143"><code>MinimalNatsClient.java</code> · 客户端 · 143 行<a class="headerlink" href="#minimalnatsclientjava-143" title="Permanent link">&para;</a></h4>
+<p><strong>自研的极简 NATS 协议实现</strong>（不是 jnats 封装）。</p>
+<p><strong>为什么自研而不是用 jnats</strong>：类注释写明原因 ——
+<strong>jnats 在 Spring Boot fat jar 环境下消息读取线程会失效</strong>。<code>session-manager</code> 用的是 jnats
+（普通 jar 启动），而本模块必须自研以规避该问题。</p>
+<p><strong>实现方式</strong>：直接实现 NATS core 协议（TCP + 文本帧解析），
+包含 <code>connect()</code>（建立连接并启动读循环，<strong>阻塞调用方直到连接完成</strong>）、
+<code>subscribe(subject)</code>、<code>publish(subject, payload)</code>、<code>readLoop</code>（解析 <code>MSG</code> / <code>PING</code> 帧）、<code>close()</code>。</p>
+<p><strong>内部接口 <code>MessageHandler</code></strong>：收到消息时的回调契约
+（由 <code>NatsBusServer</code> 传入方法引用 <code>this::handleRequest</code>）。</p>
+<p><strong>维护提示</strong>：本类只实现了 NATS core 的最小子集（无 TLS、无认证、无 JetStream）。
+若将来需要这些能力，应评估「引入 jnats 并解决线程问题」与「扩展自研实现」的成本取舍。</p>
+<h4 id="natsbusserverjava-67"><code>NatsBusServer.java</code> · 组件 · 67 行<a class="headerlink" href="#natsbusserverjava-67" title="Permanent link">&para;</a></h4>
+<p><strong>总线应答服务</strong>（R1-04 脊柱神经信号接收端 / R2-06 R1 动态采集指令通道）。</p>
+<ul>
+<li><strong>实现 <code>ApplicationRunner</code></strong>：应用启动后（<code>run</code> 回调）才建立连接与订阅，避免阻塞容器启动。</li>
+<li><strong>订阅两个主题</strong>（<strong>具体主题而非通配</strong>）：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>主题</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>lifeform.rpc.sense.ping</code></td>
+<td>返回 <code>{"service":"sense-service","status":"pong","channel":"TOUCH"}</code></td>
+</tr>
+<tr>
+<td><code>lifeform.rpc.sense.collect</code></td>
+<td>转给 <code>R1DynamicHandler.dispatchJson(payload)</code> 执行采集</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>为什么用具体主题</strong>：类注释写明 —— <strong>Docker NATS 环境下通配订阅投递失效</strong>，用具体主题绕过。
+  这是环境适配的取舍，代价是新增 RPC 主题必须在此显式登记。</li>
+<li><strong>解析 URL</strong>：从 <code>NATS_URL</code>（默认 <code>nats://127.0.0.1:4222</code>）手工拆分 host/port
+  （<code>replace("nats://","").split(":")</code>）—— <strong>不支持带认证信息或路径的 URL</strong>。</li>
+<li><strong>降级</strong>：连接失败只记 WARN，服务照常运行（总线是可选依赖）。</li>
+<li><strong>应答</strong>：仅当存在 <code>replyTo</code> 时才 <code>publish</code> 回包，并用 <code>abbreviate</code> 把日志中的响应截断到 240 字。</li>
+<li><strong>协作</strong>：<code>session-manager</code> 的 <code>create</code> 会话时会向 <code>lifeform.rpc.sense.ping</code> 发请求，
+  由本类应答 —— 这就是「会话创建返回 <code>bus_channel: nats</code>」的来源。</li>
+</ul>
+<h3 id="513-normalize">5.13 normalize 包<a class="headerlink" href="#513-normalize" title="Permanent link">&para;</a></h3>
+<h4 id="datanormalizerjava-68"><code>DataNormalizer.java</code> · 组件 · 68 行<a class="headerlink" href="#datanormalizerjava-68" title="Permanent link">&para;</a></h4>
+<p><strong>五字段标准化打标</strong>（R2-04）：把渠道的 <code>CollectResult</code> 转成五字段完整的 <code>CollectedData</code>。</p>
+<p><strong>五字段的赋值规则</strong>（每一处都有明确取舍）：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>规则</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>sourceChannel</code></td>
+<td>取 <code>result.sourceChannel</code>；为空则 <code>"UNKNOWN"</code></td>
+</tr>
+<tr>
+<td><code>tenantId</code></td>
+<td><strong>只取 <code>request.tenantId</code></strong>（网关注入），空白则 <code>"default"</code></td>
+</tr>
+<tr>
+<td><code>timestamp</code></td>
+<td><code>System.currentTimeMillis()</code> —— <strong>标准化时刻</strong>，不是采集开始时刻</td>
+</tr>
+<tr>
+<td><code>freshness</code></td>
+<td>渠道自报优先 → <code>request.params["freshness"]</code> → 按 <code>mode</code> 推断（<code>R0_DEFAULT</code>→NEAR_REALTIME，其余→REALTIME）</td>
+</tr>
+<tr>
+<td><code>confidence</code></td>
+<td>渠道自报（≥0 时）；若为 -1 哨兵值则回退到 <code>result.qualityScore</code>；最后<strong>钳制到 [0,1] 并保留 4 位小数</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>关于租户：注释明确写了「只信任网关注入的租户，忽略请求体」</strong>。这是多租户安全边界在感官层的落点。</p>
+<p><strong><code>freshness</code> 的三级回退</strong>是实用设计：渠道可以自报最准确的时效（如 <code>TouchChannel</code> 对文件报 <code>BATCH</code>），
+也可以由 R0 规则通过 <code>params.freshness</code> 指定，都没有时按采集模式推断。</p>
+<p><strong>辅助方法</strong>：<code>tenantIdOf(request)</code>、<code>resolveFreshness(result, request)</code>、<code>fiveFieldsComplete(data)</code>、<code>getProperties()</code>。</p>
+<p><strong>注意 <code>getProperties()</code></strong>：暴露配置对象但当前无人调用 —— 属于预留的测试/扩展入口。</p>
+<h3 id="514-quality">5.14 quality 包<a class="headerlink" href="#514-quality" title="Permanent link">&para;</a></h3>
+<h4 id="qualitygatejava-116"><code>QualityGate.java</code> · 组件 · 116 行<a class="headerlink" href="#qualitygatejava-116" title="Permanent link">&para;</a></h4>
+<p><strong>质检门槛</strong>（R2-10 暂存前置质检 / R2-04 数据质量）。两层判定 + 单一事实来源（见 §3.2）。</p>
+<p><strong>硬规则 <code>rejectReason(content)</code></strong>（按顺序短路判定）：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">顺序</th>
+<th>条件</th>
+<th>拒绝原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td>null 或空白</td>
+<td><code>EMPTY_CONTENT</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td>可打印字符占比 &lt; <code>minPrintableRatio</code>(0.8)</td>
+<td><code>ENCODING_GARBLED</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td>重复乱码</td>
+<td><code>REPETITIVE_GARBAGE</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td>长度 &lt; <code>minLength</code>(20)</td>
+<td><code>BELOW_QUALITY_THRESHOLD</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">5</td>
+<td>加权评分 &lt; <code>threshold</code>(0.6)</td>
+<td><code>BELOW_QUALITY_THRESHOLD</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">—</td>
+<td>全部通过</td>
+<td><code>null</code>（放行）</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>REPETITIVE_GARBAGE</code> 的判定</strong>（<code>isRepetitiveGarbage</code>，两个条件任一成立）：</p>
+<ul>
+<li><strong>单字符连续重复 ≥ 12 次</strong>；</li>
+<li><strong>长度 ≥ 40 且去空白后不同字符数 ≤ 2</strong>（如 <code>abababab...</code>）。</li>
+</ul>
+<p><strong>注意</strong>：内容短于 12 字符时<strong>直接返回 false</strong>（不做重复判定），因为短文本的重复没有统计意义。</p>
+<p><strong>软评分 <code>score(content)</code></strong>（0~1 加权）：</p>
+<table>
+<thead>
+<tr>
+<th>权重</th>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0.45</td>
+<td><code>W_CONTENT</code></td>
+<td>基础分（内容非空即得）</td>
+</tr>
+<tr>
+<td>0.20</td>
+<td><code>W_LENGTH</code></td>
+<td><code>lengthFactor</code> = <code>min(1, length / minLength)</code>（<strong>达到 minLength 即饱和为 1</strong>）</td>
+</tr>
+<tr>
+<td>0.20</td>
+<td><code>W_PRINTABLE</code></td>
+<td>可打印字符占比</td>
+</tr>
+<tr>
+<td>0.15</td>
+<td><code>W_DENSITY</code></td>
+<td><code>informationDensity</code> = 非空白字符中「字母或数字」的占比</td>
+</tr>
+</tbody>
+</table>
+<p><strong>提前返回 0 的三种情况</strong>（评分阶段）：空内容、长度不足、重复乱码。
+即这些情况连评分都不算 —— 与硬规则判定保持一致。</p>
+<p><strong><code>score()</code> 与 <code>rejectReason()</code> 的关系</strong>：<code>rejectReason</code> 的第 5 条会<strong>调用 <code>score()</code></strong>。
+因此两者是「<code>rejectReason</code> 包含 <code>score</code>」的关系，而不是并列的两套逻辑。
+这是 §3.2 那个缺陷修复后的形态。</p>
+<p><strong><code>apply(data)</code></strong>：对 <code>CollectedData</code> 执行质检并落状态。
+注意 —— <strong>无论接受还是拒绝，都会写入 <code>qualityScore</code></strong>（拒绝时分数保留，便于分析「差多远」）。
+这正是 <code>QualityGateTest.applyMarksRejectedAndRecordsReason</code> 与 <code>applyMarksAcceptedWithScore</code> 两个用例覆盖的行为。</p>
+<p><strong>三个静态工具方法</strong>：<code>printableRatio</code>（<code>\n\r\t</code> 视为可打印）、<code>isRepetitiveGarbage</code>、<code>informationDensity</code> ——
+都声明为 <code>static</code>（包内可见），便于测试直接调用。</p>
+<h3 id="515-schedule">5.15 schedule 包<a class="headerlink" href="#515-schedule" title="Permanent link">&para;</a></h3>
+<h4 id="r0schedulerjava-133"><code>R0Scheduler.java</code> · 组件 · 133 行<a class="headerlink" href="#r0schedulerjava-133" title="Permanent link">&para;</a></h4>
+<p><strong>R0 默认采集调度</strong>（R2-05）：规则驱动 + 增量同步语义。</p>
+<p><strong>调度机制</strong>：</p>
+<ul>
+<li><code>@Scheduled(fixedDelayString = "${sense.r0.tick-ms:60000}", initialDelayString = "${sense.r0.initial-delay-ms:30000}")</code>
+  → 每 tick 检查一次全部规则。</li>
+<li><strong>每条规则独立计时</strong>：<code>lastRunAt</code>（<code>ConcurrentHashMap&lt;ruleId, 时间戳&gt;</code>）+ <code>due(rule)</code> 判定
+  <code>now - last &gt;= intervalSeconds*1000</code>。</li>
+<li><strong><code>intervalSeconds &lt;= 0</code> 的语义</strong>：间隔视为 0 → <strong>每 tick 都触发</strong>。</li>
+<li>「增量同步」的含义：<strong>只有到期的规则才触发</strong>，未到期的跳过，不做无谓采集。</li>
+</ul>
+<p><strong><code>run(rule, scope)</code> 的执行内容</strong>：</p>
+<pre><code class="language-text">构造 CollectRequest：
+  dataSource = rule.dataSource
+  query      = rule.query
+  tenantId   = rule.tenantId
+  mode       = &quot;R0_DEFAULT&quot;
+  params     = { freshness, scope, rule_id }
+pipeline.collect(ChannelType.parse(rule.channel), request)
+  ↓
+记录 lastRunAt、triggered++
+写入调度日志 record：rule_id / scope / channel / batch_id / staging_status /
+                     item_count / quality_score / duration_ms / at
+</code></pre>
+<p><strong><code>scope</code> 取值</strong>：<code>"R0_SCHEDULED"</code>（定时触发）或 <code>"MANUAL"</code>（手动触发）—— 便于区分演示与真实调度。</p>
+<p><strong>调度日志</strong>：<code>ArrayDeque</code> 保留最近 <strong><code>MAX_LOG = 200</code></strong> 条，
+<strong>环形淘汰</strong>（满了 <code>removeFirst()</code>），<code>synchronized</code> 保护，<code>log(limit)</code> 返回倒序（最新在前）。
+用途是 Console / 排障，不落盘。</p>
+<p><strong>注意一个实现细节</strong>：<code>lastRunAt.put(rule.getId(), started)</code> 用的是<strong>开始时刻</strong>而非结束时刻 ——
+所以规则间隔是「从上次开始到本次开始」，长时间执行的规则会有重叠可能（当前为串行循环，不会并发）。</p>
+<p><strong>方法</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tick()</code></td>
+<td>定时入口（<code>r0.enabled=false</code> 时直接返回）</td>
+</tr>
+<tr>
+<td><code>run(rule, scope)</code></td>
+<td>执行单条规则</td>
+</tr>
+<tr>
+<td><code>runNow(ruleId)</code></td>
+<td>手动触发（规则不存在抛 <code>IllegalArgumentException</code>）</td>
+</tr>
+<tr>
+<td><code>rules()</code></td>
+<td>规则清单（含 <code>last_run_at</code>）</td>
+</tr>
+<tr>
+<td><code>log(limit)</code></td>
+<td>调度日志（倒序、截断）</td>
+</tr>
+<tr>
+<td><code>stats()</code></td>
+<td><code>enabled</code> / <code>tick_ms</code> / <code>rules</code> 数 / <code>triggered</code> 累计 / <code>last_tick_at</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="516-security">5.16 security 包<a class="headerlink" href="#516-security" title="Permanent link">&para;</a></h3>
+<h4 id="outboundguardjava-84"><code>OutboundGuard.java</code> · 工具类 · 84 行<a class="headerlink" href="#outboundguardjava-84" title="Permanent link">&para;</a></h4>
+<p><strong>SSRF 出站守卫</strong>（R2-02）。纯静态工具类（<code>final</code> + 私有构造，不可实例化）。</p>
+<p><strong><code>assertPublicHttpUrl(uri, allowedHosts)</code> 的四层校验</strong>：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">顺序</th>
+<th>校验</th>
+<th>失败信息</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td>scheme 必须是 http(s)</td>
+<td><code>only http/https URLs are allowed</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td>host 非空</td>
+<td><code>URL host is required</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td>若 <code>allowedHosts</code> 非空，host 必须在白名单内（<strong>大小写不敏感</strong>）</td>
+<td><code>host is not in SENSE_ALLOWED_HOSTS</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td><strong>解析出所有 IP</strong>（<code>getAllByName</code>），逐个检查是否被禁</td>
+<td><code>private or local network targets are forbidden</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>第 4 步的禁判条件</strong>（覆盖完整）：</p>
+<table>
+<thead>
+<tr>
+<th>判定</th>
+<th>覆盖范围</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>isAnyLocalAddress()</code></td>
+<td><code>0.0.0.0</code> 等</td>
+</tr>
+<tr>
+<td><code>isLoopbackAddress()</code></td>
+<td><code>127.0.0.0/8</code>、<code>::1</code></td>
+</tr>
+<tr>
+<td><code>isLinkLocalAddress()</code></td>
+<td><code>169.254.0.0/16</code>、<code>fe80::/10</code></td>
+</tr>
+<tr>
+<td><code>isSiteLocalAddress()</code></td>
+<td><code>10/8</code>、<code>172.16/12</code>、<code>192.168/16</code></td>
+</tr>
+<tr>
+<td><code>isMulticastAddress()</code></td>
+<td>组播地址</td>
+</tr>
+<tr>
+<td><code>isExtendedBlockedAddress()</code></td>
+<td><strong>自定义补充</strong>：IPv6 ULA <code>fc00::/7</code> + IPv4 <strong>CGNAT <code>100.64/10</code></strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么需要 <code>getAllByName</code> 遍历</strong>：一个域名可能解析出多个 A/AAAA 记录，
+只检查第一个会被「DNS 多记录绕过」攻破（第一个是公网 IP，第二个是内网 IP）。<strong>必须全部检查。</strong></p>
+<p><strong><code>assertInternalHttpUrl(uri)</code></strong>：只校验 http(s) + host 可解析。
+<strong>只能用于配置来源的可信端点</strong>（如 OCR 服务在本机 <code>127.0.0.1</code>）——
+注释明确警告「禁止用于用户提交的 data_source」。</p>
+<p><strong><code>parseAllowedHosts(String)</code></strong>：逗号分隔 → 去空白 → 小写 → 不可变 <code>Set</code>。</p>
+<p><strong>异常类型</strong>：全部抛 <code>BizException(AGENT_BAD_REQUEST)</code> —— 最终映射为 HTTP 400，
+语义上「请求的 URL 不合法」比 500 更准确。</p>
+<h3 id="517-staging">5.17 staging 包<a class="headerlink" href="#517-staging" title="Permanent link">&para;</a></h3>
+<h4 id="stagingbackendjava-34"><code>StagingBackend.java</code> · 接口 · 34 行<a class="headerlink" href="#stagingbackendjava-34" title="Permanent link">&para;</a></h4>
+<p>暂存后端抽象（R2-10）。方法：<code>name()</code>、<code>available()</code>、<code>put(data)</code>、<code>get(batchId, tenantId)</code>、
+<code>list(tenantId, status, limit)</code>、<code>rollback(batchId, tenantId)</code>、<code>stats()</code>。</p>
+<p><strong>设计意图</strong>：Phase 3 消费暂存区数据入库，因此需要一个「比内存可靠、又不是最终知识库」的中间层。
+用接口隔离后端，使 MinIO 缺失时可自动降级到本地文件而不影响上层。</p>
+<h4 id="stagingstorejava-68"><code>StagingStore.java</code> · 组件 · 68 行<a class="headerlink" href="#stagingstorejava-68" title="Permanent link">&para;</a></h4>
+<p><strong>暂存入口</strong>：按可用性自动选后端，并在主后端失效时<strong>实时降级</strong>。</p>
+<p><strong><code>active()</code></strong>：<code>minioBackend.available() ? minio : local</code> —— 每次调用都重新判定，
+因此 MinIO 中途挂掉能立即切换（不需要重启）。</p>
+<p><strong>五个方法的降级策略</strong>（注意差异）：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>主后端失败时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>put</code></td>
+<td><code>ref == null</code> <strong>且</strong>主后端不是 local <strong>且</strong> local 可用 → 写入 local 并记 WARN</td>
+</tr>
+<tr>
+<td><code>get</code></td>
+<td>主后端取不到 → 去 local 再试</td>
+</tr>
+<tr>
+<td><code>list</code></td>
+<td>主后端<strong>返回空</strong> → 去 local 再试</td>
+</tr>
+<tr>
+<td><code>rollback</code></td>
+<td>主后端返回 false → 去 local 再试</td>
+</tr>
+<tr>
+<td><code>stats</code> / <code>backendName</code></td>
+<td>返回当前 active 信息 + 两个后端的详细统计</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>list</code> 的降级条件是「返回空」而非「异常」</strong> —— 因为接口约定用空列表表示无数据。
+副作用是：真正无数据时会多查一次 local，可接受。</p>
+<p><strong><code>stats()</code> 结构</strong>：<code>{ active_backend, minio: {...}, local: {...} }</code> ——
+让运维能同时看到两个后端的状态，便于判断降级是否发生。</p>
+<h4 id="miniostagingbackendjava-188"><code>MinioStagingBackend.java</code> · 后端 · 188 行<a class="headerlink" href="#miniostagingbackendjava-188" title="Permanent link">&para;</a></h4>
+<p><strong>MinIO 暂存后端</strong>（R2-10 主实现）。</p>
+<ul>
+<li><strong>对象键格式</strong>（注释给出）：<code>staging/{tenant}/{STATUS}/batch-{batchId}/item-{n}.json</code>
+  —— <strong>状态直接体现在路径中</strong>，因此「按状态查询」是前缀列举，效率高且隔离清晰。</li>
+<li><strong>配置</strong>：<code>sense.staging.minio-endpoint</code> / <code>minio-access-key</code> / <code>minio-secret-key</code> / <code>bucket</code>。</li>
+<li><strong><code>available()</code></strong>：凭据与端点齐备且能连通。</li>
+<li>方法：<code>init()</code>（<code>@PostConstruct</code>，建桶）、<code>put</code> / <code>get</code> / <code>list</code> / <code>rollback</code> / <code>stats</code>，
+  私有 <code>readObject(key)</code> / <code>keyOf(data, index)</code> / <code>bucket()</code> / <code>tenant(tenantId)</code>。</li>
+<li><strong><code>rollback</code></strong>：按 <code>batch-{batchId}/</code> 前缀删除该批次全部对象。</li>
+</ul>
+<h4 id="localstagingbackendjava-188"><code>LocalStagingBackend.java</code> · 后端 · 188 行<a class="headerlink" href="#localstagingbackendjava-188" title="Permanent link">&para;</a></h4>
+<p><strong>本地文件系统暂存后端</strong>（MinIO 不可用时的降级实现）。</p>
+<ul>
+<li><strong>根目录</strong>：<code>sense.staging.local-root</code>（默认 <code>{user.dir}/data/sense-staging</code>）。</li>
+<li><strong>方法</strong>与 MinIO 后端一一对应，保证两个实现语义一致。</li>
+<li><strong><code>rollback</code> 的实现要点（含一个修复过的缺陷）</strong>：先用 <code>Files.walk</code> 找出该批次的所有路径，
+  <strong>必须按 <code>Comparator.reverseOrder()</code> 逆序删除</strong>。
+  原因：按正序删除会先删父目录、再删子项，触发
+  <code>DirectoryNotEmptyException</code> 导致回滚返回 false。逆序删除从最深的子项开始，才能干净移除整个批次。</li>
+<li><strong>辅助</strong>：<code>tenant(data)</code> / <code>status(data)</code> / <code>fromMap(map)</code> / <code>str(v)</code> / <code>num(v)</code> ——
+  负责 JSON ↔ <code>CollectedData</code> 的转换与类型容错。</li>
+<li><strong><code>init()</code></strong>：<code>@PostConstruct</code> 确保根目录存在。</li>
+</ul>
+<h3 id="518-util">5.18 util 包<a class="headerlink" href="#518-util" title="Permanent link">&para;</a></h3>
+<h4 id="httpclientsjava-24"><code>HttpClients.java</code> · 工具类 · 24 行<a class="headerlink" href="#httpclientsjava-24" title="Permanent link">&para;</a></h4>
+<p><strong>统一 HTTP 客户端构建器</strong>（缺陷 D-1 修复的落点）。</p>
+<pre><code class="language-java">public static HttpClient.Builder builder(Duration connectTimeout) {
+    return HttpClient.newBuilder()
+            .version(HttpClient.Version.HTTP_1_1)   // ← 关键
+            .connectTimeout(connectTimeout);
+}
+</code></pre>
+<ul>
+<li><strong>为什么必须有</strong>：<code>HttpClient</code> 默认协商 HTTP/2，对明文连接会先发 <code>Upgrade: h2c</code> 握手；
+  uvicorn(h11) 不兼容该升级，<strong>丢弃请求体</strong>导致 FastAPI 报 422。</li>
+<li><strong>返回 <code>Builder</code> 而非 <code>HttpClient</code></strong>：让调用方能继续追加配置
+  （如 <code>TouchChannel</code> 追加 <code>followRedirects(NEVER)</code>）。</li>
+<li><strong>约定</strong>：渠道侧（取图、OCR 调用、URL 抓取）<strong>一律经本类构建</strong>。</li>
+<li><strong>回归守卫</strong>：<code>HttpClientsTest.buildsHttp11ClientWithConnectTimeout</code> 断言版本为 HTTP/1.1。</li>
+</ul>
+<h4 id="textextractorjava-117"><code>TextExtractor.java</code> · 工具类 · 117 行<a class="headerlink" href="#textextractorjava-117" title="Permanent link">&para;</a></h4>
+<p><strong>文本抽取与编码处理</strong>（R2-02）。纯静态工具类。</p>
+<p><strong><code>decode(body, contentType)</code> 的五级编码嗅探</strong>（逐级尝试，成功即返回）：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">顺序</th>
+<th>依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">1</td>
+<td>HTTP 头 <code>Content-Type</code> 里的 <code>charset=</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">2</td>
+<td><strong>BOM</strong>（UTF-8 <code>EF BB BF</code> / UTF-16BE <code>FE FF</code> / UTF-16LE <code>FF FE</code>）</td>
+</tr>
+<tr>
+<td style="text-align: right;">3</td>
+<td>HTML <code>&lt;meta charset=...&gt;</code>（只在前 4096 字节里找，用 ISO-8859-1 读取以避免二次解码问题）</td>
+</tr>
+<tr>
+<td style="text-align: right;">4</td>
+<td><strong>UTF-8 严格解码</strong>（<code>CodingErrorAction.REPORT</code>）</td>
+</tr>
+<tr>
+<td style="text-align: right;">5</td>
+<td><strong>GBK 回退</strong></td>
+</tr>
+<tr>
+<td style="text-align: right;">兜底</td>
+<td>用 UTF-8 宽松解码（不抛异常）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>「严格解码」是关键</strong>：用 <code>REPORT</code> 而非默认的 <code>REPLACE</code> 才能<strong>判定失败并继续下一级尝试</strong>；
+若用默认行为，任何字节序列都会"成功"解码成乱码，嗅探逻辑就失效了。</p>
+<p><strong><code>extract(raw)</code> 的正文提取</strong>：</p>
+<pre><code class="language-text">判断是否 HTML（doctype / &lt;html / &lt;body / &lt;p&gt; / &lt;div 任一命中）
+  ├─ 不是 → 原样返回 clean(raw)（纯文本不做处理）
+  └─ 是
+       ① 取 &lt;title&gt; 内容
+       ② 用正则移除 &lt;script&gt; &lt;style&gt; &lt;noscript&gt; &lt;svg&gt; &lt;head&gt; 整块
+       ③ jsoup 解析，移除导航/页脚/侧栏/表单/按钮/iframe/广告/评论等选择器
+       ④ 取 body.text()；title 为空时回退 doc.title()
+</code></pre>
+<p><strong><code>clean(text)</code> 的规范化</strong>：<code>\u00a0</code>（不换行空格）→ 普通空格；
+<code>\t\x0B\f\r</code> → 空格；连续空白压成单空格；逐行去首尾空白。</p>
+<p><strong><code>Extracted</code> record</strong>：<code>(title, content)</code> —— 标题用于暂存/展示，正文用于质检与入库。</p>
+<p><strong>已知的测试命名瑕疵</strong>：<code>TextExtractorTest</code> 中有一个用例名为 <code>decodesGbkWitoutHeader</code>
+（应为 <code>Without</code>）。仅影响可读性，功能无影响。可在后续代码整理时一并改名。</p>
+<h3 id="519-common">5.19 common 包<a class="headerlink" href="#519-common" title="Permanent link">&para;</a></h3>
+<h4 id="errorcodejava-29"><code>ErrorCode.java</code> · 枚举 · 29 行<a class="headerlink" href="#errorcodejava-29" title="Permanent link">&para;</a></h4>
+<p>统一错误码（R1-08），响应体格式 <code>{"code","message","details"}</code>。
+<strong>取值与 <code>session-manager</code> 的同名枚举完全一致</strong>（10 个：<code>AGENT_BAD_REQUEST</code>、<code>AGENT_NOT_FOUND</code>、
+<code>AGENT_UNAUTHORIZED</code>、<code>AGENT_FORBIDDEN</code>、<code>AGENT_CONFLICT</code>、<code>AGENT_DUPLICATE</code>、<code>AGENT_TIMEOUT</code>、
+<code>AGENT_BUS_UNAVAILABLE</code>、<code>AGENT_UPSTREAM_UNAVAILABLE</code>、<code>AGENT_INTERNAL_ERROR</code>）。</p>
+<p><strong>维护提示</strong>：这是<strong>跨模块的重复定义</strong>（两模块各一份），新增错误码需两边同步。
+一致性由 <code>contract-check.py</code> 之外的人工约定保障 —— 改动时请一并检查另一处。</p>
+<h4 id="bizexceptionjava-34"><code>BizException.java</code> · 异常 · 34 行<a class="headerlink" href="#bizexceptionjava-34" title="Permanent link">&para;</a></h4>
+<p>携带 <code>ErrorCode</code> + <code>details</code> 的业务异常。与 <code>session-manager</code> 版本<strong>结构相同但少了「携带 cause」的构造器</strong> ——
+本模块没有跨服务调用的降级需求，因此未保留该构造器。</p>
+<p><strong>注意一个用法细节</strong>：<code>OutboundGuard</code> 抛 <code>BizException(ErrorCode.AGENT_BAD_REQUEST, "message")</code>
+（两参数构造），与该类的构造器签名匹配。</p>
+<h4 id="globalexceptionhandlerjava-53"><code>GlobalExceptionHandler.java</code> · 切面 · 53 行<a class="headerlink" href="#globalexceptionhandlerjava-53" title="Permanent link">&para;</a></h4>
+<p><code>@RestControllerAdvice</code>，把异常统一转为 <code>{"code","message","details"}</code>。
+<strong>错误码 → HTTP 状态码的映射与 <code>session-manager</code> 完全一致</strong>（见
+<a href="04-session-manager.md">04-session-manager</a> §4.12 的映射表），此处不重复。</p>
+<p>处理的异常类型：<code>BizException</code>、<code>MethodArgumentNotValidException</code>、<code>IllegalArgumentException</code>、
+兜底 <code>Exception</code>（500 且只记日志，不泄露内部消息）。</p>
+<h2 id="6-http">6. HTTP 端点汇总<a class="headerlink" href="#6-http" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>用途</th>
+<th>租户过滤</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>POST</td>
+<td><code>/api/sense/collect</code></td>
+<td>单渠道采集</td>
+<td>写：按 header 打标</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/sense/command</code></td>
+<td>R1 动态采集指令</td>
+<td>写：按 header 打标</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/sense/health</code></td>
+<td>渠道健康总览（服务健康语义）</td>
+<td>全局</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/sense/channels</code></td>
+<td>五感矩阵卡片</td>
+<td>全局</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/sense/channels/{type}</code></td>
+<td>渠道下钻详情</td>
+<td><strong>按租户</strong></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/sense/channels-health</code></td>
+<td>健康快照（含隔离/恢复）</td>
+<td>全局</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/sense/stats</code></td>
+<td>采集统计与趋势</td>
+<td>全局</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/sense/batches</code></td>
+<td>暂存批次列表</td>
+<td><strong>按租户</strong></td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/sense/batches/{batchId}/rollback</code></td>
+<td>批次回滚</td>
+<td><strong>按租户</strong></td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/sense/rules</code></td>
+<td>R0 规则清单</td>
+<td>全局</td>
+</tr>
+<tr>
+<td>POST</td>
+<td><code>/api/sense/rules/{ruleId}/run</code></td>
+<td>手动触发 R0 规则</td>
+<td>—</td>
+</tr>
+<tr>
+<td>GET</td>
+<td><code>/api/sense/deadletters</code></td>
+<td>死信队列</td>
+<td>全局</td>
+</tr>
+</tbody>
+</table>
+<p>经网关访问需带 <code>Authorization: Bearer &lt;token&gt;</code>（<code>/actuator</code> 与 <code>/api/auth</code> 除外）。</p>
+<h2 id="7">7. 配置项<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<p><code>application.yml</code> 全量配置见 §5.4 的 <code>SenseProperties</code> 表格。环境变量映射：</p>
+<table>
+<thead>
+<tr>
+<th>环境变量</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SENSE_FILE_ROOT</code></td>
+<td><code>data/sense-inbox</code></td>
+<td>本地文件采集根目录（沙箱边界）</td>
+</tr>
+<tr>
+<td><code>SENSE_ALLOWED_HOSTS</code></td>
+<td>空</td>
+<td>域名白名单（逗号分隔）</td>
+</tr>
+<tr>
+<td><code>OCR_ENABLED</code></td>
+<td><code>true</code></td>
+<td>视觉渠道 OCR 开关</td>
+</tr>
+<tr>
+<td><code>OCR_URL</code></td>
+<td><code>http://127.0.0.1:8000/api/nlp/ocr</code></td>
+<td>OCR 服务地址</td>
+</tr>
+<tr>
+<td><code>STAGING_BACKEND</code></td>
+<td><code>auto</code></td>
+<td><code>auto</code> / <code>minio</code> / <code>local</code></td>
+</tr>
+<tr>
+<td><code>MINIO_ENDPOINT</code> / <code>MINIO_ACCESS_KEY</code> / <code>MINIO_SECRET_KEY</code> / <code>MINIO_BUCKET</code></td>
+<td><code>127.0.0.1:9000</code> / 空 / 空 / <code>lifeform-staging</code></td>
+<td>暂存后端</td>
+</tr>
+<tr>
+<td><code>STAGING_LOCAL_ROOT</code></td>
+<td><code>data/sense-staging</code></td>
+<td>本地暂存根目录</td>
+</tr>
+<tr>
+<td><code>R0_ENABLED</code> / <code>R0_TICK_MS</code></td>
+<td><code>true</code> / <code>60000</code></td>
+<td>R0 调度</td>
+</tr>
+<tr>
+<td><code>NATS_URL</code></td>
+<td><code>nats://127.0.0.1:4222</code></td>
+<td>总线地址（<strong>只读环境变量</strong>）</td>
+</tr>
+<tr>
+<td><code>KAFKA_BOOTSTRAP</code></td>
+<td><code>127.0.0.1:9092</code></td>
+<td>事件通道（<strong>只读环境变量</strong>）</td>
+</tr>
+<tr>
+<td><code>SENSE_INTEL_FEEDS</code></td>
+<td>空</td>
+<td>嗅觉渠道情报源（逗号分隔）</td>
+</tr>
+<tr>
+<td><code>NACOS_ADDR</code> / <code>NACOS_IP</code> / <code>GRPC_PORT</code> / <code>OTLP_ENDPOINT</code></td>
+<td><code>127.0.0.1:8848</code> / <code>127.0.0.1</code> / <code>9093</code> / <code>localhost:4318/v1/traces</code></td>
+<td>基础设施</td>
+</tr>
+</tbody>
+</table>
+<p><strong>注意 <code>NACOS_IP</code> 显式设为 <code>127.0.0.1</code></strong>（其他模块不设）—— 原因是本机多网卡时，
+Nacos 可能注册错误的网卡 IP，导致 <code>session-manager</code> 通过 NATS 之外的方式访问不到。</p>
+<h2 id="8-48">8. 测试基线（48 个用例）<a class="headerlink" href="#8-48" title="Permanent link">&para;</a></h2>
+<h3 id="touchchanneltest-12"><code>TouchChannelTest</code> · 12 个<a class="headerlink" href="#touchchanneltest-12" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>守卫的约定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>blocksLoopbackUrl</code> / <code>blocksPrivateNetworkUrl</code> / <code>blocksIpv6UniqueLocalUrl</code> / <code>blocksCarrierGradeNatUrl</code></td>
+<td><strong>SSRF 四类拦截</strong>（loopback / 私网 / IPv6 ULA / CGNAT）</td>
+</tr>
+<tr>
+<td><code>acceptsPlainText</code></td>
+<td>纯文本路径</td>
+</tr>
+<tr>
+<td><code>readsFileInsideFileRoot</code></td>
+<td>file-root 内正常读取</td>
+</tr>
+<tr>
+<td><code>readsHtmlFileWithBodyExtraction</code></td>
+<td><strong><code>file://</code> 前缀解析 + HTML 正文提取</strong>（修复过的缺陷）</td>
+</tr>
+<tr>
+<td><code>blocksPathTraversal</code></td>
+<td><strong>路径穿越拦截</strong>（<code>../</code> 逃逸）</td>
+</tr>
+<tr>
+<td><code>reportsMissingFileAsFailure</code></td>
+<td>文件不存在 → 失败而非抛异常</td>
+</tr>
+<tr>
+<td><code>rejectsBlankDataSource</code></td>
+<td>空 dataSource 拒绝</td>
+</tr>
+<tr>
+<td><code>registrySupportsPluggableChannel</code></td>
+<td><strong>可插拔性</strong>：自定义渠道注册后能被 <code>ChannelRegistry</code> 发现</td>
+</tr>
+<tr>
+<td><code>channelTypeParsesChineseLabel</code></td>
+<td><code>ChannelType.parse</code> 支持中文名</td>
+</tr>
+</tbody>
+</table>
+<p><code>registrySupportsPluggableChannel</code> 是 R2-01 的直接验收用例 —— 它定义一个匿名渠道实现，
+验证「不改核心代码即可扩展」。</p>
+<h3 id="qualitygatetest-7"><code>QualityGateTest</code> · 7 个<a class="headerlink" href="#qualitygatetest-7" title="Permanent link">&para;</a></h3>
+<p><code>acceptsNormalContent</code>、<code>rejectsEmptyContent</code>、<code>rejectsRepetitiveGarbage</code>、
+<code>rejectsControlCharacterGarbage</code>、<code>rejectsShortLowQualityContent</code>、
+<code>applyMarksRejectedAndRecordsReason</code>、<code>applyMarksAcceptedWithScore</code>。</p>
+<p>后两个用例覆盖 <code>apply</code> 的两条分支（含「拒绝时也写 qualityScore」这一行为）。</p>
+<h3 id="collectpipelinetest-6"><code>CollectPipelineTest</code> · 6 个<a class="headerlink" href="#collectpipelinetest-6" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>守卫的约定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>retriesUntilSuccessAndRecordsAttempts</code></td>
+<td>退避重试 + <code>attempts</code> 计数</td>
+</tr>
+<tr>
+<td><code>exhaustedRetryGoesToDeadLetterAndIsRejected</code></td>
+<td><strong>重试耗尽 → 死信 + REJECTED</strong></td>
+</tr>
+<tr>
+<td><code>lowQualityContentIsInterceptedBeforeStaging</code></td>
+<td><strong>质检在暂存之前</strong>（低质数据不进 ACCEPTED）</td>
+</tr>
+<tr>
+<td><code>isolatedChannelDegradesToAvailableChannel</code></td>
+<td><strong>渠道隔离 → 路由降级</strong></td>
+</tr>
+<tr>
+<td><code>noAvailableChannelFailsFastAndRegistersDeadLetter</code></td>
+<td>无可用渠道 → failFast + 死信（不抛异常）</td>
+</tr>
+<tr>
+<td><code>acceptedDataIsStagedAndCountedInMetrics</code></td>
+<td>成功路径：落暂存 + 记指标</td>
+</tr>
+</tbody>
+</table>
+<p>测试用 <code>ScriptedChannel</code>（可编排前 N 次失败的假渠道）精确控制重试场景 —— 这比用 Mockito 桩更直观。</p>
+<h3 id="datanormalizertest-6"><code>DataNormalizerTest</code> · 6 个<a class="headerlink" href="#datanormalizertest-6" title="Permanent link">&para;</a></h3>
+<p><code>producesFiveCompleteFields</code>（R2-04 核心验收）、<code>usesChannelReportedConfidenceWhenPresent</code>、
+<code>r0ModeInfersNearRealtimeFreshness</code>、<code>explicitFreshnessFromChannelWins</code>、
+<code>blankTenantFallsBackToDefault</code>、<code>toMapUsesSnakeCaseKeys</code>。</p>
+<h3 id="stagingstoretest-6"><code>StagingStoreTest</code> · 6 个<a class="headerlink" href="#stagingstoretest-6" title="Permanent link">&para;</a></h3>
+<p><code>degradesToLocalBackendWhenMinioUnavailable</code>（<strong>降级能力</strong>）、<code>storesAndListsAcceptedData</code>、
+<code>keepsRejectedDataOutOfAcceptedArea</code>（<strong>状态分区隔离</strong>）、
+<code>rollbackRemovesWholeBatch</code>（<strong>批次回滚</strong>，覆盖修复过的逆序删除缺陷）、
+<code>tenantIsolationOnRead</code>（<strong>租户隔离</strong>）、<code>statsReportsBothBackends</code>。</p>
+<h3 id="channelhealthmonitortest-4"><code>ChannelHealthMonitorTest</code> · 4 个<a class="headerlink" href="#channelhealthmonitortest-4" title="Permanent link">&para;</a></h3>
+<p><code>degradesThenIsolatesAfterConsecutiveFailures</code>（状态机全程）、<code>recoversAutomaticallyAndCountsRecovery</code>
+（自动恢复）、<code>reservedChannelIsDownEvenWhenProbeThrows</code>（预留渠道处理）、<code>snapshotContainsIsolationFields</code>。</p>
+<h3 id="httpclientstest-1"><code>HttpClientsTest</code> · 1 个<a class="headerlink" href="#httpclientstest-1" title="Permanent link">&para;</a></h3>
+<p><code>buildsHttp11ClientWithConnectTimeout</code> —— 缺陷 D-1 回归守卫（与 <code>session-manager</code> 的
+<code>OutboundHttpTest</code> 是同一缺陷在两侧的守卫）。</p>
+<h3 id="textextractortest-6"><code>TextExtractorTest</code> · 6 个<a class="headerlink" href="#textextractortest-6" title="Permanent link">&para;</a></h3>
+<p><code>extractsTitleAndBodyFromHtml</code>、<code>keepsPlainTextUntouched</code>、<code>decodesUtf8ByContentTypeHeader</code>、
+<code>decodesGbkWitoutHeader</code>（<strong>用例名有拼写错误，应为 <code>Without</code></strong>）、<code>decodesCharsetFromHtmlMeta</code>、
+<code>handlesEmptyInput</code>。</p>
+<h2 id="9">9. 故障排查速查<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>可能原因</th>
+<th>排查位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>视觉渠道一直 DEGRADED</td>
+<td>OCR 引擎未安装（PaddleOCR/Tesseract）</td>
+<td><code>GET /api/sense/channels-health</code> 看 <code>VISUAL</code>；OCR 探针要求响应含 <code>"available":true</code></td>
+</tr>
+<tr>
+<td>嗅觉渠道 DOWN</td>
+<td>未配置情报源</td>
+<td>设 <code>SENSE_INTEL_FEEDS</code>，或配 R0 规则 <code>channel=NOSE</code></td>
+</tr>
+<tr>
+<td>听觉渠道始终 DOWN</td>
+<td><strong>这是预期行为</strong>（Phase 3 才实现）</td>
+<td><code>AudioChannel.available()==false</code></td>
+</tr>
+<tr>
+<td>所有采集都 REJECTED 且原因含 <code>no available channel</code></td>
+<td>全部渠道不可用/被隔离</td>
+<td>查 <code>/api/sense/channels-health</code> 的 <code>isolated</code> 字段</td>
+</tr>
+<tr>
+<td>数据落到了本地而不是 MinIO</td>
+<td>MinIO 不可达，已自动降级</td>
+<td><code>/api/sense/stats</code> 的 <code>staging.active_backend</code></td>
+</tr>
+<tr>
+<td>采集成功但没事件</td>
+<td>Kafka 不可达（<code>max.block.ms=3000</code> 后放弃）</td>
+<td><code>/api/sense/stats</code> 的 event <code>available</code> / <code>published</code></td>
+</tr>
+<tr>
+<td>前端趋势图无数据</td>
+<td><code>SenseMetrics</code> 为内存态，重启归零</td>
+<td>需要重新采集产生数据</td>
+</tr>
+<tr>
+<td>会话创建时 <code>bus_channel=direct</code></td>
+<td>NATS 未连通</td>
+<td>检查 <code>NATS_URL</code>；注意本模块用自研客户端，订阅的是具体主题</td>
+</tr>
+</tbody>
+</table>
+<h2 id="10">10. 修改指引<a class="headerlink" href="#10" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>改动位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>新增一个采集渠道</strong></td>
+<td>实现 <code>SenseChannel</code> + 加 <code>@Component</code>（<strong>无需改 <code>ChannelRegistry</code></strong>）；若需参与降级顺序，注意 <code>CollectPipeline.fallbackOrder</code> 里 TOUCH 被强制置首</td>
+</tr>
+<tr>
+<td>调整路由降级顺序</td>
+<td><code>CollectPipeline.route()</code> 的 <code>fallbackOrder</code></td>
+</tr>
+<tr>
+<td>新增质检规则</td>
+<td><strong>只加到 <code>QualityGate.rejectReason()</code></strong>（保持单一事实来源）</td>
+</tr>
+<tr>
+<td>调整质检阈值/权重</td>
+<td><code>QualityGate</code> 的四个 <code>W_*</code> 常量 + <code>sense.quality.*</code> 配置</td>
+</tr>
+<tr>
+<td>调整重试策略</td>
+<td><code>sense.retry.*</code> 配置（无需改代码）</td>
+</tr>
+<tr>
+<td>调整健康判定灵敏度</td>
+<td><code>sense.health.degrade-after</code> / <code>down-after</code>（默认 1 / 3）</td>
+</tr>
+<tr>
+<td>新增 R0 定时规则</td>
+<td><code>application.yml</code> 的 <code>sense.r0.rules[]</code>（<strong>无需改代码</strong>）</td>
+</tr>
+<tr>
+<td>新增总线 RPC 主题</td>
+<td><code>NatsBusServer</code> 的订阅列表 + <code>handleRequest</code> 分支（<strong>通配订阅在此环境失效，必须显式登记</strong>）</td>
+</tr>
+<tr>
+<td>新增暂存后端（如 S3）</td>
+<td>实现 <code>StagingBackend</code>，并在 <code>StagingStore.active()</code> 加入选择逻辑</td>
+</tr>
+<tr>
+<td>调整暂存对象键结构</td>
+<td><code>MinioStagingBackend.keyOf()</code> / <code>LocalStagingBackend</code> 的路径拼装（<strong>两处需保持一致</strong>）</td>
+</tr>
+<tr>
+<td>新增运营观测接口</td>
+<td><code>SenseAdminController</code>（<strong>字段用 snake_case，并同步前端 Console 契约</strong>）</td>
+</tr>
+<tr>
+<td>调整事件负载字段</td>
+<td><code>SenseEventPublisher.publishCollected</code>（注意 Phase 3 消费者会依赖这些字段）</td>
+</tr>
+<tr>
+<td>调整指标趋势窗口</td>
+<td><code>SenseMetrics.rateTrend()</code>（当前 6 分钟，<strong>需与前端图表同步</strong>）</td>
+</tr>
+<tr>
+<td>新增错误码</td>
+<td><code>common/ErrorCode</code> + <code>GlobalExceptionHandler</code> switch（<strong>记得同步 <code>session-manager</code> 的同名文件</strong>）</td>
+</tr>
+</tbody>
+</table></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

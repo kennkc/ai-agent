@@ -1,0 +1,395 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>02 · proto-contracts 契约模块</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-16 14:36 · 源文件 02-proto-contracts.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 模块职责</a></li>
+<li><a href="#2">2. 契约清单</a></li>
+<li><a href="#3">3. 生成文件的命名规律</a></li>
+<li><a href="#4">4. 为什么生成源码要入库（关键工程决策）</a><ul>
+<li><a href="#41">4.1 问题现象</a></li>
+<li><a href="#42">4.2 采用的方案</a></li>
+<li><a href="#43">4.3 代价与待办</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 契约变更流程</a></li>
+<li><a href="#6">6. 依赖关系</a></li>
+<li><a href="#7">7. 归档说明</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="02-proto-contracts">02 · proto-contracts 契约模块<a class="headerlink" href="#02-proto-contracts" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>模块路径：<code>services/java/proto-contracts/</code>
+源文件数：<strong>90 个 <code>.java</code></strong>（全部为 <code>protoc</code> 生成产物，无手写代码）、0 测试
+对应契约目录：<code>proto/</code>（6 份 <code>.proto</code>）</p>
+</blockquote>
+<h2 id="1">1. 模块职责<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>本模块是两个角色合一：</p>
+<ol>
+<li><strong>跨语言契约的单一事实来源</strong>：<code>.proto</code> 定义消息与服务，Java 侧（本模块）与 Python 侧（<code>nlp-service</code>）各自从同一份契约生成代码，
+   保证两侧字段名、字段号、服务方法签名不会漂移。</li>
+<li><strong>被所有 Java 服务依赖的编译期基础</strong>：<code>gateway-service</code>、<code>session-manager</code>、<code>sense-service</code>、<code>body-service</code> 的 <code>pom.xml</code>
+   都依赖本模块，用于 gRPC 健康探针与未来的服务间 gRPC 调用。</li>
+</ol>
+<p><strong>本模块不独立部署</strong>，没有 <code>main</code> 方法、没有 <code>application.yml</code>，只产出 jar。</p>
+<h2 id="2">2. 契约清单<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>契约文件</th>
+<th>包</th>
+<th>service</th>
+<th>消息 / 枚举</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>proto/body/v1/body.proto</code></td>
+<td><code>com.agent.body.v1</code></td>
+<td><code>BodyService</code></td>
+<td><code>IngestRequest/Response</code>、<code>RetrieveRequest/Response</code>、<code>RetrievedChunk</code>（5）</td>
+</tr>
+<tr>
+<td><code>proto/brain/v1/brain.proto</code></td>
+<td><code>com.agent.brain.v1</code></td>
+<td><code>BrainService</code></td>
+<td><code>RecognizeIntentRequest/Response</code>、<code>IntentResult</code>、<code>PlanTaskRequest/Response</code>、<code>TaskStep</code>（6）</td>
+</tr>
+<tr>
+<td><code>proto/common/v1/health.proto</code></td>
+<td><code>com.agent.common.v1</code></td>
+<td><code>HealthService</code></td>
+<td><code>HealthCheckRequest/Response</code>、<code>Error</code>（3）</td>
+</tr>
+<tr>
+<td><code>proto/limb/v1/limb.proto</code></td>
+<td><code>com.agent.limb.v1</code></td>
+<td><code>LimbService</code></td>
+<td><code>ExecuteToolRequest/Response</code>、<code>ToolResult</code>、<code>RegisterToolRequest/Response</code>（5）</td>
+</tr>
+<tr>
+<td><code>proto/sensor/v1/sensor.proto</code></td>
+<td><code>com.agent.sensor.v1</code></td>
+<td><code>SensorService</code></td>
+<td><code>CollectRequest/Response</code>、<code>RegisterChannelRequest/Response</code>、<code>ChannelHealthRequest/Response</code> + <code>ChannelType</code>、<code>CollectMode</code> 枚举（8）</td>
+</tr>
+<tr>
+<td><code>proto/session/v1/session.proto</code></td>
+<td><code>com.agent.session.v1</code></td>
+<td><code>SessionService</code></td>
+<td><code>Session</code>、<code>Message</code>、<code>Citation</code> + Create/Append/Get/List/UpdateStatus 各 Request/Response（13）</td>
+</tr>
+</tbody>
+</table>
+<p>除 <code>common/health.proto</code>（Phase 0 已投入使用）外，<code>brain</code> / <code>limb</code> / <code>sensor</code> / <code>session</code> / <code>body</code> 的 gRPC 服务方法
+目前<strong>仅定义了契约，尚未实现服务端</strong> —— 当前服务间调用走 HTTP 与 NATS。契约先行是为了让后续阶段（尤其 Phase 5 四肢层）
+在实现 gRPC 时不必回头改接口。</p>
+<h2 id="3">3. 生成文件的命名规律<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<p>理解命名规律后，90 个文件可以按「每个 message 2~3 个文件 + 每个 proto 2 个文件」快速定位：</p>
+<table>
+<thead>
+<tr>
+<th>生成文件</th>
+<th>来源</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;Message&gt;.java</code></td>
+<td>每个 <code>message</code></td>
+<td>消息的不变类（immutable class），含 Builder</td>
+</tr>
+<tr>
+<td><code>&lt;Message&gt;OrBuilder.java</code></td>
+<td>每个 <code>message</code></td>
+<td>消息的只读视图接口，供 gRPC 传输层与方法签名使用</td>
+</tr>
+<tr>
+<td><code>&lt;ProtoFile&gt;OuterClass.java</code></td>
+<td>每个 <code>.proto</code></td>
+<td>文件级外层类，存放文件描述符与静态注册入口</td>
+</tr>
+<tr>
+<td><code>&lt;Service&gt;Grpc.java</code></td>
+<td>每个 <code>service</code></td>
+<td>gRPC 桩类：<code>newBlockingStub</code> / <code>newStub</code> / 服务端 <code>ImplBase</code></td>
+</tr>
+</tbody>
+</table>
+<p>一个特殊的命名细节：<code>session.proto</code> 中<strong>存在名为 <code>Session</code> 的 message</strong>，与「由文件名推导出的外层类名 <code>Session</code>」冲突，
+因此 <code>protoc</code> 把外层类改名为 <strong><code>SessionOuterClass.java</code></strong>。这是本模块唯一一处需要留心的地方 ——
+在 <code>session</code> 包内 <code>Session</code> 指的是消息类，不是外层类。</p>
+<p>各包文件数分布：</p>
+<table>
+<thead>
+<tr>
+<th>包</th>
+<th style="text-align: right;">文件数</th>
+<th style="text-align: right;">其中 Grpc 桩</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>com.agent.body.v1</code></td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">1（<code>BodyServiceGrpc</code>）</td>
+</tr>
+<tr>
+<td><code>com.agent.brain.v1</code></td>
+<td style="text-align: right;">14</td>
+<td style="text-align: right;">1（<code>BrainServiceGrpc</code>）</td>
+</tr>
+<tr>
+<td><code>com.agent.common.v1</code></td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">1（<code>HealthServiceGrpc</code>）</td>
+</tr>
+<tr>
+<td><code>com.agent.limb.v1</code></td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">1（<code>LimbServiceGrpc</code>）</td>
+</tr>
+<tr>
+<td><code>com.agent.sensor.v1</code></td>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">1（<code>SensorServiceGrpc</code>）</td>
+</tr>
+<tr>
+<td><code>com.agent.session.v1</code></td>
+<td style="text-align: right;">28</td>
+<td style="text-align: right;">1（<code>SessionServiceGrpc</code>）</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>90</strong></td>
+<td style="text-align: right;"><strong>6</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 为什么生成源码要入库（关键工程决策）<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<p>这是本项目最需要注意的一个非常规决策，<strong>不是疏忽，而是刻意的规避措施</strong>。</p>
+<h3 id="41">4.1 问题现象<a class="headerlink" href="#41" title="Permanent link">&para;</a></h3>
+<p>按常规做法，<code>protobuf-maven-plugin</code> 挂在默认生命周期上，每次 <code>mvn package</code> 都会：</p>
+<ol>
+<li>把 <code>protoc</code> 与 <code>protoc-gen-grpc-java</code> 可执行文件解压到 <code>target/protoc-dependencies/</code>；</li>
+<li>构建时<strong>先删除</strong>该目录再重新解压。</li>
+</ol>
+<p>在本机 Windows 上，第 2 步的目录删除会永久阻塞。用 <code>jstack</code> 抓取主线程栈可见调用链：</p>
+<pre><code class="language-text">java.io.WinNTFileSystem.delete0(Native Method)
+  → java.io.WinNTFileSystem.delete(File)
+  → org.codehaus.plexus.util.FileUtils.forceDelete(...)
+  → org.codehaus.plexus.util.FileUtils.deleteDirectory(...)
+  → org.codehaus.plexus.util.FileUtils.cleanDirectory(...)
+  → org.xolstice.maven.plugins.protobuf.AbstractProtocMojo.makeProtoPathFromJars(...)
+</code></pre>
+<p>即 <code>protoc</code> 依赖目录的清理在<strong>原生层</strong>长时间不返回，表现为「Maven 没有任何输出、永久卡死」。</p>
+<p>已排除的可能性（逐一实测，均非根因）：Aliyun 镜像网络问题（返回 200）、磁盘空间不足、
+Maven 并发（单进程可复现）、Bash 沙箱（PowerShell 通道同样复现）、<code>protoc</code> 子进程残留。</p>
+<h3 id="42">4.2 采用的方案<a class="headerlink" href="#42" title="Permanent link">&para;</a></h3>
+<p><strong>不对抗操作系统行为，而是把它从构建路径上移除：</strong></p>
+<ol>
+<li>用 <code>protoc</code> 命令行<strong>直接生成</strong> 90 个源文件，复制进 <code>src/main/java</code> 并提交入库；</li>
+<li>从默认生命周期<strong>移除</strong> <code>protobuf-maven-plugin</code>；</li>
+<li>保留一个 <code>proto-gen</code> profile 作为再生入口，只在契约变更时手动触发。</li>
+</ol>
+<p>效果：构建从「永久卡死」变为约 <strong>39 秒</strong>稳定通过（<code>clean package</code>）。</p>
+<h3 id="43">4.3 代价与待办<a class="headerlink" href="#43" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>代价</th>
+<th>缓解方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>契约变更后必须手动重新生成并提交产物，否则两侧不同步</td>
+<td>保留 <code>proto-gen</code> profile，见下节命令</td>
+</tr>
+<tr>
+<td>90 个生成文件在 PR 中产生较大 diff 噪音</td>
+<td>评审时按「只看 <code>proto/</code> 与 <code>Grpc.java</code>」策略跳过纯生成文件</td>
+</tr>
+<tr>
+<td>忘记同步的风险</td>
+<td><strong>建议后续在 CI 中加入校验</strong>：用 <code>-Pproto-gen</code> 重新生成后执行 <code>git diff --exit-code</code>，有差异即失败</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5">5. 契约变更流程<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 1) 先改契约
+#    编辑 proto/&lt;pkg&gt;/v1/&lt;name&gt;.proto
+
+# 2) 重新生成 Java 产物（需 JDK21）
+cd services/java
+../../scripts/mvn-dev.sh -pl proto-contracts -am clean package -Pproto-gen
+
+# 3) 确认产物变化
+git status --short services/java/proto-contracts/src/main/java
+
+# 4) 同步 Python 侧产物
+#    nlp-service 的 proto 生成产物路径：services/python/nlp-service/generated/（已被 .gitignore 忽略，需重新生成）
+
+# 5) 提交：proto 文件 + 生成产物 一起提交，不要只提交其中一个
+</code></pre>
+<p><strong>注意</strong>：<code>proto-gen</code> profile 会因为插件要清理 <code>target/protoc-dependencies</code> 而<strong>触发同一处卡死风险</strong>。
+若该命令无输出卡住，参考项目根 <code>docs/demo/</code> 下验收文档的故障排查章节，或直接用 <code>protoc</code> 命令行生成
+（参数要点：<code>--proto_path</code> 需同时包含 <code>proto/</code> 与 protobuf 的 <code>well-known-types</code> 依赖目录，
+<code>--plugin=protoc-gen-grpc-java=&lt;解压出的可执行文件&gt;</code>，<code>--java_out</code> 与 <code>--grpc-java_out</code> 指向
+<code>proto-contracts/src/main/java</code>）。</p>
+<h2 id="6">6. 依赖关系<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<p>本模块的 <code>pom.xml</code> 声明了：</p>
+<table>
+<thead>
+<tr>
+<th>依赖</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>protobuf-java</code></td>
+<td>生成代码的运行时（<code>com.google.protobuf.*</code>）</td>
+</tr>
+<tr>
+<td><code>grpc-protobuf</code></td>
+<td>gRPC 与 protobuf 的桥接</td>
+</tr>
+<tr>
+<td><code>grpc-stub</code></td>
+<td>gRPC 桩基类</td>
+</tr>
+<tr>
+<td><code>javax.annotation-api</code></td>
+<td>生成代码中 <code>@javax.annotation.Generated</code> 注解所需</td>
+</tr>
+</tbody>
+</table>
+<p>四个业务模块通过 <code>&lt;dependency&gt;proto-contracts&lt;/dependency&gt;</code> 引入，因此<strong>修改本模块会触发全部模块重编译</strong>。</p>
+<h2 id="7">7. 归档说明<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<p>按本文档系列的约定，本模块的 90 个文件<strong>不逐个展开描述</strong> —— 它们的职责由 <code>.proto</code> 唯一决定，
+逐个描述只会复制契约内容。需要了解某个消息的字段时，<strong>直接读 <code>proto/</code> 下的 <code>.proto</code> 文件</strong>，
+那才是可读性最好的事实来源（生成出来的 Java 反而是难读的那一侧）。</p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

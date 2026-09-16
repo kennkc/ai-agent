@@ -120,7 +120,12 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 - Python proto generation: 12 generated files in services/python/nlp-service/generated
 - Phase demo scripts: `docs/demo/Phase0-DEMO.md`, `docs/demo/Phase1-DEMO.md`, `docs/demo/Phase2-DEMO.md`
 - Phase 2 stage reports archived in `docs/项目进度日志报告/` (stage report, execution log, test & acceptance report; each with a generated HTML twin)
-- `scripts/md2html-report.py` renders those reports to self-contained HTML (managed Python + `markdown` installed via `pip install --target E:\AI\核心知识\.workbuddy\tmp\pylibs`; run with `PYTHONPATH` pointing there)
+- **Java source documentation** in `docs/java-services/`: per-file description of all 72 hand-written
+  Java sources (6 gateway / 13 session-manager / 35 sense-service / 4 body-service main + 14 test classes)
+  plus the 90 generated proto sources described by contract; 7 documents with HTML twins
+- `scripts/md2html-report.py` renders reports/docs to self-contained HTML. **Must run with anaconda Python**
+  (`E:/software/anaconda3/python.exe`); the managed Python has no `markdown` package.
+  Usage: `E:/software/anaconda3/python.exe scripts/md2html-report.py --all "<dir>"` (`--all` skips `README.md`)
 
 ## 2026-09-15 Work Platform Observability Update (dev branch)
 
