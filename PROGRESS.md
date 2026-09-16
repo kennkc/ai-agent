@@ -11,9 +11,12 @@ acceptance report, each with an HTML twin) are archived in
 
 ## Current milestone
 
-Phase 0, Phase 1 and Phase 2 development scope is implemented on `codex/phase0-1-hardening`
-(the external `workbuddy/main` branch is merged in on a semantic basis, and `dev` is
-fast-forwarded from the main line).
+Phase 0, Phase 1 and Phase 2 development scope is implemented on the long-lived branches
+`workbuddy/main`, `codex/phase0-1-hardening` and `dev`, which since 2026-09-16 point at the
+same commit (all three kept in sync via fast-forward; the `workbuddy/main` line brought in the
+Java per-file documentation set `docs/java-services/` and the middleware real-state fixes, the
+`codex` line brought in the wp-bff control-plane hardening, data-source degradation surfacing
+and CI additions — merged on a semantic basis, no side was overwritten).
 Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12; after the D-1 cross-service
 fix (2026-09-13) and the hardening pass below the suite stands at **61 Java tests green**.
 
