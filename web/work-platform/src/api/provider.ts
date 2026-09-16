@@ -6,6 +6,7 @@ import {
   onlineAgents, optimizationSuggestions, organs, remoteChannels, remoteFlow, resultArtifacts,
   searchIndex, senses, serviceHealth, skills, startMiddlewareMock, stopMiddlewareMock, buildSuggestionExecution, tasks, teamWorkflow, todaySummary, tracingSeed, vitalSigns,
 } from './mock'
+import { reportApiOk, reportDegrade } from './status'
 import type { MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SuggestionExecution, TracingOverview } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
 const api = axios.create({
@@ -28,10 +29,21 @@ const asArray = (payload: any) => {
   const value = unwrap(payload)
   return Array.isArray(value) ? value : (value.items || value.list || [])
 }
-const safe = async (request: () => Promise<any>, fallback: any): Promise<any> => {
+/**
+ * API 模式下的一次请求。
+ * 成功即清除该 scope 的降级记录；失败则登记降级后再返回 fallback——
+ * 任何 Mock 回落都必须留下可观测痕迹（详见 ./status.ts）。
+ */
+const safe = async (request: () => Promise<any>, fallback: any, scope = 'unknown'): Promise<any> => {
   try {
-    return await request()
-  } catch {
+    const result = await request()
+    reportApiOk(scope)
+    return result
+  } catch (error) {
+    const reason = (error as { response?: { status?: number } })?.response?.status
+      ? `HTTP ${(error as { response: { status: number } }).response.status}`
+      : ((error as Error)?.message || 'request failed')
+    reportDegrade(scope, reason)
     return fallback
   }
 }
@@ -74,9 +86,9 @@ export const dataProvider = {
 
   async getOverview() {
     if (source === 'mock') return mockWorkbench.overview
-    // BFF 未实现 /overview 时回落 mock 数据，避免整页报错（已实现端点：middleware / tracing）
-    const fallback = await safe(() => api.get('/overview'), { data: { data: mockWorkbench.overview } })
-    return unwrap(fallback)
+    // BFF 未实现 /overview 时保留 Mock 兜底，但必须显式登记降级，不再静默替换数据源
+    const payload = await safe(() => api.get('/overview'), { data: { data: mockWorkbench.overview } }, 'overview')
+    return unwrap(payload)
   },
 
   async getTasks() {
@@ -111,8 +123,14 @@ export const dataProvider = {
     const fallback: MiddlewareOverview = { enabled: false, items: [], summary: { total: 0, up: 0, down: 0 }, checked_at: '' }
     try {
       const payload = unwrapBody(await api.get('/middleware'))
-      return payload && typeof payload === 'object' && 'enabled' in payload ? payload as MiddlewareOverview : fallback
-    } catch {
+      if (payload && typeof payload === 'object' && 'enabled' in payload) {
+        reportApiOk('middleware')
+        return payload as MiddlewareOverview
+      }
+      reportDegrade('middleware', '响应缺少 enabled 字段')
+      return fallback
+    } catch (error) {
+      reportDegrade('middleware', (error as Error)?.message || 'BFF /middleware 不可达')
       return fallback
     }
   },
@@ -132,8 +150,14 @@ export const dataProvider = {
     const fallback: TracingOverview = { enabled: false, ui_url: '', services: [], recent: [], checked_at: '' }
     try {
       const payload = unwrapBody(await api.get('/tracing'))
-      return payload && typeof payload === 'object' && 'enabled' in payload ? payload as TracingOverview : fallback
-    } catch {
+      if (payload && typeof payload === 'object' && 'enabled' in payload) {
+        reportApiOk('tracing')
+        return payload as TracingOverview
+      }
+      reportDegrade('tracing', '响应缺少 enabled 字段')
+      return fallback
+    } catch (error) {
+      reportDegrade('tracing', (error as Error)?.message || 'BFF /tracing 不可达')
       return fallback
     }
   },
@@ -141,14 +165,17 @@ export const dataProvider = {
   async getWorkbenchData() {
     if (source === 'mock') return mockWorkbench
 
-    const requests = [
-      api.get('/vitals'), api.get('/organs'), api.get('/brain/DEC-20260912-0042'),
-      api.get('/senses'), api.get('/evolution'), api.get('/collab/DOM-2048'),
-      api.get('/experts'), api.get('/skills'), api.get('/connectors'),
-      api.get('/automations'), api.get('/cases'), api.get('/approvals'),
-      api.get('/models'), api.get('/remote-im/channels'), api.get('/agents/online'),
+    // 每个端点单独登记降级 scope，便于界面精确指出"哪个模块仍在用 Mock 数据"
+    const endpoints: Array<[string, string]> = [
+      ['vitals', '/vitals'], ['organs', '/organs'], ['brain', '/brain/DEC-20260912-0042'],
+      ['senses', '/senses'], ['evolution', '/evolution'], ['collaboration', '/collab/DOM-2048'],
+      ['experts', '/experts'], ['skills', '/skills'], ['connectors', '/connectors'],
+      ['automations', '/automations'], ['cases', '/cases'], ['approvals', '/approvals'],
+      ['models', '/models'], ['remote_channels', '/remote-im/channels'], ['online_agents', '/agents/online'],
     ]
-    const results = await Promise.all(requests.map(request => safe(() => request, { data: { data: null } })))
+    const results = await Promise.all(endpoints.map(([scope, path]) =>
+      safe(() => api.get(path), { data: { data: null } }, scope),
+    ))
     const [vitals, organsData, brain, sensesData, evolutionData, collaborationData, expertsData,
       skillsData, connectorsData, automationsData, casesData, approvalsData, modelsData, remoteChannelsData, onlineAgentsData] = results.map(item => unwrap(item.data))
 

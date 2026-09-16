@@ -1,12 +1,15 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import PlatformLayout from '../layouts/PlatformLayout.vue'
-import OverviewView from '../views/OverviewView.vue'
-import TasksView from '../views/TasksView.vue'
-import ChatView from '../views/ChatView.vue'
-import ModuleView from '../views/ModuleView.vue'
-import MiddlewareView from '../views/MiddlewareView.vue'
-import TracingView from '../views/TracingView.vue'
 import type { ModuleId } from '../types'
+
+// 全部路由使用动态 import：首屏只加载平台骨架，模块视图按需拉取，
+// 避免把 13 个模块面板 + 观测区一次性打进初始 chunk。
+const PlatformLayout = () => import('../layouts/PlatformLayout.vue')
+const OverviewView = () => import('../views/OverviewView.vue')
+const TasksView = () => import('../views/TasksView.vue')
+const ChatView = () => import('../views/ChatView.vue')
+const ModuleView = () => import('../views/ModuleView.vue')
+const MiddlewareView = () => import('../views/MiddlewareView.vue')
+const TracingView = () => import('../views/TracingView.vue')
 
 const moduleRoutes = [
   'vitals', 'brain', 'senses', 'evolution', 'collab', 'experts', 'skills',

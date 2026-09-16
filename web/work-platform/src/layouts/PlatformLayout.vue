@@ -60,9 +60,11 @@
           <span class="status-dot" />
           <span>{{ online ? 'SYNC' : 'OFFLINE' }}</span>
         </div>
-        <el-tag :type="store.dataSource === 'api' ? 'success' : 'info'" effect="dark" class="source-tag" @click="store.toggleDataSource">
-          {{ store.dataSource.toUpperCase() }}
-        </el-tag>
+        <el-tooltip :disabled="!degradedCount" :content="degradeTooltip" placement="bottom">
+          <el-tag :type="degradedCount ? 'danger' : store.dataSource === 'api' ? 'success' : 'info'" effect="dark" class="source-tag" @click="store.toggleDataSource">
+            {{ store.dataSource.toUpperCase() }}{{ degradedCount ? ` · 降级 ${degradedCount}` : '' }}
+          </el-tag>
+        </el-tooltip>
         <el-tag type="warning" effect="plain" class="tenant-tag">{{ store.tenant }}</el-tag>
         <el-tooltip content="通知中心">
           <el-badge :value="unreadCount" :hidden="unreadCount === 0" class="notification-badge">
@@ -83,6 +85,12 @@
       </el-header>
       <el-main class="platform-main">
         <div class="ambient-line top" />
+        <div v-if="degradedCount" class="degrade-banner" role="status">
+          <span class="degrade-dot" />
+          <strong>数据源降级</strong>
+          <span>API 模式下 {{ degradedCount }} 个数据域回落到 Mock：{{ degradedScopes }}</span>
+          <el-button text type="primary" size="small" @click="degradeDetailVisible = true">查看明细</el-button>
+        </div>
         <router-view />
         <div class="ambient-line bottom" />
       </el-main>
@@ -157,6 +165,22 @@
       <el-button type="primary" :loading="savingPreferences" @click="savePreferences">保存偏好</el-button>
     </template>
   </el-dialog>
+
+  <el-dialog v-model="degradeDetailVisible" width="640px" title="数据源降级明细">
+    <p class="degrade-dialog-hint">
+      当前数据源为 <strong>{{ store.dataSource.toUpperCase() }}</strong>。以下数据域在 API 模式下请求失败或 BFF 尚未实现，
+      界面正在展示 Mock 数据；补齐端点后会自动恢复真实数据。
+    </p>
+    <el-table :data="dataSourceStatus.degraded" size="small">
+      <el-table-column prop="scope" label="数据域" width="140" />
+      <el-table-column prop="reason" label="降级原因" />
+      <el-table-column prop="at" label="时间" width="110" />
+    </el-table>
+    <el-empty v-if="!degradedCount" description="当前没有降级数据域" :image-size="70" />
+    <template #footer>
+      <el-button @click="degradeDetailVisible = false">关闭</el-button>
+    </template>
+  </el-dialog>
 </template>
 
 <script setup lang="ts">
@@ -172,6 +196,7 @@ import { onlineAgents } from '../api/mock'
 import { useAppStore } from '../stores/app'
 import { notifications as notificationSeed, searchIndex, vitalSigns } from '../api/mock'
 import { dataProvider } from '../api/provider'
+import { dataSourceStatus } from '../api/status'
 import type { NotificationItem, SearchItem, UserPreferences } from '../types'
 
 const store = useAppStore()
@@ -208,6 +233,10 @@ const preferenceDraft = reactive<UserPreferences>({
   notify_healing: store.notifyHealing,
 })
 const savingPreferences = ref(false)
+const degradeDetailVisible = ref(false)
+const degradedCount = computed(() => dataSourceStatus.degraded.length)
+const degradedScopes = computed(() => dataSourceStatus.degraded.map(item => item.scope).join(' / '))
+const degradeTooltip = computed(() => `API 模式下降级的数据域：${degradedScopes.value || '-'}`)
 
 function openSearch() {
   searchVisible.value = true
@@ -386,4 +415,16 @@ onUnmounted(() => {
 .online-agent-copy strong { font-size: 10px; }
 .online-agent-copy small { overflow: hidden; color: var(--wp-sub); font-size: 8px; text-overflow: ellipsis; white-space: nowrap; }
 .online-agent-row em { color: var(--wp-sub); font-size: 8px; font-style: normal; }
+
+/* 数据源降级提示：API 模式下回落到 Mock 时必须可见 */
+.degrade-banner {
+  display: flex; align-items: center; gap: 10px; margin: 0 0 14px;
+  padding: 9px 14px; border: 1px solid rgba(212,175,55,.45); border-radius: 12px;
+  background: linear-gradient(90deg, rgba(212,175,55,.14), rgba(212,175,55,.03));
+  color: var(--wp-text); font-size: 12px; letter-spacing: .01em;
+}
+.degrade-banner strong { color: var(--wp-gold-soft); letter-spacing: .08em; }
+.degrade-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--wp-gold-soft); box-shadow: 0 0 9px rgba(212,175,55,.65); animation: degrade-pulse 2.4s ease-in-out infinite; }
+@keyframes degrade-pulse { 0%, 100% { opacity: 1 } 50% { opacity: .35 } }
+.degrade-dialog-hint { margin: 0 0 14px; color: var(--wp-sub); font-size: 12px; line-height: 1.7; }
 </style>

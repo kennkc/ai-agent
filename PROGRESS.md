@@ -1,6 +1,6 @@
 # Agent-Lifeform Development Progress
 
-> Last updated: 2026-09-15
+> Last updated: 2026-09-16
 
 ## Archived stage reports
 
@@ -11,8 +11,11 @@ acceptance report, each with an HTML twin) are archived in
 
 ## Current milestone
 
-Phase 0, Phase 1 and Phase 2 development scope is implemented on branch `workbuddy/main`.
-Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12 with 54 Java tests green.
+Phase 0, Phase 1 and Phase 2 development scope is implemented on `codex/phase0-1-hardening`
+(the external `workbuddy/main` branch is merged in on a semantic basis, and `dev` is
+fast-forwarded from the main line).
+Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12; after the D-1 cross-service
+fix (2026-09-13) and the hardening pass below the suite stands at **61 Java tests green**.
 
 ## Phase 0
 
@@ -142,6 +145,76 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
   (localhost / 127.0.0.1 / LAN IP all reachable, `host: true` + `allowedHosts: true` in config —
   note the dev script previously overrode config via `--host 0.0.0.0`).
 
+## 2026-09-16 Engineering Hardening (optimization pass)
+
+Scope: the P0/P1/P2 items from the progress review, **excluding Phase 3**.
+
+### P0 · wp-bff control-plane hardening
+
+- Control endpoints (`POST /api/wp/middleware/:key/start|stop`) now require **both** an origin
+  check (Origin/Referer against `WP_BFF_ALLOWED_ORIGINS`) and a control token
+  (`X-WP-Control-Token`, compared with `timingSafeEqual`). Missing/invalid token -> 401,
+  foreign origin -> 403; both cases are audit-logged as `REJECT_AUTH`.
+- Token resolution: `WP_BFF_CONTROL_TOKEN` env var, otherwise a random token generated at boot,
+  written to `services/node/wp-bff/logs/wp-bff-control-token` (mode 0600) and printed once to
+  stdout. There is **no** unauthenticated fallback mode.
+- CORS: `Access-Control-Allow-Origin: *` removed; the header is echoed only for allow-listed
+  origins and `Vary: Origin` is always set. Preflight from a foreign origin returns 403.
+- New read-only `GET /api/wp/healthz` reports token source, origin allow-list and key inventory
+  without leaking the token.
+- `server.js` refactored into `createServer(options)` with injectable spawn/probe/fetch, so the
+  control plane is testable. `services/node/wp-bff/test/server.test.js` adds **14 regression
+  cases** (auth, CSRF, allow-list, fixed command shape, idempotency, CORS, tracing fallback,
+  sampling metadata).
+- Dev wiring: the Vite proxy reads the token file **server-side** and injects the header, so the
+  token never reaches the browser bundle. The proxy deliberately does **not** rewrite `Origin`,
+  keeping the CSRF check effective through the proxy.
+
+### P0 · API mode no longer silently falls back to Mock
+
+- New `web/work-platform/src/api/status.ts` tracks degradation per data scope (overview, vitals,
+  organs, brain, senses, evolution, collaboration, experts, skills, connectors, automations,
+  cases, approvals, models, remote_channels, online_agents, middleware, tracing).
+- `provider.ts`'s `safe()` records a degradation entry on failure / clears it on success;
+  `getMiddleware` and `getTracing` register degradation when the payload lacks `enabled`.
+- UI: the header shows an `API · 降级 N` badge, a warning banner sits above the routed view with a
+  drill-down dialog (scope + reason + time), and each module page shows its own degradation alert
+  when its data domain is still served from Mock.
+
+### P1 · Observability truthfulness
+
+- Trace aggregation now returns `sample_size`, `sample_limit` and `p99_basis`
+  (`sampled_recent_traces`); the tracing page states that P99/spans come from the most recent 20
+  traces per service and are **not** full 24h metrics.
+- Recent-trace ordering switched from local time-string comparison to the absolute
+  `start_time_ms` value, removing a cross-midnight ordering bug.
+- Middleware cards now expose the probe type (`TCP 端口可达性`) next to latency and port, so a
+  green card is not mistaken for deep process health.
+
+### P1 · CI coverage
+
+- `.gitlab-ci.yml` gains `python-test` (pytest, 19 cases) and `wp-bff-test`
+  (`node --check` + `node --test`, 14 cases); `java-test`, `frontend-build` (typecheck + build)
+  and `contract-check` were already present.
+
+### P2 · Frontend delivery
+
+- All routes use dynamic `import()` now: overview, tasks, chat, the 13 module pages, middleware
+  and tracing are separate chunks instead of one initial bundle.
+- Added `@types/node` plus `"types": ["vite/client", "node"]` so `vite.config.ts` is type-checked.
+- Build output: `element` vendor chunk 952 kB (still a full import — on-demand import is deferred
+  until a visual regression baseline exists), `ModuleView` 51 kB, `vue` 111 kB.
+- `ModuleView.vue` (~85 kB, 13 module branches) is still one component; splitting it into
+  per-module panels is queued behind the same visual-regression prerequisite.
+
+### Verification (2026-09-16)
+
+- `services/node/wp-bff` -> `node --test`: **14 passed**
+- `services/python/nlp-service` -> `python -m pytest`: **19 passed**
+- `web/work-platform` -> `npm run typecheck` passed, `npm run build` passed
+- Manual API-mode degradation check: header badge + banner + per-module alert render when the
+  BFF does not implement a data domain
+
 ## Remaining
 
 - ~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:
@@ -150,7 +223,10 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 - OCR end-to-end acceptance requires installing PaddleOCR or Tesseract; until then the
   visual channel stays `DEGRADED` and the API truthfully reports `available=false`.
 - Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration).
-- Work Platform BFF/API mode: **minimal Ops subset done** (2026-09-15, see above) — middleware
-  observe/start/stop + tracing observe are real; remaining endpoints (tasks/approvals/models/
-  vitals/overview aggregation, WebSocket events) still pending and currently fall back to Mock.
+- Work Platform BFF/API mode: **minimal Ops subset done** (2026-09-15) — middleware
+  observe/start/stop + tracing observe are real. Remaining endpoints (tasks/approvals/models/
+  vitals/overview aggregation, WebSocket events) are still pending and fall back to Mock; since
+  2026-09-16 that fallback is no longer silent (header badge + banner + per-module alert).
+- `ModuleView.vue` split and Element Plus on-demand import: assessed, but both need a visual
+  regression baseline before execution (see 2026-09-16 section).
 

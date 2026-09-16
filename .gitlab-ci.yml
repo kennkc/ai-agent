@@ -60,6 +60,22 @@ java-test:
     - mvn test -q
   coverage: '/Total.*?([0-9]{1,3})%/'
 
+python-test:
+  stage: test
+  image: python:3.12-slim
+  script:
+    - cd services/python/nlp-service
+    - pip install --no-cache-dir -r requirements.txt -r requirements-dev.txt
+    - python -m pytest -q
+
+wp-bff-test:
+  stage: test
+  image: node:20
+  script:
+    - cd services/node/wp-bff
+    - node --check server.js
+    - node --test
+
 contract-check:
   stage: test
   image: python:3.12-slim

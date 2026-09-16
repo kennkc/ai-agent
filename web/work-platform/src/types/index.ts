@@ -390,6 +390,8 @@ export interface MiddlewareNode {
 
 export interface MiddlewareOverview {
   enabled: boolean
+  /** 探针类型：tcp = 仅端口可达性，不代表进程内部健康度 */
+  probe_mode?: string
   items: MiddlewareNode[]
   summary: { total: number; up: number; down: number }
   checked_at: string
@@ -400,6 +402,12 @@ export interface TracingServiceStat {
   spans_24h: number
   error_rate: number
   p99_ms: number
+  /** 采样口径：本服务参与聚合的 trace 条数 */
+  sample_size?: number
+  /** 采样上限（当前实现 = 最近 20 条） */
+  sample_limit?: number
+  /** P99 的计算基础，sampled_recent_traces = 采样内分位，非全量 24h 指标 */
+  p99_basis?: string
 }
 
 export interface TracingRecentTrace {
@@ -409,6 +417,8 @@ export interface TracingRecentTrace {
   duration_ms: number
   spans: number
   time: string
+  /** 绝对毫秒时间戳，用于跨天排序（time 为本地时间字符串） */
+  start_time_ms?: number
   status: 'ok' | 'error'
 }
 

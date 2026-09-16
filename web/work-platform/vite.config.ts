@@ -1,5 +1,26 @@
 import { defineConfig } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import fs from 'node:fs'
+import path from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const here = path.dirname(fileURLToPath(import.meta.url))
+const repoRoot = path.resolve(here, '..', '..')
+const wpBffTokenFile = path.join(repoRoot, 'services', 'node', 'wp-bff', 'logs', 'wp-bff-control-token')
+
+/**
+ * 读取 wp-bff 控制令牌（仅服务端代理使用，绝不进入浏览器 bundle）。
+ * 优先环境变量 WP_BFF_CONTROL_TOKEN，其次读取 wp-bff 启动时落盘的令牌文件。
+ */
+function readControlToken(): string {
+  const fromEnv = (process.env.WP_BFF_CONTROL_TOKEN || '').trim()
+  if (fromEnv) return fromEnv
+  try {
+    return fs.readFileSync(wpBffTokenFile, 'utf8').trim()
+  } catch {
+    return ''
+  }
+}
 
 export default defineConfig({
   plugins: [vue()],
@@ -12,6 +33,15 @@ export default defineConfig({
       '/api/wp': {
         target: 'http://127.0.0.1:8090',
         changeOrigin: true,
+        configure: proxy => {
+          proxy.on('proxyReq', proxyReq => {
+            // wp-bff 控制端点要求 Origin 白名单 + 控制令牌；
+            // Origin 由浏览器原样带到 wp-bff 校验，代理只负责注入令牌。
+            // 通过非 127.0.0.1/localhost 访问开发服务器时，需把该来源加入 WP_BFF_ALLOWED_ORIGINS。
+            const token = readControlToken()
+            if (token) proxyReq.setHeader('X-WP-Control-Token', token)
+          })
+        },
       },
       '/api': {
         target: 'http://127.0.0.1:8080',
