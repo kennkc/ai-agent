@@ -12,7 +12,7 @@ acceptance report, each with an HTML twin) are archived in
 ## Current milestone
 
 Phase 0, Phase 1 and Phase 2 development scope is implemented on the long-lived branches
-`workbuddy/main`, `codex/phase0-1-hardening` and `dev`, which since 2026-09-16 point at the
+`workbuddy/main`, `codex/main` and `dev`, which since 2026-09-16 point at the
 same commit (all three kept in sync via fast-forward; the `workbuddy/main` line brought in the
 Java per-file documentation set `docs/java-services/` and the middleware real-state fixes, the
 `codex` line brought in the wp-bff control-plane hardening, data-source degradation surfacing
