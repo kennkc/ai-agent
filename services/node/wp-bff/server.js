@@ -146,11 +146,13 @@ function createServer(options = {}) {
       state,
       console_url: meta.console_url,
       console_label: meta.console_label,
+      // 口径：本探针只判断 TCP 端口可达性，不探测进程内部健康度，
+      // 因此指标命名为“端口状态”而不是“进程健康”，避免绿点被误读。
       metrics: [
         { label: '探针', value: `${latencyMs}ms` },
         { label: '探针类型', value: 'TCP 端口可达性' },
         { label: '端口', value: String(meta.port) },
-        { label: '进程', value: state === 'up' ? '健康' : '未响应' },
+        { label: '端口状态', value: state === 'up' ? '可达' : '不可达' },
       ],
       last_check: nowTime(),
     }

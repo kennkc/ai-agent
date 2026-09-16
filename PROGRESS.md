@@ -188,8 +188,9 @@ Scope: the P0/P1/P2 items from the progress review, **excluding Phase 3**.
   traces per service and are **not** full 24h metrics.
 - Recent-trace ordering switched from local time-string comparison to the absolute
   `start_time_ms` value, removing a cross-midnight ordering bug.
-- Middleware cards now expose the probe type (`TCP 端口可达性`) next to latency and port, so a
-  green card is not mistaken for deep process health.
+- Middleware cards now expose the probe type (`TCP 端口可达性`) and the indicator formerly labelled
+  "进程：健康" is renamed to "端口状态：可达/不可达", so a green card is not mistaken for deep
+  process health.
 
 ### P1 · CI coverage
 
