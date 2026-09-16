@@ -1,0 +1,874 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>04 · session-manager 会话服务</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-16 14:36 · 源文件 04-session-manager.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 模块职责</a></li>
+<li><a href="#2">2. 关键设计约束（改代码前必读）</a><ul>
+<li><a href="#21">2.1 会话归属校验是每次访问的强制关卡</a></li>
+<li><a href="#22">2.2 上游故障默认降级，而不是整链路失败</a></li>
+<li><a href="#23-http-outboundhttp-d-1">2.3 跨服务 HTTP 必须走 OutboundHttp（缺陷 D-1 的修复成果）</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 文件清单</a></li>
+<li><a href="#4">4. 逐文件说明</a><ul>
+<li><a href="#41-sessionmanagerapplicationjava-19">4.1 SessionManagerApplication.java · 启动类 · 19 行</a></li>
+<li><a href="#42-controllersessioncontrollerjava-143">4.2 controller/SessionController.java · 控制器 · 143 行</a></li>
+<li><a href="#43-busbusproxyjava-34">4.3 bus/BusProxy.java · 组件 · 34 行</a></li>
+<li><a href="#44-natsnatsclientjava-75">4.4 nats/NatsClient.java · 组件 · 75 行</a></li>
+<li><a href="#45-kafkakafkaeventpublisherjava-55">4.5 kafka/KafkaEventPublisher.java · 组件 · 55 行</a></li>
+<li><a href="#46-kafkakafkaeventconsumerjava-66">4.6 kafka/KafkaEventConsumer.java · 组件 · 66 行</a></li>
+<li><a href="#47-orchestrationnlpclientjava-56">4.7 orchestration/NlpClient.java · 客户端 · 56 行</a></li>
+<li><a href="#48-orchestrationbodyclientjava-44">4.8 orchestration/BodyClient.java · 客户端 · 44 行</a></li>
+<li><a href="#49-orchestrationoutboundhttpjava-46">4.9 orchestration/OutboundHttp.java · 工具类 · 46 行</a></li>
+<li><a href="#410-commonerrorcodejava-30">4.10 common/ErrorCode.java · 枚举 · 30 行</a></li>
+<li><a href="#411-commonbizexceptionjava-41">4.11 common/BizException.java · 异常 · 41 行</a></li>
+<li><a href="#412-commonglobalexceptionhandlerjava-54">4.12 common/GlobalExceptionHandler.java · 切面 · 54 行</a></li>
+<li><a href="#413-grpcgrpchealthserverjava-32">4.13 grpc/GrpcHealthServer.java · 组件 · 32 行</a></li>
+<li><a href="#414-4-10">4.14 测试文件（4 个类 · 10 个用例）</a><ul>
+<li><a href="#busbusproxytestjava-1">bus/BusProxyTest.java · 1 个用例</a></li>
+<li><a href="#controllersessioncontrollertestjava-3">controller/SessionControllerTest.java · 3 个用例</a></li>
+<li><a href="#orchestrationoutboundhttptestjava-2">orchestration/OutboundHttpTest.java · 2 个用例</a></li>
+<li><a href="#orchestrationupstreamdegradetestjava-4">orchestration/UpstreamDegradeTest.java · 4 个用例</a></li>
+</ul>
+</li>
+</ul>
+</li>
+<li><a href="#5">5. 配置项</a></li>
+<li><a href="#6">6. 修改指引</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="04-session-manager">04 · session-manager 会话服务<a class="headerlink" href="#04-session-manager" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>模块路径：<code>services/java/session-manager/</code>
+源文件：<strong>13 个主代码 + 4 个测试</strong>（主代码 616 行）
+HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
+主要依赖：Spring Web、Spring Data Redis、NATS（jnats）、Kafka clients</p>
+</blockquote>
+<h2 id="1">1. 模块职责<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p><code>session-manager</code> 是生命体的<strong>对话记忆与编排中枢</strong>，承担三件事：</p>
+<ol>
+<li><strong>会话生命周期管理</strong>：创建 / 查询 / 关闭会话，状态存 Redis（Hash + List 结构，TTL 2 小时）。</li>
+<li><strong>VS1 问答编排</strong>：<code>ask</code> 请求串起「意图识别 → 知识检索 → 模板回答 → 消息落库」的完整链路。</li>
+<li><strong>脊柱总线接入</strong>：通过 NATS 做同步请求-应答（与感官层握手）与事件发布；通过 Kafka 发布持久化领域事件。</li>
+</ol>
+<p>它在链路中的位置：<strong>网关之后、<code>nlp-service</code> 与 <code>body-service</code> 之前</strong>，是唯一掌握完整问答流程的模块。</p>
+<h2 id="2">2. 关键设计约束（改代码前必读）<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21">2.1 会话归属校验是每次访问的强制关卡<a class="headerlink" href="#21" title="Permanent link">&para;</a></h3>
+<p>所有按 ID 访问的操作（<code>get</code> / <code>close</code> / <code>ask</code>）都先经过 <code>requireOwnedSession(sessionId, tenantId)</code>：</p>
+<table>
+<thead>
+<tr>
+<th>情况</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Redis 中无该会话</td>
+<td><code>AGENT_NOT_FOUND</code>（404）</td>
+</tr>
+<tr>
+<td>会话存在但 <code>tenant_id</code> 与请求头不一致</td>
+<td><code>AGENT_FORBIDDEN</code>（403）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>这是跨租户越权读的唯一防线</strong>。新增任何按会话 ID 的接口，都必须调用这个方法 ——
+包括只读接口，因为会话内容本身属于租户资产。</p>
+<p>注意这里比对的是<strong>请求头 <code>X-Tenant-Id</code></strong>（由网关注入，见 <a href="03-gateway-service.md">03-gateway-service</a>），
+不是请求体或查询参数。</p>
+<h3 id="22">2.2 上游故障默认降级，而不是整链路失败<a class="headerlink" href="#22" title="Permanent link">&para;</a></h3>
+<p><code>NlpClient</code> / <code>BodyClient</code> 各自受一个开关控制：</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>默认</th>
+<th>降级时行为</th>
+<th>关闭降级时行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app.nlp.degrade-on-failure</code></td>
+<td><code>true</code></td>
+<td>意图 → <code>{"intent":"闲聊","confidence":0.5,"engine":"FALLBACK"}</code></td>
+<td>抛 <code>AGENT_UPSTREAM_UNAVAILABLE</code>（502），<strong>保留 cause</strong></td>
+</tr>
+<tr>
+<td><code>app.body.degrade-on-failure</code></td>
+<td><code>true</code></td>
+<td>检索 → 空列表</td>
+<td>同上</td>
+</tr>
+</tbody>
+</table>
+<p>设计取舍：<strong>默认可用性优先</strong>。<code>nlp-service</code>（Python）或 <code>body-service</code> 挂掉时，用户仍能拿到模板回答，
+而不是看到 502。需要严格语义（例如做数据一致性校验的环境）时把开关关掉。</p>
+<p>降级时返回的 <code>intent</code> 与 <code>nlp-service</code> 自身的 <code>FALLBACK</code> 引擎语义保持一致，避免两侧出现「同一个故障、两种意图值」。</p>
+<h3 id="23-http-outboundhttp-d-1">2.3 跨服务 HTTP 必须走 <code>OutboundHttp</code>（缺陷 D-1 的修复成果）<a class="headerlink" href="#23-http-outboundhttp-d-1" title="Permanent link">&para;</a></h3>
+<p><strong>不要直接使用 <code>RestClient.builder().build()</code></strong>，一律经 <code>OutboundHttp.restClient(baseUrl)</code> 构建。</p>
+<p>原因（这是本项目一个已修复的真实线上级缺陷，务必理解）：</p>
+<pre><code class="language-text">RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFactory，
+底层 JDK HttpClient 默认协商 HTTP/2。对明文（http://）连接，JDK 会先发送
+    Upgrade: h2c
+    HTTP2-Settings: ...
+升级握手。uvicorn 的 h11 实现不兼容该升级，把请求判为非法并【丢弃请求体】，
+于是 FastAPI 报 422 &quot;body Field required&quot;，Java 侧只看到&quot;上游不可用&quot;。
+</code></pre>
+<p><code>OutboundHttp</code> 显式锁定 <strong>HTTP/1.1</strong>，并统一补齐连接超时（3s）与读超时（10s）——
+后者避免 Python 侧卡住时把会话请求一起拖死。</p>
+<p>该约束由 <code>OutboundHttpTest</code> 用裸 <code>ServerSocket</code> 抓原始报文做回归守卫（断言请求行是 <code>HTTP/1.1</code>
+且不含 <code>h2c</code> / <code>http2-settings</code> 头）—— 因为端口级健康检查<strong>无法发现</strong>这个缺陷，健康检查是通的，只有请求体会丢。</p>
+<h2 id="3">3. 文件清单<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>类型</th>
+<th style="text-align: right;">行数</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SessionManagerApplication.java</code></td>
+<td>启动类</td>
+<td style="text-align: right;">19</td>
+<td>Spring Boot 入口 + 服务发现</td>
+</tr>
+<tr>
+<td><code>controller/SessionController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">143</td>
+<td>会话 CRUD + <code>ask</code> 问答编排</td>
+</tr>
+<tr>
+<td><code>bus/BusProxy.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">34</td>
+<td>总线调用的<strong>容错包装</strong>（异常吞掉返回 null）</td>
+</tr>
+<tr>
+<td><code>nats/NatsClient.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">75</td>
+<td>NATS 连接、同步请求-应答、异步发布</td>
+</tr>
+<tr>
+<td><code>kafka/KafkaEventPublisher.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">55</td>
+<td>Kafka 事件发布（持久化事件通道）</td>
+</tr>
+<tr>
+<td><code>kafka/KafkaEventConsumer.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">66</td>
+<td>Kafka 事件消费（审计/回放用）</td>
+</tr>
+<tr>
+<td><code>orchestration/NlpClient.java</code></td>
+<td>客户端</td>
+<td style="text-align: right;">56</td>
+<td>调 <code>nlp-service</code> 做意图识别（含降级）</td>
+</tr>
+<tr>
+<td><code>orchestration/BodyClient.java</code></td>
+<td>客户端</td>
+<td style="text-align: right;">44</td>
+<td>调 <code>body-service</code> 做知识检索（含降级）</td>
+</tr>
+<tr>
+<td><code>orchestration/OutboundHttp.java</code></td>
+<td>工具类</td>
+<td style="text-align: right;">46</td>
+<td><strong>跨服务 HTTP 统一出口</strong>（HTTP/1.1 + 超时）</td>
+</tr>
+<tr>
+<td><code>common/ErrorCode.java</code></td>
+<td>枚举</td>
+<td style="text-align: right;">30</td>
+<td>统一错误码定义</td>
+</tr>
+<tr>
+<td><code>common/BizException.java</code></td>
+<td>异常</td>
+<td style="text-align: right;">41</td>
+<td>携带错误码 + 明细的业务异常</td>
+</tr>
+<tr>
+<td><code>common/GlobalExceptionHandler.java</code></td>
+<td>切面</td>
+<td style="text-align: right;">54</td>
+<td>错误码 → HTTP 状态码映射与统一响应体</td>
+</tr>
+<tr>
+<td><code>grpc/GrpcHealthServer.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">32</td>
+<td>gRPC Health 探针</td>
+</tr>
+<tr>
+<td><code>test/…/BusProxyTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">21</td>
+<td>总线代理序列化与委托</td>
+</tr>
+<tr>
+<td><code>test/…/SessionControllerTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">76</td>
+<td>租户校验、跨租户拒绝、ask 链路</td>
+</tr>
+<tr>
+<td><code>test/…/OutboundHttpTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">101</td>
+<td><strong>缺陷 D-1 回归守卫</strong></td>
+</tr>
+<tr>
+<td><code>test/…/UpstreamDegradeTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">56</td>
+<td>上游降级与不降级两种语义</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 逐文件说明<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41-sessionmanagerapplicationjava-19">4.1 <code>SessionManagerApplication.java</code> · 启动类 · 19 行<a class="headerlink" href="#41-sessionmanagerapplicationjava-19" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：Spring Boot 入口，<code>@EnableDiscoveryClient</code> 注册到 Nacos。</li>
+<li><strong>注意</strong>：类注释中「Phase 4: 会话状态机 FSM」尚未实现 —— 当前会话状态只有 <code>ACTIVE</code> / <code>CLOSED</code> 两个值，
+  由请求路径决定，没有独立的状态机校验。这是 Phase 4 的待办，不是现状。</li>
+<li>本模块<strong>没有</strong> <code>@ConfigurationProperties</code> 类，配置全部通过 <code>@Value</code> 直接注入（见 §5）。</li>
+</ul>
+<h3 id="42-controllersessioncontrollerjava-143">4.2 <code>controller/SessionController.java</code> · 控制器 · 143 行<a class="headerlink" href="#42-controllersessioncontrollerjava-143" title="Permanent link">&para;</a></h3>
+<p>模块最核心的文件，也是唯一掌握完整问答流程的地方。</p>
+<p><strong>Redis 键结构</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>键</th>
+<th>类型</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>session:{sessionId}</code></td>
+<td>Hash</td>
+<td><code>tenant_id</code>、<code>status</code>、<code>created_at</code>、<code>updated_at</code>、<code>last_activity_at</code>、<code>message_count</code></td>
+</tr>
+<tr>
+<td><code>session:{sessionId}:messages</code></td>
+<td>List</td>
+<td>每条消息的 JSON 字符串（<code>rightPush</code> 追加）</td>
+</tr>
+</tbody>
+</table>
+<p>两者 TTL 均为 <strong>2 小时</strong>，每次 <code>touchSession</code> 一起续期。</p>
+<p><strong>接口</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>create</code></td>
+<td><code>POST /api/session</code></td>
+<td>生成 UUID 会话，写 Hash 与 TTL，探测总线连通性，发 Kafka <code>session.created</code> 事件</td>
+</tr>
+<tr>
+<td><code>get</code></td>
+<td><code>GET /api/session/{sessionId}</code></td>
+<td>返回会话 Hash（先过归属校验）</td>
+</tr>
+<tr>
+<td><code>close</code></td>
+<td><code>DELETE /api/session/{sessionId}</code></td>
+<td>删除会话 Hash 与消息 List（先过归属校验）</td>
+</tr>
+<tr>
+<td><code>ask</code></td>
+<td><code>POST /api/session/{sessionId}/ask</code></td>
+<td>问答主链路</td>
+</tr>
+</tbody>
+</table>
+<p><strong><code>create</code> 的总线探测设计</strong>：创建会话时向 <code>lifeform.rpc.sense.ping</code> 发一次请求-应答，
+把结果作为 <code>bus_channel</code>（<code>nats</code> / <code>direct</code>）与 <code>bus_reply</code> 返回。这既是冒烟探针，
+也让调用方一眼看出总线是否通。<strong>总线不通不影响会话创建</strong>（<code>BusProxy</code> 会吞掉异常返回 null）。</p>
+<p><strong><code>ask</code> 的执行顺序</strong>（不要随意调整）：</p>
+<pre><code class="language-text">1. 校验 question 非空          → 空则 AGENT_BAD_REQUEST
+2. requireOwnedSession         → 越权/不存在直接拒绝（在调用上游之前）
+3. nlpClient.recognize         → 意图（可能是降级的 FALLBACK）
+4. bodyClient.retrieve         → top_k=3 知识片段
+5. buildAnswer(chunks)         → 模板拼装（无 LLM 参与）
+6. appendMessage × 2           → 分别落 user 与 assistant 两条消息
+7. touchSession                → 刷新 updated_at / last_activity_at / message_count 与 TTL
+</code></pre>
+<p>要点：</p>
+<ul>
+<li><strong>先校验再调上游</strong>：把租户校验放在最前，避免为越权请求白跑两次跨服务调用。</li>
+<li><strong><code>buildAnswer</code> 是模板而非模型生成</strong>：取第一条 chunk 的 <code>content</code>（超 240 字截断）拼成
+  「根据知识库《标题》检索结果：…」；无命中时返回固定话术「当前知识库未找到足够信息，请补充文档后重试。」
+  真正的 LLM 生成是 Phase 4 的 M4 目标。</li>
+<li><strong><code>latency_ms</code> 只记在 assistant 消息上</strong>，且是「意图识别 + 检索 + 拼装」的总耗时，
+  不包含消息落库本身。</li>
+<li>内部类 <code>record AskRequest(String question)</code>：请求体形状。</li>
+</ul>
+<p><strong>已知不足</strong>：<code>appendMessage</code> 失败时抛 <code>AGENT_INTERNAL_ERROR</code>，但此时上游调用已经发生、
+前一条消息可能已写入 —— 目前没有回滚机制。Phase 4 引入状态机时应一并处理。</p>
+<h3 id="43-busbusproxyjava-34">4.3 <code>bus/BusProxy.java</code> · 组件 · 34 行<a class="headerlink" href="#43-busbusproxyjava-34" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：<code>NatsClient</code> 之上的<strong>容错包装</strong>，把 <code>Map</code> 负载序列化为 JSON 后转发，并把所有异常吞掉。</li>
+<li><strong>行为差异（有意设计）</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>失败时</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>request</code></td>
+<td>返回 <code>null</code></td>
+<td>调用方据此判断总线是否可用（如 <code>create</code> 的 <code>bus_channel</code>）</td>
+</tr>
+<tr>
+<td><code>publish</code></td>
+<td>静默忽略</td>
+<td>注释明确：「Phase 1 总线投递是<strong>尽力而为</strong>，Kafka 才是持久事件通道」</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>协作</strong>：被 <code>SessionController.create</code> 调用；依赖 <code>NatsClient</code>。</li>
+</ul>
+<h3 id="44-natsnatsclientjava-75">4.4 <code>nats/NatsClient.java</code> · 组件 · 75 行<a class="headerlink" href="#44-natsnatsclientjava-75" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：NATS core 协议的 Java 客户端封装（基于 <code>jnats</code>），提供同步请求-应答与异步发布。</li>
+<li><strong>连接管理</strong>：<code>@PostConstruct init()</code> 连接 <code>NATS_URL</code>（默认 <code>nats://127.0.0.1:4222</code>），
+  连接名 <code>session-manager</code>，<code>maxReconnects=5</code>；<code>@PreDestroy close()</code> 关闭。</li>
+<li><strong>降级策略（关键）</strong>：连接失败<strong>只记 WARN 不抛异常</strong> —— 服务照常启动，后续调用被判为不可用。
+  这与 <code>gateway-service</code> 的 gRPC 健康服务「启动失败即失败」形成对比，因为总线是可选依赖。</li>
+<li><strong>超时</strong>：<code>request</code> 的超时硬编码 <strong>3 秒</strong>；<code>request</code> 与 <code>publish</code> 失败均返回空值/忽略，不向上抛。</li>
+<li><strong>协作</strong>：被 <code>BusProxy</code> 独占地使用 —— 其他类不应直接用 <code>NatsClient</code>。</li>
+</ul>
+<h3 id="45-kafkakafkaeventpublisherjava-55">4.5 <code>kafka/KafkaEventPublisher.java</code> · 组件 · 55 行<a class="headerlink" href="#45-kafkakafkaeventpublisherjava-55" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：领域事件的持久化发布通道（与 NATS 的「尽力而为」互补）。</li>
+<li><strong>主题命名约定</strong>：<code>lifeform.{domain}.{event}</code>，由 <code>publish(domain, event, key, payload)</code> 拼装。
+  例如 <code>publish("session", "created", sessionId, event)</code> → 主题 <code>lifeform.session.created</code>。</li>
+<li><strong>配置</strong>：<code>KAFKA_BOOTSTRAP</code>（默认 <code>127.0.0.1:9092</code>），<code>acks=all</code>，字符串序列化器。</li>
+<li><strong>降级</strong>：初始化失败只记 WARN，<code>producer</code> 为 null 时 <code>publish</code> 直接返回（事件静默丢弃）。
+  发送是<strong>异步回调</strong>方式，发送失败只记 WARN。</li>
+<li><strong>常量提醒</strong>：本模块的 Kafka 配置全部走<strong>环境变量</strong>（<code>System.getenv</code>），不是 <code>application.yml</code> ——
+  需要改 bootstrap 时改环境变量，改 yml 无效。</li>
+</ul>
+<h3 id="46-kafkakafkaeventconsumerjava-66">4.6 <code>kafka/KafkaEventConsumer.java</code> · 组件 · 66 行<a class="headerlink" href="#46-kafkakafkaeventconsumerjava-66" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：订阅 <code>lifeform.session.created</code> 并打印日志，用于<strong>事件链路可观测性</strong>（不是业务消费）。</li>
+<li><strong>开关</strong>：<code>KAFKA_CONSUMER_ENABLED</code>（默认 <code>true</code>）。本地不需要时设为 <code>false</code> 可少一个后台线程。</li>
+<li><strong>实现</strong>：<code>@PostConstruct</code> 启动一个名为 <code>kafka-session-event-consumer</code> 的<strong>守护线程</strong>跑 <code>pollLoop</code>；
+  消费者组 <code>session-manager-event-audit</code>，<code>auto.offset.reset=earliest</code>。</li>
+<li><strong>停止</strong>：<code>@PreDestroy</code> 置位 <code>running=false</code> + <code>interrupt()</code> + <code>consumer.wakeup()</code> 三重唤醒，
+  保证 <code>poll(500ms)</code> 能及时退出。</li>
+<li><strong>协作</strong>：与 <code>KafkaEventPublisher</code> 成对，验证「发得出去、收得回来」。当前只是 <code>log.info</code>，
+  没有业务处理逻辑 —— 真正的消费者（如感官事件入库）会在 Phase 3 出现。</li>
+</ul>
+<h3 id="47-orchestrationnlpclientjava-56">4.7 <code>orchestration/NlpClient.java</code> · 客户端 · 56 行<a class="headerlink" href="#47-orchestrationnlpclientjava-56" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：调用 <code>nlp-service</code> 的 <code>POST /api/nlp/intent</code> 做意图识别。</li>
+<li><strong>请求</strong>：<code>{"text": question, "session_id": sessionId, "tenant_id": tenantId}</code>，
+  同时带 <code>X-Tenant-Id</code> 请求头（双层传递：body 内与 header 都有，因为 Python 侧两种读法都可能用）。</li>
+<li><strong>配置</strong>：<code>app.nlp.base-url</code>（默认 <code>http://127.0.0.1:8000</code>）、<code>app.nlp.degrade-on-failure</code>（默认 <code>true</code>）。</li>
+<li><strong>返回兜底</strong>：响应为 null <strong>或</strong>抛 <code>RestClientException</code> 时，按降级开关处理（见 §2.2）。</li>
+<li><strong><code>fallback()</code> 的语义</strong>：<code>{"intent":"闲聊","confidence":0.5,"engine":"FALLBACK"}</code> ——
+  特意带上 <code>engine</code> 字段，让调用方/前端能区分「真实识别」与「降级兜底」，避免把兜底结果当成识别结果展示。</li>
+</ul>
+<h3 id="48-orchestrationbodyclientjava-44">4.8 <code>orchestration/BodyClient.java</code> · 客户端 · 44 行<a class="headerlink" href="#48-orchestrationbodyclientjava-44" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：调用 <code>body-service</code> 的 <code>POST /api/body/retrieve</code> 做知识检索。</li>
+<li><strong>请求</strong>：<code>{"query": question, "top_k": 3}</code> + <code>X-Tenant-Id</code> 头。<strong><code>top_k</code> 硬编码为 3</strong>，
+  目前不可配置 —— 若要调整召回数量需改代码。</li>
+<li><strong>配置</strong>：<code>app.body.base-url</code>（默认 <code>http://127.0.0.1:8083</code>）、<code>app.body.degrade-on-failure</code>（默认 <code>true</code>）。</li>
+<li><strong>降级</strong>：返回 <code>List.of()</code>（空结果），使 <code>buildAnswer</code> 走「未找到足够信息」话术。</li>
+</ul>
+<h3 id="49-orchestrationoutboundhttpjava-46">4.9 <code>orchestration/OutboundHttp.java</code> · 工具类 · 46 行<a class="headerlink" href="#49-orchestrationoutboundhttpjava-46" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：跨服务 HTTP 调用的<strong>唯一出口</strong>，封装 HTTP/1.1 锁定与超时。</li>
+<li><strong>成员</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>成员</th>
+<th>值 / 说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CONNECT_TIMEOUT</code></td>
+<td>3 秒（内网调用足够，过长只会拖慢失败反馈）</td>
+</tr>
+<tr>
+<td><code>READ_TIMEOUT</code></td>
+<td>10 秒</td>
+</tr>
+<tr>
+<td><code>client()</code></td>
+<td>返回 <code>HttpClient</code>，<code>Version.HTTP_1_1</code> + 连接超时</td>
+</tr>
+<tr>
+<td><code>restClient(baseUrl)</code></td>
+<td>返回 <code>RestClient</code>，基于 <code>JdkClientHttpRequestFactory</code> + 读超时</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>类的可见性</strong>：<code>public final</code> + 私有构造 —— 纯静态工具类，不允许实例化。</li>
+<li><strong>强制约定</strong>：见 §2.3。新增跨服务调用（如将来调 <code>sense-service</code>）必须经本类。</li>
+<li><strong>协作</strong>：被 <code>NlpClient</code> / <code>BodyClient</code> 使用。<strong><code>sense-service</code> 侧有同名的 <code>HttpClients</code> 工具类</strong>
+  （见 <a href="05-sense-service.md">05-sense-service</a> §4.24），职责相同但各模块独立实现 —— 同样是为了避免模块间共享代码依赖。</li>
+</ul>
+<h3 id="410-commonerrorcodejava-30">4.10 <code>common/ErrorCode.java</code> · 枚举 · 30 行<a class="headerlink" href="#410-commonerrorcodejava-30" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：统一错误码（需求 R1-08）。响应体格式：<code>{"code","message","details"}</code>。</li>
+<li><strong>完整取值</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>默认消息</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AGENT_BAD_REQUEST</code></td>
+<td>请求参数不合法</td>
+</tr>
+<tr>
+<td><code>AGENT_NOT_FOUND</code></td>
+<td>资源不存在</td>
+</tr>
+<tr>
+<td><code>AGENT_UNAUTHORIZED</code></td>
+<td>未认证或 Token 无效</td>
+</tr>
+<tr>
+<td><code>AGENT_FORBIDDEN</code></td>
+<td>无权限访问</td>
+</tr>
+<tr>
+<td><code>AGENT_CONFLICT</code></td>
+<td>资源冲突</td>
+</tr>
+<tr>
+<td><code>AGENT_DUPLICATE</code></td>
+<td>资源已存在</td>
+</tr>
+<tr>
+<td><code>AGENT_TIMEOUT</code></td>
+<td>调用超时</td>
+</tr>
+<tr>
+<td><code>AGENT_BUS_UNAVAILABLE</code></td>
+<td>总线通道不可用</td>
+</tr>
+<tr>
+<td><code>AGENT_UPSTREAM_UNAVAILABLE</code></td>
+<td>上游服务不可用</td>
+</tr>
+<tr>
+<td><code>AGENT_INTERNAL_ERROR</code></td>
+<td>服务内部错误</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>注意</strong>：<code>sense-service</code> 有<strong>另一份完全相同的 <code>ErrorCode</code></strong>（包路径不同）。两份需要同步维护；
+  若将来新增错误码，记得两边都加。</li>
+</ul>
+<h3 id="411-commonbizexceptionjava-41">4.11 <code>common/BizException.java</code> · 异常 · 41 行<a class="headerlink" href="#411-commonbizexceptionjava-41" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：携带 <code>ErrorCode</code> + <code>details</code> 明细的业务异常，<code>RuntimeException</code> 子类。</li>
+<li><strong>四个构造器</strong>，用途不同：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>构造器</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>(ErrorCode)</code></td>
+<td>用错误码默认消息</td>
+</tr>
+<tr>
+<td><code>(ErrorCode, String)</code></td>
+<td>覆盖消息</td>
+</tr>
+<tr>
+<td><code>(ErrorCode, String, Map)</code></td>
+<td>带字段级明细（如校验失败的具体字段）</td>
+</tr>
+<tr>
+<td><code>(ErrorCode, String, Throwable)</code></td>
+<td><strong>保留根因</strong> —— 上游调用失败时使用，避免排障时只剩包装后的错误码</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li>最后一个是 <code>UpstreamDegradeTest</code> 显式断言的行为（<code>assertNotNull(error.getCause())</code>）。</li>
+</ul>
+<h3 id="412-commonglobalexceptionhandlerjava-54">4.12 <code>common/GlobalExceptionHandler.java</code> · 切面 · 54 行<a class="headerlink" href="#412-commonglobalexceptionhandlerjava-54" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：<code>@RestControllerAdvice</code>，把异常统一转成 <code>{"code","message","details"}</code> 响应体。</li>
+<li><strong>错误码 → HTTP 状态码映射</strong>（改错误码时需同步这里）：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>ErrorCode</th>
+<th>HTTP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AGENT_UNAUTHORIZED</code></td>
+<td>401</td>
+</tr>
+<tr>
+<td><code>AGENT_FORBIDDEN</code></td>
+<td>403</td>
+</tr>
+<tr>
+<td><code>AGENT_NOT_FOUND</code></td>
+<td>404</td>
+</tr>
+<tr>
+<td><code>AGENT_CONFLICT</code> / <code>AGENT_DUPLICATE</code></td>
+<td>409</td>
+</tr>
+<tr>
+<td><code>AGENT_TIMEOUT</code></td>
+<td>504</td>
+</tr>
+<tr>
+<td><code>AGENT_BUS_UNAVAILABLE</code></td>
+<td>503</td>
+</tr>
+<tr>
+<td><code>AGENT_UPSTREAM_UNAVAILABLE</code></td>
+<td>502</td>
+</tr>
+<tr>
+<td>其他（含 <code>AGENT_BAD_REQUEST</code>）</td>
+<td>400（<code>default</code> 分支）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>其他处理的异常</strong>：<code>MethodArgumentNotValidException</code> → 400 且 details 为「字段 → 消息」映射；
+  <code>IllegalArgumentException</code> → 400（沿用异常自带消息）；兜底 <code>Exception</code> → 500 且<strong>只记日志、
+  不把内部异常消息返回给客户端</strong>（避免泄露实现细节）。</li>
+<li><strong>协作</strong>：捕获 <code>BizException</code>；被所有控制器共享。</li>
+</ul>
+<h3 id="413-grpcgrpchealthserverjava-32">4.13 <code>grpc/GrpcHealthServer.java</code> · 组件 · 32 行<a class="headerlink" href="#413-grpcgrpchealthserverjava-32" title="Permanent link">&para;</a></h3>
+<p>与 <code>gateway-service</code> 的同名类<strong>逐行相同</strong>（仅端口配置不同）。职责与设计取舍见
+<a href="03-gateway-service.md">03-gateway-service</a> §4.2，此处不重复。</p>
+<h3 id="414-4-10">4.14 测试文件（4 个类 · 10 个用例）<a class="headerlink" href="#414-4-10" title="Permanent link">&para;</a></h3>
+<h4 id="busbusproxytestjava-1"><code>bus/BusProxyTest.java</code> · 1 个用例<a class="headerlink" href="#busbusproxytestjava-1" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>验证内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>serializesAndDelegatesRequest</code></td>
+<td><code>BusProxy.request</code> 把 Map 序列化为 JSON 后委托给 <code>NatsClient</code>，并原样返回应答（用 Mockito 匹配 <code>lifeform.rpc.sense.ping</code> + 含 <code>tenant-a</code> 的负载）</td>
+</tr>
+</tbody>
+</table>
+<h4 id="controllersessioncontrollertestjava-3"><code>controller/SessionControllerTest.java</code> · 3 个用例<a class="headerlink" href="#controllersessioncontrollertestjava-3" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>验证内容</th>
+<th>守卫的约定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>createUsesVerifiedTenantHeader</code></td>
+<td>创建的会话 Hash 中 <code>tenant_id</code> 等于<strong>请求头传入值</strong></td>
+<td>租户来源正确（不是从请求体取）</td>
+</tr>
+<tr>
+<td><code>rejectsCrossTenantRead</code></td>
+<td>会话属 <code>tenant-a</code>、以 <code>tenant-b</code> 读取 → <code>BizException(AGENT_FORBIDDEN)</code></td>
+<td><strong>跨租户越权读防线</strong>（§2.1）</td>
+</tr>
+<tr>
+<td><code>askReturnsAnswerFromLocalRetrieval</code></td>
+<td>mock 意图 + 检索后，返回的 <code>intent</code> 正确、answer 含检索内容，且<strong>恰好写入 2 条消息</strong></td>
+<td>问答链路完整性与消息落库次数</td>
+</tr>
+</tbody>
+</table>
+<p>第三个用例的 <code>verify(list, times(2)).rightPush(...)</code> 是个精准断言 —— 落库条数变化（多写/少写）会立刻被发现。</p>
+<h4 id="orchestrationoutboundhttptestjava-2"><code>orchestration/OutboundHttpTest.java</code> · 2 个用例<a class="headerlink" href="#orchestrationoutboundhttptestjava-2" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>验证内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>clientIsLockedToHttp11</code></td>
+<td><code>OutboundHttp.client().version()</code> 必须是 <code>HTTP_1_1</code></td>
+</tr>
+<tr>
+<td><code>restClientSendsPlainHttp11RequestWithIntactBody</code></td>
+<td>裸 <code>ServerSocket</code> 抓原始报文：请求行必须是 <code>POST /api/nlp/intent HTTP/1.1</code>，<strong>不含 <code>h2c</code> / <code>http2-settings</code></strong>，且<strong>请求体完整</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>这是全项目最有价值的一个测试</strong>。缺陷 D-1 的特征是「端口能连、健康检查通过、但请求体丢失导致 422」——
+常规集成测试极难发现。它直接断言线缆上的字节，把缺陷锁死在源头。第二个用例还顺带验证了
+<code>Content-Length</code> 解析与完整收发，是一个自包含的最小 HTTP 服务端实现。</p>
+<h4 id="orchestrationupstreamdegradetestjava-4"><code>orchestration/UpstreamDegradeTest.java</code> · 4 个用例<a class="headerlink" href="#orchestrationupstreamdegradetestjava-4" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>验证内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>nlpClientDegradesToFallbackIntent</code></td>
+<td>降级开启 + 上游拒绝连接 → <code>intent=闲聊</code>、<code>engine=FALLBACK</code></td>
+</tr>
+<tr>
+<td><code>nlpClientRaisesUpstreamUnavailableWhenDegradeDisabled</code></td>
+<td>降级关闭 → <code>AGENT_UPSTREAM_UNAVAILABLE</code>，且 <strong><code>getCause()</code> 非空</strong>（根因保留）</td>
+</tr>
+<tr>
+<td><code>bodyClientDegradesToEmptyResult</code></td>
+<td>降级开启 → 空列表</td>
+</tr>
+<tr>
+<td><code>bodyClientRaisesUpstreamUnavailableWhenDegradeDisabled</code></td>
+<td>降级关闭 → <code>AGENT_UPSTREAM_UNAVAILABLE</code></td>
+</tr>
+</tbody>
+</table>
+<p>制造故障的手法很干净：<code>closedPort()</code> 先 <code>new ServerSocket(0)</code> 拿到一个空闲端口再<strong>立即释放</strong>，
+从而得到一个当前无监听者的端口，稳定复现「连接被拒绝」。</p>
+<h2 id="5">5. 配置项<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<p>本模块的配置分散在三处，<strong>改配置时注意区分</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>来源</th>
+<th>配置项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>application.yml</code></td>
+<td><code>server.port</code>(8081)、<code>grpc.port</code>(9092)、<code>app.nlp.base-url</code>、<code>app.nlp.degrade-on-failure</code>、<code>app.body.base-url</code>、<code>app.body.degrade-on-failure</code>、<code>spring.data.redis.host/port</code>、<code>spring.cloud.nacos.discovery.server-addr</code></td>
+</tr>
+<tr>
+<td>环境变量（<code>System.getenv</code>）</td>
+<td><code>NATS_URL</code>(默认 <code>nats://127.0.0.1:4222</code>)、<code>KAFKA_BOOTSTRAP</code>(默认 <code>127.0.0.1:9092</code>)、<code>KAFKA_CONSUMER_ENABLED</code>(默认 <code>true</code>)</td>
+</tr>
+<tr>
+<td>环境变量（经 yml 占位符）</td>
+<td><code>REDIS_HOST</code>、<code>REDIS_PORT</code>、<code>NACOS_ADDR</code>、<code>GRPC_PORT</code>、<code>NLP_BASE_URL</code>、<code>BODY_BASE_URL</code>、<code>NLP_DEGRADE_ON_FAILURE</code>、<code>BODY_DEGRADE_ON_FAILURE</code>、<code>OTLP_ENDPOINT</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>易踩的坑</strong>：NATS 与 Kafka 的配置<strong>只读环境变量</strong>，不读 <code>application.yml</code>。
+想在不重启容器的前提下改 NATS 地址是做不到的。</p>
+<h2 id="6">6. 修改指引<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>改动位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新增会话相关接口</td>
+<td><code>SessionController</code>，<strong>必须调用 <code>requireOwnedSession</code></strong></td>
+</tr>
+<tr>
+<td>调整会话 TTL</td>
+<td><code>SessionController.SESSION_TTL</code>（当前硬编码 2 小时，未配置化）</td>
+</tr>
+<tr>
+<td>调整召回数量</td>
+<td><code>BodyClient.retrieve</code> 里硬编码的 <code>top_k=3</code>（建议后续配置化）</td>
+</tr>
+<tr>
+<td>新增跨服务调用</td>
+<td>新建 Client 类，<strong>必须用 <code>OutboundHttp.restClient</code></strong></td>
+</tr>
+<tr>
+<td>新增错误码</td>
+<td><code>common/ErrorCode</code> + <code>GlobalExceptionHandler</code> 的 switch（注意与 <code>sense-service</code> 同名文件同步）</td>
+</tr>
+<tr>
+<td>新增领域事件</td>
+<td><code>KafkaEventPublisher.publish(domain, event, key, payload)</code>，主题自动拼为 <code>lifeform.{domain}.{event}</code></td>
+</tr>
+<tr>
+<td>实现会话状态机（Phase 4）</td>
+<td><code>SessionController</code> 目前只有 <code>ACTIVE</code>/<code>CLOSED</code> 两个字面值，状态机需新增校验层</td>
+</tr>
+</tbody>
+</table></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

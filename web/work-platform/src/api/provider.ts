@@ -81,6 +81,13 @@ const mockWorkbench = {
 }
 let executionSeq = 0
 
+// —— 中间件模块不受全局 mock 开关限制：卡片必须按真实启停状态展示 ——
+// wp-bff GET /middleware 对 8 个中间件做真实 TCP 探针；仅当 BFF 不可达时回落演示数据并标注 data_source='mock'
+const mockMiddlewareFallback = (): MiddlewareOverview => ({
+  ...getMiddlewareOverview(),
+  data_source: 'mock',
+})
+
 export const dataProvider = {
   mode: source,
 
@@ -132,31 +139,35 @@ export const dataProvider = {
   },
 
   async getMiddleware(): Promise<MiddlewareOverview> {
-    if (source === 'mock') return getMiddlewareOverview()
-    // API 模式：BFF 未就绪或中间件观测服务未启动时，返回 enabled=false 触发"未启用"页
-    const fallback: MiddlewareOverview = { enabled: false, items: [], summary: { total: 0, up: 0, down: 0 }, checked_at: '' }
     try {
       const payload = unwrapBody(await api.get('/middleware'))
       if (payload && typeof payload === 'object' && 'enabled' in payload) {
         reportApiOk('middleware')
-        return payload as MiddlewareOverview
+        return { ...payload, data_source: 'live' } as MiddlewareOverview
       }
       reportDegrade('middleware', '响应缺少 enabled 字段')
-      return fallback
+      return mockMiddlewareFallback()
     } catch (error) {
       reportDegrade('middleware', (error as Error)?.message || 'BFF /middleware 不可达')
-      return fallback
+      return mockMiddlewareFallback()
     }
   },
 
   async startMiddleware(key: string): Promise<MiddlewareNode | null> {
-    if (source === 'api') return unwrapBody(await api.post(`/middleware/${key}/start`))
-    return startMiddlewareMock(key)
+    try {
+      return unwrapBody(await api.post(`/middleware/${key}/start`))
+    } catch {
+      // BFF 不可达时回落 mock 演示启动流程
+      return startMiddlewareMock(key)
+    }
   },
 
   async stopMiddleware(key: string): Promise<MiddlewareNode | null> {
-    if (source === 'api') return unwrapBody(await api.post(`/middleware/${key}/stop`))
-    return stopMiddlewareMock(key)
+    try {
+      return unwrapBody(await api.post(`/middleware/${key}/stop`))
+    } catch {
+      return stopMiddlewareMock(key)
+    }
   },
 
   async getTracing(): Promise<TracingOverview> {

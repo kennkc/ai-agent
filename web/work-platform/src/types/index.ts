@@ -395,6 +395,8 @@ export interface MiddlewareOverview {
   items: MiddlewareNode[]
   summary: { total: number; up: number; down: number }
   checked_at: string
+  /** 数据来源：live=wp-bff 真实探针；mock=BFF 不可达时的演示回落（仅前端标注用，BFF 不返回） */
+  data_source?: 'live' | 'mock'
 }
 
 /** BFF /overview 聚合的观测域（真实数据来源：wp-bff） */

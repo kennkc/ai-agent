@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>03 · gateway-service 网关服务</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-16 14:36 · 源文件 03-gateway-service.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 模块职责</a></li>
+<li><a href="#2">2. 关键设计约束（改代码前必读）</a><ul>
+<li><a href="#21-id">2.1 租户 ID 的可信边界</a></li>
+<li><a href="#22">2.2 开发令牌端点是「默认关闭 + 仅环回地址」</a></li>
+<li><a href="#23-jwt">2.3 JWT 密钥强度是启动期硬校验</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 文件清单</a></li>
+<li><a href="#4">4. 逐文件说明</a><ul>
+<li><a href="#41-gatewayapplicationjava-14">4.1 GatewayApplication.java · 启动类 · 14 行</a></li>
+<li><a href="#42-grpcgrpchealthserverjava-32">4.2 grpc/GrpcHealthServer.java · 组件 · 32 行</a></li>
+<li><a href="#43-securityauthpropertiesjava-19">4.3 security/AuthProperties.java · 配置类 · 19 行</a></li>
+<li><a href="#44-securityjwtservicejava-41">4.4 security/JwtService.java · 服务 · 41 行</a></li>
+<li><a href="#45-securityjwtauthfilterjava-58">4.5 security/JwtAuthFilter.java · 全局过滤器 · 58 行</a></li>
+<li><a href="#46-securityauthcontrollerjava-36">4.6 security/AuthController.java · 控制器 · 36 行</a></li>
+<li><a href="#47-testjwtservicetestjava-24-2">4.7 test/…/JwtServiceTest.java · 测试 · 24 行 · 2 个用例</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 路由配置</a></li>
+<li><a href="#6">6. 修改指引</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="03-gateway-service">03 · gateway-service 网关服务<a class="headerlink" href="#03-gateway-service" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>模块路径：<code>services/java/gateway-service/</code>
+源文件：<strong>6 个主代码 + 1 个测试</strong>
+HTTP 端口：<strong>8080</strong>（统一入口）· gRPC 端口：<strong>9091</strong>
+技术栈：Spring Cloud Gateway（WebFlux 响应式）+ JJWT</p>
+</blockquote>
+<h2 id="1">1. 模块职责<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>网关是整个生命体的<strong>统一脊柱入口</strong>，承担四件事：</p>
+<ol>
+<li><strong>路由</strong>：把 <code>/api/{session,sense,nlp,body}/**</code> 分发到对应后端服务（基于 Nacos 服务发现的负载均衡）。</li>
+<li><strong>鉴权</strong>：校验 <code>Authorization: Bearer &lt;JWT&gt;</code>，失败直接短路返回，不透传到业务服务。</li>
+<li><strong>租户注入</strong>：从 JWT 解出 <code>tenant_id</code>，<strong>覆写</strong>为请求头 <code>X-Tenant-Id</code> 后再转发。
+   这是多租户隔离的根基 —— 业务服务<strong>不得信任</strong>请求参数里客户端自带的租户 ID。</li>
+<li><strong>健康探针</strong>：暴露 gRPC Health 服务，供服务网格/运维探活。</li>
+</ol>
+<h2 id="2">2. 关键设计约束（改代码前必读）<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-id">2.1 租户 ID 的可信边界<a class="headerlink" href="#21-id" title="Permanent link">&para;</a></h3>
+<p><code>JwtAuthFilter</code> 用 <code>mutate().header(TENANT_HEADER, tenantId)</code> 写入租户头。
+若客户端在请求里伪造 <code>X-Tenant-Id</code>，<strong>会被此处覆写覆盖</strong>，因此下游可以放心取用。</p>
+<p>对下游的约束：业务服务只应从 <code>X-Tenant-Id</code> 请求头读取租户，不读查询参数或请求体里的租户字段。</p>
+<h3 id="22">2.2 开发令牌端点是「默认关闭 + 仅环回地址」<a class="headerlink" href="#22" title="Permanent link">&para;</a></h3>
+<p><code>AuthController</code> 受两个条件共同保护：</p>
+<table>
+<thead>
+<tr>
+<th>保护</th>
+<th>实现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>功能开关</td>
+<td><code>@ConditionalOnProperty(prefix = "app.auth", name = "dev-token-endpoint-enabled", havingValue = "true")</code> —— 默认 <code>false</code>，Bean 根本不注册</td>
+</tr>
+<tr>
+<td>来源限制</td>
+<td>运行时校验 <code>remoteAddress</code> 必须是环回地址（<code>InetAddress.isLoopbackAddress()</code>），否则 403</td>
+</tr>
+</tbody>
+</table>
+<p><strong>生产环境务必保持 <code>DEV_TOKEN_ENDPOINT_ENABLED=false</code></strong>（默认值已满足）。若开启且网关监听在公网，等同于开放任意租户的令牌签发。</p>
+<h3 id="23-jwt">2.3 JWT 密钥强度是启动期硬校验<a class="headerlink" href="#23-jwt" title="Permanent link">&para;</a></h3>
+<p><code>JwtService</code> 构造函数会在密钥缺失或不足 32 字节时<strong>直接抛异常终止启动</strong>，而不是回退到默认密钥。
+这是有意为之：宁可启动失败，也不接受「用弱密钥悄悄跑起来」。</p>
+<h2 id="3">3. 文件清单<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>类型</th>
+<th style="text-align: right;">行数</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GatewayApplication.java</code></td>
+<td>启动类</td>
+<td style="text-align: right;">14</td>
+<td>Spring Boot 入口 + 服务发现 + 配置绑定</td>
+</tr>
+<tr>
+<td><code>grpc/GrpcHealthServer.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">32</td>
+<td>gRPC Health 探针服务</td>
+</tr>
+<tr>
+<td><code>security/AuthProperties.java</code></td>
+<td>配置类</td>
+<td style="text-align: right;">19</td>
+<td>绑定 <code>app.auth.*</code> 配置</td>
+</tr>
+<tr>
+<td><code>security/JwtService.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">41</td>
+<td>JWT 签发与校验</td>
+</tr>
+<tr>
+<td><code>security/JwtAuthFilter.java</code></td>
+<td>全局过滤器</td>
+<td style="text-align: right;">58</td>
+<td>鉴权 + 租户注入</td>
+</tr>
+<tr>
+<td><code>security/AuthController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">36</td>
+<td>开发令牌端点（默认关闭）</td>
+</tr>
+<tr>
+<td><code>test/…/JwtServiceTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">24</td>
+<td>密钥强度与租户往返</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 逐文件说明<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41-gatewayapplicationjava-14">4.1 <code>GatewayApplication.java</code> · 启动类 · 14 行<a class="headerlink" href="#41-gatewayapplicationjava-14" title="Permanent link">&para;</a></h3>
+<pre><code class="language-java">@SpringBootApplication
+@EnableDiscoveryClient
+@EnableConfigurationProperties(AuthProperties.class)
+</code></pre>
+<ul>
+<li><strong>职责</strong>：Spring Boot 应用入口。</li>
+<li><strong>@EnableDiscoveryClient</strong>：启用 Nacos 服务发现，使 <code>lb://sense-service</code> 这类 URI 能解析为实际实例。</li>
+<li><strong>@EnableConfigurationProperties(AuthProperties.class)</strong>：显式注册配置类（注意本模块<strong>没有</strong>用
+  <code>@ConfigurationPropertiesScan</code>，与 <code>sense-service</code> 的做法不同 —— 新增配置类时需在此显式登记，或用 <code>@Component</code> 标注）。</li>
+</ul>
+<h3 id="42-grpcgrpchealthserverjava-32">4.2 <code>grpc/GrpcHealthServer.java</code> · 组件 · 32 行<a class="headerlink" href="#42-grpcgrpchealthserverjava-32" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：以 <code>SmartLifecycle</code> 方式在 Spring 容器启动/关闭时管理一个 gRPC 服务，仅提供标准 Health 服务。</li>
+<li><strong>关键行为</strong>：读取 <code>${grpc.port:0}</code>；<strong>端口 ≤ 0 时直接跳过启动</strong>（便于本地不想开 gRPC 时置 0）。</li>
+<li><strong>实现要点</strong>：用 <code>HealthStatusManager</code> 注册空服务名 <code>""</code> 的状态为 <code>SERVING</code>（gRPC 健康检查协议约定：
+  空字符串代表整个服务器）。启动失败抛 <code>IllegalStateException</code>，使容器启动失败而非静默降级。</li>
+<li><strong>为何手写而非用框架</strong>：Spring Boot 官方没有内置的 gRPC server 自动配置，手写 30 行比引入额外依赖更轻。</li>
+<li><strong>协作</strong>：<code>gateway-service</code> / <code>session-manager</code> / <code>sense-service</code> / <code>body-service</code> 四个模块各有一个
+  <strong>内容几乎相同</strong>的 <code>GrpcHealthServer</code>（端口不同）。这是刻意的取舍 —— 保持模块间零共享代码依赖，
+  避免为了复用 30 行工具类而在 <code>proto-contracts</code> 里引入 Spring 依赖。</li>
+</ul>
+<h3 id="43-securityauthpropertiesjava-19">4.3 <code>security/AuthProperties.java</code> · 配置类 · 19 行<a class="headerlink" href="#43-securityauthpropertiesjava-19" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：绑定 <code>app.auth.*</code> 配置项。</li>
+<li><strong>成员</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>属性</th>
+<th>配置键</th>
+<th>默认值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>secret</code></td>
+<td><code>app.auth.secret</code></td>
+<td>无（必填）</td>
+<td>HS256 密钥，<strong>至少 32 字节</strong></td>
+</tr>
+<tr>
+<td><code>tokenTtl</code></td>
+<td><code>app.auth.token-ttl</code></td>
+<td><code>PT24H</code></td>
+<td>令牌有效期，<code>Duration</code> 类型</td>
+</tr>
+<tr>
+<td><code>devTokenEndpointEnabled</code></td>
+<td><code>app.auth.dev-token-endpoint-enabled</code></td>
+<td><code>false</code></td>
+<td>是否注册开发令牌端点</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>协作</strong>：由 <code>GatewayApplication</code> 的 <code>@EnableConfigurationProperties</code> 注册；被 <code>JwtService</code>（读密钥与 TTL）
+  和 <code>AuthController</code> 的 <code>@ConditionalOnProperty</code>（读开关）消费。</li>
+</ul>
+<h3 id="44-securityjwtservicejava-41">4.4 <code>security/JwtService.java</code> · 服务 · 41 行<a class="headerlink" href="#44-securityjwtservicejava-41" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：JWT（HS256）的签发与解析，唯一持有签名密钥的地方。</li>
+<li><strong>核心方法</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>String sign(String tenantId)</code></td>
+<td>签发令牌：<code>subject=lifeform-agent</code>，自定义声明 <code>tenant_id</code>，含 <code>iat</code> / <code>exp</code></td>
+</tr>
+<tr>
+<td><code>Claims parse(String token)</code></td>
+<td>校验签名与有效期后返回声明；失败抛 JJWT 异常由过滤器统一处理</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>启动期安全带（重要）</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>校验</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>secret</code> 为 null 或空白</td>
+<td>抛 <code>IllegalStateException("JWT_SECRET must be configured. Refusing insecure default key.")</code></td>
+</tr>
+<tr>
+<td>密钥字节数 &lt; 32</td>
+<td>抛 <code>IllegalStateException("JWT_SECRET must be at least 32 bytes for HS256.")</code></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>为什么用 <code>tenant_id</code> 自定义声明而不是只放 subject</strong>：租户是<strong>授权维度</strong>，必须与身份主体解耦 ——
+  同一个主体将来可能切换租户（管理后台场景），把租户放独立声明比塞进 subject 字符串更清晰。</li>
+<li><strong>协作</strong>：<code>JwtAuthFilter</code> 调用 <code>parse</code>；<code>AuthController</code> 调用 <code>sign</code>。</li>
+</ul>
+<h3 id="45-securityjwtauthfilterjava-58">4.5 <code>security/JwtAuthFilter.java</code> · 全局过滤器 · 58 行<a class="headerlink" href="#45-securityjwtauthfilterjava-58" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：网关的鉴权与租户注入关卡。实现 <code>GlobalFilter, Ordered</code>，<code>getOrder()</code> 返回 <strong>-100</strong>（尽早执行）。</li>
+<li><strong>处理流程</strong>：</li>
+</ul>
+<pre><code class="language-text">取请求路径 path
+├─ path 以 /actuator 或 /api/auth 开头 → 直接放行（健康检查与令牌签发本身无需鉴权）
+└─ 否则
+   ├─ 无 Authorization 或前缀不是 &quot;Bearer &quot; → 401 AGENT_UNAUTHORIZED
+   ├─ jwtService.parse(token)
+   │   ├─ 抛异常（签名错/过期/格式错） → 401 AGENT_UNAUTHORIZED
+   │   ├─ 声明中无 tenant_id 或为空白 → 403 AGENT_FORBIDDEN
+   │   └─ 成功 → mutate 请求头，写入 X-Tenant-Id → 放行
+</code></pre>
+<ul>
+<li><strong><code>reject()</code> 的设计</strong>：不抛异常，而是直接构造 JSON 响应体
+  （<code>{"code":…,"message":…,"details":{}}</code>）短路返回。这样错误响应格式与业务服务的
+  <code>GlobalExceptionHandler</code> 输出保持一致，客户端只需一套解析逻辑。</li>
+<li><strong>注意</strong>：<code>/api/auth</code> 整体放行意味着<strong>将来若在该前缀下新增需要鉴权的接口，会被这里一并放行</strong> ——
+  新增端点前请确认它属于「认证类」而非「业务类」。</li>
+<li><strong>协作</strong>：上游是客户端请求，下游是所有被路由的业务服务。</li>
+</ul>
+<h3 id="46-securityauthcontrollerjava-36">4.6 <code>security/AuthController.java</code> · 控制器 · 36 行<a class="headerlink" href="#46-securityauthcontrollerjava-36" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：开发/联调用的令牌签发端点 <code>POST /api/auth/token?tenantId=xxx</code>。</li>
+<li><strong>双重保护</strong>（见 §2.2）：类级 <code>@ConditionalOnProperty</code> 控制 Bean 是否注册；方法体内校验来源必须是环回地址。</li>
+<li><strong>返回</strong>：<code>{"token": "...", "tenant_id": "...", "token_type": "Bearer"}</code>。</li>
+<li><strong>实现细节</strong>：<code>remoteAddress</code> 为 null 时也拒绝（无法确证来源即不放行）；
+  地址解析异常同样归为 403，避免把内部异常细节暴露给调用方。</li>
+<li><strong>典型用法</strong>（本机联调）：</li>
+</ul>
+<p><code>bash
+  # 需先设置 DEV_TOKEN_ENDPOINT_ENABLED=true 并重启网关
+  curl -X POST "http://127.0.0.1:8080/api/auth/token?tenantId=demo"</code></p>
+<h3 id="47-testjwtservicetestjava-24-2">4.7 <code>test/…/JwtServiceTest.java</code> · 测试 · 24 行 · 2 个用例<a class="headerlink" href="#47-testjwtservicetestjava-24-2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>验证内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>signsAndParsesTenant</code></td>
+<td>用 32 字节密钥签发后解析，<code>tenant_id</code> 声明能正确往返</td>
+</tr>
+<tr>
+<td><code>rejectsWeakSecret</code></td>
+<td>弱密钥（<code>short-secret</code>）触发 <code>IllegalStateException</code>，锁住 §2.3 的安全带</td>
+</tr>
+</tbody>
+</table>
+<p><strong>这个测试的价值在于第二条</strong> —— 它是对「禁止弱密钥」这一安全约定的回归守卫，防止有人为了「方便本地开发」
+把启动期校验删掉。</p>
+<h2 id="5">5. 路由配置<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<p>路由定义在 <code>src/main/resources/application.yml</code>：</p>
+<table>
+<thead>
+<tr>
+<th>路由 id</th>
+<th>匹配路径</th>
+<th>目标</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>session-manager</code></td>
+<td><code>/api/session/**</code></td>
+<td><code>lb://session-manager</code></td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td><code>/api/sense/**</code></td>
+<td><code>lb://sense-service</code></td>
+</tr>
+<tr>
+<td><code>nlp-service</code></td>
+<td><code>/api/nlp/**</code></td>
+<td><code>lb://nlp-service</code>（Python 服务，也注册到 Nacos）</td>
+</tr>
+<tr>
+<td><code>body-service</code></td>
+<td><code>/api/body/**</code></td>
+<td><code>lb://body-service</code></td>
+</tr>
+</tbody>
+</table>
+<p>同时开启了 <code>discovery.locator</code>（<code>enabled: true</code>、<code>lower-case-service-id: true</code>），
+意味着<strong>未显式配置的服务也会按 <code>/{service-id}/**</code> 自动生成路由</strong> —— 这是服务发现定位器的默认行为。
+新增服务时优先补显式路由，以便控制路径前缀。</p>
+<p><strong>已知缺口</strong>：中间件观测的 <code>wp-bff</code>（Node，端口 8090）<strong>尚无网关路由</strong>。
+当前前端在开发期依赖 Vite 代理 <code>/api/wp → 127.0.0.1:8090</code>；生产路径需要在网关补一条
+<code>/api/wp/**</code> 路由。详见 <a href="07-运行时配置与横切约定.md">07-运行时配置与横切约定</a>。</p>
+<h2 id="6">6. 修改指引<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>改动位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新增一条路由</td>
+<td><code>application.yml</code> 的 <code>spring.cloud.gateway.routes</code></td>
+</tr>
+<tr>
+<td>放行某类无需鉴权的路径</td>
+<td><code>JwtAuthFilter</code> 中的路径判断（<strong>注意安全影响</strong>）</td>
+</tr>
+<tr>
+<td>调整令牌有效期</td>
+<td><code>application.yml</code> 的 <code>app.auth.token-ttl</code></td>
+</tr>
+<tr>
+<td>新增鉴权相关配置项</td>
+<td>加字段到 <code>AuthProperties</code>（已在启动类登记，无需额外操作）</td>
+</tr>
+<tr>
+<td>实现真正的 gRPC 转发</td>
+<td>当前仅暴露 Health；服务间 gRPC 调用尚未启用，契约已备于 <code>proto-contracts</code></td>
+</tr>
+</tbody>
+</table></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>01 · 模块总览与架构</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-16 14:36 · 源文件 01-模块总览与架构.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 生命体分层与模块映射</a></li>
+<li><a href="#2">2. 模块清单</a></li>
+<li><a href="#3">3. 模块依赖关系</a></li>
+<li><a href="#4">4. 两条主要链路</a><ul>
+<li><a href="#41-vs1-phase-1">4.1 VS1 问答链路（Phase 1 打通，当前主干）</a></li>
+<li><a href="#42-phase-2">4.2 感官采集链路（Phase 2 新增）</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 目录结构</a></li>
+<li><a href="#6">6. 技术基线</a></li>
+<li><a href="#7">7. 构建与运行</a><ul>
+<li><a href="#71">7.1 构建（本机特有关键约束）</a></li>
+<li><a href="#72">7.2 启动依赖</a></li>
+</ul>
+</li>
+<li><a href="#8">8. 下一步阅读</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="01">01 · 模块总览与架构<a class="headerlink" href="#01" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>本文说明 <code>services/java</code> 下五个 Maven 模块的职责边界、协作方式与运行形态。
+读完这篇应能回答：「我要改的功能应该在哪个模块？」</p>
+</blockquote>
+<h2 id="1">1. 生命体分层与模块映射<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>项目用「人体生命体」隐喻组织架构，各层落到 Java 侧的映射关系如下：</p>
+<table>
+<thead>
+<tr>
+<th>生命体层</th>
+<th>对应能力</th>
+<th>当前落地模块</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>大脑层</td>
+<td>意图识别、会话状态、任务规划</td>
+<td><code>session-manager</code>（编排）+ <code>nlp-service</code>（Python，意图）</td>
+<td>Phase 1/2 部分</td>
+</tr>
+<tr>
+<td>感官层</td>
+<td>文本 / URL / 文件 / 图像采集</td>
+<td><code>sense-service</code></td>
+<td><strong>Phase 2 已实现</strong></td>
+</tr>
+<tr>
+<td>躯体层</td>
+<td>知识库、向量检索、RAG</td>
+<td><code>body-service</code>（本地检索 MVP）</td>
+<td>Phase 3 待做</td>
+</tr>
+<tr>
+<td>四肢层</td>
+<td>工具调用、代码执行、沙箱</td>
+<td>—</td>
+<td>Phase 5+</td>
+</tr>
+<tr>
+<td>小脑层</td>
+<td>DAG、Saga、多 Agent 编排</td>
+<td>—</td>
+<td>Phase 6+</td>
+</tr>
+<tr>
+<td>免疫层</td>
+<td>安全、容错、审批、多租户</td>
+<td>横切：网关 JWT + 租户注入 + <code>OutboundGuard</code></td>
+<td>持续增强</td>
+</tr>
+<tr>
+<td>进化层</td>
+<td>反馈学习、知识自愈</td>
+<td>—</td>
+<td>Phase 8</td>
+</tr>
+</tbody>
+</table>
+<p>其中 <code>gateway-service</code> 不属于任何「器官」，它是<strong>统一的脊柱入口</strong>：所有外部流量从这里进，
+在这里完成鉴权、租户注入与路由分发。</p>
+<h2 id="2">2. 模块清单<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>artifactId</th>
+<th style="text-align: right;">HTTP 端口</th>
+<th style="text-align: right;">gRPC 端口</th>
+<th>一句话职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>proto-contracts</code></td>
+<td><code>proto-contracts</code></td>
+<td style="text-align: right;">—</td>
+<td style="text-align: right;">—</td>
+<td>跨语言契约：6 份 proto 的 Java/gRPC 生成产物</td>
+</tr>
+<tr>
+<td><code>gateway-service</code></td>
+<td><code>gateway-service</code></td>
+<td style="text-align: right;">8080</td>
+<td style="text-align: right;">9091</td>
+<td>路由、JWT 鉴权、<code>X-Tenant-Id</code> 注入</td>
+</tr>
+<tr>
+<td><code>session-manager</code></td>
+<td><code>session-manager</code></td>
+<td style="text-align: right;">8081</td>
+<td style="text-align: right;">9092</td>
+<td>会话生命周期 + VS1 问答编排</td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td><code>sense-service</code></td>
+<td style="text-align: right;">8082</td>
+<td style="text-align: right;">9093</td>
+<td>五感渠道采集、质检、暂存、健康治理</td>
+</tr>
+<tr>
+<td><code>body-service</code></td>
+<td><code>body-service</code></td>
+<td style="text-align: right;">8083</td>
+<td style="text-align: right;">9094</td>
+<td>本地知识检索（Phase 3 将换为向量库）</td>
+</tr>
+</tbody>
+</table>
+<p>Python 侧的 <code>nlp-service</code>（端口 8000）不在本文档范围，但它是问答链路的必经环节，此处标出以完整呈现链路。</p>
+<h2 id="3">3. 模块依赖关系<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">                        ┌──────────────────────┐
+   外部请求 ──────────▶  │   gateway-service    │  8080
+                        │  路由 / JWT / 租户    │
+                        └──────────┬───────────┘
+                                   │ lb:// 服务发现（Nacos）
+          ┌──────────────┬─────────┴────────┬──────────────┐
+          ▼              ▼                  ▼              ▼
+   /api/session/**  /api/sense/**     /api/nlp/**    /api/body/**
+          │              │                  │              │
+   ┌──────▼──────┐  ┌────▼─────┐     ┌──────▼─────┐  ┌─────▼──────┐
+   │  session-   │  │  sense-  │     │  nlp-      │  │   body-    │
+   │  manager    │  │  service │     │  service   │  │  service   │
+   │    8081     │  │   8082   │     │  (Python)  │  │    8083    │
+   └──┬───┬───┬──┘  └────┬─────┘     └────────────┘  └─────▲──────┘
+      │   │   │          │                                  │
+      │   │   └──HTTP────┼──────────────────────────────────┘
+      │   │              │  返回检索结果
+      │   └──HTTP────────┼──▶ nlp-service /api/nlp/intent
+      │                  │
+      └──NATS / Kafka────┴──▶ 消息总线（脊柱神经）
+
+  所有模块 ──▶ proto-contracts（编译期依赖，含 gRPC 契约与 Health 服务）
+</code></pre>
+<p>要点：</p>
+<ul>
+<li><strong><code>proto-contracts</code> 是被所有模块依赖的编译期基础</strong>，不独立部署。</li>
+<li><strong><code>session-manager</code> 同时使用两种通信风格</strong>：对 <code>nlp-service</code> / <code>body-service</code> 走同步 HTTP（问答需要即时结果）；
+  对 <code>sense-service</code> 走 NATS 请求-应答（异步采集，允许延迟）。</li>
+<li><strong><code>sense-service</code> 不反向调用 <code>session-manager</code></strong>，采集结果通过事件（<code>lifeform.sense.collected</code>）广播，
+  由 Phase 3 的入库消费者订阅 —— 保证感官层与大脑层解耦。</li>
+</ul>
+<h2 id="4">4. 两条主要链路<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41-vs1-phase-1">4.1 VS1 问答链路（Phase 1 打通，当前主干）<a class="headerlink" href="#41-vs1-phase-1" title="Permanent link">&para;</a></h3>
+<pre><code class="language-text">POST /api/session                     → 创建会话（Redis 存状态）
+POST /api/session/{id}/ask            → 提问
+  ├─ NlpClient  → nlp-service         → 意图识别（规则优先 → L0 模型兜底）
+  ├─ BodyClient → body-service        → 检索知识片段
+  └─ 模板拼装 answer（不依赖 LLM）    → 返回 + 落消息历史
+</code></pre>
+<p>降级行为：<code>nlp-service</code> 或 <code>body-service</code> 不可用时，默认按配置降级
+（意图 → <code>FALLBACK</code> 闲聊、检索 → 空结果），仍能返回模板回答，而不是整条链路 503；
+显式关闭降级时返回 502 语义的 <code>AGENT_UPSTREAM_UNAVAILABLE</code> 并保留根因。</p>
+<h3 id="42-phase-2">4.2 感官采集链路（Phase 2 新增）<a class="headerlink" href="#42-phase-2" title="Permanent link">&para;</a></h3>
+<pre><code class="language-text">两种触发方式：
+  R0 定时调度（R0Scheduler，规则驱动）  ─┐
+  R1 动态指令（HTTP /api/sense/command）─┤
+  R1 总线指令（NATS，R1-04 脊柱信号）   ─┘
+                                        ▼
+                            CollectPipeline（路由 + 退避重试 + 降级）
+                                        ▼
+                     SenseChannel 五感渠道（触/视/嗅/味/听）
+                                        ▼
+                            DataNormalizer（五字段打标）
+                                        ▼
+                     QualityGate（硬规则 + 评分，低质直接拦截）
+                                        ▼
+                     StagingStore（MinIO / 本地，隔离暂存 + 批次回滚）
+                                        ▼
+                     SenseEventPublisher（lifeform.sense.collected）
+</code></pre>
+<p>治理设施环绕这条链路：<code>ChannelHealthMonitor</code>（探针 / 隔离 / 恢复）、
+<code>DeadLetterStore</code>（重试耗尽登记）、<code>SenseMetrics</code>（供 Console 感官视图）。</p>
+<h2 id="5">5. 目录结构<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">services/java/
+├── pom.xml                        # 聚合父 POM（java.version=21）
+├── proto-contracts/               # 契约模块（90 个生成文件）
+│   ├── pom.xml
+│   └── src/main/java/com/agent/{body,brain,common,limb,sensor,session}/v1/
+├── gateway-service/               # 6 main + 1 test
+│   ├── pom.xml
+│   └── src/main/java/com/agent/gateway/
+│       ├── GatewayApplication.java
+│       ├── grpc/                  # gRPC Health 探针
+│       └── security/              # JWT 签发、校验过滤器、开发令牌端点
+├── session-manager/               # 13 main + 4 test
+│   ├── pom.xml
+│   └── src/main/java/com/agent/session/
+│       ├── SessionManagerApplication.java
+│       ├── bus/                   # 总线代理
+│       ├── common/                # 错误码 / 业务异常 / 全局异常处理
+│       ├── controller/            # 会话 REST 入口
+│       ├── grpc/
+│       ├── kafka/                 # 事件消费与发布
+│       ├── nats/                  # NATS 客户端
+│       └── orchestration/         # 跨服务 HTTP 出口 + 上游客户端
+├── sense-service/                 # 35 main + 8 test
+│   ├── pom.xml
+│   └── src/main/java/com/agent/sense/
+│       ├── SenseServiceApplication.java
+│       ├── channel/               # R2-01 渠道抽象 + 五感实现
+│       ├── collect/               # R2-02/R2-06 采集主流程
+│       ├── common/                # 错误码 / 全局异常处理
+│       ├── config/                # R2-01~R2-10 配置绑定
+│       ├── controller/            # 采集入口 + 运营观测接口
+│       ├── deadletter/            # R2-09 死信队列
+│       ├── dynamic/               # R2-06 R1 动态指令
+│       ├── event/                 # 采集事件发布
+│       ├── grpc/
+│       ├── health/                # R2-09 渠道健康治理
+│       ├── metrics/               # 采集指标（Console 数据源）
+│       ├── model/                 # R2-04 采集数据模型
+│       ├── nats/                  # 自研最小 NATS 客户端 + 总线服务
+│       ├── normalize/             # R2-04 五字段打标
+│       ├── quality/               # R2-04/R2-10 质检门槛
+│       ├── schedule/              # R2-05 R0 定时调度
+│       ├── security/              # R2-02 SSRF 出站守卫
+│       ├── staging/               # R2-10 隔离暂存（多后端）
+│       └── util/                  # HTTP 客户端构建器 / 文本抽取
+└── body-service/                  # 4 main + 1 test
+    ├── pom.xml
+    └── src/main/java/com/agent/body/
+        ├── BodyServiceApplication.java
+        ├── controller/
+        ├── grpc/
+        └── store/                 # 内存检索实现
+</code></pre>
+<h2 id="6">6. 技术基线<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>版本</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java</td>
+<td>21</td>
+<td><code>maven.compiler.release</code> 由属性 <code>java.version</code> 驱动</td>
+</tr>
+<tr>
+<td>Spring Boot</td>
+<td>3.3.4</td>
+<td>由父 POM 统一管理</td>
+</tr>
+<tr>
+<td>Spring Cloud</td>
+<td>2023.0.3</td>
+<td>—</td>
+</tr>
+<tr>
+<td>Spring Cloud Alibaba</td>
+<td>2023.0.1.0</td>
+<td>Nacos 服务发现</td>
+</tr>
+<tr>
+<td>gRPC</td>
+<td>1.65.1</td>
+<td>与 <code>protoc-gen-grpc-java</code> 版本一致</td>
+</tr>
+<tr>
+<td>Protobuf</td>
+<td>3.25.3</td>
+<td>与 <code>protoc</code> 版本一致</td>
+</tr>
+<tr>
+<td>Lombok</td>
+<td>由父 POM 管理</td>
+<td>大量使用 <code>@Data</code> / <code>@Slf4j</code></td>
+</tr>
+<tr>
+<td>MinIO SDK</td>
+<td>8.2.1</td>
+<td>仅 <code>sense-service</code> 使用</td>
+</tr>
+<tr>
+<td>jsoup</td>
+<td>1.17.2</td>
+<td>仅 <code>sense-service</code> 使用（HTML 正文提取）</td>
+</tr>
+<tr>
+<td>resilience4j-retry</td>
+<td>2.2.0</td>
+<td>仅 <code>sense-service</code> 使用（退避重试）</td>
+</tr>
+<tr>
+<td>Kafka clients</td>
+<td>由父 POM 管理</td>
+<td><code>session-manager</code> 事件通道</td>
+</tr>
+<tr>
+<td>jnats / 自研客户端</td>
+<td>—</td>
+<td><code>session-manager</code> 用 jnats；<code>sense-service</code> 用自研最小实现</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7">7. 构建与运行<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<h3 id="71">7.1 构建（本机特有关键约束）<a class="headerlink" href="#71" title="Permanent link">&para;</a></h3>
+<p><strong>不要直接使用 <code>mvn</code></strong> —— 本机 <code>mvn.cmd</code> 已损坏。所有构建走仓库根的包装脚本：</p>
+<pre><code class="language-bash">cd services/java
+
+# 全量构建 + 测试
+../../scripts/mvn-dev.sh clean package
+
+# 只跑单个模块（根 POM 在 services/java 下，必须在此目录执行 -pl）
+../../scripts/mvn-dev.sh -pl sense-service -am test
+</code></pre>
+<p><code>scripts/mvn-dev.sh</code> 通过 <code>plexus-classworlds</code> 启动器直调 Maven，绕开损坏的 <code>mvn.cmd</code>。</p>
+<p>另外两点容易踩：</p>
+<ul>
+<li><strong><code>rm -rf target</code> 会被安全策略拦截</strong>，清理请用 Maven 自带 <code>clean</code> 目标。</li>
+<li><strong>默认生命周期不会调用 <code>protoc</code></strong> —— 生成的 proto 源码已入库，原因见 <a href="02-proto-contracts.md">02-proto-contracts</a>。</li>
+</ul>
+<h3 id="72">7.2 启动依赖<a class="headerlink" href="#72" title="Permanent link">&para;</a></h3>
+<p>各服务启动前需以下基础设施就绪（由仓库根 <code>docker-compose.yml</code> 提供）：</p>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>依赖</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gateway-service</code></td>
+<td>Nacos（服务发现）</td>
+</tr>
+<tr>
+<td><code>session-manager</code></td>
+<td>Nacos、Redis（会话存储）</td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td>Nacos、MinIO（暂存，缺失时自动降级本地）、NATS（R1 总线指令）</td>
+</tr>
+<tr>
+<td><code>body-service</code></td>
+<td>Nacos</td>
+</tr>
+</tbody>
+</table>
+<p>MinIO 缺失不会导致 <code>sense-service</code> 启动失败 —— <code>StagingStore</code> 会自动降级到本地文件后端，
+保证「低质拦截 + 批次可回滚」始终成立。</p>
+<h2 id="8">8. 下一步阅读<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<ul>
+<li>要改接口或路由 → <a href="03-gateway-service.md">03-gateway-service</a></li>
+<li>要改问答链路 → <a href="04-session-manager.md">04-session-manager</a></li>
+<li>要加采集渠道 / 调质检策略 → <a href="05-sense-service.md">05-sense-service</a></li>
+<li>要接入向量库 → <a href="06-body-service.md">06-body-service</a></li>
+<li>要部署或排查环境问题 → <a href="07-运行时配置与横切约定.md">07-运行时配置与横切约定</a></li>
+</ul></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
