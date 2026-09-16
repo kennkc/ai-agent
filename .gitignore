@@ -1,6 +1,8 @@
 # 环境变量（含密钥，不入库）
-.env.local
-.env.test
+# 仅 .env.example 作为模板入库；.env / .env.local / .env.production 等一律忽略
+.env
+.env.*
+!.env.example
 
 # 构建产物
 target/
@@ -31,7 +33,6 @@ services/python/nlp-service/generated/
 
 # Vite cache
 **/.vite/
-.env
 
 # Python 虚拟环境（本机 services/python/venv，34MB，不入库）
 venv/
