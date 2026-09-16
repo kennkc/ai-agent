@@ -26,4 +26,10 @@ node services/node/wp-bff/server.js
 # 默认端口 8090，可用 WP_BFF_PORT 覆盖
 ```
 
+前置条件：根目录需有 `.env`（复制 `.env.example`），其中 `MINIO_ROOT_USER` 等为 `docker compose` 必需变量；
+目录名变更后还需沿用既有 `COMPOSE_PROJECT_NAME`，否则会与存量容器/数据卷命名冲突。
+
+前端中间件监控卡片**始终以本服务的真实探针结果为准**（不受 `VITE_DATA_SOURCE` mock 开关限制）；
+BFF 未运行时前端回落演示数据，并在界面标注"演示数据 · BFF 未连接"。
+
 开发期前端由 Vite 代理 `/api/wp` → `http://127.0.0.1:8090`（见 `web/work-platform/vite.config.ts`）；生产路径为网关 `/api/wp/**` 路由（待建）。
