@@ -41,10 +41,10 @@ Phase 2 感官回路（已落地）：
 | Java 服务 | Java 21 + Spring Boot 3 + Spring Cloud Alibaba |
 | Python AI 服务 | Python 3.12 + FastAPI |
 | 前端 | Vue 3 + Vite + TypeScript + Element Plus |
-| 前端状态 | Pinia + TanStack Query for Vue |
+| 前端状态 | Pinia（服务端 Query/缓存层待 Phase 3 引入 TanStack Query） |
 | 前端路由 | Vue Router |
-| DAG 可视化 | Vue Flow |
-| 实时通信 | WebSocket / socket.io-client |
+| DAG 可视化 | 自研 SVG + CSS 拓扑（Vue Flow 待编排期引入） |
+| 实时通信 | 当前为 REST 轮询；WebSocket 推送为设计目标，代码尚未接入 |
 | 数据层 | PostgreSQL + pgvector、Qdrant、Redis、MinIO |
 | 消息总线 | NATS JetStream + Kafka |
 | 可观测性 | OpenTelemetry + Jaeger + Prometheus + Grafana |
@@ -145,7 +145,11 @@ npm run dev
 默认地址：`http://localhost:3001`。开发期 Vite 代理 `/api/wp` → `http://127.0.0.1:8090`。
 
 数据源切换：`web/work-platform/.env` 中 `VITE_DATA_SOURCE=mock|api`（当前开发环境为 `api`）。
-API 模式下观测区两页展示真实数据：**中间件监控**（8 容器实时探针、单卡片启停、一键串行启动/终止，真实执行 `docker compose up -d / stop`，8-key 白名单）与**链路追踪**（真实 Jaeger 服务统计与最近链路）；BFF 未覆盖的端点自动回落 Mock。详见 `services/node/wp-bff/README.md`。
+API 模式下观测区两页展示真实数据：**中间件监控**（8 容器实时探针、单卡片启停、一键串行启动/终止，真实执行 `docker compose up -d / stop`，8-key 白名单）与**链路追踪**（真实 Jaeger 服务统计与最近链路）。
+
+**数据源降级不再静默**（2026-09-16 起）：BFF 未覆盖或请求失败的数据域仍会回落 Mock，但顶栏会显示 `API · 降级 N` 徽标并在页面顶部给出黄色横幅，点击可查看是哪些数据域、因为什么原因在展示 Mock 数据。
+
+**中间件控制面需要令牌**：`POST /api/wp/middleware/:key/start|stop` 必须同时满足「来源白名单」与「控制令牌」两项校验。令牌优先取环境变量 `WP_BFF_CONTROL_TOKEN`，未配置时由 wp-bff 启动时随机生成到 `services/node/wp-bff/logs/wp-bff-control-token`；开发期 Vite 代理在服务端读取该文件并注入请求头，令牌不会进入浏览器。局域网 IP 访问开发服务器时需把该来源加入 `WP_BFF_ALLOWED_ORIGINS`。详见 `services/node/wp-bff/README.md`。
 
 ---
 
@@ -157,7 +161,8 @@ API 模式下观测区两页展示真实数据：**中间件监控**（8 容器�
 - Gateway 将已验证 JWT 中的 `tenant_id` 写入 `X-Tenant-Id`。
 - Session、Sense、Body 服务不得信任 query/body 中的租户字段。
 - URL 采集默认禁止 loopback、私网、链路本地、组播和自动重定向。
-- 生产环境仍需补充 OAuth2/RBAC、mTLS、Vault/KMS、限流和审计保留策略。
+- 工作平台 BFF 控制面（`wp-bff`）固定绑定 `127.0.0.1`，并叠加来源白名单（Origin/Referer）+ 控制令牌双校验；CORS 不再使用通配符。
+- 生产环境仍需补充 OAuth2/RBAC、mTLS、Vault/KMS、限流和审计保留策略；`wp-bff` 的进程级静态令牌需替换为租户级 JWT 鉴权与最小权限模型（Phase 7）。
 
 ---
 
@@ -192,7 +197,10 @@ curl -X POST "http://127.0.0.1:8080/api/session/<session_id>/ask" \
 
 ```bash
 cd services/java
-../../scripts/mvn-dev.sh clean package     # 52 tests, 0 failures
+../../scripts/mvn-dev.sh clean package     # 61 tests, 0 failures
+
+cd services/node/wp-bff
+node --test                                # 14 passed（控制面安全回归）
 
 cd services/python/nlp-service
 ../venv/Scripts/python.exe tests/test_intent.py   # 15 passed, L0 holdout 90.0%, P99 0.052 ms
@@ -319,7 +327,22 @@ npm run build
 
 6. 确认 `dist/` 构建成功后再提交。
 
-### 8.4 提交前检查
+### 8.4 分支与发布治理
+
+| 分支 | 用途 |
+|---|---|
+| `codex/phase0-1-hardening` | 当前主干开发分支（Phase 0/1 加固 + Phase 2 观测区），一切改动先落这里 |
+| `dev` | 集成分支，落后于主干时通过 `git merge --ff-only origin/dev` 快进合入 |
+| `workbuddy/main` | 外部协作者分支，合并前必须逐项比对语义，不做覆盖式合并 |
+
+约定：
+
+1. 新工作分支统一使用 `codex/` 前缀。
+2. 分支名与内容出现偏差时（例如 Phase 2 内容落在 `phase0-1-hardening`），在阶段收口时新建语义正确的分支并归档，不做历史重写。
+3. 每次合并后必须重跑全量验证（Java / Python / 契约 / wp-bff / Vue typecheck+build）再推送。
+4. 冲突处理按「时间 + 语义」逐项合并，禁止直接覆盖对方改动。
+
+### 8.5 提交前检查
 
 每次提交前必须确认：
 
@@ -332,7 +355,8 @@ npm run build
 [ ] 契约检查 0 FAIL
 [ ] Vue typecheck 通过
 [ ] Vue build 通过
-[ ] 未提交 node_modules、dist、target 和本地密钥
+[ ] wp-bff `node --test` 通过（控制面改动时）
+[ ] 未提交 node_modules、dist、target、logs 和本地密钥
 ```
 
 ---
@@ -346,6 +370,8 @@ npm run build
 - [x] Phase 2：五感渠道、R0/R1 采集、质检、隔离暂存、意图级联（R2-01~R2-10）
 - [ ] OCR 端到端验收（需安装 PaddleOCR 或 Tesseract）
 - [x] Docker 运行时冒烟（2026-09-13：8 容器 + 4 Java + Python + 前端，healthcheck 16/16，问答链路 200）
+- [x] 观测区与最小 Ops BFF：中间件监控 / 链路追踪（2026-09-15）
+- [x] 工程加固（2026-09-16）：wp-bff 控制面鉴权 + CORS 收紧、数据源降级可见化、链路采样口径标注、CI 补 Python/wp-bff 测试、前端路由懒加载
 - [ ] Phase 3：Qdrant/pgvector 正式知识库
 - [ ] Phase 4：LLM Gateway 与 M1 问答 MVP
 - [ ] Phase 5-8：工具、编排、免疫、自进化

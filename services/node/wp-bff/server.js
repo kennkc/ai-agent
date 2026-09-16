@@ -6,14 +6,29 @@
  *   GET  /api/wp/middleware              探测 8 个中间件，返回 MiddlewareOverview 契约
  *   POST /api/wp/middleware/:key/start   白名单内执行 docker compose up -d <key>
  *   POST /api/wp/middleware/:key/stop    白名单内执行 docker compose stop <key>
+ *   GET  /api/wp/tracing                 Jaeger 服务注册与最近 trace 聚合
+ *   GET  /api/wp/healthz                 进程存活 + 控制面配置自检（只读）
  *
- * 安全：key 白名单 + 固定命令形态，无任意参数透传；控制操作写审计日志。
+ * 安全模型（2026-09-16 加固）：
+ *   1. 读端点（GET）开放但仅面向白名单来源回显 CORS 头
+ *   2. 控制端点（POST）双重校验：来源白名单（Origin/Referer）+ 控制令牌 X-WP-Control-Token
+ *   3. 控制令牌来自 WP_BFF_CONTROL_TOKEN；未配置时启动生成一次性随机令牌并写入 logs/ 与 stdout
+ *   4. CORS 不再使用通配符，仅回显 WP_BFF_ALLOWED_ORIGINS 内的来源
+ *   5. key 白名单 + 固定命令形态，无任意参数透传；控制操作写审计日志
+ *   6. 令牌比较使用 timingSafeEqual，避免时序侧信道
  */
 const http = require('node:http')
 const net = require('node:net')
-const { spawn } = require('node:child_process')
+const crypto = require('node:crypto')
+const { spawn: realSpawn } = require('node:child_process')
 const fs = require('node:fs')
 const path = require('node:path')
+
+const DEFAULT_ALLOWED_ORIGINS = [
+  'http://127.0.0.1:3001',
+  'http://localhost:3001',
+  'http://[::1]:3001',
+]
 
 function httpGetJson(url, timeoutMs = 2500) {
   return new Promise(resolve => {
@@ -29,9 +44,7 @@ function httpGetJson(url, timeoutMs = 2500) {
   })
 }
 
-const PORT = Number(process.env.WP_BFF_PORT || 8090)
-const REPO_ROOT = path.resolve(__dirname, '..', '..', '..')
-const AUDIT_LOG = path.join(__dirname, 'logs', 'wp-bff-audit.log')
+const DEFAULT_PORT = Number(process.env.WP_BFF_PORT || 8090)
 
 // key 白名单：key 即 docker-compose.yml 服务名，禁止其余任何值
 const MIDDLEWARE = {
@@ -46,18 +59,344 @@ const MIDDLEWARE = {
 }
 const WHITELIST = new Set(Object.keys(MIDDLEWARE))
 
-// 内存 ops 表：key -> { action: 'start'|'stop', startedAt }，由 GET 探针或 watchdog 清除
-const ops = new Map()
 const START_TIMEOUT_MS = 180000
 const STOP_TIMEOUT_MS = 120000
 
-function audit(action, key, detail) {
-  const line = `[${new Date().toISOString()}] ${action} ${key || '-'} ${detail || ''}\n`
+function defaultControlTokenFile() {
+  return path.join(__dirname, 'logs', 'wp-bff-control-token')
+}
+
+/**
+ * 解析控制令牌：优先环境变量；否则生成随机令牌并落盘（0600）。
+ * 未配置环境变量时服务仍可启动，但控制端点只接受随机令牌，默认拒绝一切凭据猜测。
+ */
+function resolveControlToken({ tokenFile = defaultControlTokenFile(), envToken = process.env.WP_BFF_CONTROL_TOKEN } = {}) {
+  const fromEnv = String(envToken || '').trim()
+  if (fromEnv) return { token: fromEnv, source: 'env', tokenFile: null }
+  const token = crypto.randomBytes(24).toString('hex')
+  let written = false
   try {
-    fs.mkdirSync(path.dirname(AUDIT_LOG), { recursive: true })
-    fs.appendFileSync(AUDIT_LOG, line)
-  } catch { /* 审计失败不阻断主流程 */ }
-  process.stdout.write(line)
+    fs.mkdirSync(path.dirname(tokenFile), { recursive: true })
+    fs.writeFileSync(tokenFile, `${token}\n`, { mode: 0o600 })
+    written = true
+  } catch { /* 落盘失败不阻断启动，令牌仍在 stdout 中输出 */ }
+  return { token, source: 'generated', tokenFile: written ? tokenFile : null }
+}
+
+function resolveAllowedOrigins(raw = process.env.WP_BFF_ALLOWED_ORIGINS) {
+  const list = String(raw || '')
+    .split(',')
+    .map(item => item.trim())
+    .filter(Boolean)
+  return new Set(list.length ? list : DEFAULT_ALLOWED_ORIGINS)
+}
+
+function timingSafeEqual(a, b) {
+  const left = Buffer.from(String(a ?? ''), 'utf8')
+  const right = Buffer.from(String(b ?? ''), 'utf8')
+  if (left.length !== right.length) return false
+  return crypto.timingSafeEqual(left, right)
+}
+
+/** 返回 true=白名单来源，false=明确越权，null=无浏览器来源信息（非浏览器客户端） */
+function originVerdict(req, allowedOrigins) {
+  const origin = req.headers.origin
+  if (origin) return allowedOrigins.has(String(origin))
+  const referer = req.headers.referer
+  if (referer) {
+    try { return allowedOrigins.has(new URL(String(referer)).origin) } catch { return false }
+  }
+  return null
+}
+
+function createServer(options = {}) {
+  const middleware = options.middleware || MIDDLEWARE
+  const whitelist = new Set(Object.keys(middleware))
+  const allowedOrigins = options.allowedOrigins || (options.allowedOriginsSet || resolveAllowedOrigins())
+  const controlToken = options.controlToken || resolveControlToken({ tokenFile: options.tokenFile || defaultControlTokenFile() })
+  const tokenValue = typeof controlToken === 'string' ? controlToken : controlToken.token
+  const spawnImpl = options.spawnImpl || realSpawn
+  const probeImpl = options.probeImpl || probeTcp
+  const fetchJson = options.fetchJson || httpGetJson
+  const repoRoot = options.repoRoot || path.resolve(__dirname, '..', '..', '..')
+  const auditPath = options.auditPath || path.join(__dirname, 'logs', 'wp-bff-audit.log')
+
+  const ops = new Map()
+
+  function audit(action, key, detail) {
+    const line = `[${new Date().toISOString()}] ${action} ${key || '-'} ${detail || ''}\n`
+    try {
+      fs.mkdirSync(path.dirname(auditPath), { recursive: true })
+      fs.appendFileSync(auditPath, line)
+    } catch { /* 审计失败不阻断主流程 */ }
+    if (options.silent !== true) process.stdout.write(line)
+  }
+
+  function nowTime() {
+    return new Date().toLocaleTimeString('zh-CN', { hour12: false })
+  }
+
+  function nodeFor(key, state, latencyMs) {
+    const meta = middleware[key]
+    return {
+      key,
+      name: meta.name,
+      role: meta.role,
+      port: meta.port,
+      state,
+      console_url: meta.console_url,
+      console_label: meta.console_label,
+      // 口径：本探针只判断 TCP 端口可达性，不探测进程内部健康度，
+      // 因此指标命名为“端口状态”而不是“进程健康”，避免绿点被误读。
+      metrics: [
+        { label: '探针', value: `${latencyMs}ms` },
+        { label: '探针类型', value: 'TCP 端口可达性' },
+        { label: '端口', value: String(meta.port) },
+        { label: '端口状态', value: state === 'up' ? '可达' : '不可达' },
+      ],
+      last_check: nowTime(),
+    }
+  }
+
+  async function probeState(key) {
+    const { up, latencyMs } = await probeImpl(middleware[key].port)
+    // ops 表修正：探针到达目标态即清除操作，否则报告中间态
+    const op = ops.get(key)
+    if (op) {
+      if (op.action === 'start' && up) {
+        ops.delete(key)
+        audit('OP_DONE', key, `start 完成，耗时 ${Math.round((Date.now() - op.startedAt) / 1000)}s`)
+        return { state: 'up', latencyMs }
+      }
+      if (op.action === 'stop' && !up) {
+        ops.delete(key)
+        audit('OP_DONE', key, 'stop 完成')
+        return { state: 'down', latencyMs }
+      }
+      return { state: op.action === 'start' ? 'starting' : 'stopping', latencyMs }
+    }
+    return { state: up ? 'up' : 'down', latencyMs }
+  }
+
+  function composeService(action, key) {
+    // 命令形态固定：仅 up -d 与 stop，key 已过白名单
+    const args = action === 'start' ? ['compose', 'up', '-d', key] : ['compose', 'stop', key]
+    const child = spawnImpl('docker', args, { cwd: repoRoot, windowsHide: true })
+    let output = ''
+    child.stdout?.on('data', chunk => { output += chunk })
+    child.stderr?.on('data', chunk => { output += chunk })
+    child.on('error', err => {
+      audit('SPAWN_FAIL', key, String(err))
+      ops.delete(key)
+    })
+    child.on('close', code => {
+      audit('COMPOSE_EXIT', key, `${action} exit=${code} ${String(output).split('\n').slice(-3).join(' | ').trim()}`)
+      if (code !== 0) ops.delete(key)
+    })
+    return child
+  }
+
+  function corsHeaders(req) {
+    const origin = req.headers.origin
+    const headers = {
+      'Content-Type': 'application/json; charset=utf-8',
+      Vary: 'Origin',
+    }
+    if (origin && allowedOrigins.has(String(origin))) {
+      headers['Access-Control-Allow-Origin'] = String(origin)
+      headers['Access-Control-Allow-Methods'] = 'GET, POST, OPTIONS'
+      headers['Access-Control-Allow-Headers'] = 'Content-Type, X-Tenant-Id, X-WP-Control-Token'
+      headers['Access-Control-Max-Age'] = '600'
+    }
+    return headers
+  }
+
+  function send(req, res, code, payload) {
+    const body = JSON.stringify(payload)
+    res.writeHead(code, corsHeaders(req))
+    res.end(body)
+  }
+
+  function authorizeControl(req) {
+    const verdict = originVerdict(req, allowedOrigins)
+    if (verdict === false) {
+      return { ok: false, code: 403, error: '请求来源不在白名单内（Origin/Referer 校验失败）' }
+    }
+    const presented = req.headers['x-wp-control-token']
+    if (!presented || !timingSafeEqual(presented, tokenValue)) {
+      return { ok: false, code: 401, error: '控制令牌缺失或无效（X-WP-Control-Token）' }
+    }
+    return { ok: true }
+  }
+
+  async function handleControl(req, res, key, action) {
+    const auth = authorizeControl(req)
+    if (!auth.ok) {
+      audit('REJECT_AUTH', key, `${action} ${auth.error}`)
+      return send(req, res, auth.code, { error: auth.error })
+    }
+    if (!whitelist.has(key)) {
+      audit('REJECT', key, `非白名单 key，action=${action}`)
+      return send(req, res, 403, { error: `key "${key}" 不在白名单内` })
+    }
+    const probe = await probeState(key)
+    if (ops.has(key)) {
+      return send(req, res, 200, { data: nodeFor(key, probe.state, probe.latencyMs) })
+    }
+    if (action === 'start' && probe.state === 'up') {
+      return send(req, res, 200, { data: nodeFor(key, 'up', probe.latencyMs) })
+    }
+    if (action === 'stop' && probe.state === 'down') {
+      return send(req, res, 200, { data: nodeFor(key, 'down', probe.latencyMs) })
+    }
+    ops.set(key, { action, startedAt: Date.now() })
+    const watchdogMs = action === 'start' ? START_TIMEOUT_MS : STOP_TIMEOUT_MS
+    setTimeout(() => {
+      if (ops.get(key)?.action === action) {
+        ops.delete(key)
+        audit('OP_TIMEOUT', key, `${action} 超时 ${Math.round(watchdogMs / 1000)}s，解除中间态`)
+      }
+    }, watchdogMs).unref()
+    audit('OP_START', key, `docker compose ${action === 'start' ? 'up -d' : 'stop'} ${key}`)
+    composeService(action, key)
+    return send(req, res, 200, { data: nodeFor(key, action === 'start' ? 'starting' : 'stopping', probe.latencyMs) })
+  }
+
+  async function handleMiddleware(req, res) {
+    const entries = await Promise.all(Object.keys(middleware).map(async key => ({ key, probe: await probeState(key) })))
+    const items = entries.map(({ key, probe }) => nodeFor(key, probe.state, probe.latencyMs))
+    const up = items.filter(item => item.state === 'up').length
+    send(req, res, 200, {
+      data: {
+        enabled: true,
+        checked_at: nowTime(),
+        probe_mode: 'tcp',
+        summary: { total: items.length, up, down: items.length - up },
+        items,
+      },
+    })
+  }
+
+  // 拉取单个服务最近 traces 并聚合统计（limit 内采样口径）
+  function fetchServiceTraces(serviceName, limit = 20) {
+    const url = `http://127.0.0.1:16686/api/traces?service=${encodeURIComponent(serviceName)}&limit=${limit}&lookback=24h`
+    return fetchJson(url, 4000).then(payload => Array.isArray(payload?.data) ? payload.data : [])
+  }
+
+  function spanServiceName(trace, span) {
+    const process = trace.processes?.[span.processID]
+    return process?.serviceName || 'unknown'
+  }
+
+  function spanHasError(span) {
+    return (span.tags || []).some(tag => tag.key === 'error' && tag.value === true)
+  }
+
+  function aggregateTraces(serviceName, traces) {
+    let spanCount = 0
+    let errorTraces = 0
+    const durationsMs = []
+    for (const trace of traces) {
+      const spans = trace.spans || []
+      spanCount += spans.length
+      if (spans.some(spanHasError)) errorTraces += 1
+      if (spans.length) durationsMs.push(Math.max(...spans.map(span => span.duration || 0)) / 1000)
+    }
+    durationsMs.sort((a, b) => a - b)
+    const p99 = durationsMs.length ? durationsMs[Math.min(durationsMs.length - 1, Math.floor(durationsMs.length * 0.99))] : 0
+    return {
+      name: serviceName,
+      traces: traces.length,
+      spans_24h: spanCount,
+      error_rate: traces.length ? Math.round((errorTraces / traces.length) * 1000) / 10 : 0,
+      p99_ms: Math.round(p99 * 10) / 10,
+      // 采样口径：仅基于 Jaeger 最近 limit 条 trace，非全量 24h 统计
+      sample_size: traces.length,
+      sample_limit: 20,
+      sample_window: '24h',
+      p99_basis: 'sampled_recent_traces',
+    }
+  }
+
+  function traceToRecent(trace) {
+    const spans = (trace.spans || []).slice().sort((a, b) => (a.startTime || 0) - (b.startTime || 0))
+    const root = spans.find(span => !span.references?.length) || spans[0]
+    if (!root) return null
+    const totalDuration = Math.max(...spans.map(span => (span.duration || 0))) / 1000
+    const startedMs = Math.round((root.startTime || 0) / 1000)
+    return {
+      time: new Date(startedMs).toLocaleTimeString('zh-CN', { hour12: false }),
+      // 排序键：绝对毫秒时间戳，避免用本地时间字符串做跨天字典序比较
+      start_time_ms: startedMs,
+      trace_id: String(trace.traceID || ''),
+      service: spanServiceName(trace, root),
+      operation: root.operationName || '-',
+      spans: spans.length,
+      duration_ms: Math.round(totalDuration * 10) / 10,
+      status: spans.some(spanHasError) ? 'error' : 'ok',
+    }
+  }
+
+  async function handleTracing(req, res) {
+    const probe = await probeImpl(middleware.jaeger.port)
+    if (!probe.up) {
+      return send(req, res, 200, { data: { enabled: false, ui_url: '', services: [], recent: [], checked_at: nowTime() } })
+    }
+    // 真实 Jaeger 数据：服务列表 + 每服务最近 20 条 trace 聚合（spans/错误率/P99）
+    const servicesPayload = await fetchJson('http://127.0.0.1:16686/api/services')
+    const names = Array.isArray(servicesPayload?.data) ? servicesPayload.data : []
+    const settled = await Promise.all(names.map(name =>
+      fetchServiceTraces(name)
+        .then(traces => ({ name, traces }))
+        .catch(() => ({ name, traces: [] })),
+    ))
+    const services = settled.map(({ name, traces }) => aggregateTraces(name, traces))
+    const recent = settled
+      .flatMap(({ traces }) => traces.map(traceToRecent))
+      .filter(Boolean)
+      .sort((a, b) => b.start_time_ms - a.start_time_ms)
+      .slice(0, 12)
+    send(req, res, 200, {
+      data: {
+        enabled: true,
+        ui_url: 'http://127.0.0.1:16686',
+        services,
+        recent,
+        checked_at: nowTime(),
+      },
+    })
+  }
+
+  function handleHealthz(req, res) {
+    send(req, res, 200, {
+      data: {
+        status: 'up',
+        service: 'wp-bff',
+        checked_at: nowTime(),
+        control: {
+          token_source: typeof controlToken === 'string' ? 'injected' : controlToken.source,
+          token_file: typeof controlToken === 'string' ? null : controlToken.tokenFile,
+          allowed_origins: [...allowedOrigins],
+          guard: 'origin-whitelist + control-token',
+        },
+        middleware_keys: Object.keys(middleware),
+      },
+    })
+  }
+
+  return http.createServer((req, res) => {
+    const url = new URL(req.url, `http://127.0.0.1:${req.socket.localPort || DEFAULT_PORT}`)
+    const match = url.pathname.match(/^\/api\/wp\/middleware\/([a-z0-9-]+)\/(start|stop)$/)
+    if (req.method === 'OPTIONS') {
+      const verdict = originVerdict(req, allowedOrigins)
+      return send(req, res, verdict === false ? 403 : 204, verdict === false ? { error: 'origin not allowed' } : {})
+    }
+    if (req.method === 'GET' && url.pathname === '/api/wp/healthz') return handleHealthz(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/tracing') return handleTracing(req, res)
+    if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])
+    return send(req, res, 404, { error: 'not found' })
+  })
 }
 
 function probeTcp(port, timeoutMs = 900) {
@@ -75,212 +414,34 @@ function probeTcp(port, timeoutMs = 900) {
   })
 }
 
-function nowTime() {
-  return new Date().toLocaleTimeString('zh-CN', { hour12: false })
-}
-
-function nodeFor(key, state, latencyMs) {
-  const meta = MIDDLEWARE[key]
-  return {
-    key,
-    name: meta.name,
-    role: meta.role,
-    port: meta.port,
-    state,
-    console_url: meta.console_url,
-    console_label: meta.console_label,
-    metrics: [
-      { label: '探针', value: `${latencyMs}ms` },
-      { label: '端口', value: String(meta.port) },
-      { label: '进程', value: state === 'up' ? '健康' : '未响应' },
-    ],
-    last_check: nowTime(),
-  }
-}
-
-async function probeState(key) {
-  const { up, latencyMs } = await probeTcp(MIDDLEWARE[key].port)
-  // ops 表修正：探针到达目标态即清除操作，否则报告中间态
-  const op = ops.get(key)
-  if (op) {
-    if (op.action === 'start' && up) {
-      ops.delete(key)
-      audit('OP_DONE', key, `start 完成，耗时 ${Math.round((Date.now() - op.startedAt) / 1000)}s`)
-      return { state: 'up', latencyMs }
-    }
-    if (op.action === 'stop' && !up) {
-      ops.delete(key)
-      audit('OP_DONE', key, 'stop 完成')
-      return { state: 'down', latencyMs }
-    }
-    return { state: op.action === 'start' ? 'starting' : 'stopping', latencyMs }
-  }
-  return { state: up ? 'up' : 'down', latencyMs }
-}
-
-function composeService(action, key) {
-  // 命令形态固定：仅 up -d 与 stop，key 已过白名单
-  const args = action === 'start' ? ['compose', 'up', '-d', key] : ['compose', 'stop', key]
-  const child = spawn('docker', args, { cwd: REPO_ROOT, windowsHide: true })
-  let output = ''
-  child.stdout.on('data', chunk => { output += chunk })
-  child.stderr.on('data', chunk => { output += chunk })
-  child.on('error', err => {
-    audit('SPAWN_FAIL', key, String(err))
-    ops.delete(key)
+function startServer(options = {}) {
+  const controlToken = options.controlToken || resolveControlToken({ tokenFile: options.tokenFile })
+  const server = createServer({ ...options, controlToken })
+  const port = Number(options.port || DEFAULT_PORT)
+  const host = options.host || '127.0.0.1'
+  const tokenValue = typeof controlToken === 'string' ? controlToken : controlToken.token
+  server.listen(port, host, () => {
+    const tokenSource = typeof controlToken === 'string' ? 'injected' : controlToken.source
+    process.stdout.write(
+      `[wp-bff] listening on ${host}:${port} · control-token-source=${tokenSource}\n` +
+      (tokenSource === 'generated'
+        ? `[wp-bff] control token (generated, keep secret): ${tokenValue}\n[wp-bff] token file: ${controlToken.tokenFile || '(write failed)'}\n`
+        : '[wp-bff] control token loaded from WP_BFF_CONTROL_TOKEN\n'),
+    )
   })
-  child.on('close', code => {
-    audit('COMPOSE_EXIT', key, `${action} exit=${code} ${output.split('\n').slice(-3).join(' | ').trim()}`)
-    if (code !== 0) ops.delete(key)
-  })
-  return child
+  return server
 }
 
-function send(res, code, payload) {
-  const body = JSON.stringify(payload)
-  res.writeHead(code, {
-    'Content-Type': 'application/json; charset=utf-8',
-    'Access-Control-Allow-Origin': '*',
-    'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type, X-Tenant-Id',
-  })
-  res.end(body)
+if (require.main === module) startServer()
+
+module.exports = {
+  MIDDLEWARE,
+  WHITELIST,
+  DEFAULT_ALLOWED_ORIGINS,
+  createServer,
+  startServer,
+  resolveControlToken,
+  resolveAllowedOrigins,
+  timingSafeEqual,
+  originVerdict,
 }
-
-async function handleControl(req, res, key, action) {
-  if (!WHITELIST.has(key)) {
-    audit('REJECT', key, `非白名单 key，action=${action}`)
-    return send(res, 403, { error: `key "${key}" 不在白名单内` })
-  }
-  const probe = await probeState(key)
-  if (ops.has(key)) {
-    return send(res, 200, { data: nodeFor(key, probe.state, probe.latencyMs) })
-  }
-  if (action === 'start' && probe.state === 'up') {
-    return send(res, 200, { data: nodeFor(key, 'up', probe.latencyMs) })
-  }
-  if (action === 'stop' && probe.state === 'down') {
-    return send(res, 200, { data: nodeFor(key, 'down', probe.latencyMs) })
-  }
-  ops.set(key, { action, startedAt: Date.now() })
-  const watchdogMs = action === 'start' ? START_TIMEOUT_MS : STOP_TIMEOUT_MS
-  setTimeout(() => {
-    if (ops.get(key)?.action === action) {
-      ops.delete(key)
-      audit('OP_TIMEOUT', key, `${action} 超时 ${Math.round(watchdogMs / 1000)}s，解除中间态`)
-    }
-  }, watchdogMs).unref()
-  audit('OP_START', key, `docker compose ${action === 'start' ? 'up -d' : 'stop'} ${key}`)
-  composeService(action, key)
-  return send(res, 200, { data: nodeFor(key, action === 'start' ? 'starting' : 'stopping', probe.latencyMs) })
-}
-
-async function handleMiddleware(res) {
-  const entries = await Promise.all(Object.keys(MIDDLEWARE).map(async key => ({ key, probe: await probeState(key) })))
-  const items = entries.map(({ key, probe }) => nodeFor(key, probe.state, probe.latencyMs))
-  const up = items.filter(item => item.state === 'up').length
-  send(res, 200, {
-    data: {
-      enabled: true,
-      checked_at: nowTime(),
-      summary: { total: items.length, up, down: items.length - up },
-      items,
-    },
-  })
-}
-
-// 拉取单个服务最近 traces 并聚合统计（limit 内采样口径）
-function fetchServiceTraces(serviceName, limit = 20) {
-  const url = `http://127.0.0.1:16686/api/traces?service=${encodeURIComponent(serviceName)}&limit=${limit}&lookback=24h`
-  return httpGetJson(url, 4000).then(payload => Array.isArray(payload?.data) ? payload.data : [])
-}
-
-function spanServiceName(trace, span) {
-  const process = trace.processes?.[span.processID]
-  return process?.serviceName || 'unknown'
-}
-
-function spanHasError(span) {
-  return (span.tags || []).some(tag => tag.key === 'error' && tag.value === true)
-}
-
-function aggregateTraces(serviceName, traces) {
-  let spanCount = 0
-  let errorTraces = 0
-  const durationsMs = []
-  for (const trace of traces) {
-    const spans = trace.spans || []
-    spanCount += spans.length
-    if (spans.some(spanHasError)) errorTraces += 1
-    if (spans.length) durationsMs.push(Math.max(...spans.map(span => span.duration || 0)) / 1000)
-  }
-  durationsMs.sort((a, b) => a - b)
-  const p99 = durationsMs.length ? durationsMs[Math.min(durationsMs.length - 1, Math.floor(durationsMs.length * 0.99))] : 0
-  return {
-    name: serviceName,
-    traces: traces.length,
-    spans_24h: spanCount,
-    error_rate: traces.length ? Math.round((errorTraces / traces.length) * 1000) / 10 : 0,
-    p99_ms: Math.round(p99 * 10) / 10,
-  }
-}
-
-function traceToRecent(trace) {
-  const spans = (trace.spans || []).slice().sort((a, b) => (a.startTime || 0) - (b.startTime || 0))
-  const root = spans.find(span => !span.references?.length) || spans[0]
-  if (!root) return null
-  const totalDuration = Math.max(...spans.map(span => (span.duration || 0))) / 1000
-  return {
-    time: new Date(root.startTime / 1000).toLocaleTimeString('zh-CN', { hour12: false }),
-    trace_id: String(trace.traceID || ''),
-    service: spanServiceName(trace, root),
-    operation: root.operationName || '-',
-    spans: spans.length,
-    duration_ms: Math.round(totalDuration * 10) / 10,
-    status: spans.some(spanHasError) ? 'error' : 'ok',
-  }
-}
-
-async function handleTracing(res) {
-  const probe = await probeTcp(MIDDLEWARE.jaeger.port)
-  if (!probe.up) {
-    return send(res, 200, { data: { enabled: false, ui_url: '', services: [], recent: [], checked_at: nowTime() } })
-  }
-  // 真实 Jaeger 数据：服务列表 + 每服务最近 20 条 trace 聚合（spans/错误率/P99）
-  const servicesPayload = await httpGetJson('http://127.0.0.1:16686/api/services')
-  const names = Array.isArray(servicesPayload?.data) ? servicesPayload.data : []
-  const settled = await Promise.all(names.map(name =>
-    fetchServiceTraces(name)
-      .then(traces => ({ name, traces }))
-      .catch(() => ({ name, traces: [] })),
-  ))
-  const services = settled.map(({ name, traces }) => aggregateTraces(name, traces))
-  const recent = settled
-    .flatMap(({ traces }) => traces.map(traceToRecent))
-    .filter(Boolean)
-    .sort((a, b) => b.time.localeCompare(a.time))
-    .slice(0, 12)
-  send(res, 200, {
-    data: {
-      enabled: true,
-      ui_url: 'http://127.0.0.1:16686',
-      services,
-      recent,
-      checked_at: nowTime(),
-    },
-  })
-}
-
-const server = http.createServer((req, res) => {
-  const url = new URL(req.url, `http://127.0.0.1:${PORT}`)
-  const match = url.pathname.match(/^\/api\/wp\/middleware\/([a-z0-9-]+)\/(start|stop)$/)
-  if (req.method === 'OPTIONS') return send(res, 204, {})
-  if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(res)
-  if (req.method === 'GET' && url.pathname === '/api/wp/tracing') return handleTracing(res)
-  if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])
-  return send(res, 404, { error: 'not found' })
-})
-
-server.listen(PORT, '127.0.0.1', () => {
-  audit('BOOT', null, `wp-bff listening on 127.0.0.1:${PORT}, repo=${REPO_ROOT}`)
-})

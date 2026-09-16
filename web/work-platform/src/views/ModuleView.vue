@@ -12,6 +12,13 @@
       :closable="false"
       show-icon
     />
+    <el-alert
+      v-if="moduleDegraded"
+      :title="`API 模式下该模块尚未接入真实端点，当前展示 Mock 数据（${moduleDegraded.reason}）。补齐 BFF 端点后自动切换。`"
+      type="warning"
+      :closable="false"
+      show-icon
+    />
     <el-alert v-if="loadError" title="模块数据加载失败，已保留最近快照" type="error" :closable="false" show-icon>
       <template #default><el-button size="small" text type="primary" @click="loadWorkbench">重试</el-button></template>
     </el-alert>
@@ -547,6 +554,7 @@ import { useRoute } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import { Checked, Document, Microphone, Promotion, View } from '@element-plus/icons-vue'
 import { dataProvider } from '../api/provider'
+import { dataSourceStatus } from '../api/status'
 import {
   approvals as mockApprovals, automations as mockAutomations, brainChain, brainDecision,
   cases as mockCases, collaboration as mockCollaboration, connectors as mockConnectors,
@@ -568,6 +576,11 @@ const iconMap: Record<string, unknown> = { View, Microphone, Document, Promotion
 
 const loading = ref(true)
 const loadError = ref(false)
+// 模块 id 与 provider 中登记的降级 scope 名称对照（仅 collab 不一致）
+const degradeScopeAlias: Partial<Record<ModuleId, string>> = { collab: 'collaboration' }
+const moduleDegraded = computed(() =>
+  dataSourceStatus.degraded.find(item => item.scope === (degradeScopeAlias[moduleId.value] || moduleId.value)) || null,
+)
 const vitalsOnline = ref(true)
 const vitalData = ref<VitalSign[]>(mockVitalSigns.map(item => ({ ...item })))
 const organData = ref<OrganHealth[]>(mockOrgans.map(item => ({ ...item })))

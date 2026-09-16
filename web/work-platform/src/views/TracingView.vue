@@ -41,12 +41,17 @@
         </a>
       </section>
 
+      <p class="sampling-hint">
+        统计口径：按服务取最近 20 条 trace（lookback 24h）做采样聚合，<strong>不是</strong>全量 24h 指标；
+        P99 为采样内分位值，仅用于趋势观察，容量规划请以指标库为准。
+      </p>
       <section class="stat-row">
         <article v-for="s in overview.services" :key="s.name" class="stat-card" :class="{ active: s.name === activeService }" @click="selectService(s.name)">
           <strong>{{ s.name }}</strong>
           <div class="stat-line"><span>Span/24h</span><em>{{ s.spans_24h.toLocaleString() }}</em></div>
           <div class="stat-line"><span>错误率</span><em :class="{ err: s.error_rate > 1 }">{{ s.error_rate }}%</em></div>
           <div class="stat-line"><span>P99</span><em>{{ s.p99_ms }}ms</em></div>
+          <div class="stat-line"><span>采样</span><em>{{ s.sample_size ?? '—' }}/{{ s.sample_limit ?? 20 }}</em></div>
         </article>
       </section>
 
@@ -153,6 +158,8 @@ onMounted(refresh)
 .service-select { width: 220px; }
 .toolbar-hint { color: var(--wp-sub); font-size: 11px; margin-right: auto; }
 .toolbar-warn { color: var(--wp-warning, #d4af37); font-size: 11px; }
+.sampling-hint { margin: 2px 0 0; padding: 8px 12px; border-left: 2px solid var(--wp-gold-soft, #d4af37); border-radius: 0 8px 8px 0; background: rgba(148,163,184,.06); color: var(--wp-sub); font-size: 11px; line-height: 1.7; }
+.sampling-hint strong { color: var(--wp-gold-soft, #d4af37); }
 .stat-row { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
 .stat-card { padding: 14px; border: 1px solid var(--wp-border); border-radius: 12px; background: rgba(148,163,184,.05); cursor: pointer; }
 .stat-card:hover { border-color: var(--wp-primary); }

@@ -2,10 +2,11 @@
   "name": "wp-bff",
   "version": "0.1.0",
   "private": true,
-  "description": "work-platform BFF (minimal ops subset): middleware observe/start/stop",
+  "description": "work-platform BFF (minimal ops subset): middleware observe/start/stop + tracing observe",
   "main": "server.js",
   "scripts": {
-    "start": "node server.js"
+    "start": "node server.js",
+    "test": "node --test"
   },
   "engines": {
     "node": ">=20"
