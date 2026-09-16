@@ -397,6 +397,26 @@ export interface MiddlewareOverview {
   checked_at: string
 }
 
+/** BFF /overview 聚合的观测域（真实数据来源：wp-bff） */
+export interface OverviewObservability {
+  middleware: {
+    total: number
+    up: number
+    down: number
+    pending: number
+    probe_mode: string
+    items: MiddlewareNode[]
+  }
+  tracing: {
+    enabled: boolean
+    services: number
+    spans_sampled: number
+    recent_errors: number
+    p99_ms: number
+    p99_basis: string
+  }
+}
+
 export interface TracingServiceStat {
   name: string
   spans_24h: number

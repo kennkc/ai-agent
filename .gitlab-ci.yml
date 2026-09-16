@@ -76,6 +76,26 @@ wp-bff-test:
     - node --check server.js
     - node --test
 
+docker-smoke:
+  stage: test
+  image: docker:24
+  services:
+    - docker:24-dind
+  variables:
+    DOCKER_HOST: tcp://docker:2375
+    DOCKER_TLS_CERTDIR: ""
+  script:
+    - docker compose up -d
+    - ./scripts/healthcheck.sh
+  after_script:
+    - docker compose logs --tail=80 || true
+    - docker compose down -v || true
+  # 需要 dind runner 支持；暂设为允许失败，达标后转为强制门禁
+  allow_failure: true
+  only:
+    - main
+    - dev
+
 contract-check:
   stage: test
   image: python:3.12-slim

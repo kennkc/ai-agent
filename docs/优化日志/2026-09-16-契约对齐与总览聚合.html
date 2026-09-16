@@ -1,0 +1,337 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>优化日志 · 2026-09-16 契约对齐与总览聚合</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-16 22:30 · 源文件 2026-09-16-契约对齐与总览聚合.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 本轮目标</a></li>
+<li><a href="#2">2. 变更清单</a><ul>
+<li><a href="#21-p0">2.1 P0 · 契约与实现对齐</a></li>
+<li><a href="#22-p1-bff">2.2 P1 · BFF 总览聚合端点</a></li>
+<li><a href="#23-p1-ci">2.3 P1 · 分支治理与 CI</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 验证记录</a></li>
+<li><a href="#4">4. 未执行项与原因</a></li>
+<li><a href="#5">5. 下一步建议（按优先级）</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="2026-09-16">优化日志 · 2026-09-16 契约对齐与总览聚合<a class="headerlink" href="#2026-09-16" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>阶段</strong>：Phase 0/1/2 消化期（<strong>Phase 3 冻结中，本轮不含 Phase 3 内容</strong>）
+<strong>分支</strong>：<code>codex/phase0-1-hardening</code>
+<strong>依据</strong>：2026-09-16 项目进度评估结论（P0/P1/P2 建议清单）
+<strong>决策记录</strong>：Phase 3 暂不解冻；<code>workbuddy/main</code> 保留不合流；<code>dev</code> 归属另一台远端开发机</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 本轮目标<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>把评估结论中「不依赖 Phase 3」的整改项落地，核心是消除<strong>契约与实现互不对齐</strong>的结构性风险，并让总览页首次消费真实数据。</p>
+<hr />
+<h2 id="2">2. 变更清单<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-p0">2.1 P0 · 契约与实现对齐<a class="headerlink" href="#21-p0" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>变更前</th>
+<th>变更后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>契约端点</td>
+<td>31 个，服务端实现 0 个</td>
+<td>37 个 = <strong>implemented 6 + planned 31</strong></td>
+</tr>
+<tr>
+<td>已实现端点登记</td>
+<td>5 个观测端点全部不在契约内</td>
+<td>全部登记；另补 <code>/suggestions/{id}/apply</code></td>
+</tr>
+<tr>
+<td>契约校验能力</td>
+<td>仅校验契约自洽（P1 层 / 命名 / WS）</td>
+<td>增加双向校验：实现→契约、前端→契约</td>
+</tr>
+<tr>
+<td>一致性门禁</td>
+<td>无</td>
+<td><code>contract-check.py</code> 新增 3 条规则，纳入 CI</td>
+</tr>
+</tbody>
+</table>
+<p>新增校验规则：</p>
+<ol>
+<li><code>server.js</code> 的 <code>IMPLEMENTED_ENDPOINTS</code> 中每个端点必须登记且标记 <code>x-wp-status: implemented</code></li>
+<li><code>provider.ts</code> 调用的每个路径必须能匹配契约模板（<code>{param}</code> 段级匹配）</li>
+<li>所有端点必须带 <code>x-wp-status</code> 标记，否则告警</li>
+</ol>
+<p>门禁负向验证（证明规则真的会拦）：</p>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>从契约移除 <code>/tracing</code> 登记</td>
+<td>exit=1，<code>FAIL 实现端点未登记契约: /tracing</code></td>
+</tr>
+<tr>
+<td>把 <code>/middleware</code> 标成 planned</td>
+<td>exit=1，<code>FAIL 实现端点状态不符: /middleware</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-p1-bff">2.2 P1 · BFF 总览聚合端点<a class="headerlink" href="#22-p1-bff" title="Permanent link">&para;</a></h3>
+<p>新增 <code>GET /api/wp/overview</code>（真实数据）：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>observability.middleware</code></td>
+<td>8 个中间件 TCP 探针汇总（total/up/down/pending + 明细）</td>
+</tr>
+<tr>
+<td><code>observability.tracing</code></td>
+<td>Jaeger 注册服务数、采样 Span、最近异常链路、P99（标注采样口径）</td>
+</tr>
+<tr>
+<td><code>gaps</code></td>
+<td>15 个仍待实现的数据域，显式透传</td>
+</tr>
+</tbody>
+</table>
+<p>设计约束：<strong>不做静默填充</strong>——已实现部分为真实数据，未实现部分经 <code>gaps</code> 透传，前端逐个登记为降级。</p>
+<p>前端接入：<code>provider.getOverview()</code> 优先调用该端点；<code>OverviewView</code> 新增「OPS 观测区实时摘要」模块（端口可达 / 注册服务 / 异常链路 / 待接入数据域 四张卡）。</p>
+<h3 id="23-p1-ci">2.3 P1 · 分支治理与 CI<a class="headerlink" href="#23-p1-ci" title="Permanent link">&para;</a></h3>
+<ul>
+<li>README §8.4 按最新决策更新：<code>dev</code> = 另一台开发机分支（推送前先 <code>git fetch</code> 确认对方进度）、<code>workbuddy/main</code> 保留不合流</li>
+<li>CI 新增 <code>docker-smoke</code> job（compose 起栈 + <code>healthcheck.sh</code>，需 dind runner，暂设 <code>allow_failure: true</code>）</li>
+</ul>
+<hr />
+<h2 id="3">3. 验证记录<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>验证</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>wp-bff 回归</td>
+<td><code>node --test</code></td>
+<td><strong>14 passed</strong></td>
+</tr>
+<tr>
+<td>契约分层（含新规则）</td>
+<td><code>contract-check.py --work-platform</code></td>
+<td>37 端点 / implemented 6 / planned 31 / <strong>0 FAIL</strong></td>
+</tr>
+<tr>
+<td>契约负向用例</td>
+<td>两个变体</td>
+<td>均 exit=1，门禁有效</td>
+</tr>
+<tr>
+<td>前端类型检查</td>
+<td><code>npm run typecheck</code></td>
+<td>passed</td>
+</tr>
+<tr>
+<td>前端构建</td>
+<td><code>npm run build</code></td>
+<td>passed</td>
+</tr>
+<tr>
+<td>总览端点实跑</td>
+<td>启动 wp-bff:8091 → <code>GET /api/wp/overview</code></td>
+<td>返回真实观测数据（Docker 未运行 → up=0/8；Jaeger <code>enabled=false</code>）</td>
+</tr>
+<tr>
+<td>Python 测试</td>
+<td><code>python -m pytest</code></td>
+<td><strong>19 passed</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4">4. 未执行项与原因<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phase 3（body-service 持久化 / 向量检索）</td>
+<td>按决策冻结，团队正在消化 Phase 0-2 知识点</td>
+</tr>
+<tr>
+<td>合流 <code>workbuddy/main</code></td>
+<td>按决策保留为独立线</td>
+</tr>
+<tr>
+<td>Java 测试密度补强（gateway / session）</td>
+<td>本轮聚焦契约链路，已列入下一轮</td>
+</tr>
+<tr>
+<td>前端自动化测试（Vitest / Playwright）</td>
+<td>需先建立视觉回归基线，避免无保护重构</td>
+</tr>
+<tr>
+<td>Element Plus 按需导入</td>
+<td>同上，依赖视觉基线</td>
+</tr>
+<tr>
+<td>OCR 引擎接入</td>
+<td>依赖本机安装 PaddleOCR / Tesseract</td>
+</tr>
+<tr>
+<td>P99 升级为 Prometheus 指标</td>
+<td>属 Phase 3+ 观测能力范围</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5">5. 下一步建议（按优先级）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>Java 测试补强</strong>：<code>gateway-service</code>（JWT / 租户越权）、<code>session-manager</code>（VS1 降级路径）</li>
+<li><strong>前端测试基线</strong>：Vitest 组件测试 + Playwright 截图，为 <code>ModuleView</code> 拆分与按需导入铺路</li>
+<li><strong>契约持续对齐</strong>：新增 BFF 端点时三处同改（<code>server.js</code> / OpenAPI 契约 / <code>provider.ts</code>）</li>
+<li><strong>可观测性演进</strong>：中间件探针从 TCP 端口可达性升级为容器健康检查（当前口径已在页面标注）</li>
+</ol>
+<hr />
+<p><em>归档位置：<code>docs/优化日志/</code> · 生成方式：<code>scripts/md2html-report.py --all "docs/优化日志"</code></em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

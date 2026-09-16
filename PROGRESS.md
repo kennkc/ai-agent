@@ -216,6 +216,54 @@ Scope: the P0/P1/P2 items from the progress review, **excluding Phase 3**.
 - Manual API-mode degradation check: header badge + banner + per-module alert render when the
   BFF does not implement a data domain
 
+## 2026-09-16 Contract Alignment & Overview Aggregation (optimization pass 2)
+
+Follow-up to the progress review: this pass fixes the structural gap between the BFF contract and the
+implementation, and gives the overview page its first real data. Phase 3 stays frozen (the team is
+consolidating Phase 0-2 material). Branch decisions recorded in README 8.4: `workbuddy/main` remains
+an independent line (no merge) and `dev` belongs to another developer machine.
+
+### P0 · Contract <-> implementation alignment
+
+- Contract grew from 31 to **37 endpoints**, each path carrying an `x-wp-status` marker:
+  **implemented 6 | planned 31**.
+- Registered the five observability/Ops endpoints (`/healthz`, `/overview`, `/middleware`,
+  `/middleware/{key}/start`, `/middleware/{key}/stop`, `/tracing`) plus
+  `/suggestions/{suggestion_id}/apply`, which the front end was already calling but the contract
+  never declared.
+- `scripts/contract-check.py` gained three rules: implemented endpoints must be registered and marked
+  `implemented`; every path called from `provider.ts` must match a contract template; every endpoint
+  must carry `x-wp-status`.
+- Negative tests prove the gate bites: removing `/tracing` from the contract -> exit 1
+  (`FAIL 实现端点未登记契约: /tracing`); marking `/middleware` as planned -> exit 1
+  (`FAIL 实现端点状态不符: /middleware`).
+
+### P1 · BFF overview aggregation
+
+- New `GET /api/wp/overview` aggregates only what has a real source: `observability.middleware`
+  (8 TCP probes with up/down/pending) and `observability.tracing` (services, sampled spans, recent
+  errors, sampled P99). The 15 still-unimplemented domains are returned in `gaps` and surfaced as
+  degradation by the front end - no silent filling.
+- Front end: `provider.getOverview()` calls the aggregate endpoint, and `OverviewView` gained an
+  "OPS 观测区实时摘要" strip with four cards (port reachability / registered services / recent error
+  traces / pending data domains).
+
+### P1 · Governance and CI
+
+- README 8.4 records the branch decisions: `git fetch` before pushing to `dev` (another machine's
+  branch); `workbuddy/main` stays independent.
+- CI gained a `docker-smoke` job (compose up + `healthcheck.sh`; requires a dind runner, currently
+  `allow_failure: true`).
+
+### Verification (2026-09-16, pass 2)
+
+- wp-bff `node --test`: **14 passed**
+- `scripts/contract-check.py --work-platform`: 37 endpoints, implemented 6 / planned 31, **0 FAIL**
+- Vue `npm run typecheck` and `npm run build`: passed
+- Live check: started wp-bff on :8091 and called `GET /api/wp/overview` - returned real probe data
+  (Docker not running -> up=0/8, Jaeger `enabled=false`)
+- Optimization log archived at `docs/优化日志/2026-09-16-契约对齐与总览聚合.md` (plus generated HTML)
+
 ## Remaining
 
 - ~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:

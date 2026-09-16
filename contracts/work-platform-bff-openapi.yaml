@@ -338,6 +338,31 @@ components:
         model_calls: { type: array, items: { $ref: '#/components/schemas/ModelCallPoint' } }
         model_runtime: { type: array, items: { $ref: '#/components/schemas/ModelRuntimeNode' } }
         optimization_suggestions: { type: array, items: { $ref: '#/components/schemas/OptimizationSuggestion' } }
+        # 2026-09-16 新增：wp-bff /overview 聚合的观测域（真实数据）
+        observability:
+          type: object
+          properties:
+            middleware:
+              type: object
+              properties:
+                total: { type: integer }
+                up: { type: integer }
+                down: { type: integer }
+                pending: { type: integer }
+                probe_mode: { type: string, example: tcp }
+                items: { type: array, items: { type: object } }
+            tracing:
+              type: object
+              properties:
+                enabled: { type: boolean }
+                services: { type: integer }
+                spans_sampled: { type: integer }
+                recent_errors: { type: integer }
+                p99_ms: { type: number }
+                p99_basis: { type: string, example: sampled_recent_traces }
+        # 仍未实现、由前端按降级策略显式标注的数据域
+        gaps: { type: array, items: { type: string } }
+        source: { type: string, example: wp-bff }
     ManagedModel:
       type: object
       required: [model_id, name, provider, tier, state, cost_per_1k, latency_ms, quality, share]
@@ -398,8 +423,13 @@ components:
         latency_ms: { type: integer }
 paths:
   /overview:
+    x-wp-status: implemented
     get:
-      summary: 总览增强驾驶舱（团队协作/模型监控/运行状态/优化建议）
+      summary: 总览聚合（已实现观测域：中间件 + 链路追踪；其余数据域经 gaps 显式透传）
+      description: |
+        已实现部分为真实数据：observability.middleware（8 中间件 TCP 探针）与
+        observability.tracing（Jaeger 服务与采样统计）。
+        其余数据域由 gaps 列出，前端据此标注为 Mock 降级，不做静默填充。
       security: [{ bearerAuth: [] }]
       responses:
         '200':
@@ -413,6 +443,7 @@ paths:
                     properties:
                       data: { $ref: '#/components/schemas/OverviewDashboard' }
   /vitals:
+    x-wp-status: planned
     get:
       summary: 生命体征实时（D1）
       responses:
@@ -423,12 +454,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
   /organs:
+    x-wp-status: planned
     get:
       summary: 器官健康报告（D2，M1 后启用）
       responses:
         '200':
           description: OK
   /senses:
+    x-wp-status: planned
     get:
       summary: 五感矩阵渠道状态与采集质量（D6）
       responses:
@@ -439,6 +472,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
   /brain/{decision_id}:
+    x-wp-status: planned
     get:
       summary: 决策链回放（D5，读 IN3 AuditLog）
       parameters:
@@ -451,12 +485,14 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
   /evolution:
+    x-wp-status: planned
     get:
       summary: 进化视图（R-C07）
       responses:
         '200':
           description: OK
   /collab/{domain_id}:
+    x-wp-status: planned
     get:
       summary: 协作域详情（MC）
       parameters:
@@ -469,6 +505,7 @@ paths:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
   /tasks:
+    x-wp-status: planned
     get:
       summary: 任务列表（WB-01）
       parameters:
@@ -497,6 +534,7 @@ paths:
         '201':
           description: Created
   /tasks/{task_id}:
+    x-wp-status: planned
     get:
       summary: 任务详情（WB-01）
       parameters:
@@ -505,6 +543,7 @@ paths:
         '200':
           description: OK
   /tasks/{task_id}/retry:
+    x-wp-status: planned
     post:
       summary: 重试失败任务（WB-01）
       parameters:
@@ -513,6 +552,7 @@ paths:
         '200':
           description: OK
   /chat/{task_id}:
+    x-wp-status: planned
     get:
       summary: 任务对话消息（WB-02）
       parameters:
@@ -521,6 +561,7 @@ paths:
         '200':
           description: OK
   /results/{task_id}:
+    x-wp-status: planned
     get:
       summary: 结果工作区产物（WB-02，Artifact 列表）
       parameters:
@@ -529,12 +570,14 @@ paths:
         '200':
           description: OK
   /experts:
+    x-wp-status: planned
     get:
       summary: 专家列表（WB-03）
       responses:
         '200':
           description: OK
   /experts/{expert_id}:
+    x-wp-status: planned
     get:
       summary: 专家详情（含 output_schema）
       parameters:
@@ -543,12 +586,14 @@ paths:
         '200':
           description: OK
   /skills:
+    x-wp-status: planned
     get:
       summary: 技能市场列表（WB-05）
       responses:
         '200':
           description: OK
   /skills/{skill_id}/install:
+    x-wp-status: planned
     post:
       summary: 安装技能（WB-05）
       parameters:
@@ -557,12 +602,14 @@ paths:
         '200':
           description: OK
   /connectors:
+    x-wp-status: planned
     get:
       summary: 连接器列表（WB-06）
       responses:
         '200':
           description: OK
   /connectors/{connector_id}/authorize:
+    x-wp-status: planned
     post:
       summary: 连接器授权（WB-06，OAuth 流）
       parameters:
@@ -571,6 +618,7 @@ paths:
         '200':
           description: OK
   /automations:
+    x-wp-status: planned
     get:
       summary: 自动化列表（WB-07）
       responses:
@@ -594,6 +642,7 @@ paths:
         '201':
           description: Created
   /automations/{automation_id}:
+    x-wp-status: planned
     patch:
       summary: 启停/修改自动化（WB-07）
       parameters:
@@ -602,12 +651,14 @@ paths:
         '200':
           description: OK
   /cases:
+    x-wp-status: planned
     get:
       summary: 灵感案例列表（WB-08）
       responses:
         '200':
           description: OK
   /cases/{case_id}/reuse:
+    x-wp-status: planned
     post:
       summary: 案例"做同款"（WB-08）
       parameters:
@@ -616,6 +667,7 @@ paths:
         '201':
           description: 已创建任务
   /approvals:
+    x-wp-status: planned
     get:
       summary: 审批队列（IN4）
       parameters:
@@ -624,6 +676,7 @@ paths:
         '200':
           description: OK
   /approvals/{approval_id}/decision:
+    x-wp-status: planned
     post:
       summary: 审批决策（IN4，L4 双人复核）
       parameters:
@@ -642,11 +695,13 @@ paths:
         '200':
           description: OK
   /models:
+    x-wp-status: planned
     get:
       summary: 多模型池与运行状态（WB-10）
       responses:
         '200': { description: OK }
   /models/{model_id}:
+    x-wp-status: planned
     patch:
       summary: 更新模型启停与路由状态
       parameters:
@@ -654,21 +709,25 @@ paths:
       responses:
         '200': { description: OK }
   /remote-im/channels:
+    x-wp-status: planned
     get:
       summary: 远程 IM 通道列表（WB-09 / IN8）
       responses:
         '200': { description: OK }
   /remote-im/command:
+    x-wp-status: planned
     post:
       summary: 通过 IM 下发远程任务指令
       responses:
         '202': { description: Accepted }
   /agents/online:
+    x-wp-status: planned
     get:
       summary: Agent 在线状态与当前任务
       responses:
         '200': { description: OK }
   /search:
+    x-wp-status: planned
     get:
       summary: 全局搜索（W4，任务/知识/技能/案例）
       parameters:
@@ -677,6 +736,7 @@ paths:
         '200':
           description: OK
   /preferences:
+    x-wp-status: planned
     get:
       summary: 偏好设置（W4）
       responses:
@@ -697,6 +757,65 @@ paths:
       responses:
         '200':
           description: OK
+
+  # 观测区 / 最小 Ops 子集（2026-09-16 登记：wp-bff 已实现，服务端口 8090）
+  /healthz:
+    x-wp-status: implemented
+    get:
+      summary: wp-bff 控制面自检（令牌来源/来源白名单/key 清单，不含令牌明文）
+      tags: [observability]
+      security: []
+      responses:
+        '200': { description: OK }
+  /middleware:
+    x-wp-status: implemented
+    get:
+      summary: 8 个中间件 TCP 探针与容器态（up/down/starting/stopping）
+      tags: [observability]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /middleware/{key}/start:
+    x-wp-status: implemented
+    x-wp-security: origin-allowlist + control-token
+    post:
+      summary: 启动中间件（固定执行 docker compose up -d key，key 白名单）
+      tags: [observability, control]
+      responses:
+        '200': { description: OK }
+        '401': { description: 控制令牌缺失或无效 }
+        '403': { description: 来源不在白名单或 key 不在白名单 }
+  /middleware/{key}/stop:
+    x-wp-status: implemented
+    x-wp-security: origin-allowlist + control-token
+    post:
+      summary: 停止中间件（固定执行 docker compose stop key，key 白名单）
+      tags: [observability, control]
+      responses:
+        '200': { description: OK }
+        '401': { description: 控制令牌缺失或无效 }
+        '403': { description: 来源不在白名单或 key 不在白名单 }
+  /tracing:
+    x-wp-status: implemented
+    get:
+      summary: Jaeger 服务统计与最近链路（每服务最近 20 条 trace 采样聚合）
+      tags: [observability]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /suggestions/{suggestion_id}/apply:
+    x-wp-status: planned
+    post:
+      summary: 应用优化建议并返回执行回执（总览增强驾驶舱）
+      tags: [overview]
+      responses:
+        '200': { description: OK }
 
 ws:
   events:

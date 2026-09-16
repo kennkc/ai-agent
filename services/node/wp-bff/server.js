@@ -59,6 +59,27 @@ const MIDDLEWARE = {
 }
 const WHITELIST = new Set(Object.keys(MIDDLEWARE))
 
+/**
+ * 本服务实现的端点（路径相对 /api/wp 前缀）。
+ * 用途：contract-check.py 依赖此清单校验「实现端点必须在契约中登记」，请与
+ * contracts/work-platform-bff-openapi.yaml 的 x-wp-status: implemented 保持一致。
+ */
+const IMPLEMENTED_ENDPOINTS = [
+  { method: 'GET', path: '/healthz' },
+  { method: 'GET', path: '/overview' },
+  { method: 'GET', path: '/middleware' },
+  { method: 'POST', path: '/middleware/{key}/start' },
+  { method: 'POST', path: '/middleware/{key}/stop' },
+  { method: 'GET', path: '/tracing' },
+]
+
+/** 总览页仍待 BFF 实现的聚合数据域，透传给前端用于降级展示 */
+const OVERVIEW_GAPS = [
+  'vitals', 'organs', 'brain', 'senses', 'evolution', 'collaboration',
+  'experts', 'skills', 'connectors', 'automations', 'cases', 'approvals',
+  'models', 'remote_im', 'agents',
+]
+
 const START_TIMEOUT_MS = 180000
 const STOP_TIMEOUT_MS = 120000
 
@@ -337,6 +358,57 @@ function createServer(options = {}) {
     }
   }
 
+  /**
+   * 总览聚合：只聚合 wp-bff 已具备真实数据源的部分（中间件 + 链路追踪），
+   * 其余数据域通过 gaps 显式列出，由前端按降级策略标注为 Mock，不做静默填充。
+   */
+  async function handleOverview(req, res) {
+    const entries = await Promise.all(Object.keys(middleware).map(async key => ({ key, probe: await probeState(key) })))
+    const items = entries.map(({ key, probe }) => nodeFor(key, probe.state, probe.latencyMs))
+    const up = items.filter(item => item.state === 'up').length
+    const pending = items.filter(item => item.state === 'starting' || item.state === 'stopping').length
+
+    const jaegerProbe = await probeImpl(middleware.jaeger.port)
+    let tracing = { enabled: false, services: 0, spans_sampled: 0, recent_errors: 0, p99_ms: 0, p99_basis: 'sampled_recent_traces' }
+    if (jaegerProbe.up) {
+      const servicesPayload = await fetchJson('http://127.0.0.1:16686/api/services')
+      const names = Array.isArray(servicesPayload?.data) ? servicesPayload.data : []
+      const settled = await Promise.all(names.map(name =>
+        fetchServiceTraces(name).then(traces => ({ name, traces })).catch(() => ({ name, traces: [] })),
+      ))
+      const stats = settled.map(({ name, traces }) => aggregateTraces(name, traces))
+      const recent = settled.flatMap(({ traces }) => traces.map(traceToRecent)).filter(Boolean)
+      tracing = {
+        enabled: true,
+        services: names.length,
+        spans_sampled: stats.reduce((sum, stat) => sum + stat.spans_24h, 0),
+        recent_errors: recent.filter(item => item.status === 'error').length,
+        p99_ms: stats.length ? Math.max(...stats.map(stat => stat.p99_ms)) : 0,
+        p99_basis: 'sampled_recent_traces',
+      }
+    }
+
+    send(req, res, 200, {
+      data: {
+        source: 'wp-bff',
+        checked_at: nowTime(),
+        observability: {
+          middleware: {
+            total: items.length,
+            up,
+            down: items.length - up - pending,
+            pending,
+            probe_mode: 'tcp',
+            items,
+          },
+          tracing,
+        },
+        gaps: OVERVIEW_GAPS,
+        note: 'observability 为真实数据；gaps 中的数据域仍待 BFF 实现，前端按降级策略标注',
+      },
+    })
+  }
+
   async function handleTracing(req, res) {
     const probe = await probeImpl(middleware.jaeger.port)
     if (!probe.up) {
@@ -392,6 +464,7 @@ function createServer(options = {}) {
       return send(req, res, verdict === false ? 403 : 204, verdict === false ? { error: 'origin not allowed' } : {})
     }
     if (req.method === 'GET' && url.pathname === '/api/wp/healthz') return handleHealthz(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/tracing') return handleTracing(req, res)
     if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])
@@ -437,6 +510,8 @@ if (require.main === module) startServer()
 module.exports = {
   MIDDLEWARE,
   WHITELIST,
+  IMPLEMENTED_ENDPOINTS,
+  OVERVIEW_GAPS,
   DEFAULT_ALLOWED_ORIGINS,
   createServer,
   startServer,

@@ -7,10 +7,29 @@
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/api/wp/healthz` | 进程存活 + 控制面配置自检（令牌来源、来源白名单、key 清单），不含令牌明文 |
+| GET | `/api/wp/overview` | 总览聚合：仅聚合已具备真实数据源的观测域（中间件 + 链路追踪），未实现的数据域通过 `gaps` 显式列出 |
 | GET | `/api/wp/middleware` | 探测 8 个中间件（TCP 探针），返回 `MiddlewareOverview` 契约 |
 | POST | `/api/wp/middleware/:key/start` | 启动中间件：`docker compose up -d <key>` |
 | POST | `/api/wp/middleware/:key/stop` | 终止中间件：`docker compose stop <key>` |
 | GET | `/api/wp/tracing` | Jaeger 在线时返回真实服务注册列表与每服务最近 20 条 trace 聚合统计（traces/spans/错误率/P99）及全局最新 12 条链路；Jaeger 未启动时返回 `enabled:false` |
+
+## 契约一致性（2026-09-16）
+
+`server.js` 导出 `IMPLEMENTED_ENDPOINTS`（本服务实际实现的端点清单），`scripts/contract-check.py`
+据此执行双向校验：
+
+1. **实现 → 契约**：清单中每个端点必须在 `contracts/work-platform-bff-openapi.yaml` 中登记，且
+   `x-wp-status: implemented`；缺失或状态不符直接 FAIL。
+2. **前端 → 契约**：`web/work-platform/src/api/provider.ts` 调用的每个路径必须能匹配到契约模板
+   （`{param}` 段级匹配），未登记直接 FAIL。
+3. **分层统计**：输出 `implemented / planned` 与前端调用数量，`planned` 表示已设计未实现。
+
+新增或改名端点时，必须同步三处：`server.js` 的 `IMPLEMENTED_ENDPOINTS`、OpenAPI 契约、前端调用。
+本地校验：
+
+```bash
+python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
+```
 
 ## 安全模型（2026-09-16 加固）
 

@@ -18,6 +18,35 @@
 
     <el-skeleton v-if="loading" :rows="8" animated />
     <template v-else>
+      <section v-if="observability" aria-label="观测区实时摘要" class="observability-strip">
+        <div class="section-heading">
+          <span>OPS 观测区实时摘要 · 真实数据</span>
+          <el-button text type="primary" @click="router.push('/middleware')">进入中间件监控 <el-icon><ArrowRight /></el-icon></el-button>
+        </div>
+        <div class="observability-grid">
+          <button type="button" class="observability-card" @click="router.push('/middleware')">
+            <span>中间件端口可达</span>
+            <strong>{{ observability.middleware.up }}<small>/ {{ observability.middleware.total }}</small></strong>
+            <em>探针 {{ observability.middleware.probe_mode.toUpperCase() }} · 启动中 {{ observability.middleware.pending }}</em>
+          </button>
+          <button type="button" class="observability-card" @click="router.push('/tracing')">
+            <span>Jaeger 注册服务</span>
+            <strong>{{ observability.tracing.services }}<small> 个</small></strong>
+            <em>{{ observability.tracing.enabled ? `采样 Span ${observability.tracing.spans_sampled}` : 'Jaeger 未启用' }}</em>
+          </button>
+          <button type="button" class="observability-card" :class="{ warn: observability.tracing.recent_errors > 0 }" @click="router.push('/tracing')">
+            <span>最近异常链路</span>
+            <strong>{{ observability.tracing.recent_errors }}<small> 条</small></strong>
+            <em>P99 {{ observability.tracing.p99_ms }}ms（采样分位）</em>
+          </button>
+          <div class="observability-card static">
+            <span>待接入数据域</span>
+            <strong>{{ overviewGaps.length }}<small> 项</small></strong>
+            <em>其余总览数据仍为 Mock，见顶栏降级提示</em>
+          </div>
+        </div>
+      </section>
+
       <section aria-label="生命体征摘要">
         <div class="section-heading"><span>D1 生命体征摘要</span><el-button text type="primary" @click="router.push('/vitals')">进入体征舱 <el-icon><ArrowRight /></el-icon></el-button></div>
         <div class="vital-summary-grid">
@@ -233,7 +262,8 @@ import {
   vitalSigns as fallbackVitals,
 } from '../api/mock'
 import type {
-  MetricCard, ModelCallPoint, ModelRuntimeNode, OptimizationSuggestion, OverviewWorkflow, OverviewWorkflowAgent, SuggestionExecution, TodaySummary, VitalSign,
+  MetricCard, ModelCallPoint, ModelRuntimeNode, OptimizationSuggestion, OverviewObservability,
+  OverviewWorkflow, OverviewWorkflowAgent, SuggestionExecution, TodaySummary, VitalSign,
 } from '../types'
 
 type TimelineItem = { phase: string; title: string; desc: string; status: string }
@@ -328,6 +358,9 @@ function linePath(key: 'calls' | 'latency', max: number) {
   return modelCalls.value.map((item, index) => `${index === 0 ? 'M' : 'L'} ${chartX(index, modelCalls.value.length)} ${chartY(item[key], max)}`).join(' ')
 }
 
+const observability = ref<OverviewObservability | null>(null)
+const overviewGaps = ref<string[]>([])
+
 async function loadOverview() {
   loading.value = true
   error.value = ''
@@ -342,6 +375,8 @@ async function loadOverview() {
       model_calls?: ModelCallPoint[]
       model_runtime?: ModelRuntimeNode[]
       optimization_suggestions?: OptimizationSuggestion[]
+      observability?: OverviewObservability
+      gaps?: string[]
     }
     metrics.value = data.metrics?.length ? data.metrics : fallbackMetrics
     services.value = data.services?.length ? data.services : fallbackServices
@@ -352,6 +387,8 @@ async function loadOverview() {
     modelCalls.value = data.model_calls?.length ? data.model_calls : fallbackModelCalls.map(item => ({ ...item }))
     modelRuntime.value = data.model_runtime?.length ? data.model_runtime : fallbackModelRuntime.map(item => ({ ...item }))
     suggestions.value = data.optimization_suggestions?.length ? data.optimization_suggestions : fallbackSuggestions.map(item => ({ ...item }))
+    observability.value = data.observability ?? null
+    overviewGaps.value = data.gaps ?? []
   } catch {
     error.value = 'overview'
   } finally {
@@ -688,6 +725,24 @@ onUnmounted(() => {
 @media (max-width: 1450px) { .cockpit-grid { grid-template-columns: 1fr; } .workflow-card, .model-monitor-card { min-height: auto; } }
 @media (max-width: 1180px) { .vital-summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } .agent-strip { grid-template-columns: repeat(3, minmax(0, 1fr)); } .cockpit-bottom { grid-template-columns: 1fr; } }
 @media (max-width: 760px) { .vital-summary-grid, .agent-strip, .model-node-grid { grid-template-columns: 1fr; } .hero-telemetry .gold { width: 100%; margin-left: 0; } .monitor-metrics { grid-template-columns: repeat(2, minmax(0, 1fr)); } .model-status-layout { grid-template-columns: 1fr; } .workflow-summary { grid-template-columns: 1fr; } .workflow-eta { text-align: left; } }
+
+/* 观测区实时摘要（真实数据：wp-bff /overview 聚合） */
+.observability-strip { margin-bottom: 18px; }
+.observability-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; }
+.observability-card {
+  display: flex; flex-direction: column; gap: 4px; padding: 14px 16px; text-align: left;
+  border: 1px solid rgba(212, 175, 55, .32); border-radius: 14px; cursor: pointer;
+  background: linear-gradient(150deg, rgba(212, 175, 55, .10), rgba(15, 23, 42, .35));
+  color: var(--wp-text); transition: transform .18s ease, border-color .18s ease;
+}
+.observability-card:hover { transform: translateY(-2px); border-color: var(--wp-gold-soft, #d4af37); }
+.observability-card.static { cursor: default; }
+.observability-card.static:hover { transform: none; }
+.observability-card.warn { border-color: rgba(239, 68, 68, .55); background: linear-gradient(150deg, rgba(239, 68, 68, .14), rgba(15, 23, 42, .35)); }
+.observability-card span { color: var(--wp-sub); font-size: 11px; letter-spacing: .08em; }
+.observability-card strong { font-size: 26px; font-weight: 650; }
+.observability-card strong small { font-size: 12px; font-weight: 400; color: var(--wp-sub); }
+.observability-card em { color: var(--wp-sub); font-size: 11px; font-style: normal; }
 </style>
 
 <style scoped>

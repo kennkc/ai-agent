@@ -74,9 +74,14 @@ def parse_proto_messages(path):
 
 
 def parse_openapi_paths(path):
-    """行解析提取 OpenAPI 端点与 WS 事件（避免 yaml 依赖）"""
-    paths, ws_events = set(), set()
+    """行解析提取 OpenAPI 端点、WS 事件与分层状态（避免 yaml 依赖）
+
+    返回 (paths, ws_events, status)：status 为 路径 -> x-wp-status 取值
+    （implemented / planned / unmarked）。
+    """
+    paths, ws_events, status = set(), set(), {}
     in_ws = False
+    current = None
     with open(path, encoding="utf-8") as f:
         for line in f:
             s = line.strip()
@@ -90,8 +95,60 @@ def parse_openapi_paths(path):
                 continue
             m = re.match(r"^  (/[a-z0-9_{}/.-]+):\s*$", line)
             if m:
-                paths.add(m.group(1))
-    return paths, ws_events
+                current = m.group(1)
+                paths.add(current)
+                status.setdefault(current, "unmarked")
+                continue
+            m2 = re.match(r"^    x-wp-status:\s*(\w+)\s*$", line)
+            if m2 and current:
+                status[current] = m2.group(1)
+    return paths, ws_events, status
+
+
+def parse_js_implemented_endpoints(path):
+    """提取 wp-bff server.js 中 IMPLEMENTED_ENDPOINTS 的路径清单"""
+    if not os.path.exists(path):
+        return []
+    text = open(path, encoding="utf-8").read()
+    block = re.search(r"const IMPLEMENTED_ENDPOINTS = \[(.*?)\]", text, re.S)
+    if not block:
+        return []
+    return re.findall(r"path:\s*'([^']+)'", block.group(1))
+
+
+def parse_frontend_endpoints(path):
+    """提取 provider.ts 中调用的 BFF 路径（含模板变量）"""
+    if not os.path.exists(path):
+        return []
+    text = open(path, encoding="utf-8").read()
+    found = set()
+    for m in re.finditer(r"api\.(?:get|post|put|patch|delete)\(\s*[`'\"]([^`'\"]+)", text):
+        found.add(m.group(1))
+    for m in re.finditer(r"\[\s*'[a-z_]+'\s*,\s*'([^']+)'\]", text):
+        found.add(m.group(1))
+    return sorted(found)
+
+
+def normalize_frontend_path(p):
+    """前端模板变量 ${x} 归一化为 {param}，并确保以 / 开头"""
+    p = re.sub(r"\$\{[^}]+\}", "{param}", p)
+    return p if p.startswith("/") else "/" + p
+
+
+def path_matches_template(template, actual):
+    """段级匹配：契约模板中的 {xxx} 段可匹配任意非空段"""
+    t = [x for x in template.strip("/").split("/") if x]
+    a = [x for x in actual.strip("/").split("/") if x]
+    if len(t) != len(a):
+        return False
+    for ts, as_ in zip(t, a):
+        if ts.startswith("{") and ts.endswith("}"):
+            if not as_:
+                return False
+            continue
+        if ts != as_:
+            return False
+    return True
 
 
 def check_model(messages, model, spec):
@@ -115,7 +172,7 @@ def check_work_platform(openapi_path):
     """X3 · work-platform 契约分层校验"""
     if not os.path.exists(openapi_path):
         return [f"FAIL 契约文件缺失: {openapi_path}"]
-    paths, ws_events = parse_openapi_paths(openapi_path)
+    paths, ws_events, wp_status = parse_openapi_paths(openapi_path)
     issues = []
     # 1) P1 启用层必须全覆盖
     for ep in sorted(WP_P1_ENDPOINTS):
@@ -134,7 +191,32 @@ def check_work_platform(openapi_path):
     for ev in sorted(WP_WS_EVENTS):
         if ev not in ws_events:
             issues.append(f"FAIL WS 事件缺失: {ev}")
+    # 5) 实现端点必须在契约中登记，且状态必须为 implemented
+    impl_paths = parse_js_implemented_endpoints(
+        str(REPO_ROOT / "services" / "node" / "wp-bff" / "server.js"))
+    for ep in impl_paths:
+        if ep not in paths:
+            issues.append(f"FAIL 实现端点未登记契约: {ep}（wp-bff IMPLEMENTED_ENDPOINTS）")
+        elif wp_status.get(ep) != "implemented":
+            issues.append(f"FAIL 实现端点状态不符: {ep}（契约标记 {wp_status.get(ep)}，应为 implemented）")
+
+    # 6) 前端调用的端点必须能匹配到契约模板
+    fe_paths = parse_frontend_endpoints(
+        str(REPO_ROOT / "web" / "work-platform" / "src" / "api" / "provider.ts"))
+    for raw in fe_paths:
+        actual = normalize_frontend_path(raw)
+        if not any(path_matches_template(tpl, actual) for tpl in paths):
+            issues.append(f"FAIL 前端调用未登记契约: {actual}（provider.ts）")
+
+    # 7) 所有端点都应有分层标记
+    unmarked = sorted(p for p, v in wp_status.items() if v == "unmarked")
+    if unmarked:
+        issues.append(f"WARN 端点缺少 x-wp-status 标记: {len(unmarked)} 个（{', '.join(unmarked[:3])} …）")
+
+    impl_n = sum(1 for v in wp_status.values() if v == "implemented")
     print(f"扫描端点: {len(paths)} 个 | WS 事件: {len(ws_events)} 个 | P1 层: {len(WP_P1_ENDPOINTS)} | 阶段层: {len(WP_STAGE_ENDPOINTS)}")
+    print(f"实现分层: implemented {impl_n} | planned {len(paths) - impl_n} | "
+          f"wp-bff 实现 {len(impl_paths)} | 前端调用 {len(fe_paths)}")
     return issues
 
 

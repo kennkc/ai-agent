@@ -86,9 +86,23 @@ export const dataProvider = {
 
   async getOverview() {
     if (source === 'mock') return mockWorkbench.overview
-    // BFF 未实现 /overview 时保留 Mock 兜底，但必须显式登记降级，不再静默替换数据源
-    const payload = await safe(() => api.get('/overview'), { data: { data: mockWorkbench.overview } }, 'overview')
-    return unwrap(payload)
+    try {
+      const payload = unwrapBody(await api.get('/overview'))
+      reportApiOk('overview')
+      // BFF /overview 目前只聚合观测域（中间件 + 链路追踪）；其余总览数据域仍是 Mock，
+      // 逐个登记降级，避免"接口通了 = 数据真实"的误读。
+      const gaps: string[] = Array.isArray(payload?.gaps) ? payload.gaps : []
+      gaps.forEach(gap => reportDegrade(String(gap), 'BFF /overview 未覆盖，当前展示 Mock 数据'))
+      return {
+        ...mockWorkbench.overview,
+        observability: payload?.observability ?? null,
+        gaps,
+        source: payload?.source || 'wp-bff',
+      }
+    } catch (error) {
+      reportDegrade('overview', (error as Error)?.message || 'BFF /overview 不可达')
+      return mockWorkbench.overview
+    }
   },
 
   async getTasks() {
