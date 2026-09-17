@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 10:15 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-17 10:46 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -140,6 +140,7 @@
 <li><a href="#_6">六、剩余项与已知缺口</a><ul>
 <li><a href="#61">6.1 阻塞 / 待验收</a></li>
 <li><a href="#62-docsjava-services07-md">6.2 已登记的工程缺口（源自 docs/java-services/07-运行时配置与横切约定.md）</a></li>
+<li><a href="#63-debt-00x">6.3 技术债（DEBT-00X）</a></li>
 </ul>
 </li>
 <li><a href="#docs">七、docs 归档索引</a></li>
@@ -603,6 +604,12 @@ git push origin codex/main:workbuddy/main
 <td>团队冻结，固化 Phase 0-2</td>
 <td>知识库与语义检索未打通</td>
 </tr>
+<tr>
+<td>5</td>
+<td><strong>Phase 2 两项验证方法仍"待验"</strong></td>
+<td>《G1-验证追踪视图》中 C09 数据总线代理、C16 感官渠道管理器标 🟡 待验</td>
+<td>即 <a href="./技术债台账.md">DEBT-009 / DEBT-006</a>，详见 §6.3 —— <strong>"阶段已验收"不等于"所有验证方法都已跑过"</strong></td>
+</tr>
 </tbody>
 </table>
 <h3 id="62-docsjava-services07-md">6.2 已登记的工程缺口（源自 <code>docs/java-services/07-运行时配置与横切约定.md</code>）<a class="headerlink" href="#62-docsjava-services07-md" title="Permanent link">&para;</a></h3>
@@ -614,6 +621,84 @@ git push origin codex/main:workbuddy/main
 <li>HTTP 端口<strong>写死</strong>，未做环境变量占位</li>
 <li><code>TextExtractorTest</code> 有用例名拼写错误 <code>decodesGbkWitoutHeader</code>（未擅改测试代码）</li>
 </ul>
+<h3 id="63-debt-00x">6.3 技术债（<code>DEBT-00X</code>）<a class="headerlink" href="#63-debt-00x" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p><strong>权威台账：<a href="./技术债台账.md"><code>技术债台账.md</code></a></strong> —— 含逐条源码证据、触发点与一致性问题登记。
+下表仅摘要，<strong>以台账为准</strong>。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>债ID</th>
+<th>模块</th>
+<th>简化实现</th>
+<th>正式目标</th>
+<th>触发点</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>DEBT-001</td>
+<td>body-service</td>
+<td>内存 Map + 字符命中打分</td>
+<td>Qdrant 向量检索</td>
+<td>VS3</td>
+<td>🔴 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-002</td>
+<td>session-manager</td>
+<td>字符串模板拼接回答</td>
+<td>LLM 生成</td>
+<td>VS2</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-003</td>
+<td>session-manager</td>
+<td>~~内存 Map~~ → <strong>已换真 Redis</strong></td>
+<td>Redis 持久化</td>
+<td>P4</td>
+<td>✅ <strong>已闭合</strong></td>
+</tr>
+<tr>
+<td>DEBT-005</td>
+<td>gateway-service</td>
+<td>最小 HMAC JWT</td>
+<td>OAuth2 / OIDC</td>
+<td>P7</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-006</td>
+<td>sense-service（测试）</td>
+<td>仅单渠道单测</td>
+<td>五渠道集成测试</td>
+<td>P2</td>
+<td>🔴 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-007</td>
+<td>nlp-service</td>
+<td>TF-IDF + 最近质心</td>
+<td>BERT 级模型</td>
+<td>P4</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-009</td>
+<td>session-manager（测试）</td>
+<td>仅总线代理单测</td>
+<td>消息链路测试</td>
+<td>P2</td>
+<td>🔴 未闭合</td>
+</tr>
+</tbody>
+</table>
+<p><strong>两条红线提醒</strong>（引《D5-1》§5.2「触发点到达后 2 个迭代内必须替换，否则升级为风险项」）：
+DEBT-006 与 DEBT-009 的触发点（P2）<strong>已到</strong>且未闭合 → 按红线应升级为风险项。
+DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<strong>不构成验收阻塞</strong>。</p>
 <hr />
 <h2 id="docs">七、docs 归档索引<a class="headerlink" href="#docs" title="Permanent link">&para;</a></h2>
 <table>
@@ -639,6 +724,11 @@ git push origin codex/main:workbuddy/main
 <td><code>docs/功能开发流程.md</code></td>
 <td>每个功能的开发流程与验收标准</td>
 <td>流程或功能变化时</td>
+</tr>
+<tr>
+<td><code>docs/技术债台账.md</code></td>
+<td><strong><code>DEBT-00X</code> 权威台账</strong>（简化实现 / 正式目标 / 触发点 / 状态 + 源码证据）</td>
+<td>创建或关闭任何债务时</td>
 </tr>
 <tr>
 <td><code>docs/项目进度日志报告/</code></td>

@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>技术债台账（DEBT Registry）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-17 10:45 · 源文件 技术债台账.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">为什么把台账搬进仓库</a></li>
+<li><a href="#_2">一、台账总表</a></li>
+<li><a href="#_3">二、逐条详情</a><ul>
+<li><a href="#debt-001-body-service">DEBT-001 · body-service 检索为内存实现</a></li>
+<li><a href="#debt-002">DEBT-002 · 回答生成为模板拼接</a></li>
+<li><a href="#debt-003">DEBT-003 · 会话存储 —— 已闭合 ✅</a></li>
+<li><a href="#debt-005-jwt">DEBT-005 · 网关为最小 JWT</a></li>
+<li><a href="#debt-006">DEBT-006 · 五渠道集成测试缺口</a></li>
+<li><a href="#debt-007-l0-bert">DEBT-007 · L0 意图模型为统计分类器（非 BERT）</a></li>
+<li><a href="#debt-009">DEBT-009 · 消息链路测试缺口</a></li>
+</ul>
+</li>
+<li><a href="#_4">三、关联未实现项（不属于技术债，但常被一起问到）</a></li>
+<li><a href="#2026-09-17">四、一致性问题登记（2026-09-17 核实发现，未擅自修改源码）</a><ul>
+<li><a href="#41-debt-003">4.1 DEBT-003 编号冲突 —— 同一编号两个含义</a></li>
+<li><a href="#42">4.2 台账描述与代码实况不符</a></li>
+<li><a href="#43">4.3 生成物注释滞后（已闭合债务仍写着旧实现）</a></li>
+<li><a href="#44">4.4 编号跳号</a></li>
+<li><a href="#45">4.5 验收口径待对齐</a></li>
+</ul>
+</li>
+<li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
+<li><a href="#_5">六、待办</a></li>
+<li><a href="#debt-00x">七、代码标记索引（DEBT-00X 出现在哪）</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="debt-registry">技术债台账（DEBT Registry）<a class="headerlink" href="#debt-registry" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>口径时间</strong>：2026-09-17 · <strong>代码基线</strong>：<code>91d2643</code>
+<strong>来源</strong>：设计文档《D5-冻结前收尾/D5-1-简化版演进规范》§5.1 清单 —— 本文件是<strong>仓库内的权威副本</strong></p>
+</blockquote>
+<h2 id="_1">为什么把台账搬进仓库<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<p>代码里散落着 <code>// DEBT-00X</code> 注释（proto 源 3 处、Python 2 处），但台账原先<strong>只存在于设计文档侧</strong>
+（<code>AGENT_CONTEXT/D5-冻结前收尾/D5-1-简化版演进规范.md</code> §5.1）。由此产生两个问题：</p>
+<ol>
+<li><strong>查不到</strong>：读代码的人看到 <code>DEBT-007</code> 无从确认含义，必须跨到知识库检索；</li>
+<li><strong>不完整且滞后</strong>：原清单只有 DEBT-001/002/003 三条，而代码已引用到 <code>DEBT-009</code>；
+   同时 DEBT-003 对应的实现<strong>已经升级完了</strong>，清单还写着"待替换"。</li>
+</ol>
+<p>本文件把「设计文档原清单」与「代码中实际引用的全部编号」合并，并<strong>逐条按当前代码核实状态</strong>。</p>
+<hr />
+<h2 id="_2">一、台账总表<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<p>状态图例：✅ 已闭合 · 🟡 未闭合（触发点未到） · 🔴 未闭合（触发点已到）</p>
+<table>
+<thead>
+<tr>
+<th>债ID</th>
+<th>模块（实际落点）</th>
+<th>简化实现（代码实况）</th>
+<th>正式目标</th>
+<th>触发点</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>DEBT-001</strong></td>
+<td>body-service</td>
+<td><code>BodyStore</code> 内存 Map + 字符命中率打分</td>
+<td>Qdrant 向量检索</td>
+<td>VS3</td>
+<td>🔴</td>
+</tr>
+<tr>
+<td><strong>DEBT-002</strong></td>
+<td>session-manager（回答生成）</td>
+<td>字符串模板拼接</td>
+<td>LLM 生成</td>
+<td>VS2</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-003</strong></td>
+<td>session-manager（会话存储）</td>
+<td>~~内存 Map~~ → <strong>已换真 Redis</strong></td>
+<td>Redis 持久化</td>
+<td>P4</td>
+<td>✅ <strong>已闭合</strong></td>
+</tr>
+<tr>
+<td><strong>DEBT-005</strong></td>
+<td>gateway-service</td>
+<td>最小 HMAC JWT</td>
+<td>OAuth2 / OIDC</td>
+<td>P7</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-006</strong></td>
+<td>sense-service（测试缺口）</td>
+<td>仅单渠道单测</td>
+<td>五渠道集成测试</td>
+<td>P2</td>
+<td>🔴</td>
+</tr>
+<tr>
+<td><strong>DEBT-007</strong></td>
+<td>nlp-service</td>
+<td>字符 n-gram TF-IDF + 最近质心</td>
+<td>BERT 级模型（ONNX）</td>
+<td>P4</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-009</strong></td>
+<td>session-manager（测试缺口）</td>
+<td>仅总线代理单测</td>
+<td>消息链路（NATS/Kafka）测试</td>
+<td>P2</td>
+<td>🔴</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>DEBT-004</code> / <code>DEBT-008</code> <strong>从未被使用</strong>（编号跳号，见 §4.4）。</p>
+</blockquote>
+<hr />
+<h2 id="_3">二、逐条详情<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<h3 id="debt-001-body-service">DEBT-001 · body-service 检索为内存实现<a class="headerlink" href="#debt-001-body-service" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：<code>BodyStore</code> 用 <code>ConcurrentHashMap&lt;String, List&lt;StoredChunk&gt;&gt;</code> 按租户存切片；
+  检索打分是「整串包含 = 1.0，否则按查询字符在正文中的命中率」——<strong>纯内存、无持久化、无语义相似度</strong>。</li>
+<li><strong>正式目标</strong>：Qdrant 向量检索。<code>docker-compose.yml</code> 已定义 qdrant 服务（端口 6333/6334），
+  但<strong>当前没有任何服务调用它</strong>。</li>
+<li><strong>触发点</strong>：VS3 完成（Phase 3，<strong>当前冻结</strong>）</li>
+<li><strong>状态</strong>：🔴 未闭合</li>
+<li><strong>证据</strong>：<code>services/java/body-service/src/main/java/com/agent/body/store/BodyStore.java:9,22-48</code>；
+  全仓无 qdrant 客户端依赖。</li>
+<li>⚠️ 台账原文描述为「本地文件检索」，<strong>与实际不符</strong> —— 实际连文件都没落盘（见 §4.2）。</li>
+</ul>
+<h3 id="debt-002">DEBT-002 · 回答生成为模板拼接<a class="headerlink" href="#debt-002" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：<code>SessionController.buildAnswer()</code> 把检索到的首条切片截前 240 字，
+  套进固定句式「根据知识库《X》检索结果：…」；无检索结果时返回固定致歉文案。</li>
+<li><strong>正式目标</strong>：LLM 生成</li>
+<li><strong>触发点</strong>：VS2 完成</li>
+<li><strong>状态</strong>：🟡 未闭合</li>
+<li><strong>证据</strong>：<code>services/java/session-manager/src/main/java/com/agent/session/controller/SessionController.java:132-138</code>；
+  债务标记在 <code>proto/brain/v1/brain.proto:1</code>。</li>
+<li>备注：台账原文把模块记为「大脑」，实际代码落在 <strong>session-manager</strong>（大脑期尚未开工）。</li>
+</ul>
+<h3 id="debt-003">DEBT-003 · 会话存储 —— 已闭合 ✅<a class="headerlink" href="#debt-003" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>原简化实现</strong>：会话与消息存进程内存 Map。</li>
+<li><strong>当前实况</strong>：<strong>已改为真实 Redis</strong>。<code>session-manager</code> 依赖 <code>spring-boot-starter-data-redis</code>，
+  <code>application.yml</code> 配置 <code>${REDIS_HOST:127.0.0.1}:${REDIS_PORT:6379}</code>，
+  <code>SessionController</code> 全程使用 <code>StringRedisTemplate</code>（Hash 存会话元数据 + List 存消息，2h TTL）。</li>
+<li><strong>关闭依据</strong>：Redis 客户端与配置均真实存在，且会话写入/读取/删除全走 Redis
+  （<code>SessionController.java:10,22,45-51,102,112-117,126</code>）。</li>
+<li><strong>状态</strong>：✅ <strong>已闭合</strong>（2026-09-17 核实）</li>
+<li>⚠️ 但 proto 源与两处生成物的注释<strong>仍写着旧实现</strong>（见 §4.3）。</li>
+</ul>
+<h3 id="debt-005-jwt">DEBT-005 · 网关为最小 JWT<a class="headerlink" href="#debt-005-jwt" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：<code>JwtService</code> 使用 <code>io.jsonwebtoken.security.Keys.hmacShaKeyFor()</code> 做对称 HMAC 签发验签，
+  无签发方/密钥轮转/OIDC 发现端点。</li>
+<li><strong>正式目标</strong>：OAuth2 / OIDC</li>
+<li><strong>触发点</strong>：P7（见《D5-3-安全演进路径》）</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到）</li>
+<li><strong>证据</strong>：<code>services/java/gateway-service/src/main/java/com/agent/gateway/security/JwtService.java:5,27</code>。</li>
+</ul>
+<h3 id="debt-006">DEBT-006 · 五渠道集成测试缺口<a class="headerlink" href="#debt-006" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：感官测试只有 <code>TouchChannelTest</code>（单渠道）、<code>CollectPipelineTest</code>、
+  <code>ChannelHealthMonitorTest</code> —— <strong>没有覆盖五渠道协同的路由/降级集成测试</strong>。</li>
+<li><strong>正式目标</strong>：五渠道集成测试（含隔离渠道自动降级到可用渠道的端到端验证）</li>
+<li><strong>触发点</strong>：P2</li>
+<li><strong>状态</strong>：🔴 未闭合（触发点已到，Phase 2 已宣告验收）</li>
+<li><strong>证据</strong>：<code>services/java/sense-service/src/test/java/com/agent/sense/</code> 下无五渠道协同用例。</li>
+<li>备注：《G1-验证追踪视图》中 C16 感官渠道管理器的验收方法即本项，状态标 🟡 待验（见 §4.5）。</li>
+</ul>
+<h3 id="debt-007-l0-bert">DEBT-007 · L0 意图模型为统计分类器（非 BERT）<a class="headerlink" href="#debt-007-l0-bert" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：字符 n-gram（单字 0.4 / bigram 1.0 / trigram 0.8）TF-IDF + 最近质心，
+  纯 Python 手写、零第三方依赖，余弦相似度 + 分离度合成置信度。</li>
+<li><strong>正式目标</strong>：BERT 级模型（ONNX 推理），接口按 <code>predict / predict_batch / stats</code> 抽象以便整体替换</li>
+<li><strong>触发点</strong>：P4 大脑期接入模型推理服务</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到）</li>
+<li><strong>证据</strong>：<code>services/python/nlp-service/app/intent/l0_model.py:49</code>；实测留出集 <strong>90.0%</strong> / P99 <strong>0.035ms</strong>，
+  已满足 R2-08 的「准确率 ≥ 85%、延迟 &lt; 50ms」验收指标，故<strong>不构成验收阻塞</strong>。</li>
+</ul>
+<h3 id="debt-009">DEBT-009 · 消息链路测试缺口<a class="headerlink" href="#debt-009" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：会话侧只有 <code>BusProxyTest</code> 单测；<strong>无 NATS / Kafka 真实链路测试</strong>
+  （发布—订阅、应答、断连重试、死信等）。</li>
+<li><strong>正式目标</strong>：消息链路测试</li>
+<li><strong>触发点</strong>：P2（NATS 接入）</li>
+<li><strong>状态</strong>：🔴 未闭合（触发点已到）</li>
+<li><strong>证据</strong>：<code>services/java/session-manager/src/test/java/com/agent/session/</code> 下无 NATS/Kafka 用例。</li>
+<li>备注：同 DEBT-006，《G1-验证追踪视图》中 C09 数据总线代理的验收方法即本项，状态标 🟡 待验。</li>
+</ul>
+<hr />
+<h2 id="_4">三、关联未实现项（<strong>不属于技术债</strong>，但常被一起问到）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<p>技术债 = 「先用简化版顶着，到点换正式版」。以下属于<strong>明示未实现 / 环境缺口</strong>，性质不同，单列：</p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>性质</th>
+<th>当前表现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>OCR 端到端</td>
+<td>环境缺口（需装 PaddleOCR / Tesseract）</td>
+<td>视觉渠道 <code>available=false</code>，如实降级，不伪造</td>
+</tr>
+<tr>
+<td>听觉渠道（ASR）</td>
+<td>设计预留（R2-03 只保留接口与注册位）</td>
+<td><code>available()=false</code> / <code>healthy()=false</code>，自动标记 DOWN 并隔离</td>
+</tr>
+<tr>
+<td>wp-bff 契约 31 个 planned 端点</td>
+<td>分期实现</td>
+<td>契约标 <code>x-wp-status: planned</code>；<code>/overview</code> 用 <code>gaps</code> 列出 15 个未覆盖域，前端标注 Mock</td>
+</tr>
+<tr>
+<td>body-service 缺 OTLP 配置</td>
+<td>配置缺口</td>
+<td>不在 Jaeger 链路，也未接入统一错误码体系</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2026-09-17">四、一致性问题登记（2026-09-17 核实发现，<strong>未擅自修改源码</strong>）<a class="headerlink" href="#2026-09-17" title="Permanent link">&para;</a></h2>
+<h3 id="41-debt-003">4.1 <code>DEBT-003</code> 编号冲突 —— 同一编号两个含义<a class="headerlink" href="#41-debt-003" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>位置</th>
+<th>该编号被用来表示</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>proto/session/v1/session.proto:10</code> + 生成物</td>
+<td>会话存储为内存 Map → 换 Redis</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/app/main.py:1</code></td>
+<td>意图识别升级为「规则引擎 + L0 双级联」→ P4 混合识别</td>
+</tr>
+</tbody>
+</table>
+<p>两者是<strong>完全不同的债务</strong>。推测 <code>main.py</code> 那一行是编号误用（复制模板时未改号）。
+<strong>处置</strong>：未擅自改号（编号分配属设计侧决策），登记为待办 §6-1。</p>
+<h3 id="42">4.2 台账描述与代码实况不符<a class="headerlink" href="#42" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>DEBT-001</strong> 台账写「本地文件检索」，实际是<strong>纯内存 Map</strong>，连文件持久化都没有；
+  且 <code>docker-compose.yml</code> 里的 qdrant 容器<strong>无人调用</strong> —— 容易被误读为"已经在用 Qdrant 了"。</li>
+<li><strong>DEBT-002</strong> 台账把模块记为「大脑」，实际落在 <strong>session-manager</strong>。</li>
+</ul>
+<h3 id="43">4.3 生成物注释滞后（已闭合债务仍写着旧实现）<a class="headerlink" href="#43" title="Permanent link">&para;</a></h3>
+<p>DEBT-003 已闭合，但下列位置仍保留旧描述：</p>
+<table>
+<thead>
+<tr>
+<th>位置</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>proto/session/v1/session.proto:10</code></td>
+<td><strong>契约源码</strong>，需改注释后重新生成</td>
+</tr>
+<tr>
+<td><code>services/java/proto-contracts/src/main/java/com/agent/session/v1/SessionServiceGrpc.java</code>（6 处）</td>
+<td>protoc 生成产物，随上者重生成</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/generated/session/v1/session_pb2_grpc.py</code>（3 处）</td>
+<td>同上</td>
+</tr>
+</tbody>
+</table>
+<p><strong>处置</strong>：本仓库的 protobuf 生成源码<strong>已入库</strong>，改注释须走 <code>-Pproto-gen</code> 重新生成并提交产物。
+因该 profile 会真实调用 protoc（本机历史上出现过构建阻塞），<strong>本次未动</strong>，登记为待办 §6-2。</p>
+<h3 id="44">4.4 编号跳号<a class="headerlink" href="#44" title="Permanent link">&para;</a></h3>
+<p><code>DEBT-004</code> 与 <code>DEBT-008</code> <strong>在全仓（含设计文档）从未出现</strong>。可能是预留号或漏登记。
+<strong>处置</strong>：保留空号不回收，避免与历史文档冲突；后续新债从 <code>DEBT-010</code> 起编。</p>
+<h3 id="45">4.5 验收口径待对齐<a class="headerlink" href="#45" title="Permanent link">&para;</a></h3>
+<p>《G1-验证追踪视图》中 <strong>C09 数据总线代理</strong>、<strong>C16 感官渠道管理器</strong> 的验收方法正是
+DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2 报告已宣告验收通过。
+<strong>处置</strong>：属"诚实留痕"的正常结果，但建议在 <code>项目进度总览.md</code> 中把这两项<strong>显式登记为验收留有余项</strong>，
+避免"阶段已验收"被读成"所有验证方法都已跑过"。</p>
+<hr />
+<h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>创建</strong>：任何简化实现落地时同步创建 —— 代码 <code>// DEBT-00X</code> 注释 <strong>+ 登记本文件</strong></li>
+<li><strong>追踪</strong>：每里程碑（M1/M2/M3）审查一次，更新状态</li>
+<li><strong>关闭</strong>：替换完成且契约测试通过 → 销项（在本文件标注 ✅ 并写明关闭依据与日期）</li>
+<li><strong>红线</strong>：<strong>触发点到达后 2 个迭代内必须替换</strong>，否则升级为风险项（阻断里程碑演示）</li>
+<li><strong>红线现状</strong>：DEBT-006 与 DEBT-009 触发点已到（P2）且尚未闭合，按红线<strong>应升级为风险项</strong>（见 §6-3）</li>
+</ul>
+<hr />
+<h2 id="_5">六、待办<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>事项</th>
+<th>建议动作</th>
+<th>归属</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>DEBT-003</code> 编号冲突（<code>nlp-service/app/main.py</code>）</td>
+<td>确认意图升级是否应占用独立编号，若是则改为新号并同步本文件</td>
+<td>设计侧确认</td>
+</tr>
+<tr>
+<td>2</td>
+<td>proto 源与生成物注释滞后（DEBT-003 旧描述）</td>
+<td>改 <code>proto/session/v1/session.proto</code> 注释 → <code>-Pproto-gen</code> 重生成 → 提交产物</td>
+<td>需网络/构建窗口</td>
+</tr>
+<tr>
+<td>3</td>
+<td>DEBT-006 / DEBT-009 触发点已到</td>
+<td>在其被替换前，按红线升级为风险项并写入总览</td>
+<td>项目侧</td>
+</tr>
+<tr>
+<td>4</td>
+<td>本文件与设计文档台账同步</td>
+<td>设计文档侧 §5.1 改为指向本文件，避免两处各写一份</td>
+<td>设计侧</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="debt-00x">七、代码标记索引（<code>DEBT-00X</code> 出现在哪）<a class="headerlink" href="#debt-00x" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>位置</th>
+<th>编号</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>proto/body/v1/body.proto:1</code></td>
+<td>DEBT-001</td>
+</tr>
+<tr>
+<td><code>proto/brain/v1/brain.proto:1</code></td>
+<td>DEBT-002</td>
+</tr>
+<tr>
+<td><code>proto/session/v1/session.proto:10</code></td>
+<td>DEBT-003（滞后）</td>
+</tr>
+<tr>
+<td><code>services/java/proto-contracts/.../session/v1/SessionServiceGrpc.java</code> ×6</td>
+<td>DEBT-003（生成物，滞后）</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/generated/session/v1/session_pb2_grpc.py</code> ×3</td>
+<td>DEBT-003（生成物，滞后）</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/app/main.py:1</code></td>
+<td>DEBT-003（<strong>冲突</strong>）</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/app/main.py:2</code> · <code>app/intent/l0_model.py:10</code></td>
+<td>DEBT-007</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em>
+<em>状态核实方式：逐条对源码取证据（文件 + 行号），非沿用设计文档描述</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
