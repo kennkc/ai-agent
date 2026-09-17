@@ -374,6 +374,31 @@ npm run build
 3. 每次合并后必须重跑全量验证（Java / Python / 契约 / wp-bff / Vue typecheck+build）再推送。
 4. 冲突处理按「时间 + 语义」逐项合并，禁止直接覆盖对方改动。
 
+#### 8.4.1 远端拓扑与推送配置
+
+```text
+本机工作副本 ──fetch──> 本地镜像仓库 (ai-agent) ──SSH──> GitHub
+      └─────────────── push (pushurl) ───────────────────┘
+```
+
+| remote | fetch 地址 | push 地址 |
+|---|---|---|
+| `origin` | 本地镜像仓库 `<repo>\ai-agent`（拉取快，不占网络） | `git@github.com:kennkc/ai-agent.git`（**直达 GitHub**） |
+| `github` | `git@github.com:kennkc/ai-agent.git` | 同左 |
+
+- **拉取协作者最新**：`git fetch github && git merge --ff-only github/codex/main`
+- **推送**：`git push origin codex/main`（直达 GitHub，不再需要"先推镜像、再推 GitHub"的两步转发）
+- **注意**：推送直达 GitHub 后，本地镜像仓库会滞后。若要从镜像拉取，先在镜像仓库执行 `git fetch origin` 或 `git merge --ff-only origin/codex/main`
+- **网络约束**：本机 HTTPS（443）被阻断，GitHub 通信统一走 SSH（22 端口，密钥已就绪）
+
+推送三个长期分支：
+
+```powershell
+git push origin codex/main
+git push origin codex/main:dev
+git push origin codex/main:workbuddy/main
+```
+
 ### 8.5 提交前检查
 
 每次提交前必须确认：
