@@ -104,7 +104,7 @@ Maven 并发（单进程可复现）、Bash 沙箱（PowerShell 通道同样复�
 |---|---|
 | 契约变更后必须手动重新生成并提交产物，否则两侧不同步 | 保留 `proto-gen` profile，见下节命令 |
 | 90 个生成文件在 PR 中产生较大 diff 噪音 | 评审时按「只看 `proto/` 与 `Grpc.java`」策略跳过纯生成文件 |
-| 忘记同步的风险 | **建议后续在 CI 中加入校验**：用 `-Pproto-gen` 重新生成后执行 `git diff --exit-code`，有差异即失败 |
+| 忘记同步的风险 | ✅ **2026-09-17 已加门禁**：CI 用 `-Pproto-gen` 重新生成后由 `scripts/proto-sync-check.sh` 双向比对（未入库 / 内容不同 / 契约已无），有差异即失败；本地同样可跑 `bash scripts/proto-sync-check.sh java` |
 
 ## 5. 契约变更流程
 

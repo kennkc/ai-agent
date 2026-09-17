@@ -103,6 +103,35 @@ contract-check:
     - python scripts/contract-check.py
     - python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
 
+# ── 契约生成物同步门禁（技术债台账 §6-5 / §6-6）──
+# 抓「proto/*.proto 改了，却忘了重新生成 / 提交产物」—— 此前没有任何检查能发现。
+# 两侧拆成独立 job，失败时定位明确：
+#   python 侧 → 产物能否由当前契约源重现、且能被 Python 加载
+#   java   侧 → target 重新生成物与 src/main/java 入库产物是否逐字节一致
+proto-check-python:
+  stage: test
+  image: python:3.12-slim
+  script:
+    # grpcio-tools 在 requirements-dev.txt（构建期依赖，运行时不需要）
+    - pip install --no-cache-dir -r services/python/nlp-service/requirements-dev.txt
+    - bash scripts/proto-sync-check.sh python
+
+proto-check-java:
+  stage: test
+  image: maven:3.9-eclipse-temurin-21
+  cache:
+    key: maven-proto-contracts
+    paths:
+      - .m2/repository/
+  script:
+    - cd services/java
+    - mvn -Pproto-gen -pl proto-contracts -am generate-sources
+    - cd "$CI_PROJECT_DIR"
+    - bash scripts/proto-sync-check.sh java
+  # 需联网下载 protoc 与 protoc-gen-grpc-java（版本已锁定在 proto-contracts/pom.xml，
+  # 因此生成结果可复现）。若 runner 无外网导致下载失败，请改用离线仓库，
+  # 或在依赖就绪前临时加 allow_failure: true（勿长期放宽）。
+
 # ── 阶段3: 打包 ──
 java-package:
   stage: package

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 11:04 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-17 15:27 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -141,6 +141,7 @@
 <li><a href="#61">6.1 阻塞 / 待验收</a></li>
 <li><a href="#62-docsjava-services07-md">6.2 已登记的工程缺口（源自 docs/java-services/07-运行时配置与横切约定.md）</a></li>
 <li><a href="#63-debt-00x">6.3 技术债（DEBT-00X）</a></li>
+<li><a href="#64-2026-09-17">6.4 2026-09-17 闭合的工程项</a></li>
 </ul>
 </li>
 <li><a href="#docs">七、docs 归档索引</a></li>
@@ -198,7 +199,7 @@
 <td>加固期</td>
 <td>工程化（非独立阶段）</td>
 <td>🔄 <strong>进行中</strong></td>
-<td>观测区 + 最小 Ops BFF、控制面鉴权与 CORS 收紧、<strong>契约↔实现双向对齐（37 端点）</strong>、总览聚合端点、数据源降级可见化、CI 补 Python/wp-bff 测试、前端路由懒加载</td>
+<td>观测区 + 最小 Ops BFF、控制面鉴权与 CORS 收紧、<strong>契约↔实现双向对齐（37 端点）</strong>、总览聚合端点、数据源降级可见化、CI 补 Python/wp-bff 测试、<strong>契约↔生成物同步门禁（2026-09-17）</strong>、前端路由懒加载</td>
 <td><code>docs/优化日志/</code></td>
 </tr>
 <tr>
@@ -428,12 +429,12 @@
 </tr>
 <tr>
 <td><code>scripts/</code></td>
-<td><code>mvn-dev.sh</code>（绕过损坏的 <code>mvn.cmd</code>）、<code>contract-check.py</code>、<code>healthcheck.sh</code>、<code>start.sh</code>、<code>md2html-report.py</code>、<code>java-doc-coverage.py</code>、<code>proto-gen.sh</code></td>
+<td><code>mvn-dev.sh</code>（绕过损坏的 <code>mvn.cmd</code>）、<code>contract-check.py</code>、<strong><code>proto-sync-check.sh</code></strong>（契约↔生成物同步门禁）、<code>healthcheck.sh</code>、<code>start.sh</code>、<code>md2html-report.py</code>、<code>java-doc-coverage.py</code>、<code>proto-gen.sh</code></td>
 <td>✅</td>
 </tr>
 <tr>
 <td>CI（<code>.gitlab-ci.yml</code>）</td>
-<td><code>java-test</code> / <code>frontend-build</code> / <code>contract-check</code> / <code>python-test</code> / <code>wp-bff-test</code> / <code>docker-smoke</code>（后者 <code>allow_failure</code>，需 dind runner）</td>
+<td><code>java-test</code> / <code>frontend-build</code> / <code>contract-check</code> / <strong><code>proto-check-python</code> · <code>proto-check-java</code></strong> / <code>python-test</code> / <code>wp-bff-test</code> / <code>docker-smoke</code>（后者 <code>allow_failure</code>，需 dind runner）</td>
 <td>✅</td>
 </tr>
 </tbody>
@@ -702,6 +703,37 @@ git push origin codex/main:workbuddy/main
 <p><strong>两条红线提醒</strong>（引《D5-1》§5.2「触发点到达后 2 个迭代内必须替换，否则升级为风险项」）：
 DEBT-006 与 DEBT-009 的触发点（P2）<strong>已到</strong>且未闭合 → 按红线应升级为风险项。
 DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<strong>不构成验收阻塞</strong>。</p>
+<h3 id="64-2026-09-17">6.4 2026-09-17 闭合的工程项<a class="headerlink" href="#64-2026-09-17" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原缺口</th>
+<th>闭合方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>契约↔生成物同步门禁</strong></td>
+<td>改了 <code>proto/*.proto</code> 却忘重新生成 / 提交产物 —— 此前<strong>没有任何检查</strong>能发现</td>
+<td><code>scripts/proto-sync-check.sh</code>（本地双向比对：未入库 / 内容不同 / 契约已无）+ CI job <code>proto-check-python</code> · <code>proto-check-java</code>（失败即阻断）</td>
+</tr>
+<tr>
+<td><strong>Python 生成物无生成步骤</strong></td>
+<td><code>generated/</code> 已 gitignore，换机后可能整个缺失而无人察觉</td>
+<td>CI <code>proto-check-python</code> 每次重新生成 + 12 文件数断言 + 6 模块导入自检</td>
+</tr>
+<tr>
+<td>台账记账修正</td>
+<td><code>grpcio-tools</code> 曾被登记为「未声明」，实际一直在 <code>requirements-dev.txt</code>（构建期依赖）</td>
+<td>修正 <code>技术债台账.md</code> §6-7 与 <code>proto契约使用说明.md</code> §4.2</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>待首跑确认</strong>：Java 侧 CI 门禁的<strong>真实 <code>mvn -Pproto-gen</code> 生成路径</strong>尚未在 runner 上跑过
+（比对逻辑已用合成生成物验证 90/90，三类偏差均可报出）。详见台账待办 §6-9。</p>
+</blockquote>
 <hr />
 <h2 id="docs">七、docs 归档索引<a class="headerlink" href="#docs" title="Permanent link">&para;</a></h2>
 <table>

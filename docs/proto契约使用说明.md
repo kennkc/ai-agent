@@ -154,13 +154,22 @@ services/python/venv/Scripts/python.exe -m grpc_tools.protoc \
   proto/sensor/v1/*.proto proto/body/v1/*.proto proto/limb/v1/*.proto
 ```
 
-依赖：`grpcio-tools`（当前 venv 内为 **1.83.1**，已装）。`requirements.txt` 里**没有声明** `grpcio-tools` —— 换机重建环境时需额外装。
+依赖：`grpcio-tools`（当前 venv 内为 **1.83.1**）。**已声明在 `requirements-dev.txt`**（与 `grpcio`、`protobuf` 并列）——
+它是**构建期**依赖，运行时并不需要（服务不提供 gRPC 接口），故未放 `requirements.txt`。重建环境：
+
+```bash
+pip install -r services/python/nlp-service/requirements.txt \
+            -r services/python/nlp-service/requirements-dev.txt
+```
+
+（CI 的 `python-test` 与 `proto-check-python` 都是这样安装的。）
 
 ### 4.3 本机坑（实测）
 
 | 坑 | 现象 | 结论 |
 |---|---|---|
-| **POSIX 路径传给原生 Windows Python** | `scripts/proto-gen.sh` 原版用 `pwd` 得到 `/e/ai_workspace/...` 再传给 `venv/Scripts/python.exe`，protoc 报 `directory does not exist` / `File does not reside within any path specified using --proto_path`，退出码 1 | **已修复**：改为 `cd "$ROOT"` + 相对路径。`pwd -W` / `cygpath -w` 也可用 |
+| **POSIX 路径传给原生 Windows Python** | `scripts/proto-gen.sh` 原版用 `pwd` 得到 `/e/ai_workspace/...` 再传给 `venv/Scripts/python.exe`，protoc 报 `directory does not exist` / `File does not reside within any path specified using --proto_path`，退出码 1 | **已修复**：改为 `cd "$ROOT"` + 相对路径。同因也导致 `proto-sync-check.sh` 初版失败 |
+| **`PYTHONPATH` 不认 POSIX 绝对路径** | `PYTHONPATH=/e/ai_workspace/.../generated` → `ModuleNotFoundError: No module named 'session'`；换成 `generated`（相对 cwd）或 `E:\...\generated`（Windows 绝对）都正常 | 可用：相对路径、Windows 绝对路径；**不可用**：Git Bash 的 `/e/...`。工具脚本里更稳的写法是 `cd` 到产物目录（cwd 自动进 `sys.path`），见 `proto-sync-check.sh` |
 | **Git Bash `/tmp` 与 Windows Python 不互通** | `mkdir -p /tmp/x` 后把 `/tmp/x` 传给 Windows Python → `No such file or directory` | 临时目录用仓库内 `.build/`（已 gitignore）或 `E:/...` 绝对路径 |
 | **protoc 在 `-Pproto-gen` 下可能卡死** | Maven 无输出、永久挂起 | 见 `docs/java-services/02-proto-contracts.md` §5 的手工 `protoc` 兜底方案 |
 
@@ -225,8 +234,20 @@ E:/software/anaconda3/python.exe scripts/contract-check.py
 ### 5.4 场景 D：核对契约有没有漂移
 
 ```bash
+# ① 契约自身规则（字段命名 / 字典对齐）：快速，随时可跑
 E:/software/anaconda3/python.exe scripts/contract-check.py
+
+# ② 生成物 ↔ 契约源是否同步：Contract Drift 门禁，2026-09-17 新增
+bash scripts/proto-sync-check.sh python   # Python 侧：重生成 + 产物断言 + 导入自检
+bash scripts/proto-sync-check.sh java     # Java 侧：需先跑 mvn -Pproto-gen generate-sources
+bash scripts/proto-sync-check.sh all      # 两侧都查（默认）
+
+# Java 侧前置（本仓库 Java 产物入库在 src/main/java，先生成到 target 再比对）
+cd services/java && ../../scripts/mvn-dev.sh -Pproto-gen -pl proto-contracts -am generate-sources
 ```
+
+`proto-sync-check.sh` 会双向比对并明确报出三类偏差：**未入库**（生成了没同步回入库）、
+**内容不同**（契约源变了但产物未重新生成）、**契约已无**（入库产物在契约里已不存在）。退出码非 0 即不同步。
 
 ---
 
@@ -239,16 +260,25 @@ E:/software/anaconda3/python.exe scripts/contract-check.py
 | 命名规则 | 所有 message 字段名必须 `snake_case`（禁驼峰/大写） |
 | 字典对齐 | `Session` / `Message` 必须含《D5-2》规定的字段（`agent_id`/`title`/`message_count`/`last_activity_at`/`model`；`session_id`/`role`/`content`/`intent`/`confidence`/`source_citations`/`latency_ms`/`source`） |
 | 通用字段 | `id`/`tenant_id`/`created_at`/`updated_at`/`version` 缺失报 `WARN` |
-| 产物一致性 | **不检查** —— 生成物与 `.proto` 是否同步**没有门禁** |
+| 产物一致性 | **不由本脚本检查** —— 见下方独立的 `proto-sync-check.sh`（2026-09-17 新增） |
 
 **不覆盖**（重要空白）：
 
-- ❌ **生成物与契约源的同步性**：改了 `.proto` 忘记重生成，门禁**不会**发现。
-  建议补：`-Pproto-gen` 重生成后跑 `git diff --exit-code`（`02-proto-contracts.md` §4.3 已提过这条建议，至今未落地）。
 - ❌ 字段号变更 / 兼容性破坏
-- ❌ Python 侧生成物存在性（该目录 gitignore 且无 CI 步骤，**换机后可能整个缺失而无人察觉**）
+- ❌ RPC 实现状态（`implemented` / `planned` 分层只对 OpenAPI 线做，proto 线靠本文档 §三 引用矩阵人工维护）
 
-当前基线：**FAIL 0 / WARN 3**（3 条 WARN 为既有通用字段告警）。
+**产物同步另设专门门禁**（补上此前"改契约忘重生成无人发现"的空白）：
+
+| 门禁 | 入口 | 检查内容 |
+|---|---|---|
+| 本地可直接跑 | `scripts/proto-sync-check.sh [python\|java\|all]` | 双向比对三类偏差：**未入库** / **内容不同** / **契约已无**；Python 侧另做产物数断言与 6 模块导入自检 |
+| CI（GitLab） | `.gitlab-ci.yml` → `proto-check-python`、`proto-check-java` | 两侧各一个独立 job，失败即阻断 |
+
+当前基线：`contract-check.py` **FAIL 0 / WARN 3**（3 条 WARN 为既有通用字段告警）；
+`proto-sync-check.sh` **Python 侧通过**（产出 12/12、与 `generated/` 逐字节一致、6 模块导入 OK）。
+> Java 侧的**比对逻辑**已在本机用合成生成物验证（90/90 一致，并验证了三类偏差均能被报出），
+> 但**真实 `mvn -Pproto-gen` 生成路径尚未在 CI runner 上首跑** —— 本机 Windows 有 `protoc` 清理阻塞的历史问题，
+> 故意未在本地触发。首次流水线运行若报「未找到任何 .java 生成物」，请先核对 Maven 输出目录。
 
 ---
 
@@ -262,7 +292,7 @@ E:/software/anaconda3/python.exe scripts/contract-check.py
 | 协议 | gRPC | HTTP/JSON |
 | 用途 | **服务间**内部调用（未来） | **前端 ↔ wp-bff** 的控制面 |
 | 生成物 | Java 入库 / Python 不入库 | 不生成代码，手写 TS 类型 |
-| 门禁 | 字段命名 + 字典对齐 | 端点分层（implemented/planned）+ `x-wp-status` 必填 |
+| 门禁 | 字段命名 + 字典对齐 + **产物同步**（`proto-sync-check.sh`） | 端点分层（implemented/planned）+ `x-wp-status` 必填 |
 | 实现状态 | 0/15 RPC 实现 | 6/37 端点实现 |
 | 详细文档 | **本文档** | `docs/功能开发流程.md` §3.10 |
 
@@ -275,14 +305,15 @@ E:/software/anaconda3/python.exe scripts/contract-check.py
 | # | 事项 | 影响 | 建议动作 | 归属 |
 |---|---|---|---|---|
 | 1 | **零运行时调用** | 6 份契约、15 个 RPC 全部空转 | 不是缺陷，但**必须防止被读成"已实现"**；本文档即为此而写 | 项目侧 |
-| 2 | **生成物同步无门禁** | 改契约忘重生成 → 两侧静默漂移 | CI 加 `-Pproto-gen` + `git diff --exit-code` | 工程侧 |
-| 3 | **Python 生成物未入库且无 CI 步骤** | 换机后 `generated/` 整个缺失，且不会被任何检查发现 | 在 CI 加 `bash scripts/proto-gen.sh` + 导入自检；或在 `requirements.txt` 声明 `grpcio-tools` | 工程侧 |
-| 4 | **`grpcio-tools` 未写进 `requirements.txt`** | 重建 venv 后生成脚本报 `No module named grpc_tools` | 补进 `requirements.txt` | 工程侧 |
+| 2 | ~~生成物同步无门禁~~ | — | ✅ **2026-09-17 已落地**：`scripts/proto-sync-check.sh`（本地）+ CI job `proto-check-python` / `proto-check-java` | 已完成 |
+| 3 | ~~Python 生成物未入库且无 CI 步骤~~ | — | ✅ **2026-09-17 已落地**：CI `proto-check-python` 每次重新生成 + 12 文件断言 + 6 模块导入自检（产物仍按既有决策不入库） | 已完成 |
+| 4 | ~~`grpcio-tools` 未写进 `requirements.txt`~~ | — | ✅ **已澄清为记账错误**：它一直在 `requirements-dev.txt`（构建期依赖，本就不该进 `requirements.txt`）；此前描述有误，已修正本文档 §4.2 与台账 §6-7 | 已完成（记账修正） |
 | 5 | **proto 头部 DEBT 注释滞后** | `session.proto` 说"内存 Map"（实际已 Redis）、`brain.proto` 归属模块写错、`body.proto` 说"本地文件"（实际内存 Map）；且这些注释**原样复制进 90 个生成类** | 改注释 → 重生成 → 提交产物（需构建窗口，见台账 §6-2） | 需构建窗口 |
 | 6 | **`proto-gen.sh` 路径 bug** | 本机 Git Bash 下脚本**完全不可用**（退出码 1） | ✅ **2026-09-17 已修复并复测** | 已完成 |
 | 7 | 仅 `health.proto` 带 `go_package` | 若将来生成 Go 代码，5 份契约缺选项 | 统一补齐或明确不产 Go | 设计侧 |
 | 8 | 五渠道 / 消息链路无集成测试 | gRPC 接入时无可参照的测试范式 | 见 `docs/技术债台账.md` DEBT-006/009 | 项目侧 |
 | 9 | `Phase0-开发执行日志.md` 称"Python 12 文件已入库" | 与 `.gitignore` 事实不符 | 已在技术债台账登记为口径漂移（历史归档按约定**不回改**，在当期文档纠正） | 已完成登记 |
+| 10 | **Java 侧 CI 门禁未在真实 runner 首跑验证** | 首次流水线可能因 Maven 输出目录与脚本假设不符而误报「未找到任何 .java 生成物」；本机 Windows 有 `protoc` 清理阻塞史，故未在本地触发 `-Pproto-gen` | 首次 CI 运行后确认；脚本已用 `find` 自适应目录、失败会打印明确排查提示 | 工程侧（待首跑确认） |
 
 ---
 
@@ -298,6 +329,7 @@ Python 产物   services/python/nlp-service/generated/<域>/v1/                 
 当前使用      0 个服务引用（服务间走 HTTP + NATS/Kafka）
 gRPC 9091-9094  用的是 grpc-services 自带 HealthStatusManager，与本仓库 proto 无关
 改契约要点    字段号只增不改；改完两侧都要重生成；proto 注释会进生成物
+同步门禁      bash scripts/proto-sync-check.sh all      （CI: proto-check-python / proto-check-java）
 ```
 
 ---

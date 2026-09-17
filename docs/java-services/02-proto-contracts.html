@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 11:04 · 源文件 02-proto-contracts.md</span>
+  <span class="meta">生成于 2026-09-17 15:27 · 源文件 02-proto-contracts.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -336,7 +336,7 @@ Maven 并发（单进程可复现）、Bash 沙箱（PowerShell 通道同样复�
 </tr>
 <tr>
 <td>忘记同步的风险</td>
-<td><strong>建议后续在 CI 中加入校验</strong>：用 <code>-Pproto-gen</code> 重新生成后执行 <code>git diff --exit-code</code>，有差异即失败</td>
+<td>✅ <strong>2026-09-17 已加门禁</strong>：CI 用 <code>-Pproto-gen</code> 重新生成后由 <code>scripts/proto-sync-check.sh</code> 双向比对（未入库 / 内容不同 / 契约已无），有差异即失败；本地同样可跑 <code>bash scripts/proto-sync-check.sh java</code></td>
 </tr>
 </tbody>
 </table>
