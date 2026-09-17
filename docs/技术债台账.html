@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 10:45 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-17 11:04 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -454,6 +454,30 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>设计文档侧 §5.1 改为指向本文件，避免两处各写一份</td>
 <td>设计侧</td>
 </tr>
+<tr>
+<td>5</td>
+<td>契约生成物与契约源<strong>无同步门禁</strong>（改了 <code>.proto</code> 忘重生成不会被任何检查发现）</td>
+<td>CI 加 <code>-Pproto-gen</code> 重生成 + <code>git diff --exit-code</code></td>
+<td>工程侧</td>
+</tr>
+<tr>
+<td>6</td>
+<td>Python 侧 proto 生成物（12 个）<strong>未入库且 CI 无生成步骤</strong> → 换机后 <code>generated/</code> 可能整个缺失而无人察觉</td>
+<td>CI 加 <code>bash scripts/proto-gen.sh</code> + 导入自检</td>
+<td>工程侧</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>grpcio-tools</code> 未写进 <code>services/python/nlp-service/requirements.txt</code></td>
+<td>补进依赖清单（否则重建 venv 后生成脚本报 <code>No module named grpc_tools</code>）</td>
+<td>工程侧</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>Phase0-开发执行日志.md</code> 第 3 条称「proto 生成物<strong>双侧入库</strong>（Java 90 + Python 12）」与事实不符（Python 侧从未入库，<code>.gitignore:32</code> 忽略）</td>
+<td>历史归档按约定<strong>不回改</strong>；已在 <code>docs/proto契约使用说明.md</code> §八 登记纠正</td>
+<td>已登记</td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -498,7 +522,8 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 </table>
 <hr />
 <p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em>
-<em>状态核实方式：逐条对源码取证据（文件 + 行号），非沿用设计文档描述</em></p></main>
+<em>状态核实方式：逐条对源码取证据（文件 + 行号），非沿用设计文档描述</em>
+<em>相关文档：<code>docs/proto契约使用说明.md</code>（契约侧使用现状与生成链路）、<code>docs/功能开发流程.md</code> §3.10（契约治理流程）</em></p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

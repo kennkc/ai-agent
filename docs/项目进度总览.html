@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 10:46 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-17 11:04 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -124,7 +124,7 @@
 <li><a href="#_2">二、阶段进度</a></li>
 <li><a href="#_3">三、功能交付矩阵</a><ul>
 <li><a href="#31-java72-58-14-90-proto">3.1 后端 Java（72 个手写源文件 = 58 主 + 14 测；另有 90 个 proto 生成文件）</a></li>
-<li><a href="#32-pythonservicespythonnlp-service7-py-12">3.2 Python（services/python/nlp-service，7 个业务 py + 12 个生成文件）</a></li>
+<li><a href="#32-pythonservicespythonnlp-service7-py-12-proto">3.2 Python（services/python/nlp-service，7 个业务 py + 12 个 proto 生成文件）</a></li>
 <li><a href="#33-webwork-platformvue-3-vite-ts-element-plus8-vue-8-ts">3.3 前端（web/work-platform，Vue 3 + Vite + TS + Element Plus，8 vue + 8 ts）</a></li>
 <li><a href="#34-ops-bffservicesnodewp-bff-node-8090">3.4 Ops BFF（services/node/wp-bff，零依赖 Node，端口 8090）</a></li>
 <li><a href="#35">3.5 基础设施与工具链</a></li>
@@ -274,14 +274,17 @@
 <tr>
 <td><code>proto-contracts</code></td>
 <td>—</td>
-<td>6 个 proto（session/sensor/brain/limb/body/common）→ <strong>90 个生成源文件已入库</strong>，默认生命周期不再调 protoc</td>
+<td>6 份 proto（session/sensor/brain/limb/body/common）→ <strong>90 个生成源文件已入库</strong>，默认生命周期不再调 protoc；<strong>6 份契约、15 个 RPC 当前均无运行时调用方</strong>（服务间走 HTTP + NATS/Kafka，9091-9094 用的是 grpc-services 自带健康服务）</td>
 <td><code>proto/</code> + <code>proto-contracts</code></td>
 <td>—</td>
-<td>✅</td>
+<td>✅ 仅编译期</td>
 </tr>
 </tbody>
 </table>
-<h3 id="32-pythonservicespythonnlp-service7-py-12">3.2 Python（<code>services/python/nlp-service</code>，7 个业务 py + 12 个生成文件）<a class="headerlink" href="#32-pythonservicespythonnlp-service7-py-12" title="Permanent link">&para;</a></h3>
+<h3 id="32-pythonservicespythonnlp-service7-py-12-proto">3.2 Python（<code>services/python/nlp-service</code>，7 个业务 py + 12 个 proto 生成文件）<a class="headerlink" href="#32-pythonservicespythonnlp-service7-py-12-proto" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>12 个生成文件位于 <code>generated/</code>，<strong>已 gitignore、不入库</strong>（详见 <code>docs/proto契约使用说明.md</code>）。</p>
+</blockquote>
 <table>
 <thead>
 <tr>
@@ -724,6 +727,11 @@ DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<
 <td><code>docs/功能开发流程.md</code></td>
 <td>每个功能的开发流程与验收标准</td>
 <td>流程或功能变化时</td>
+</tr>
+<tr>
+<td><code>docs/proto契约使用说明.md</code></td>
+<td><strong>6 份 proto 的使用说明与当前使用现状</strong>（契约清单 / 引用矩阵 / 双侧生成链路 / 变更流程 / 与 OpenAPI 分工 / 缺口登记）</td>
+<td>契约增删改或接入方变化时</td>
 </tr>
 <tr>
 <td><code>docs/技术债台账.md</code></td>

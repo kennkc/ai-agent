@@ -26,9 +26,13 @@
 | `proto/sensor/v1/sensor.proto` | `com.agent.sensor.v1` | `SensorService` | `CollectRequest/Response`、`RegisterChannelRequest/Response`、`ChannelHealthRequest/Response` + `ChannelType`、`CollectMode` 枚举（8） |
 | `proto/session/v1/session.proto` | `com.agent.session.v1` | `SessionService` | `Session`、`Message`、`Citation` + Create/Append/Get/List/UpdateStatus 各 Request/Response（13） |
 
-除 `common/health.proto`（Phase 0 已投入使用）外，`brain` / `limb` / `sensor` / `session` / `body` 的 gRPC 服务方法
-目前**仅定义了契约，尚未实现服务端** —— 当前服务间调用走 HTTP 与 NATS。契约先行是为了让后续阶段（尤其 Phase 5 四肢层）
-在实现 gRPC 时不必回头改接口。
+**6 份契约目前全部仅定义了接口、无任何运行时调用方** —— 当前服务间调用走 HTTP 与 NATS/Kafka。
+四个业务服务虽然在 9091-9094 开了 gRPC 端口，但那是 `grpc-services` 依赖自带的 `HealthStatusManager`
+（标准 `grpc.health.v1` 协议），**与本模块的 `HealthService` 无关**。
+契约先行是为了让后续阶段（尤其 Phase 5 四肢层）在实现 gRPC 时不必回头改接口。
+
+> 📌 逐契约的使用现状、引用矩阵、可复现证据与生成/变更流程，见 **`docs/proto契约使用说明.md`**。
+> **不要**把「生成类存在」读成「接口可用」。
 
 ## 3. 生成文件的命名规律
 

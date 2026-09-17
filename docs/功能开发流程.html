@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 10:16 · 源文件 功能开发流程.md</span>
+  <span class="meta">生成于 2026-09-17 11:04 · 源文件 功能开发流程.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -393,10 +393,12 @@
 <h3 id="310-proto-contracts-scriptscontract-checkpy">3.10 契约治理（<code>proto/</code> + <code>contracts/</code> + <code>scripts/contract-check.py</code>）<a class="headerlink" href="#310-proto-contracts-scriptscontract-checkpy" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>两条契约线</strong>：
-  1. <strong>跨服务 gRPC/proto</strong>：<code>proto/{session,sensor,brain,limb,body,common}/v1/</code>（6 个）
-     → 生成源码<strong>已入库</strong>（<code>proto-contracts</code> 90 个 Java 文件 + Python 12 个），
+  1. <strong>跨服务 gRPC/proto</strong>：<code>proto/{session,sensor,brain,limb,body,common}/v1/</code>（6 份）
+     → Java 生成源码<strong>已入库</strong>（<code>proto-contracts</code> 90 个文件）；
+     Python 生成物（12 个）在 <code>services/python/nlp-service/generated/</code>，<strong>已 gitignore、不入库</strong>；
      <strong>默认生命周期不调 protoc</strong>（插件在本机清理目录时会原生阻塞、构建永久卡死）；
-     契约变更时才用 <code>-Pproto-gen</code> 重新生成并提交产物
+     契约变更时 Java 用 <code>-Pproto-gen</code>、Python 用 <code>scripts/proto-gen.sh</code> 重新生成
+     → 逐条使用说明与变更流程见 <code>docs/proto契约使用说明.md</code>
   2. <strong>工作平台 BFF OpenAPI</strong>：<code>contracts/work-platform-bff-openapi.yaml</code>（<strong>37 端点</strong>，implemented 6 / planned 31）</li>
 <li><strong>门禁规则（<code>contract-check.py</code> 三条）</strong>：
   1. 实现端点必须已登记且标记 <code>implemented</code>

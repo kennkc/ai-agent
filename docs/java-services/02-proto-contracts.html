@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-16 14:36 · 源文件 02-proto-contracts.md</span>
+  <span class="meta">生成于 2026-09-17 11:04 · 源文件 02-proto-contracts.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -199,9 +199,14 @@
 </tr>
 </tbody>
 </table>
-<p>除 <code>common/health.proto</code>（Phase 0 已投入使用）外，<code>brain</code> / <code>limb</code> / <code>sensor</code> / <code>session</code> / <code>body</code> 的 gRPC 服务方法
-目前<strong>仅定义了契约，尚未实现服务端</strong> —— 当前服务间调用走 HTTP 与 NATS。契约先行是为了让后续阶段（尤其 Phase 5 四肢层）
-在实现 gRPC 时不必回头改接口。</p>
+<p><strong>6 份契约目前全部仅定义了接口、无任何运行时调用方</strong> —— 当前服务间调用走 HTTP 与 NATS/Kafka。
+四个业务服务虽然在 9091-9094 开了 gRPC 端口，但那是 <code>grpc-services</code> 依赖自带的 <code>HealthStatusManager</code>
+（标准 <code>grpc.health.v1</code> 协议），<strong>与本模块的 <code>HealthService</code> 无关</strong>。
+契约先行是为了让后续阶段（尤其 Phase 5 四肢层）在实现 gRPC 时不必回头改接口。</p>
+<blockquote>
+<p>📌 逐契约的使用现状、引用矩阵、可复现证据与生成/变更流程，见 <strong><code>docs/proto契约使用说明.md</code></strong>。
+<strong>不要</strong>把「生成类存在」读成「接口可用」。</p>
+</blockquote>
 <h2 id="3">3. 生成文件的命名规律<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
 <p>理解命名规律后，90 个文件可以按「每个 message 2~3 个文件 + 每个 proto 2 个文件」快速定位：</p>
 <table>

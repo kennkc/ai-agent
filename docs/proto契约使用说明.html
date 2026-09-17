@@ -1,0 +1,700 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>proto 契约使用说明</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-17 11:04 · 源文件 proto契约使用说明.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">一、先说结论：契约是什么状态</a></li>
+<li><a href="#_2">二、契约清单</a><ul>
+<li><a href="#_3">逐份说明</a></li>
+</ul>
+</li>
+<li><a href="#_4">三、当前使用情况（实证）</a><ul>
+<li><a href="#31">3.1 引用矩阵</a></li>
+<li><a href="#32">3.2 复现证据（可自行跑）</a></li>
+<li><a href="#33-grpc">3.3 gRPC 端口现状（别误读）</a></li>
+</ul>
+</li>
+<li><a href="#_5">四、代码生成链路</a><ul>
+<li><a href="#41-java-90">4.1 Java 侧（90 个文件，已入库）</a></li>
+<li><a href="#42-python-12-gitignore">4.2 Python 侧（12 个文件，未入库，已 gitignore）</a></li>
+<li><a href="#43">4.3 本机坑（实测）</a></li>
+</ul>
+</li>
+<li><a href="#_6">五、怎么用（分场景）</a><ul>
+<li><a href="#51-a-java-grpc">5.1 场景 A：想让 Java 服务真正提供某个 gRPC 接口</a></li>
+<li><a href="#52-b-python">5.2 场景 B：想在 Python 侧用契约（已实测）</a></li>
+<li><a href="#53-c-6">5.3 场景 C：修改 / 新增契约（6 步）</a></li>
+<li><a href="#54-d">5.4 场景 D：核对契约有没有漂移</a></li>
+</ul>
+</li>
+<li><a href="#scriptscontract-checkpy">六、校验与门禁（scripts/contract-check.py）</a></li>
+<li><a href="#openapi">七、与 OpenAPI 契约的分工</a></li>
+<li><a href="#_7">八、已知缺口与待办（登记）</a></li>
+<li><a href="#_8">九、一页速查</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="proto">proto 契约使用说明<a class="headerlink" href="#proto" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>口径时间</strong>：2026-09-17 · <strong>代码基线</strong>：<code>cb140b2</code>（<code>scripts/proto-gen.sh</code> 修复前）
+<strong>契约源</strong>：<code>proto/</code>（6 份 <code>.proto</code>，367 行）· <strong>生成物</strong>：Java 90 个（已入库）/ Python 12 个（未入库）
+<strong>定位</strong>：跨服务 gRPC 契约的唯一事实来源。HTTP 契约见 <code>contracts/work-platform-bff-openapi.yaml</code>。</p>
+</blockquote>
+<hr />
+<h2 id="_1">一、先说结论：契约是什么状态<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<p><strong>6 份契约、6 个 service、15 个 RPC 方法 —— 全部只用于编译期，当前没有任何服务在运行时调用。</strong></p>
+<p>这不是遗漏，是<strong>刻意的"契约先行"决策</strong>（后续阶段实现 gRPC 时不必回头改接口）。但由此产生一个必须防的误读：</p>
+<blockquote>
+<p>⚠️ <strong>"契约已定义" ≠ "接口已可用"。</strong>
+看到 <code>SessionServiceGrpc</code> 这类生成类，<strong>不等于</strong>会话服务对外提供 gRPC 接口。
+目前服务间调用<strong>全部走 HTTP + NATS/Kafka</strong>，与这些 proto 无关。</p>
+</blockquote>
+<p>一个最容易被误判的点：<strong>本仓库的 <code>common/health.proto</code> 也没有被使用</strong>。四个服务确实在 9091-9094 开了 gRPC 端口，但那是 <strong><code>grpc-services</code> 依赖自带的 <code>HealthStatusManager</code></strong>（实现的是标准 <code>grpc.health.v1</code> 协议，供 <code>grpc-health-probe</code> 之类工具用），<strong>不是</strong>本仓库定义的 <code>com.agent.common.v1.HealthService</code>。两者只是名字像。</p>
+<hr />
+<h2 id="_2">二、契约清单<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>契约文件</th>
+<th style="text-align: right;">行数</th>
+<th>包</th>
+<th>service</th>
+<th style="text-align: right;">RPC</th>
+<th style="text-align: right;">消息数</th>
+<th style="text-align: right;">生成 Java 文件</th>
+<th>运行时调用方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>proto/common/v1/health.proto</code></td>
+<td style="text-align: right;">35</td>
+<td><code>com.agent.common.v1</code></td>
+<td><code>HealthService</code></td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">8</td>
+<td><strong>无</strong></td>
+</tr>
+<tr>
+<td><code>proto/session/v1/session.proto</code></td>
+<td style="text-align: right;">113</td>
+<td><code>com.agent.session.v1</code></td>
+<td><code>SessionService</code></td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">28</td>
+<td><strong>无</strong></td>
+</tr>
+<tr>
+<td><code>proto/sensor/v1/sensor.proto</code></td>
+<td style="text-align: right;">71</td>
+<td><code>com.agent.sensor.v1</code></td>
+<td><code>SensorService</code></td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">16</td>
+<td><strong>无</strong></td>
+</tr>
+<tr>
+<td><code>proto/brain/v1/brain.proto</code></td>
+<td style="text-align: right;">51</td>
+<td><code>com.agent.brain.v1</code></td>
+<td><code>BrainService</code></td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">14</td>
+<td><strong>无</strong></td>
+</tr>
+<tr>
+<td><code>proto/body/v1/body.proto</code></td>
+<td style="text-align: right;">50</td>
+<td><code>com.agent.body.v1</code></td>
+<td><code>BodyService</code></td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">12</td>
+<td><strong>无</strong></td>
+</tr>
+<tr>
+<td><code>proto/limb/v1/limb.proto</code></td>
+<td style="text-align: right;">47</td>
+<td><code>com.agent.limb.v1</code></td>
+<td><code>LimbService</code></td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">12</td>
+<td><strong>无</strong></td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>367</strong></td>
+<td>6 个包</td>
+<td>6 个 service</td>
+<td style="text-align: right;"><strong>15</strong></td>
+<td style="text-align: right;"><strong>38</strong></td>
+<td style="text-align: right;"><strong>90</strong></td>
+<td><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<p>另有 2 个顶层枚举（<code>ChannelType</code>、<code>CollectMode</code>，在 <code>sensor</code>）与 1 个嵌套枚举（<code>HealthCheckResponse.Status</code>）。</p>
+<h3 id="_3">逐份说明<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h3>
+<p><strong><code>common/v1/health.proto</code></strong> — 统一健康检查与错误结构。
+<code>HealthService.Check</code> 按服务名返回 <code>Status</code>(UNKNOWN/SERVING/NOT_SERVING) + <code>version</code> + <code>uptime_seconds</code> + <code>dependencies</code> 映射（如 <code>redis=ok</code>）。<code>Error</code> 是统一错误结构（<code>code</code> / <code>message</code> / <code>details</code>）。
+<strong>唯一带 <code>go_package</code> 选项的契约</strong>，其余 5 份没有 —— 属一致性小缺口。</p>
+<p><strong><code>session/v1/session.proto</code></strong> — VS1 中枢的核心数据模型，<strong>字段逐条对齐《D5-2 核心数据字典》§3.1</strong>，是 6 份里最"重"的一份（113 行 / 13 消息）。
+- <code>Session</code>(11 字段)：含 <code>tenant_id</code> / <code>version</code>（乐观锁）等通用字段，<code>id</code> 注释标明 UUID v7。
+- <code>Message</code>(10 字段)：<code>role</code>(user/assistant/system/tool)、<code>intent</code> + <code>confidence</code>（P2 起）、<code>source_citations</code>（感知可信度呈现）、<code>latency_ms</code>。
+- <code>Citation</code>(5 字段)：来源标注（实时采集/知识库/模型生成）。
+- 5 个 RPC：Create / AppendMessage / Get / ListMessages / UpdateSessionStatus（带 <code>expected_version</code> 乐观锁）。
+- ⚠️ 第 10 行内嵌 <code>DEBT-003: 存储为内存 Map</code> —— <strong>该注释已过期</strong>（会话实际已用真 Redis），见 §八。</p>
+<p><strong><code>sensor/v1/sensor.proto</code></strong> — 五官采集契约。
+<code>ChannelType</code> 五值（VISUAL/AUDIO/TOUCH/NOSE/TASTE）与 <code>CollectMode</code>（R0 默认 / R1 动态）定义在此。<code>CollectResponse</code> 带 <code>quality_score</code>（六维质量综合分）与 <code>accepted</code>（是否过质检）。</p>
+<p><strong><code>brain/v1/brain.proto</code></strong> — 意图识别与任务规划（<code>RecognizeIntent</code> / <code>PlanTask</code>），<code>IntentResult</code> 含 <code>slots</code> 实体槽位，<code>TaskStep</code> 含 <code>depends_on</code> 依赖链。
+⚠️ 第 1 行内嵌 <code>DEBT-002</code>，标注"大脑回答为模板占位" —— 但模板回答实际落在 <strong><code>session-manager.buildAnswer</code></strong>，归属模块标错了。</p>
+<p><strong><code>body/v1/body.proto</code></strong> — 知识存储与检索（<code>Ingest</code> / <code>Retrieve</code>），<code>RetrieveResponse</code> 直接带 <code>latency_ms</code>。
+⚠️ 第 1 行内嵌 <code>DEBT-001</code>，写"本地文件检索简化版" —— 实际 <code>BodyStore</code> 是<strong>纯内存 Map + 字符命中打分</strong>，连文件都没落。</p>
+<p><strong><code>limb/v1/limb.proto</code></strong> — 工具调用与执行（<code>ExecuteTool</code> / <code>RegisterTool</code>），<code>ToolResult</code> 带 <code>sandboxed</code> 标志。<strong>Phase 5 四肢层才会用</strong>。</p>
+<hr />
+<h2 id="_4">三、当前使用情况（实证）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<h3 id="31">3.1 引用矩阵<a class="headerlink" href="#31" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>使用方</th>
+<th>是否引用生成类</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gateway-service</code></td>
+<td>❌ 零引用</td>
+<td>无 <code>import com.agent.*.v1.*</code></td>
+</tr>
+<tr>
+<td><code>session-manager</code></td>
+<td>❌ 零引用</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td>❌ 零引用</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>body-service</code></td>
+<td>❌ 零引用</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>nlp-service</code>(Python)</td>
+<td>❌ 零引用</td>
+<td>无 <code>import *_pb2</code>，无 gRPC server</td>
+</tr>
+<tr>
+<td>wp-bff / work-platform</td>
+<td>❌ 不涉及</td>
+<td>走 HTTP，与 gRPC 无关</td>
+</tr>
+</tbody>
+</table>
+<p>四个 Java 服务的 <code>pom.xml</code> <strong>都声明依赖 <code>proto-contracts</code></strong>，但代码里一行都没用 —— 依赖是"<strong>备好待用</strong>"，不是"已接入"。</p>
+<h3 id="32">3.2 复现证据（可自行跑）<a class="headerlink" href="#32" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 1) 业务服务是否引用契约生成类 → 期望输出为空
+grep -rn &quot;^import com\.agent\.[a-z]*\.v1\.&quot; services/java/*/src/main/java --include=&quot;*.java&quot;
+
+# 2) gRPC 健康端口的真实实现 → 用的是 grpc-services 自带 HealthStatusManager
+grep -rn &quot;HealthStatusManager\|io.grpc.health.v1&quot; services/java/*/src/main/java
+
+# 3) Python 侧生成物是否被引用 → 期望输出为空
+grep -rn &quot;_pb2&quot; services/python/nlp-service/app services/python/nlp-service/tests
+
+# 4) gRPC 端口只做 TCP 探测，不调 HealthService.Check
+grep -n &quot;grpc health&quot; -A1 scripts/healthcheck.sh
+</code></pre>
+<h3 id="33-grpc">3.3 gRPC 端口现状（别误读）<a class="headerlink" href="#33-grpc" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>端口</th>
+<th>实际提供</th>
+<th>启动方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gateway-service</td>
+<td>9091</td>
+<td><code>grpc.health.v1.Health/Check</code>（标准协议）</td>
+<td><code>GrpcHealthServer implements SmartLifecycle</code></td>
+</tr>
+<tr>
+<td>session-manager</td>
+<td>9092</td>
+<td>同上</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>sense-service</td>
+<td>9093</td>
+<td>同上</td>
+<td>同上</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td>9094</td>
+<td>同上</td>
+<td>同上</td>
+</tr>
+</tbody>
+</table>
+<p>实现只有一个类、24 行：<code>NettyServerBuilder.forPort(port).addService(health.getHealthService())</code>，<code>health</code> 是 <code>HealthStatusManager</code>。<strong>这不是本仓库任何 proto 的服务端实现。</strong>
+<code>scripts/healthcheck.sh</code> 的 <code>[grpc health]</code> 段也只做 <code>check_port</code>（TCP 连通性），不发起 gRPC 调用。</p>
+<hr />
+<h2 id="_5">四、代码生成链路<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<h3 id="41-java-90">4.1 Java 侧（90 个文件，<strong>已入库</strong>）<a class="headerlink" href="#41-java-90" title="Permanent link">&para;</a></h3>
+<p>产物位置：<code>services/java/proto-contracts/src/main/java/com/agent/&lt;域&gt;/v1/</code>
+分布：<code>body</code> 12 · <code>brain</code> 14 · <code>common</code> 8 · <code>limb</code> 12 · <code>sensor</code> 16 · <code>session</code> 28</p>
+<table>
+<thead>
+<tr>
+<th>生成文件</th>
+<th>来源</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>&lt;Message&gt;.java</code></td>
+<td>每个 message</td>
+<td>不可变消息类（含 Builder）</td>
+</tr>
+<tr>
+<td><code>&lt;Message&gt;OrBuilder.java</code></td>
+<td>每个 message</td>
+<td>只读视图接口</td>
+</tr>
+<tr>
+<td><code>&lt;ProtoFile&gt;.java</code></td>
+<td>每个 <code>.proto</code></td>
+<td>文件级外层类（存描述符）</td>
+</tr>
+<tr>
+<td><code>&lt;Service&gt;Grpc.java</code></td>
+<td>每个 <code>service</code></td>
+<td>gRPC 桩：<code>newBlockingStub</code> / <code>newStub</code> / <code>ImplBase</code></td>
+</tr>
+<tr>
+<td><code>&lt;Enum&gt;.java</code></td>
+<td>每个顶层 enum</td>
+<td>proto3 枚举</td>
+</tr>
+</tbody>
+</table>
+<p><strong>命名陷阱</strong>：<code>session.proto</code> 里存在名为 <code>Session</code> 的 message，与"由文件名推导的外层类名"冲突 → <code>protoc</code> 把外层类改名为 <strong><code>SessionOuterClass.java</code></strong>。在 <code>session</code> 包里 <code>Session</code> 指的是<strong>消息类</strong>。其余 5 份的外层类分别是 <code>Health</code> / <code>Sensor</code> / <code>Brain</code> / <code>Body</code> / <code>Limb</code>。</p>
+<p><strong>为什么入库（关键工程决策）</strong>：<code>protobuf-maven-plugin</code> 挂在默认生命周期时，每次构建会先删 <code>target/protoc-dependencies/</code> 再解压，而在本机 Windows 上该删除会<strong>在原生层永久阻塞</strong>（<code>WinNTFileSystem.delete0</code>），表现为「Maven 无任何输出、永久卡死」。现已把插件从默认生命周期移除，产物入库；构建从"永久卡死"变为约 39 秒稳定通过。
+完整的 jstack 证据链与已排除项见 <code>docs/java-services/02-proto-contracts.md</code> §4。</p>
+<h3 id="42-python-12-gitignore">4.2 Python 侧（12 个文件，<strong>未入库</strong>，已 gitignore）<a class="headerlink" href="#42-python-12-gitignore" title="Permanent link">&para;</a></h3>
+<p>产物位置：<code>services/python/nlp-service/generated/&lt;域&gt;/v1/{&lt;name&gt;_pb2.py, &lt;name&gt;_pb2_grpc.py}</code></p>
+<ul>
+<li><code>.gitignore:32</code> → <code>services/python/nlp-service/generated/</code></li>
+<li><strong>从未入库过</strong>（<code>git log --all -- &lt;该目录&gt;</code> 为空）</li>
+<li>⚠️ 这与 <code>docs/项目进度日志报告/Phase0-开发执行日志.md</code> 第 3 条"proto 生成物<strong>双侧入库</strong>（Java 90 文件 + Python 12 文件）"的表述不符 —— 已在技术债台账登记为口径漂移。</li>
+</ul>
+<p><strong>生成命令（已实测可复现现有产物）</strong>：</p>
+<pre><code class="language-bash"># 推荐：仓库脚本（2026-09-17 修复后可用）
+bash scripts/proto-gen.sh
+# Windows cmd：
+scripts\proto-gen.bat
+</code></pre>
+<p>脚本等价于：</p>
+<pre><code class="language-bash">cd &lt;repo-root&gt;                     # 必须是仓库根，且用相对路径 —— 见下&quot;坑&quot;
+services/python/venv/Scripts/python.exe -m grpc_tools.protoc \
+  -I proto \
+  --python_out=services/python/nlp-service/generated \
+  --grpc_python_out=services/python/nlp-service/generated \
+  proto/common/v1/*.proto proto/session/v1/*.proto proto/brain/v1/*.proto \
+  proto/sensor/v1/*.proto proto/body/v1/*.proto proto/limb/v1/*.proto
+</code></pre>
+<p>依赖：<code>grpcio-tools</code>（当前 venv 内为 <strong>1.83.1</strong>，已装）。<code>requirements.txt</code> 里<strong>没有声明</strong> <code>grpcio-tools</code> —— 换机重建环境时需额外装。</p>
+<h3 id="43">4.3 本机坑（实测）<a class="headerlink" href="#43" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>坑</th>
+<th>现象</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>POSIX 路径传给原生 Windows Python</strong></td>
+<td><code>scripts/proto-gen.sh</code> 原版用 <code>pwd</code> 得到 <code>/e/ai_workspace/...</code> 再传给 <code>venv/Scripts/python.exe</code>，protoc 报 <code>directory does not exist</code> / <code>File does not reside within any path specified using --proto_path</code>，退出码 1</td>
+<td><strong>已修复</strong>：改为 <code>cd "$ROOT"</code> + 相对路径。<code>pwd -W</code> / <code>cygpath -w</code> 也可用</td>
+</tr>
+<tr>
+<td><strong>Git Bash <code>/tmp</code> 与 Windows Python 不互通</strong></td>
+<td><code>mkdir -p /tmp/x</code> 后把 <code>/tmp/x</code> 传给 Windows Python → <code>No such file or directory</code></td>
+<td>临时目录用仓库内 <code>.build/</code>（已 gitignore）或 <code>E:/...</code> 绝对路径</td>
+</tr>
+<tr>
+<td><strong>protoc 在 <code>-Pproto-gen</code> 下可能卡死</strong></td>
+<td>Maven 无输出、永久挂起</td>
+<td>见 <code>docs/java-services/02-proto-contracts.md</code> §5 的手工 <code>protoc</code> 兜底方案</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_6">五、怎么用（分场景）<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<h3 id="51-a-java-grpc">5.1 场景 A：想让 Java 服务真正提供某个 gRPC 接口<a class="headerlink" href="#51-a-java-grpc" title="Permanent link">&para;</a></h3>
+<p>契约已经定义好，缺的是<strong>服务端实现</strong>。步骤：</p>
+<ol>
+<li>在目标服务里实现 <code>XxxServiceImplBase</code>（来自 <code>com.agent.&lt;域&gt;.v1.&lt;Service&gt;Grpc</code>）；</li>
+<li>在 <code>application.yml</code> 里加独立端口配置（<strong>不要复用 909x</strong>，那四个是标准健康探针，改动会影响 <code>healthcheck.sh</code> 与 CI）；</li>
+<li>启动时 <code>ServerBuilder.forPort(...).addService(new XxxImpl())</code>（可参照 <code>GrpcHealthServer</code> 的 <code>SmartLifecycle</code> 生命周期写法）；</li>
+<li>加集成测试（本仓库目前<strong>没有</strong>五渠道/消息链路的集成测试，见 <code>docs/技术债台账.md</code> DEBT-006/009）；</li>
+<li>更新本文档 §三 的引用矩阵 —— <strong>这是本节存在的意义：现状一旦变化必须同步</strong>。</li>
+</ol>
+<h3 id="52-b-python">5.2 场景 B：想在 Python 侧用契约（已实测）<a class="headerlink" href="#52-b-python" title="Permanent link">&para;</a></h3>
+<p><code>generated/</code> 没有 <code>__init__.py</code>，靠 Python 3 <strong>命名空间包</strong>工作，把该目录加入 <code>sys.path</code> 即可：</p>
+<pre><code class="language-bash">cd services/python/nlp-service
+PYTHONPATH=generated ../venv/Scripts/python.exe -c &quot;
+from session.v1 import session_pb2
+s = session_pb2.Session(id='s1', agent_id='a1', title='T', status='active')
+print(len(s.SerializeToString()))          # 实测 19
+print(len(session_pb2.Session.DESCRIPTOR.fields))  # 实测 11
+&quot;
+</code></pre>
+<p>导入路径是 <code>from &lt;域&gt;.v1 import &lt;name&gt;_pb2</code>（域为 <code>body</code>/<code>brain</code>/<code>common</code>/<code>limb</code>/<code>sensor</code>/<code>session</code>）。
+注意生成代码内部用相对包名导入（<code>from common.v1 import health_pb2</code>），所以<strong>必须</strong>让 <code>generated/</code> 本身成为包根，不能只加 <code>generated/session</code>。</p>
+<h3 id="53-c-6">5.3 场景 C：修改 / 新增契约（6 步）<a class="headerlink" href="#53-c-6" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 1) 改契约源
+#    编辑 proto/&lt;域&gt;/v1/&lt;name&gt;.proto —— 字段名必须 snake_case（门禁会拦）
+#    新增契约文件还需在契约清单表（本文档 §二）登记
+
+# 2) 生成 Java 产物（需 JDK 21；注意有卡死风险）
+cd services/java
+../../scripts/mvn-dev.sh -pl proto-contracts -am clean package -Pproto-gen
+git status --short proto-contracts/src/main/java     # 确认产物变化
+
+# 3) 生成 Python 产物
+cd ../..
+bash scripts/proto-gen.sh
+
+# 4) 同步生成物注释里的 DEBT 标注（proto 头部注释会【原样复制】进生成类注释）
+#    例：session.proto:10 的 DEBT-003 已过期 → 改注释后必须重生成，否则生成物继续撒谎
+
+# 5) 校验
+E:/software/anaconda3/python.exe scripts/contract-check.py
+
+# 6) 提交：proto 源 + Java 生成物 一起提交（Python 产物不入库，无需提交）
+</code></pre>
+<p><strong>注意</strong>：字段号（<code>= 1</code> <code>= 2</code>）<strong>只增不改不复用</strong>，否则破坏线上兼容性；改字段名/删字段要走废弃流程（<code>reserved</code>）。</p>
+<h3 id="54-d">5.4 场景 D：核对契约有没有漂移<a class="headerlink" href="#54-d" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">E:/software/anaconda3/python.exe scripts/contract-check.py
+</code></pre>
+<hr />
+<h2 id="scriptscontract-checkpy">六、校验与门禁（<code>scripts/contract-check.py</code>）<a class="headerlink" href="#scriptscontract-checkpy" title="Permanent link">&para;</a></h2>
+<p><strong>覆盖</strong>（proto 线）：</p>
+<table>
+<thead>
+<tr>
+<th>规则</th>
+<th>检查内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>命名规则</td>
+<td>所有 message 字段名必须 <code>snake_case</code>（禁驼峰/大写）</td>
+</tr>
+<tr>
+<td>字典对齐</td>
+<td><code>Session</code> / <code>Message</code> 必须含《D5-2》规定的字段（<code>agent_id</code>/<code>title</code>/<code>message_count</code>/<code>last_activity_at</code>/<code>model</code>；<code>session_id</code>/<code>role</code>/<code>content</code>/<code>intent</code>/<code>confidence</code>/<code>source_citations</code>/<code>latency_ms</code>/<code>source</code>）</td>
+</tr>
+<tr>
+<td>通用字段</td>
+<td><code>id</code>/<code>tenant_id</code>/<code>created_at</code>/<code>updated_at</code>/<code>version</code> 缺失报 <code>WARN</code></td>
+</tr>
+<tr>
+<td>产物一致性</td>
+<td><strong>不检查</strong> —— 生成物与 <code>.proto</code> 是否同步<strong>没有门禁</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>不覆盖</strong>（重要空白）：</p>
+<ul>
+<li>❌ <strong>生成物与契约源的同步性</strong>：改了 <code>.proto</code> 忘记重生成，门禁<strong>不会</strong>发现。
+  建议补：<code>-Pproto-gen</code> 重生成后跑 <code>git diff --exit-code</code>（<code>02-proto-contracts.md</code> §4.3 已提过这条建议，至今未落地）。</li>
+<li>❌ 字段号变更 / 兼容性破坏</li>
+<li>❌ Python 侧生成物存在性（该目录 gitignore 且无 CI 步骤，<strong>换机后可能整个缺失而无人察觉</strong>）</li>
+</ul>
+<p>当前基线：<strong>FAIL 0 / WARN 3</strong>（3 条 WARN 为既有通用字段告警）。</p>
+<hr />
+<h2 id="openapi">七、与 OpenAPI 契约的分工<a class="headerlink" href="#openapi" title="Permanent link">&para;</a></h2>
+<p>本仓库有<strong>两条并列的契约线</strong>，别混淆：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>proto 线</th>
+<th>OpenAPI 线</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>载体</td>
+<td><code>proto/{body,brain,common,limb,sensor,session}/v1/</code></td>
+<td><code>contracts/work-platform-bff-openapi.yaml</code></td>
+</tr>
+<tr>
+<td>协议</td>
+<td>gRPC</td>
+<td>HTTP/JSON</td>
+</tr>
+<tr>
+<td>用途</td>
+<td><strong>服务间</strong>内部调用（未来）</td>
+<td><strong>前端 ↔ wp-bff</strong> 的控制面</td>
+</tr>
+<tr>
+<td>生成物</td>
+<td>Java 入库 / Python 不入库</td>
+<td>不生成代码，手写 TS 类型</td>
+</tr>
+<tr>
+<td>门禁</td>
+<td>字段命名 + 字典对齐</td>
+<td>端点分层（implemented/planned）+ <code>x-wp-status</code> 必填</td>
+</tr>
+<tr>
+<td>实现状态</td>
+<td>0/15 RPC 实现</td>
+<td>6/37 端点实现</td>
+</tr>
+<tr>
+<td>详细文档</td>
+<td><strong>本文档</strong></td>
+<td><code>docs/功能开发流程.md</code> §3.10</td>
+</tr>
+</tbody>
+</table>
+<p>共通的纪律：<strong>契约先行</strong>（先改契约再改实现）、<strong>诚实标注状态</strong>（未实现就标 <code>planned</code> / 保留位，不伪造）。</p>
+<hr />
+<h2 id="_7">八、已知缺口与待办（登记）<a class="headerlink" href="#_7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>事项</th>
+<th>影响</th>
+<th>建议动作</th>
+<th>归属</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>零运行时调用</strong></td>
+<td>6 份契约、15 个 RPC 全部空转</td>
+<td>不是缺陷，但<strong>必须防止被读成"已实现"</strong>；本文档即为此而写</td>
+<td>项目侧</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>生成物同步无门禁</strong></td>
+<td>改契约忘重生成 → 两侧静默漂移</td>
+<td>CI 加 <code>-Pproto-gen</code> + <code>git diff --exit-code</code></td>
+<td>工程侧</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>Python 生成物未入库且无 CI 步骤</strong></td>
+<td>换机后 <code>generated/</code> 整个缺失，且不会被任何检查发现</td>
+<td>在 CI 加 <code>bash scripts/proto-gen.sh</code> + 导入自检；或在 <code>requirements.txt</code> 声明 <code>grpcio-tools</code></td>
+<td>工程侧</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong><code>grpcio-tools</code> 未写进 <code>requirements.txt</code></strong></td>
+<td>重建 venv 后生成脚本报 <code>No module named grpc_tools</code></td>
+<td>补进 <code>requirements.txt</code></td>
+<td>工程侧</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>proto 头部 DEBT 注释滞后</strong></td>
+<td><code>session.proto</code> 说"内存 Map"（实际已 Redis）、<code>brain.proto</code> 归属模块写错、<code>body.proto</code> 说"本地文件"（实际内存 Map）；且这些注释<strong>原样复制进 90 个生成类</strong></td>
+<td>改注释 → 重生成 → 提交产物（需构建窗口，见台账 §6-2）</td>
+<td>需构建窗口</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong><code>proto-gen.sh</code> 路径 bug</strong></td>
+<td>本机 Git Bash 下脚本<strong>完全不可用</strong>（退出码 1）</td>
+<td>✅ <strong>2026-09-17 已修复并复测</strong></td>
+<td>已完成</td>
+</tr>
+<tr>
+<td>7</td>
+<td>仅 <code>health.proto</code> 带 <code>go_package</code></td>
+<td>若将来生成 Go 代码，5 份契约缺选项</td>
+<td>统一补齐或明确不产 Go</td>
+<td>设计侧</td>
+</tr>
+<tr>
+<td>8</td>
+<td>五渠道 / 消息链路无集成测试</td>
+<td>gRPC 接入时无可参照的测试范式</td>
+<td>见 <code>docs/技术债台账.md</code> DEBT-006/009</td>
+<td>项目侧</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>Phase0-开发执行日志.md</code> 称"Python 12 文件已入库"</td>
+<td>与 <code>.gitignore</code> 事实不符</td>
+<td>已在技术债台账登记为口径漂移（历史归档按约定<strong>不回改</strong>，在当期文档纠正）</td>
+<td>已完成登记</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_8">九、一页速查<a class="headerlink" href="#_8" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">契约源        proto/&lt;域&gt;/v1/&lt;name&gt;.proto        6 份 367 行
+Java 产物     services/java/proto-contracts/src/main/java/com/agent/&lt;域&gt;/v1/   90 个，已入库
+Python 产物   services/python/nlp-service/generated/&lt;域&gt;/v1/                    12 个，不入库
+生成 Java     cd services/java &amp;&amp; ../../scripts/mvn-dev.sh -pl proto-contracts -am clean package -Pproto-gen
+生成 Python   bash scripts/proto-gen.sh
+校验          E:/software/anaconda3/python.exe scripts/contract-check.py
+当前使用      0 个服务引用（服务间走 HTTP + NATS/Kafka）
+gRPC 9091-9094  用的是 grpc-services 自带 HealthStatusManager，与本仓库 proto 无关
+改契约要点    字段号只增不改；改完两侧都要重生成；proto 注释会进生成物
+</code></pre>
+<hr />
+<p><em>本文件建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em>
+<em>用法：契约相关改动</em><em>必须</em><em>同步本文档 §二 清单与 §三 引用矩阵</em>
+<em>状态核实方式：逐项对源码取证据（grep 命令 + 实测输出），非沿用既有文档描述</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
