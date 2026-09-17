@@ -13,7 +13,10 @@
 | 目录 | 用途 |
 |---|---|
 | `docs/项目进度日志报告/` | **本目录** — 分阶段开发的过程日志与验收报告（按阶段归档） |
+| `docs/项目进度总览.md` | 跨阶段的**当前状态总览**（功能矩阵 / 测试基线 / 分支拓扑 / 剩余项） |
+| `docs/功能开发流程.md` | 每个功能的**开发流程与验收标准**（从需求到收口的完整链路） |
 | `docs/demo/` | 各阶段的端到端演示脚本（怎么跑起来看到效果） |
+| `docs/优化日志/` | 每轮工程化加固的过程与结论（按日期归档） |
 | 项目根 `PROGRESS.md` | 全局进度总览（跨阶段的 checklist 视图） |
 
 **三类文档的分工**：
@@ -56,6 +59,20 @@
 
 **阶段数据速览**：代码基线 `850f49d`（147 文件）· 测试 **73/73 通过** · 意图识别准确率 **90.0%** / P99 **0.052ms** · 全量构建 5 模块 SUCCESS
 
+### 加固期 · Phase 2 之后（2026-09-15 ~ 2026-09-16，非独立阶段）
+
+Phase 3 冻结期间做工程化：把已有能力做真、做稳、做可交付。本段**不按三件套归档**，
+过程与结论落在 `docs/优化日志/`，进度与功能矩阵统一收敛到 `docs/项目进度总览.md`。
+
+| 文件 | 说明 |
+|---|---|
+| `docs/优化日志/2026-09-16-契约对齐与总览聚合.md` · `.html` | 契约 31→37 端点、`x-wp-status` 标记、`contract-check` 三条门禁与负向验证、`GET /api/wp/overview` 只聚合有真实来源的域、`docker-smoke` CI |
+| `docs/项目进度总览.md` · `.html` | 当前进度总览：阶段状态、功能矩阵（Java/Python/前端/BFF/基础设施）、测试基线、分支与远端拓扑、剩余项与 6 项已知缺口 |
+| `docs/功能开发流程.md` · `.html` | 通用 8 步流水线、按技术栈差异、逐功能开发步骤与验收标准、新增功能清单、本机特有坑 |
+
+> 同期的 `PROGRESS.md` 章节「2026-09-15 Work Platform Observability Update」「2026-09-16 Engineering
+> Hardening」「2026-09-16 Contract Alignment & Overview Aggregation」是这一段的逐年逐轮记录。
+
 ---
 
 ## 命名规范
@@ -79,20 +96,23 @@ Phase<N>-测试验收报告.md     + .html
 本目录的 HTML 由脚本统一生成（样式一致、含目录导航）：
 
 ```bash
-# 从项目根执行；Python 需带 markdown 包（≥3.4）
-# 2026-09-15 更新：本机已无 anaconda，改用托管 Python + PYTHONPATH 指向 markdown 包目录：
+# 从项目根执行。两种可用环境，按本机情况选一种：
+
+# 【A】有 anaconda 的机器（WorkBuddy 侧，2026-09-17 实测）
+E:/software/anaconda3/python.exe scripts/md2html-report.py --all "docs/项目进度日志报告"
+
+# 【B】无 anaconda 的机器：托管 Python + PYTHONPATH 指向 markdown 包目录
 PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
   C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
   scripts/md2html-report.py --all "docs/项目进度日志报告"
 
 # 单文件模式
-PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
-  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
-  scripts/md2html-report.py "docs/项目进度日志报告/Phase2-阶段性报告.md"
+E:/software/anaconda3/python.exe scripts/md2html-report.py "docs/项目进度日志报告/Phase2-阶段性报告.md"
 ```
 
 > **注意事项**（踩坑记录）：
-> - markdown 包通过 `pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown` 安装（不污染系统环境）。
+> - markdown 包两种获取方式：anaconda 自带；（无 anaconda 时）用
+>   `pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown` 装到独立目录，不污染系统环境。
 > - 中文字符路径需加引号。
 > - `--all` 批量模式**自动排除 `README.md`**（索引页保留纯 Markdown 即可），如需转换用单文件模式。
 > - 修改 `.md` 后**需重新生成对应 `.html`**，两者一并提交，避免版本漂移。
@@ -103,7 +123,7 @@ PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
 ## 复现本阶段验证
 
 ```bash
-# Java 全量构建 + 测试（54 项）
+# Java 全量构建 + 测试（当前基线 61 项；Phase 2 归档时口径为 73 项，含 Python）
 cd services/java && ../../scripts/mvn-dev.sh clean package
 
 # Python 测试（19 项）
@@ -113,6 +133,9 @@ cd services/python/nlp-service
 
 # 契约校验
 python scripts/contract-check.py
+
+# wp-bff 回归（控制面改动时）
+cd services/node/wp-bff && node --test
 
 # 端到端演示（需 Docker 基础设施）
 ./scripts/start.sh all && ./scripts/healthcheck.sh
@@ -129,8 +152,9 @@ python scripts/contract-check.py
 - [ ] 生成对应 `.html` 并一并提交
 - [ ] 在本 README 的「文件清单」中登记新阶段条目
 - [ ] 更新项目根 `PROGRESS.md` 的对应阶段章节与验证结果
+- [ ] 更新 `docs/项目进度总览.md`（阶段状态表 + 功能矩阵 + 测试基线，**标注口径时间**）
 - [ ] 未通过项 / 待补验证项**必须显式登记**，不得省略（诚实留痕优先于好看）
 
 ---
 
-*本目录建立于 2026-09-12 · 维护：WorkBuddy*
+*本目录建立于 2026-09-12 · 2026-09-17 补入加固期条目与双环境 HTML 生成说明 · 维护：探索者一号（WorkBuddy 侧）*

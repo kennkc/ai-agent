@@ -1,6 +1,6 @@
 # Agent-Lifeform Development Progress
 
-> Last updated: 2026-09-16
+> Last updated: 2026-09-17
 
 ## Archived stage reports
 
@@ -271,6 +271,39 @@ an independent line (no merge) and `dev` belongs to another developer machine.
 - Live check: started wp-bff on :8091 and called `GET /api/wp/overview` - returned real probe data
   (Docker not running -> up=0/8, Jaeger `enabled=false`)
 - Optimization log archived at `docs/优化日志/2026-09-16-契约对齐与总览聚合.md` (plus generated HTML)
+
+## 2026-09-17 Documentation Consolidation
+
+Goal: make the archived documentation answer two questions on its own — "where are we now?" and
+"how is each feature developed?" — without reading the commit history.
+
+- Added **`docs/项目进度总览.md`** (+ HTML): stage status table (Phase 0/1/2 accepted, hardening
+  period in progress, Phase 3+ frozen, V1 design-ready), per-service feature matrix
+  (Java 58 main + 14 test = 72 sources / 90 generated proto sources; nlp-service intent + OCR;
+  work-platform; wp-bff), the 2026-09-16 test baseline, branch & remote topology, remaining items
+  and the 6 registered engineering gaps. Stale figures from older archives are explicitly marked
+  as such rather than edited in place.
+- Added **`docs/功能开发流程.md`** (+ HTML): the shared 8-step pipeline (§8.0-8.5) plus a
+  per-feature development flow for gateway / session+VS1 / sense pipeline / intent / OCR / body /
+  work-platform / wp-bff / infrastructure / contract governance / docs toolchain, each with
+  requirement source, code entry points, contracts, tests and acceptance criteria; ends with an
+  add-a-feature checklist and this host's specific pitfalls.
+- Added **`docs/README.md`**: docs map, reading order and the two supported HTML-generation
+  environments (anaconda here, managed Python + `PYTHONPATH` on the other machine).
+- Updated **`docs/项目进度日志报告/README.md`**: registered the hardening period (2026-09-15~16),
+  refreshed reproduction commands (Java baseline **61**, not the archived 54), and documented both
+  HTML generation environments.
+- Branch naming recorded: the long-lived line is now **`codex/main`** (`codex/phase0-1-hardening`
+  archived and removed on 2026-09-16); `codex/main` = `dev` = `workbuddy/main` = `ab2ad29`.
+  `main` remains the untouched initial commit and is intentionally not maintained.
+
+### Verification (2026-09-17)
+
+- `scripts/md2html-report.py --all` regenerated the new + touched documents' HTML twins
+  (anaconda Python 3.10.9, markdown 3.4.1)
+- Doc coverage self-check: `python scripts/java-doc-coverage.py`
+- No source code changed in this pass; Java/Python/contract/wp-bff baselines carry over from
+  the 2026-09-16 figures above.
 
 ## Remaining
 

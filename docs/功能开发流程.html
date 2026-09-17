@@ -1,0 +1,480 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent-Lifeform 功能开发流程</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-17 10:16 · 源文件 功能开发流程.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#8">一、通用流水线（所有功能共用，8 步）</a><ul>
+<li><a href="#readmemd-85">提交前检查单（README.md §8.5）</a></li>
+</ul>
+</li>
+<li><a href="#_1">二、按技术栈的差异</a></li>
+<li><a href="#_2">三、逐功能开发流程</a><ul>
+<li><a href="#31-gateway-service8080">3.1 网关与安全边界（gateway-service，8080）</a></li>
+<li><a href="#32-vs1-session-manager8081">3.2 会话与 VS1 问答闭环（session-manager，8081）</a></li>
+<li><a href="#33-sense-service8082">3.3 感官采集链路（sense-service，8082）</a></li>
+<li><a href="#34-nlp-service8000">3.4 意图识别（nlp-service，8000）</a></li>
+<li><a href="#35-ocrnlp-service-appocrpy">3.5 OCR（nlp-service / app/ocr.py）</a></li>
+<li><a href="#36-body-service8083">3.6 躯体服务（body-service，8083）</a></li>
+<li><a href="#37-webwork-platform">3.7 工作平台前端（web/work-platform）</a></li>
+<li><a href="#38-ops-bff-servicesnodewp-bff8090">3.8 Ops BFF 与观测区（services/node/wp-bff，8090）</a></li>
+<li><a href="#39-docker-composeyml-scripts">3.9 基础设施编排（docker-compose.yml + scripts/）</a></li>
+<li><a href="#310-proto-contracts-scriptscontract-checkpy">3.10 契约治理（proto/ + contracts/ + scripts/contract-check.py）</a></li>
+<li><a href="#311-docs">3.11 文档与归档体系（docs/ + 两个脚本）</a></li>
+</ul>
+</li>
+<li><a href="#_3">四、新增一个功能的操作清单</a></li>
+<li><a href="#_4">五、本机特有坑（照做能省几小时）</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 功能开发流程<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>口径时间</strong>：2026-09-17 · <strong>代码基线</strong>：<code>ab2ad29</code>
+本文件回答一个问题：<strong>这个项目里的每个功能，是怎么从需求走到可验收的？</strong>
+通用流水线各功能共用；逐功能一节说明各自的「需求源 → 设计 → 代码 → 契约 → 测试 → 验收」差异。</p>
+</blockquote>
+<hr />
+<h2 id="8">一、通用流水线（所有功能共用，8 步）<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<p>源自 <code>README.md</code> 第 8 章，<strong>§8.0 是强制前置</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>步</th>
+<th>动作</th>
+<th>关键约束</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>0</strong></td>
+<td><strong>同步远端并解读对方改动</strong>（<code>git fetch</code> → 判落后/领先 → 读 diff）</td>
+<td>不许直接 <code>git pull</code>；不许在过期基线上开发；技能 <code>git-sync-before-change</code></td>
+</tr>
+<tr>
+<td><strong>1</strong></td>
+<td><strong>需求与设计对齐</strong></td>
+<td>先改设计文档（需求 → 开发设计 → 测试设计 → 部署），<strong>代码跟着文档走</strong></td>
+</tr>
+<tr>
+<td><strong>2</strong></td>
+<td><strong>契约先行</strong></td>
+<td>新增/修改接口，先改 <code>proto/</code> 与 <code>contracts/</code>，再改实现</td>
+</tr>
+<tr>
+<td><strong>3</strong></td>
+<td><strong>实现</strong></td>
+<td>按阶段或垂直切片改代码，不跨阶段夹带</td>
+</tr>
+<tr>
+<td><strong>4</strong></td>
+<td><strong>测试</strong></td>
+<td>单测与实现同批提交；回归用例必须覆盖<strong>修过的缺陷</strong></td>
+</tr>
+<tr>
+<td><strong>5</strong></td>
+<td><strong>文档同步</strong></td>
+<td>阶段文档 + <code>PROGRESS.md</code> + 相关 README/索引，缺一不可</td>
+</tr>
+<tr>
+<td><strong>6</strong></td>
+<td><strong>全量验证</strong></td>
+<td>Java / Python / 契约 / wp-bff / Vue，<strong>一个都不能跳</strong></td>
+</tr>
+<tr>
+<td><strong>7</strong></td>
+<td><strong>提交与三分支对齐</strong></td>
+<td>三分支 <code>--ff-only</code> 对齐；<strong>推送需用户明确授权</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="readmemd-85">提交前检查单（<code>README.md</code> §8.5）<a class="headerlink" href="#readmemd-85" title="Permanent link">&para;</a></h3>
+<pre><code class="language-text">[ ] Markdown 已更新        [ ] HTML 镜像已同步      [ ] 版本索引已更新
+[ ] PROGRESS.md 已更新     [ ] Maven 测试通过        [ ] 契约检查 0 FAIL
+[ ] Vue typecheck 通过     [ ] Vue build 通过        [ ] wp-bff node --test 通过（控制面改动时）
+[ ] 未提交 node_modules、dist、target、logs 和本地密钥
+</code></pre>
+<hr />
+<h2 id="_1">二、按技术栈的差异<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>需求源（设计文档）</th>
+<th>代码位置</th>
+<th>契约载体</th>
+<th>验证命令</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>Java 服务</strong></td>
+<td><code>AGENT_CONTEXT/Phase&lt;N&gt;-*/{需求,开发,测试设计,部署}文档.md</code></td>
+<td><code>services/java/&lt;svc&gt;/src/{main,test}/java</code></td>
+<td><code>proto/&lt;域&gt;/v1/*.proto</code> → 生成源码<strong>已入库</strong></td>
+<td><code>scripts/mvn-dev.sh clean package</code></td>
+</tr>
+<tr>
+<td><strong>Python 服务</strong></td>
+<td>同上（Phase 2 意图/OCR）</td>
+<td><code>services/python/nlp-service/app/</code></td>
+<td>FastAPI 模型（<code>main.py</code> 内 pydantic）</td>
+<td><code>venv/Scripts/python.exe -m pytest</code></td>
+</tr>
+<tr>
+<td><strong>前端</strong></td>
+<td><code>AGENT_CONTEXT/WP-工作平台/WP-P&lt;k&gt;-*</code></td>
+<td><code>web/work-platform/src/</code></td>
+<td><code>contracts/work-platform-bff-openapi.yaml</code></td>
+<td><code>npm run typecheck &amp;&amp; npm run build</code></td>
+</tr>
+<tr>
+<td><strong>Ops BFF</strong></td>
+<td><code>WP-工作平台</code> + 观测区需求</td>
+<td><code>services/node/wp-bff/server.js</code></td>
+<td>同上（<code>x-wp-status</code> 标记）</td>
+<td><code>node --check</code> + <code>node --test</code></td>
+</tr>
+<tr>
+<td><strong>基础设施</strong></td>
+<td><code>AGENT_CONTEXT/Phase&lt;N&gt;*/部署文档.md</code></td>
+<td><code>docker-compose.yml</code>、<code>infra/</code></td>
+<td>—</td>
+<td><code>docker compose config</code> + <code>healthcheck.sh</code></td>
+</tr>
+<tr>
+<td><strong>工具脚本</strong></td>
+<td><code>D2-过渡准备/需求追踪矩阵.md</code></td>
+<td><code>scripts/</code></td>
+<td>—</td>
+<td><strong>退出码</strong>（0=通过，可用于 CI）；<code>contract-check.py {--proto-dir,--work-platform,--openapi}</code>、<code>java-doc-coverage.py {--list}</code></td>
+</tr>
+<tr>
+<td><strong>文档体系</strong></td>
+<td><code>AGENT_CONTEXT/D3-资源治理/文档版本索引.md</code></td>
+<td><code>docs/</code></td>
+<td>—</td>
+<td><code>md2html-report.py [--all &lt;目录&gt;]</code>（<strong>无 <code>--dry-run</code></strong>，幂等覆盖后看 <code>git status</code>）、<code>java-doc-coverage.py</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_2">三、逐功能开发流程<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<h3 id="31-gateway-service8080">3.1 网关与安全边界（<code>gateway-service</code>，8080）<a class="headerlink" href="#31-gateway-service8080" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>Phase1-神经期/需求设计文档.md</code>（统一入口 + 鉴权 + 租户隔离）</li>
+<li><strong>代码入口</strong>：<code>GatewayApplication</code>、路由与过滤器配置（<code>src/main/resources/application.yml</code>）</li>
+<li><strong>关键约定</strong>：</li>
+<li>路由 <code>/api/session/**</code> <code>/api/sense/**</code> <code>/api/nlp/**</code> <code>/api/body/**</code> → <code>lb://&lt;service&gt;</code></li>
+<li><strong>业务服务不得信任请求参数里的租户 ID</strong>，一律由网关注入 <code>X-Tenant-Id</code></li>
+<li>开发令牌端点 loopback-only，默认关闭，需 <code>DEV_TOKEN_ENDPOINT_ENABLED=true</code></li>
+<li><strong>测试</strong>：网关过滤链 2 项（<code>gateway-service</code> 测试类）</li>
+<li><strong>验收标准</strong>：跨租户请求被拒；无 token 401；合法 token 透传租户头</li>
+<li><strong>开发步骤</strong>：①改设计文档 ②改路由/过滤器 ③补过滤链单测（含负向：伪造租户头） ④<code>mvn-dev.sh -pl gateway-service -am test</code></li>
+</ul>
+<h3 id="32-vs1-session-manager8081">3.2 会话与 VS1 问答闭环（<code>session-manager</code>，8081）<a class="headerlink" href="#32-vs1-session-manager8081" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>Phase1-神经期/需求设计文档.md</code>（VS1：session → intent → 本地检索 → 模板回答）</li>
+<li><strong>代码入口</strong>：<code>SessionController</code>（<code>/api/session/{id}/ask</code>）、<code>OutboundHttp</code>（<strong>统一 HTTP/1.1 出站客户端</strong>）</li>
+<li><strong>关键约定</strong>：</li>
+<li>出站一律走共享 HTTP/1.1 工厂 + 连接/读超时，<strong>不要用 JDK HttpClient 默认的 HTTP/2</strong>
+    （h2c 升级握手会被 uvicorn/h11 拒绝，导致请求体被丢、FastAPI 回 422 → 表面 503，即 <strong>D-1 缺陷</strong>）</li>
+<li>下游不可用时<strong>优雅降级</strong>：intent → <code>FALLBACK</code>、检索 → 空，并回专用错误码 <code>AGENT_UPSTREAM_UNAVAILABLE</code></li>
+<li><strong>测试</strong>：10 项，含 <code>OutboundHttpTest</code> / <code>UpstreamDegradeTest</code> 两个<strong>回归守卫</strong></li>
+<li><strong>验收标准</strong>：<code>POST /api/session/{id}/ask</code> → 200；Redis <code>session:{id}:messages</code> LLEN=2；
+  <strong>停掉 nlp-service 后仍返回 200（FALLBACK）</strong></li>
+<li><strong>开发步骤</strong>：①改设计 ②实现 + 出站改造 ③补降级回归用例 ④起 Redis/Kafka 实测链路</li>
+</ul>
+<h3 id="33-sense-service8082">3.3 感官采集链路（<code>sense-service</code>，8082）<a class="headerlink" href="#33-sense-service8082" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>Phase2-感官期/需求设计文档.md</code>（R2-01~R2-10 逐条验收标准与 DoD）</li>
+<li><strong>代码入口</strong>（按 R 编号）：
+  | 需求 | 入口 |
+  |---|---|
+  | R2-01 渠道抽象 | <code>SenseChannel</code>（Register/Collect/Healthy/Close）+ <code>ChannelRegistry</code>（Spring bean 自动发现） |
+  | R2-02 触觉渠道 | <code>TouchChannel</code>（URL 抓取 + 本地文件 + 纯文本；jsoup 正文提取 + 编码探测） |
+  | R2-03 保留渠道 | <code>VisualChannel</code> / <code>NoseChannel</code> / <code>AudioChannel</code> / <code>TasteChannel</code> —— <strong>诚实上报 <code>available()</code></strong> |
+  | R2-04 归一化 | <code>DataNormalizer</code>（五字段打标：source_channel / tenant_id / timestamp / freshness / confidence） |
+  | R2-05 调度 | <code>R0Scheduler</code>（<code>@Scheduled</code> 规则轮询、每规则独立间隔、日志 + 手动 <code>runNow</code>） |
+  | R2-06 指令处理 | <code>R1DynamicHandler</code> + <code>SenseCommand</code>（指令 → 渠道路由 → 采集 → 响应，单轮渠道上限） |
+  | R2-09 健康与隔离 | <code>ChannelHealthMonitor</code>（探活 + DEGRADED/DOWN 阈值 + 自动隔离 + 恢复跟踪）、resilience4j 指数退避 + <code>DeadLetterStore</code> |
+  | R2-10 暂存 | <code>StagingStore</code>（MinIO/本地双后端、入库前质检闸门、批量回滚） |
+  | R-C02 控制台 | <code>SenseAdminController</code>：<code>/channels</code>、<code>/channels/{type}</code>、<code>/channels-health</code>、<code>/stats</code>、<code>/batches</code>、<code>/batches/{id}/rollback</code>、<code>/rules</code>、<code>/deadletters</code> |</li>
+<li><strong>关键约定</strong>：<strong>渠道能力不可用时必须诚实上报</strong>（<code>available=false</code> / <code>DEGRADED</code>），<strong>绝不伪造结果</strong></li>
+<li><strong>测试</strong>：48 项（全项目最多）</li>
+<li><strong>验收标准</strong>：R2-01~R2-10 逐条对照 DoD；健康监控能在渠道挂掉后隔离并进入死信</li>
+<li><strong>开发步骤</strong>：①先补需求设计文档的 R 条目与 DoD ②实现渠道/组件并注册 bean ③补单测
+  ④<code>mvn-dev.sh -pl sense-service -am test</code> ⑤补 <code>docs/demo/Phase2-DEMO.md</code> 的演示步骤</li>
+</ul>
+<h3 id="34-nlp-service8000">3.4 意图识别（<code>nlp-service</code>，8000）<a class="headerlink" href="#34-nlp-service8000" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>Phase2-感官期/需求设计文档.md</code>（R2-07 规则引擎、R2-08 L0 + 级联）</li>
+<li><strong>代码入口</strong>：<code>app/intent/rules.py</code>（关键词/正则/场景规则，<strong>覆盖 12 场景，要求 ≥10</strong>）、
+  <code>app/intent/l0_model.py</code>（轻量 L0 分类器）、<code>app/intent/cascade.py</code>（<strong>规则优先 → L0 兜底</strong>）、<code>app/intent/corpus.py</code>（留出集）</li>
+<li><strong>验收标准（已实测）</strong>：留出集准确率 <strong>90.0%</strong>（要求 ≥85%）；P99 <strong>0.052 ms</strong>（要求 &lt;50 ms）</li>
+<li><strong>测试</strong>：<code>tests/test_intent.py</code> 15 项</li>
+<li><strong>开发步骤</strong>：①新场景先加进 <code>rules.py</code> 的场景表并同步 <code>corpus.py</code> 留出集 ②跑 <code>test_intent.py</code> 看准确率是否守住
+  ③<strong>改语料后必须重跑准确率</strong>，别只跑通不测指标</li>
+</ul>
+<h3 id="35-ocrnlp-service-appocrpy">3.5 OCR（<code>nlp-service</code> / <code>app/ocr.py</code>）<a class="headerlink" href="#35-ocrnlp-service-appocrpy" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>代码入口</strong>：<code>app/ocr.py</code>；对外 <code>POST /api/nlp/ocr</code></li>
+<li><strong>关键约定</strong>：<strong>引擎懒初始化</strong>（导入期不初始化 PaddleOCR，否则拖慢启动）；无引擎时<strong>上报 <code>available=false</code></strong></li>
+<li><strong>测试</strong>：<code>tests/test_ocr.py</code> 4 项</li>
+<li><strong>当前状态</strong>：⚠️ 端到端未闭合 —— 需安装 PaddleOCR 或 Tesseract；在此之前视觉渠道维持 <code>DEGRADED</code></li>
+<li><strong>开发步骤</strong>：①装引擎 ②按 <code>docs/demo/Phase2-DEMO.md</code> 走图片采集链路 ③登记验收结论（诚实留痕）</li>
+</ul>
+<h3 id="36-body-service8083">3.6 躯体服务（<code>body-service</code>，8083）<a class="headerlink" href="#36-body-service8083" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>现状</strong>：基础服务已就位（1 项测试），知识入库/语义检索是 <strong>Phase 3</strong> 内容，<strong>当前冻结</strong></li>
+<li><strong>已知缺口</strong>：未配 OTLP（不在 Jaeger 链路）、未接入统一错误码体系 → 开工前需先补</li>
+</ul>
+<h3 id="37-webwork-platform">3.7 工作平台前端（<code>web/work-platform</code>）<a class="headerlink" href="#37-webwork-platform" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>AGENT_CONTEXT/WP-工作平台/</code>（<code>WP-P1 骨架</code> / <code>WP-P2 五感矩阵</code> / <code>WP-P4 决策沙盘</code> /
+  <code>WP-P5-P8 随阶段点亮</code> + <code>工作平台功能设计文档.md</code>）</li>
+<li><strong>固定更新顺序（<code>README.md</code> §8.3）</strong>：
+  1. 先改 <code>src/config/modules.ts</code> 与 <code>src/types/index.ts</code>
+  2. 再改路由、页面、Mock 数据、<code>WorkPlatformDataProvider</code>
+  3. <strong>保持 Mock 与 API 数据结构一致</strong>
+  4. 新增页面必须同步登记：<code>src/router/index.ts</code>、<code>src/layouts/PlatformLayout.vue</code>、<code>docs</code>
+  5. <code>npm run typecheck &amp;&amp; npm run build</code>，确认 <code>dist/</code> 成功后再提交</li>
+<li><strong>关键约定</strong>：</li>
+<li>路由一律动态 <code>import()</code>（懒加载），别退回同步 import</li>
+<li>数据源双轨：Mock / API，靠 <code>?ds=api</code> 切换<strong>零 UI 改动</strong></li>
+<li><strong>降级必须可见</strong>：<code>src/api/status.ts</code> 按数据域记录降级；失败→记录，成功→清除；
+    UI 呈现 <code>API · 降级 N</code> 徽标 + 横幅 + 逐模块提示。<strong>不允许静默回落 Mock</strong></li>
+<li><strong>中间件卡片不受全局 <code>VITE_DATA_SOURCE</code> 限制</strong>：始终优先真实探针，BFF 不可达才回落并标注 <code>data_source='mock'</code></li>
+<li><strong>验收标准</strong>：typecheck + build 通过；API 模式下断掉 BFF 能看见降级提示</li>
+</ul>
+<h3 id="38-ops-bff-servicesnodewp-bff8090">3.8 Ops BFF 与观测区（<code>services/node/wp-bff</code>，8090）<a class="headerlink" href="#38-ops-bff-servicesnodewp-bff8090" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>WP-工作平台</code> + 「观测区」需求（中间件监控 / 链路追踪）</li>
+<li><strong>代码入口</strong>：<code>server.js</code>（<code>createServer(options)</code>，spawn/probe/fetch <strong>可注入</strong>以便测试）、<code>test/server.test.js</code></li>
+<li><strong>关键约定</strong>：</li>
+<li>控制端点（<code>start</code>/<code>stop</code>）<strong>必须同时</strong>过来源检查（<code>WP_BFF_ALLOWED_ORIGINS</code>）与
+    控制令牌（<code>X-WP-Control-Token</code>，<code>timingSafeEqual</code> 比较）；缺失/错误 → 401，外来来源 → 403，
+    <strong>两种情况都写审计日志 <code>REJECT_AUTH</code></strong></li>
+<li>令牌来源：<code>WP_BFF_CONTROL_TOKEN</code>，否则启动时随机生成写入 <code>logs/wp-bff-control-token</code>（0600）并打印一次；
+    <strong>没有免鉴权回退模式</strong></li>
+<li>CORS：<strong>不要</strong>回 <code>Access-Control-Allow-Origin: *</code>，只对白名单来源回显并始终带 <code>Vary: Origin</code></li>
+<li>命令形状固定 + <strong>8 键白名单</strong>；未登记的 key → 403</li>
+<li>Vite 代理<strong>在服务端读令牌文件</strong>再注入请求头 → 令牌不进浏览器包；且<strong>不重写 <code>Origin</code></strong>（保持 CSRF 检查有效）</li>
+<li><strong>测试</strong>：<code>node --test</code> 14 项（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据）</li>
+<li><strong>开发步骤</strong>：①改契约（<code>x-wp-status</code>）②改 <code>server.js</code> ③补回归用例 ④<code>node --test</code> ⑤实测 <code>curl</code> 一次真实端点</li>
+</ul>
+<h3 id="39-docker-composeyml-scripts">3.9 基础设施编排（<code>docker-compose.yml</code> + <code>scripts/</code>）<a class="headerlink" href="#39-docker-composeyml-scripts" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：各阶段 <code>部署文档.md</code></li>
+<li><strong>关键约定（本机特有，踩过大坑）</strong>：</li>
+<li>仓库目录已由 <code>agent-lifeform</code> 改名 <code>ai-agent</code> → compose 默认项目名随之改变，
+    会导致与存量容器 / 数据卷命名冲突并<strong>误建空卷</strong> → 必须在 <code>.env</code> 写
+    <code>COMPOSE_PROJECT_NAME=agent-lifeform</code> 沿用存量资源</li>
+<li>根目录 <code>.env</code> 需提供 <code>MINIO_ROOT_USER</code> 等必需变量（模板见 <code>.env.example</code>）</li>
+<li><strong><code>.env</code> 一律不入库</strong>，只有 <code>.env.example</code> 入库（<code>.gitignore</code> 用 <code>.env</code> + <code>.env.*</code> + <code>!.env.example</code>）</li>
+<li><strong>验收标准</strong>：<code>docker compose config</code> 通过；<code>./scripts/start.sh all &amp;&amp; ./scripts/healthcheck.sh</code> → 16/16 OK</li>
+</ul>
+<h3 id="310-proto-contracts-scriptscontract-checkpy">3.10 契约治理（<code>proto/</code> + <code>contracts/</code> + <code>scripts/contract-check.py</code>）<a class="headerlink" href="#310-proto-contracts-scriptscontract-checkpy" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>两条契约线</strong>：
+  1. <strong>跨服务 gRPC/proto</strong>：<code>proto/{session,sensor,brain,limb,body,common}/v1/</code>（6 个）
+     → 生成源码<strong>已入库</strong>（<code>proto-contracts</code> 90 个 Java 文件 + Python 12 个），
+     <strong>默认生命周期不调 protoc</strong>（插件在本机清理目录时会原生阻塞、构建永久卡死）；
+     契约变更时才用 <code>-Pproto-gen</code> 重新生成并提交产物
+  2. <strong>工作平台 BFF OpenAPI</strong>：<code>contracts/work-platform-bff-openapi.yaml</code>（<strong>37 端点</strong>，implemented 6 / planned 31）</li>
+<li><strong>门禁规则（<code>contract-check.py</code> 三条）</strong>：
+  1. 实现端点必须已登记且标记 <code>implemented</code>
+  2. <code>provider.ts</code> 里调用的每个路径必须能匹配契约模板
+  3. 每个端点必须带 <code>x-wp-status</code></li>
+<li><strong>开发步骤</strong>：①改 <code>proto/</code> 或 <code>contracts/</code> ②改实现 ③<code>python scripts/contract-check.py [--work-platform ...]</code>
+  ④<strong>反向验证门禁真的会拦</strong>（把 <code>/tracing</code> 删掉应得 <code>FAIL 实现端点未登记契约</code>）</li>
+</ul>
+<h3 id="311-docs">3.11 文档与归档体系（<code>docs/</code> + 两个脚本）<a class="headerlink" href="#311-docs" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>产物与工具</strong>：</li>
+<li><code>scripts/md2html-report.py</code> —— Markdown → 自包含 HTML 镜像（<strong>必须 anaconda Python</strong>）</li>
+<li><code>scripts/java-doc-coverage.py</code> —— Java 逐文件文档覆盖率自查（有缺口退 1，可用于 CI）</li>
+<li><strong>硬性约定</strong>：</li>
+<li>改 <code>.md</code> <strong>必须重新生成对应 <code>.html</code></strong>，两者一并提交（否则版本漂移）</li>
+<li>新增/删除 Java 文件后，<strong>必须登记到 <code>docs/java-services/</code> 对应模块文档</strong>并跑覆盖率自查</li>
+<li>未通过项 / 待补验证项<strong>必须显式登记</strong>，不得省略（<strong>诚实留痕优先于好看</strong>）</li>
+<li>历史归档<strong>不回改</strong>：旧口径（如 54/73 项测试）保留原样，新口径写进当期文档并标注时间</li>
+</ul>
+<hr />
+<h2 id="_3">四、新增一个功能的操作清单<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">[ ] 0. 同步前置：git fetch + 解读对方改动（README §8.0）
+[ ] 1. 设计文档：需求设计 → 开发设计 → 测试设计 → 部署（四份齐备）
+[ ] 2. 契约：proto / OpenAPI 先行，补 x-wp-status
+[ ] 3. 实现：单模块最小改动，不夹带其他阶段内容
+[ ] 4. 测试：单测 + 覆盖本次修复的回归用例
+[ ] 5. 文档：PROGRESS.md / 阶段文档 / docs 索引 / java-services 登记
+[ ] 6. 验证：Java 61 + Python 19 + 契约 0 FAIL + wp-bff 14 + Vue typecheck/build
+[ ] 7. 提交：一句话说清「改了什么、为什么」，中文
+[ ] 8. 对齐：三分支 ff-only，推送前先 fetch 并等用户授权
+</code></pre>
+<hr />
+<h2 id="_4">五、本机特有坑（照做能省几小时）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>坑</th>
+<th>规避</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mvn</code> / <code>mvn.cmd</code> 会<strong>卡死</strong>（原生阻塞）</td>
+<td>一律用 <code>scripts/mvn-dev.sh</code>；<code>-pl</code> 必须在 <code>services/java</code> 下执行；清目录用 Maven <code>clean</code> 而非 <code>rm -rf</code></td>
+</tr>
+<tr>
+<td><code>rm -rf target</code> 被安全策略拦截</td>
+<td>同上，用 <code>clean</code> 目标</td>
+</tr>
+<tr>
+<td>托管 Python <strong>没有 <code>markdown</code> 包</strong></td>
+<td>生成 HTML 用 <code>E:/software/anaconda3/python.exe</code></td>
+</tr>
+<tr>
+<td>精简 Git Bash 里 <code>ls/head/tail</code> 报 <code>command not found</code></td>
+<td>先 <code>export PATH="/usr/bin:/bin:$PATH"</code></td>
+</tr>
+<tr>
+<td>用 <code>tail</code> 截断 git 关键命令输出会<strong>吞掉错误</strong></td>
+<td>不要截断 <code>fetch</code>/<code>checkout</code>/<code>merge</code>/<code>push</code> 的输出</td>
+</tr>
+<tr>
+<td>切分支后工作区文件可能从磁盘消失</td>
+<td>切前后都 <code>git status --porcelain</code> 校验；多分支对齐用 <strong>push refspec</strong></td>
+</tr>
+<tr>
+<td><code>git ls-files</code> 默认转义中文路径 → 大量假缺失</td>
+<td>用 <code>git ls-files -z</code> 或直接信 <code>git status --porcelain</code></td>
+</tr>
+<tr>
+<td>github HTTPS(443) 曾长期不通</td>
+<td>本机已改走 SSH(22)；直连间歇性波动时先重试再改配置</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

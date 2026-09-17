@@ -1,0 +1,670 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent-Lifeform 项目进度总览</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-17 10:15 · 源文件 项目进度总览.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">一、当前状态一句话</a></li>
+<li><a href="#_2">二、阶段进度</a></li>
+<li><a href="#_3">三、功能交付矩阵</a><ul>
+<li><a href="#31-java72-58-14-90-proto">3.1 后端 Java（72 个手写源文件 = 58 主 + 14 测；另有 90 个 proto 生成文件）</a></li>
+<li><a href="#32-pythonservicespythonnlp-service7-py-12">3.2 Python（services/python/nlp-service，7 个业务 py + 12 个生成文件）</a></li>
+<li><a href="#33-webwork-platformvue-3-vite-ts-element-plus8-vue-8-ts">3.3 前端（web/work-platform，Vue 3 + Vite + TS + Element Plus，8 vue + 8 ts）</a></li>
+<li><a href="#34-ops-bffservicesnodewp-bff-node-8090">3.4 Ops BFF（services/node/wp-bff，零依赖 Node，端口 8090）</a></li>
+<li><a href="#35">3.5 基础设施与工具链</a></li>
+</ul>
+</li>
+<li><a href="#_4">四、测试与验证基线</a></li>
+<li><a href="#_5">五、分支与远端拓扑</a><ul>
+<li><a href="#51">5.1 分支</a></li>
+<li><a href="#52">5.2 远端地址（两台机器不同，别照抄）</a></li>
+<li><a href="#53">5.3 变更前置约定（强制）</a></li>
+</ul>
+</li>
+<li><a href="#_6">六、剩余项与已知缺口</a><ul>
+<li><a href="#61">6.1 阻塞 / 待验收</a></li>
+<li><a href="#62-docsjava-services07-md">6.2 已登记的工程缺口（源自 docs/java-services/07-运行时配置与横切约定.md）</a></li>
+</ul>
+</li>
+<li><a href="#docs">七、docs 归档索引</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 项目进度总览<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>口径时间</strong>：2026-09-17 · <strong>代码基线</strong>：<code>ab2ad29</code>（<code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> 同提交）
+<strong>数据来源</strong>：仓库 <code>PROGRESS.md</code>、<code>docs/项目进度日志报告/</code>、<code>docs/优化日志/</code>、各服务源码实测统计
+<strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73 项测试）<strong>不回改</strong>，以本文件为准。</p>
+</blockquote>
+<hr />
+<h2 id="_1">一、当前状态一句话<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<p><strong>Phase 0 / 1 / 2 已全部交付并验收</strong>，项目当前停在 <strong>Phase 2 之后的「工程化加固期」</strong>：
+不新增阶段能力，而是把已有能力做<strong>真实、可验证、可交付</strong>（观测区接真数据、契约与实现对齐、
+控制面加鉴权、数据源降级可见）。<strong>Phase 3+ 处于冻结状态</strong>（团队在固化 Phase 0-2 资产）。</p>
+<p>唯一未闭合的验收项是 <strong>OCR 端到端</strong>，阻塞原因是需要外部引擎（PaddleOCR / Tesseract）尚未安装 ——
+系统对此<strong>诚实上报</strong> <code>available=false</code>，不伪造结果。</p>
+<hr />
+<h2 id="_2">二、阶段进度<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>阶段</th>
+<th>名称</th>
+<th>状态</th>
+<th>交付要点</th>
+<th>归档</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phase 0</td>
+<td>胚胎期</td>
+<td>✅ 已验收（08-30，09-15 追溯补档）</td>
+<td>单仓结构 / Maven 多模块 / FastAPI 骨架 / compose 基础设施 / Nacos 注册 / gRPC Health(9091-9094) / proto 双语言生成 / CI + 契约校验</td>
+<td><code>docs/demo/Phase0-DEMO.md</code></td>
+</tr>
+<tr>
+<td>Phase 1</td>
+<td>神经期</td>
+<td>✅ 已验收（09-11 收尾，09-13 动态验证）</td>
+<td>网关路由 + JWT + 租户隔离 / BusProxy(NATS) / Kafka 基线 / OTLP+Jaeger / 统一错误模型 / SSRF 防护 / <strong>VS1 追问闭环</strong></td>
+<td><code>docs/demo/Phase1-DEMO.md</code></td>
+</tr>
+<tr>
+<td>Phase 2</td>
+<td>感官期</td>
+<td>✅ 已验收（09-12）</td>
+<td><strong>R2-01~R2-10</strong> 全覆盖：五感渠道、R0 调度、R1 动态处理、健康监控+自动隔离+死信、质检暂存与回滚、规则→L0 意图级联、控制台感官视图</td>
+<td><code>docs/demo/Phase2-DEMO.md</code> + 三份阶段报告</td>
+</tr>
+<tr>
+<td>加固期</td>
+<td>工程化（非独立阶段）</td>
+<td>🔄 <strong>进行中</strong></td>
+<td>观测区 + 最小 Ops BFF、控制面鉴权与 CORS 收紧、<strong>契约↔实现双向对齐（37 端点）</strong>、总览聚合端点、数据源降级可见化、CI 补 Python/wp-bff 测试、前端路由懒加载</td>
+<td><code>docs/优化日志/</code></td>
+</tr>
+<tr>
+<td>Phase 3</td>
+<td>躯体期</td>
+<td>⏸ 冻结</td>
+<td>Qdrant / pgvector 正式知识库；body-service 知识入库与语义检索打通</td>
+<td>设计文档已备：<code>AGENT_CONTEXT/Phase3-躯体期/</code></td>
+</tr>
+<tr>
+<td>Phase 4-8</td>
+<td>大脑 / 四肢 / 小脑 / 免疫 / 生命期</td>
+<td>⏸ 冻结</td>
+<td>LLM Gateway 与问答 MVP、工具调用、编排、免疫、自进化</td>
+<td><code>AGENT_CONTEXT/Phase4~8-*/</code></td>
+</tr>
+<tr>
+<td>V1</td>
+<td>验证期</td>
+<td>📄 设计就绪</td>
+<td>性能基准实验室 / STRIDE 威胁建模 / 容灾演练 / 数据分级矩阵 / LLM 双轨评估 / 知识治理</td>
+<td><code>AGENT_CONTEXT/V1-验证期设计/</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_3">三、功能交付矩阵<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<h3 id="31-java72-58-14-90-proto">3.1 后端 Java（72 个手写源文件 = 58 主 + 14 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java72-58-14-90-proto" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>端口</th>
+<th>已交付功能</th>
+<th>主要入口</th>
+<th>测试</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>gateway-service</code></td>
+<td>8080</td>
+<td>统一入口路由（<code>/api/{session,sense,nlp,body}/**</code>）、JWT 校验、<strong>网关注入 <code>X-Tenant-Id</code></strong>、跨租户访问防护、统一错误响应模型</td>
+<td><code>GatewayApplication</code> · 路由见 <code>application.yml</code></td>
+<td>2</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>session-manager</code></td>
+<td>8081</td>
+<td>会话 CRUD、<strong>VS1 追问闭环</strong>（session → intent → 本地检索 → 模板回答）、Redis 消息存储、Kafka 事件、<strong>HTTP/1.1 出站客户端 + 优雅降级</strong></td>
+<td><code>SessionController</code> · <code>OutboundHttp</code></td>
+<td>10</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>sense-service</code></td>
+<td>8082</td>
+<td>五感渠道（Touch 实装 + Visual/Nose/Audio/Taste 保留位）、R0 规则调度、R1 指令处理、渠道健康监控与自动隔离、指数退避重试 + 死信、质检暂存（MinIO/本地双后端）+ 批量回滚、<code>SenseAdminController</code> 管理端点</td>
+<td><code>SenseChannel</code> · <code>ChannelRegistry</code> · <code>R0Scheduler</code> · <code>R1DynamicHandler</code> · <code>ChannelHealthMonitor</code> · <code>StagingStore</code></td>
+<td>48</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>body-service</code></td>
+<td>8083</td>
+<td>躯体侧基础服务（知识侧为 Phase 3 预留）</td>
+<td>—</td>
+<td>1</td>
+<td>✅ 基础</td>
+</tr>
+<tr>
+<td><code>proto-contracts</code></td>
+<td>—</td>
+<td>6 个 proto（session/sensor/brain/limb/body/common）→ <strong>90 个生成源文件已入库</strong>，默认生命周期不再调 protoc</td>
+<td><code>proto/</code> + <code>proto-contracts</code></td>
+<td>—</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<h3 id="32-pythonservicespythonnlp-service7-py-12">3.2 Python（<code>services/python/nlp-service</code>，7 个业务 py + 12 个生成文件）<a class="headerlink" href="#32-pythonservicespythonnlp-service7-py-12" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>功能</th>
+<th>文件</th>
+<th>指标</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>意图规则引擎（12 场景）</td>
+<td><code>app/intent/rules.py</code></td>
+<td>覆盖 12 场景（要求 ≥10）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>L0 轻量分类器</td>
+<td><code>app/intent/l0_model.py</code></td>
+<td>留出集准确率 <strong>90.0%</strong>（要求 ≥85%）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>规则→L0 级联</td>
+<td><code>app/intent/cascade.py</code></td>
+<td>P99 <strong>0.052 ms</strong>（要求 &lt;50 ms）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>OCR 服务</td>
+<td><code>app/ocr.py</code></td>
+<td>引擎懒初始化；无引擎时 <code>available=false</code></td>
+<td>⚠️ 待装引擎</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33-webwork-platformvue-3-vite-ts-element-plus8-vue-8-ts">3.3 前端（<code>web/work-platform</code>，Vue 3 + Vite + TS + Element Plus，8 vue + 8 ts）<a class="headerlink" href="#33-webwork-platformvue-3-vite-ts-element-plus8-vue-8-ts" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>功能</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工作平台骨架：路由 / Pinia / <code>PlatformLayout</code> / 全局搜索 / 通知中心 / 偏好持久化</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>总览驾驶舱：生命群落并发拓扑、模型调用趋势、运行时拓扑、优化建议<strong>真实执行回路</strong></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>任务（创建/重试/归档/排序）与对话工作区（产物/文件/diff/预览）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>生命体征、器官报告、大脑追踪、感官下钻、进化趋势</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>多 Agent 总线拓扑（模式卡 / 消息轨 / 工件堆叠 / 闸门）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>自动化 cron 校验、用例编排、L3/L4 审批流展示</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>观测区</strong>：中间件监控（真实 TCP 探针 + 单卡/一键串行启停）、链路追踪（真实 Jaeger）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>数据源降级可见化</strong>：<code>API · 降级 N</code> 徽标 + 横幅 + 逐模块提示</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>路由动态 <code>import()</code> 懒加载</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>ModuleView.vue</code> 拆分、Element Plus 按需引入</td>
+<td>⏸ 待视觉回归基线</td>
+</tr>
+</tbody>
+</table>
+<h3 id="34-ops-bffservicesnodewp-bff-node-8090">3.4 Ops BFF（<code>services/node/wp-bff</code>，零依赖 Node，端口 8090）<a class="headerlink" href="#34-ops-bffservicesnodewp-bff-node-8090" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>功能</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/wp/middleware</code> —— 8 个中间件真实 TCP 探针（状态/时延/指标）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>POST /api/wp/middleware/:key/start\|stop</code> —— 真实 <code>docker compose up -d / stop</code>，8 键白名单 + 固定命令形状 + 审计日志</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>GET /api/wp/tracing</code> —— 真实 Jaeger 数据（服务清单 + 采样口径 <code>sample_size/sample_limit/p99_basis</code>）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>GET /api/wp/overview</code> —— 只聚合<strong>有真实来源</strong>的域，未实现域进 <code>gaps</code>（不静默填充）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>GET /api/wp/healthz</code> —— 只读自检（令牌来源、来源白名单、键清单）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>控制面鉴权</strong>：来源检查 + <code>X-WP-Control-Token</code>（<code>timingSafeEqual</code>）；无鉴权后门</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>回归测试 <code>node --test</code></td>
+<td>✅ 14 项</td>
+</tr>
+</tbody>
+</table>
+<h3 id="35">3.5 基础设施与工具链<a class="headerlink" href="#35" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docker-compose.yml</code></td>
+<td>8 个中间件：redis / postgres / qdrant / nats / nacos / minio / jaeger / kafka（+ 5 个数据卷）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><code>scripts/</code></td>
+<td><code>mvn-dev.sh</code>（绕过损坏的 <code>mvn.cmd</code>）、<code>contract-check.py</code>、<code>healthcheck.sh</code>、<code>start.sh</code>、<code>md2html-report.py</code>、<code>java-doc-coverage.py</code>、<code>proto-gen.sh</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>CI（<code>.gitlab-ci.yml</code>）</td>
+<td><code>java-test</code> / <code>frontend-build</code> / <code>contract-check</code> / <code>python-test</code> / <code>wp-bff-test</code> / <code>docker-smoke</code>（后者 <code>allow_failure</code>，需 dind runner）</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_4">四、测试与验证基线<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<p><strong>口径：2026-09-16 合并三分支后的实测值</strong>（历史归档中的 54 / 73 项是当时口径）</p>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java</td>
+<td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh clean package</code></td>
+<td><strong>61 测试 / 0 失败</strong>（gateway 2 · session-manager 10 · sense-service 48 · body-service 1）</td>
+</tr>
+<tr>
+<td>Python</td>
+<td><code>../venv/Scripts/python.exe -m pytest</code>（nlp-service 下）</td>
+<td><strong>19 通过</strong>（意图 15 + OCR 4）</td>
+</tr>
+<tr>
+<td>契约（跨服务）</td>
+<td><code>python scripts/contract-check.py</code></td>
+<td><strong>0 FAIL</strong></td>
+</tr>
+<tr>
+<td>契约（工作平台）</td>
+<td><code>python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml</code></td>
+<td>37 端点，implemented 6 / planned 31，<strong>0 FAIL</strong></td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><code>cd services/node/wp-bff &amp;&amp; node --test</code></td>
+<td><strong>14 通过</strong></td>
+</tr>
+<tr>
+<td>前端</td>
+<td><code>cd web/work-platform &amp;&amp; npm run typecheck &amp;&amp; npm run build</code></td>
+<td>通过</td>
+</tr>
+<tr>
+<td>中间件/链路</td>
+<td><code>docker compose config</code> · <code>./scripts/healthcheck.sh</code></td>
+<td>通过（2026-09-13：16/16 OK）</td>
+</tr>
+<tr>
+<td>文档覆盖率</td>
+<td><code>python scripts/java-doc-coverage.py</code></td>
+<td>72/72 业务源文件已登记</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>注意</strong>：<code>mvn</code> 直接调用在本机会卡死（<code>mvn.cmd</code> 损坏 + protobuf 插件清理目录阻塞），
+必须走 <code>scripts/mvn-dev.sh</code>。生成 HTML 镜像必须用 <strong>anaconda Python</strong>（<code>E:/software/anaconda3/python.exe</code>），
+托管 Python 没有 <code>markdown</code> 包。</p>
+</blockquote>
+<hr />
+<h2 id="_5">五、分支与远端拓扑<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<h3 id="51">5.1 分支<a class="headerlink" href="#51" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>分支</th>
+<th>角色</th>
+<th>当前</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>codex/main</code></td>
+<td>本机（另一台开发机）主开发分支，2026-09-16 由 <code>codex/phase0-1-hardening</code> 更名</td>
+<td><code>ab2ad29</code></td>
+</tr>
+<tr>
+<td><code>dev</code></td>
+<td>另一台远端开发机的工作分支</td>
+<td><code>ab2ad29</code></td>
+</tr>
+<tr>
+<td><code>workbuddy/main</code></td>
+<td>WorkBuddy 侧主开发线（Phase 0/1/2 + 工作平台 + Java 服务文档集）</td>
+<td><code>ab2ad29</code></td>
+</tr>
+<tr>
+<td><code>main</code></td>
+<td>仓库初始提交（仅含一个 <code>README</code>），<strong>历史遗留、不维护</strong></td>
+<td><code>a305c5e</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>约定</strong>：三支保持内容一致 —— 任一分支的改动，收口时 <code>git merge --ff-only</code> 同步到另两支；</p>
+<pre><code>git push origin codex/main
+git push origin codex/main:dev
+git push origin codex/main:workbuddy/main
+</code></pre>
+<p>跨分支吸收按「<strong>时间 + 语义</strong>逐项合并」，<strong>禁止整文件覆盖</strong>。</p>
+<h3 id="52">5.2 远端地址（<strong>两台机器不同，别照抄</strong>）<a class="headerlink" href="#52" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>机器</th>
+<th>remote</th>
+<th>fetch</th>
+<th>push</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>另一台开发机（README §8.4.1 记录）</td>
+<td><code>origin</code></td>
+<td>本地镜像仓库 <code>&lt;repo&gt;\ai-agent</code>（快）</td>
+<td><code>git@github.com:kennkc/ai-agent.git</code>（直达）</td>
+</tr>
+<tr>
+<td><strong>本机（WorkBuddy 侧）</strong></td>
+<td><code>origin</code></td>
+<td><code>git@github.com:kennkc/ai-agent.git</code>（SSH 直达）</td>
+<td>同左</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>本机原走 HTTPS，443 曾长期被阻断 → 现统一走 <strong>SSH(22)</strong>。
+<code>README.md</code> §8.4.1 描述的是<strong>另一台开发机</strong>的中转拓扑，本机是直连，两者不要混用。</p>
+</blockquote>
+<h3 id="53">5.3 变更前置约定（强制）<a class="headerlink" href="#53" title="Permanent link">&para;</a></h3>
+<p>任何仓库内容变更之前，先执行 <strong><code>README.md</code> §8.0</strong>：<code>git fetch</code> → 判落后/领先 → <strong>解读</strong>对方改动
+→ 再决定集成 → 才开工。已登记为技能 <code>git-sync-before-change</code>
+（WorkBuddy 侧 <code>~/.workbuddy/skills/</code>、Codex 侧 <code>~/.agents/skills/</code>，两份必须保持一致）。</p>
+<hr />
+<h2 id="_6">六、剩余项与已知缺口<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<h3 id="61">6.1 阻塞 / 待验收<a class="headerlink" href="#61" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>原因</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>OCR 端到端验收</strong></td>
+<td>需安装 PaddleOCR 或 Tesseract</td>
+<td>视觉渠道维持 <code>DEGRADED</code>，<code>available=false</code></td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>BFF 契约 31 个 planned 端点</strong></td>
+<td>仅实现最小 Ops 子集</td>
+<td>未实现域回落 Mock（<strong>已非静默</strong>，有降级提示）</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>ModuleView.vue</code> 拆分 / Element Plus 按需引入</td>
+<td>需先建视觉回归基线</td>
+<td>首屏包体偏大（element chunk 952 kB）</td>
+</tr>
+<tr>
+<td>4</td>
+<td>Phase 3+</td>
+<td>团队冻结，固化 Phase 0-2</td>
+<td>知识库与语义检索未打通</td>
+</tr>
+</tbody>
+</table>
+<h3 id="62-docsjava-services07-md">6.2 已登记的工程缺口（源自 <code>docs/java-services/07-运行时配置与横切约定.md</code>）<a class="headerlink" href="#62-docsjava-services07-md" title="Permanent link">&para;</a></h3>
+<ul>
+<li>wp-bff <strong>无网关路由</strong>（<code>/api/wp/**</code> 生产路径缺失，前端仅靠 Vite 代理）</li>
+<li>body-service <strong>缺 OTLP 配置</strong>（不在 Jaeger 链路），也未接入统一错误码体系</li>
+<li><code>ErrorCode</code> 在 session-manager 与 sense-service <strong>各有一份</strong>，需人工同步</li>
+<li>租户头 <code>defaultValue="default"</code> → 绕过网关直连时<strong>静默落入 default 租户</strong></li>
+<li>HTTP 端口<strong>写死</strong>，未做环境变量占位</li>
+<li><code>TextExtractorTest</code> 有用例名拼写错误 <code>decodesGbkWitoutHeader</code>（未擅改测试代码）</li>
+</ul>
+<hr />
+<h2 id="docs">七、docs 归档索引<a class="headerlink" href="#docs" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>用途</th>
+<th>维护时机</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs/README.md</code></td>
+<td>docs 目录地图与阅读顺序</td>
+<td>新增目录时</td>
+</tr>
+<tr>
+<td><code>docs/项目进度总览.md</code></td>
+<td><strong>本文件</strong> — 当前进度、功能矩阵、测试基线、分支拓扑、剩余项</td>
+<td>每次收口</td>
+</tr>
+<tr>
+<td><code>docs/功能开发流程.md</code></td>
+<td>每个功能的开发流程与验收标准</td>
+<td>流程或功能变化时</td>
+</tr>
+<tr>
+<td><code>docs/项目进度日志报告/</code></td>
+<td>分阶段三件套（阶段性报告 / 开发执行日志 / 测试验收报告，各含 HTML）</td>
+<td>每阶段收口</td>
+</tr>
+<tr>
+<td><code>docs/demo/</code></td>
+<td>各阶段端到端演示脚本（怎么跑起来看到效果）</td>
+<td>每阶段收口</td>
+</tr>
+<tr>
+<td><code>docs/java-services/</code></td>
+<td>Java 逐文件说明（7 篇，覆盖 72 个源文件 + 90 个生成文件）</td>
+<td>增删 Java 文件后</td>
+</tr>
+<tr>
+<td><code>docs/优化日志/</code></td>
+<td>每轮工程化加固的过程与结论</td>
+<td>每轮加固后</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

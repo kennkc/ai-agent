@@ -433,4 +433,5 @@ git push origin codex/main:workbuddy/main
 - [ ] Phase 4：LLM Gateway 与 M1 问答 MVP
 - [ ] Phase 5-8：工具、编排、免疫、自进化
 
-详细进度见：`PROGRESS.md`
+详细进度见：`PROGRESS.md` · 当前状态总览与功能矩阵见 `docs/项目进度总览.md` ·
+各功能开发流程见 `docs/功能开发流程.md` · 文档地图见 `docs/README.md`
