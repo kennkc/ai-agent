@@ -138,7 +138,7 @@ const DEFAULT_PORT = Number(process.env.WP_BFF_PORT || 8090)
 // key 白名单：key 即 docker-compose.yml 服务名，禁止其余任何值
 const MIDDLEWARE = {
   redis: { name: 'Redis', role: '会话热存储 · L1 缓存', port: 6379 },
-  postgres: { name: 'PostgreSQL', role: '关系库 · pgvector 冷存储', port: 5432 },
+  postgres: { name: 'PostgreSQL', role: '关系库 · 元数据真相源', port: 5432 },
   qdrant: { name: 'Qdrant', role: '向量库 · 温存储检索', port: 6333, console_url: 'http://127.0.0.1:6333/dashboard', console_label: '控制台' },
   nats: { name: 'NATS', role: '神经总线 · 请求/回应', port: 4222 },
   nacos: { name: 'Nacos', role: '服务注册与发现', port: 8848, console_url: 'http://127.0.0.1:8848/nacos', console_label: '控制台' },

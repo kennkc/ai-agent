@@ -7,7 +7,7 @@ package com.agent.body.store;
  * <ul>
  *   <li>高热度 → {@link Tier#HOT}：Redis（TTL 1h，缓存/高频）</li>
  *   <li>中热度 → {@link Tier#WARM}：Qdrant（向量主库，温存储）</li>
- *   <li>冷数据 → {@link Tier#COLD}：PG + pgvector（全量归档）</li>
+ *   <li>冷数据 → {@link Tier#COLD}：PostgreSQL（关系元数据全量归档 · 真相源；向量由 Qdrant 独占，冷层不存向量）</li>
  * </ul>
  *
  * <p>分层规则**可配置**（验收要求"分层规则可配置"）：热/温阈值来自

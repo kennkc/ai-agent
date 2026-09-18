@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:55 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-18 21:55 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -145,6 +145,10 @@
 <li><a href="#45">4.5 验收口径待对齐</a></li>
 <li><a href="#46-2026-09-18">4.6 设计选型 ↔ 实现口径差异（2026-09-18 审核新登记）</a></li>
 <li><a href="#47-wp-bff-2026-09-18">4.7 wp-bff 写路径一度缺失鉴权（2026-09-18 审核发现并已闭合 ✅）</a></li>
+<li><a href="#48-500-4042026-09-18">4.8 未映射路由返回 500 而非 404（2026-09-18 前端联通验证发现并已闭合 ✅）</a></li>
+<li><a href="#49-mock-api-2026-09-18">4.9 前端 Mock 与真实 API 的字段/文案漂移（2026-09-18 发现并已闭合 ✅）</a></li>
+<li><a href="#410-2026-09-18">4.10 前端对「未实现端点」的降级语义（2026-09-18 发现并已改造 ✅）</a></li>
+<li><a href="#411-2026-09-18">4.11 开发代理目标硬编码（2026-09-18 配置对齐发现并已修复 ✅）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -541,6 +545,13 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <p><strong>共同点</strong>：两处都是"设计写得比实现更先进"。本仓库的红线是<strong>不伪造能力</strong>——
 实现没做就写清楚没做，而不是把设计文档的选型当成已交付结果写进报告。</p>
 </blockquote>
+<p><strong>2026-09-18 补充（实现侧自述已对齐，设计文档原文仍待确认）</strong>：为免「读代码的人被注释误导」，
+以下<strong>实现侧自述</strong>已统一改为与实况一致 —— <code>TierRouter</code> 冷层注释、<code>wp-bff</code> 中间件 <code>role</code> 文案、
+<code>README.md</code> 数据层与路线图、<code>infra/README.md</code> 组件表，均写明
+「PostgreSQL 关系元数据真相源 / 镜像为 pgvector 变体但<strong>未启用向量列</strong> / 向量由 Qdrant 独占」。
+<code>docker-compose.yml</code> 保留 <code>pgvector/pgvector:pg16</code> 镜像（不影响运行，为 Phase 4+ 留选择余地）。
+<strong>设计文档原文（<code>Phase3-需求设计文档</code> §R3-01、<code>Phase3-开发设计文档</code> §2/§3.1、§3.1 缓存一行）尚未改动</strong>——
+属需求/设计口径变更，需用户确认后落笔（见 §6 待办 14）。</p>
 <h3 id="47-wp-bff-2026-09-18">4.7 wp-bff 写路径一度缺失鉴权（2026-09-18 审核<strong>发现并已闭合</strong> ✅）<a class="headerlink" href="#47-wp-bff-2026-09-18" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -575,6 +586,150 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <blockquote>
 <p>台账记这一条，不是因为存在未偿债务，而是因为<strong>它的成因（"路径级安全描述"与"方法级安全实现"错位）
 会在下次新增写端点时重演</strong>。判断口径已写入 <code>docs/功能开发流程.md</code> §3.8。</p>
+</blockquote>
+<h3 id="48-500-4042026-09-18">4.8 未映射路由返回 500 而非 404（2026-09-18 前端联通验证<strong>发现并已闭合</strong> ✅）<a class="headerlink" href="#48-500-4042026-09-18" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>现象</td>
+<td>请求任何<strong>未实现</strong>的路由（如 <code>GET /api/body/definitely-not-a-route</code>）返回 <code>500 AGENT_INTERNAL_ERROR</code>，而非 <code>404</code>；方法不匹配、媒体类型不支持的场景同样落入兜底 500</td>
+</tr>
+<tr>
+<td>根因</td>
+<td>三个 Java 服务（<code>body-service</code> / <code>sense-service</code> / <code>session-manager</code>）的 <code>GlobalExceptionHandler</code> 只有「业务异常 / 参数异常 / 兜底 Exception」三档，Spring 路由层抛出的 <code>NoResourceFoundException</code> / <code>NoHandlerFoundException</code> / <code>HttpRequestMethodNotSupportedException</code> / <code>HttpMediaTypeNotSupportedException</code> 无对应处理器，全部落进兜底 <code>Exception</code> 分支</td>
+</tr>
+<tr>
+<td>为什么算一致性问题</td>
+<td>前端与契约校验依赖 <code>404</code> 判定「已登记但未实现」。返回 500 会让「端点不存在」与「服务内部故障」不可区分，降级路径无法据此决策</td>
+</tr>
+<tr>
+<td>影响</td>
+<td>误导排障方向（把拼错的 URL 当成服务故障）；正常链路不受影响</td>
+</tr>
+<tr>
+<td>修复</td>
+<td>① 三服务 <code>GlobalExceptionHandler</code> 新增 404/405/415 映射；② <code>ErrorCode</code> 补 <code>AGENT_METHOD_NOT_ALLOWED</code>；③ 三服务各补 <code>GlobalExceptionHandlerTest</code>（body 6 项 / sense 5 项 / session 5 项）</td>
+</tr>
+<tr>
+<td>现状</td>
+<td>✅ <strong>已闭合</strong>（Java <code>mvn test</code> 130 项全绿；实测未映射路由 → 404）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="49-mock-api-2026-09-18">4.9 前端 Mock 与真实 API 的字段/文案漂移（2026-09-18 <strong>发现并已闭合</strong> ✅）<a class="headerlink" href="#49-mock-api-2026-09-18" title="Permanent link">&para;</a></h3>
+<p>「Mock 先行」策略下 Mock 是<strong>视图开发期的接口契约实现</strong>，一旦真实 API 就位，Mock 必须反向对齐，
+否则切到 <code>api</code> 后同一视图会出现「字段对得上、文案/语义对不上」的隐性错位。本轮切换 <code>api</code> 前逐字段核对，发现 4 类漂移：</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>漂移项</th>
+<th>Mock 原值</th>
+<th>真实 API 值</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>嵌入后端标识</td>
+<td><code>bge-m3</code> / 1024 维 / <code>degraded=false</code></td>
+<td><code>hash-ngram-768</code> / 768 维 / <code>degraded=true</code>（DEBT-010 诚实上报）</td>
+<td>✅ 已改 Mock 对齐真实值</td>
+</tr>
+<tr>
+<td>2</td>
+<td>重排后端标识</td>
+<td><code>bge-reranker</code></td>
+<td><code>lexical-coverage</code>（DEBT-011）</td>
+<td>✅ 已改 Mock</td>
+</tr>
+<tr>
+<td>3</td>
+<td>中间件 up/down 状态</td>
+<td>jaeger/kafka <strong>down</strong>、nats/nacos/minio <strong>up</strong>（写反）</td>
+<td>jaeger/kafka <strong>up</strong>、nats/nacos/minio <strong>down</strong></td>
+<td>✅ 已改 Mock；<code>summary</code> 静态字面量 <code>up:6/down:2</code> 同步修为 <code>5/3</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>PostgreSQL 角色文案</td>
+<td>wp-bff 写 <code>关系库 · pgvector 冷存储</code>（与 §4.6 同源失真）</td>
+<td>实况为关系元数据真相源</td>
+<td>✅ 已改 <code>wp-bff/server.js</code>，与 Mock 一致</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>同类隐患</strong>：<code>KnowledgeStats.retrieval</code> 的 <code>documents/chunks/ingest_failures/sample_limit</code>
+四个字段<strong>真实 API 已返回、Mock 与 <code>types/index.ts</code> 均缺失</strong> —— 属 TypeScript 类型未覆盖真实响应，
+已一并补齐。<strong>教训</strong>：Mock 与真实响应要做<strong>双向</strong>核对（不是只查「Mock 有的真实有没有」），
+否则「真实多出来的字段」会被静默丢弃。</p>
+</blockquote>
+<h3 id="410-2026-09-18">4.10 前端对「未实现端点」的降级语义（2026-09-18 <strong>发现并已改造</strong> ✅）<a class="headerlink" href="#410-2026-09-18" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>现象</td>
+<td><code>api</code> 模式下，契约标 <code>planned</code> 的端点（<code>/tasks</code>、<code>/chat</code>、<code>/results</code>、写路径等）在前端无兜底：要么整页报错，要么<strong>静默返回 Mock 数据并当作真实结果呈现</strong></td>
+</tr>
+<tr>
+<td>为什么算一致性问题</td>
+<td>本仓库红线是「<strong>不伪造能力</strong>」。静默伪造比报错更危险——用户会以为功能已上线</td>
+</tr>
+<tr>
+<td>改造</td>
+<td>① 新增 <code>plannedEndpointError(scope, method, path, cause)</code>：登记降级 + 抛说明性错误；② <code>getTasks/getChat/getResults/getSearch</code> 改用 <code>safe()</code> 回落<strong>演示数据</strong>并显式登记降级（页面标注「演示数据」）；③ 写操作（<code>ask/createTask/retryTask/installSkill/.../updatePreferences</code>）一律走 <code>plannedEndpointError</code>，<strong>不伪造成功</strong>；④ <code>TasksView.retryTask</code> / <code>ModuleView.retryAutomation</code> / <code>OverviewView.applySuggestion</code> 补 <code>try/catch</code>，失败不改本地状态</td>
+</tr>
+<tr>
+<td>现状</td>
+<td>✅ 已落地（<code>vue-tsc --noEmit</code> + <code>vite build</code> 通过）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="411-2026-09-18">4.11 开发代理目标硬编码（2026-09-18 配置对齐<strong>发现并已修复</strong> ✅）<a class="headerlink" href="#411-2026-09-18" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>现象</td>
+<td><code>web/work-platform/vite.config.ts</code> 的 <code>/api/wp</code> 与 <code>/api</code> 代理目标（<code>http://127.0.0.1:8090</code> / <code>:8080</code>）与开发端口 3001 均为硬编码字面量</td>
+</tr>
+<tr>
+<td>影响</td>
+<td>换机、改端口、容器化运行时要改源码；与「配置与代码分离」口径不一致</td>
+</tr>
+<tr>
+<td>修复</td>
+<td>改为可由环境变量覆盖：<code>WP_BFF_URL</code> / <code>WP_GATEWAY_URL</code> / <code>WP_DEV_PORT</code>，默认值不变（行为零变化）</td>
+</tr>
+<tr>
+<td>现状</td>
+<td>✅ 已修复（构建通过，默认值与原硬编码一致）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>另：<code>.env.example</code> 由 <code>VITE_DATA_SOURCE=mock</code> 改为 <code>api</code>，并补注释说明取值语义与降级行为 ——
+对齐 <code>Phase3-需求设计文档</code> §8 R-C09「阶段完成时必须切换真实 API 数据」。
+本地 <code>.env</code>（不入库）本就为 <code>api</code>，故<strong>实际运行行为未变</strong>，仅影响新克隆者的默认值。</p>
 </blockquote>
 <hr />
 <h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>
@@ -673,6 +828,24 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>13</td>
 <td>wp-bff 的安全边界曾以<strong>路径</strong>为单位描述（"只读端点含 <code>/knowledge</code>"），而实现按<strong>方法</strong>判定 → 下次给同一路径加写方法时会再次误判为免鉴权（§4.7 即此成因）</td>
 <td>已改为按方法描述。<strong>机制化建议</strong>：把「需要控制令牌的方法集合」提为 <code>CONTROL_REQUIRED</code> 常量，并加一条测试断言"所有非 GET 的业务方法都在该集合内"，从结构上杜绝重演</td>
+<td>下轮加固</td>
+</tr>
+<tr>
+<td>14</td>
+<td><strong>设计文档 pgvector / 语义缓存口径待落笔</strong>（§4.6）：实现侧自述已对齐，但 <code>Phase3-需求设计文档</code> §R3-01 与 <code>Phase3-开发设计文档</code> §2/§3.1 的原文仍写「PG+pgvector」「Redis 语义缓存（向量相似 0.95）」</td>
+<td>二选一：① 改设计文档对齐实况（<strong>推荐</strong>，Qdrant 已承担向量主库，PG 再存向量属冗余；精确指纹缓存实测命中 45% &gt; 30% 验收）；② Phase 4+ 补 pgvector 列 / 语义缓存路径。<strong>需用户确认后执行</strong></td>
+<td>用户确认</td>
+</tr>
+<tr>
+<td>15</td>
+<td>前端 <code>VITE_TENANT_ID</code> 默认值 <code>default</code> 与 wp-bff 的 <code>X-Tenant-Id</code> 透传口径未做联动校验（多租户切换时前端需手工改 <code>.env</code>）</td>
+<td>评估是否改为运行时租户选择器（<code>/api/wp/*</code> 已支持 <code>X-Tenant-Id</code> 头透传，BFF 侧无需改动）</td>
+<td>规划侧确认</td>
+</tr>
+<tr>
+<td>16</td>
+<td>Mock ↔ 真实响应字段一致性<strong>未做成自动校验</strong>（§4.9 的 4 类漂移靠人工逐字段核对才发现）</td>
+<td>建议加一条脚本：抓取真实 <code>api</code> 响应 JSON Schema，与 <code>mock.ts</code> 样例做<strong>双向</strong>字段比对，纳入 CI</td>
 <td>下轮加固</td>
 </tr>
 </tbody>

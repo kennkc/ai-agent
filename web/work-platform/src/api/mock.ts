@@ -462,16 +462,16 @@ const middlewareDefaultMetrics: Record<string, Array<{ label: string; value: str
 const middlewareRuntime: MiddlewareOverview = {
   enabled: true,
   checked_at: '21:29:40',
-  summary: { total: 8, up: 6, down: 2 },
+  summary: { total: 8, up: 5, down: 3 },
   items: [
     { key: 'redis', name: 'Redis', role: '会话热存储 · L1 缓存', port: 6379, state: 'up', metrics: [ { label: '连接数', value: '24' }, { label: '内存', value: '38 MB' }, { label: '命中率', value: '97.2%' } ], last_check: '5 秒前' },
-    { key: 'postgres', name: 'PostgreSQL', role: '关系库 · pgvector 冷存储', port: 5432, state: 'up', metrics: [ { label: '活跃连接', value: '9' }, { label: '库大小', value: '212 MB' }, { label: '慢查询', value: '0' } ], last_check: '5 秒前' },
+    { key: 'postgres', name: 'PostgreSQL', role: '关系库 · 元数据真相源', port: 5432, state: 'up', metrics: [ { label: '活跃连接', value: '9' }, { label: '库大小', value: '212 MB' }, { label: '慢查询', value: '0' } ], last_check: '5 秒前' },
     { key: 'qdrant', name: 'Qdrant', role: '向量库 · 温存储检索', port: 6333, state: 'up', console_url: 'http://127.0.0.1:6333/dashboard', console_label: '控制台', metrics: [ { label: '集合', value: '3' }, { label: '向量数', value: '18.2K' }, { label: '检索 P99', value: '42ms' } ], last_check: '6 秒前' },
-    { key: 'nats', name: 'NATS', role: '神经总线 · 请求/回应', port: 4222, state: 'up', metrics: [ { label: '连接', value: '4' }, { label: '主题', value: '11' }, { label: '消息/分', value: '128' } ], last_check: '5 秒前' },
-    { key: 'nacos', name: 'Nacos', role: '服务注册与发现', port: 8848, state: 'up', console_url: 'http://127.0.0.1:8848/nacos', console_label: '控制台', metrics: [ { label: '注册服务', value: '4' }, { label: '健康实例', value: '4' }, { label: '配置数', value: '6' } ], last_check: '6 秒前' },
-    { key: 'minio', name: 'MinIO', role: '对象存储 · 采集暂存区', port: 9000, state: 'up', console_url: 'http://127.0.0.1:9001', console_label: '控制台', metrics: [ { label: '桶', value: '2' }, { label: '对象', value: '348' }, { label: '占用', value: '96 MB' } ], last_check: '7 秒前' },
-    { key: 'jaeger', name: 'Jaeger', role: '分布式链路追踪', port: 16686, state: 'down', console_url: 'http://127.0.0.1:16686', console_label: 'Jaeger UI', metrics: [ { label: '服务', value: '4' }, { label: 'Span/分', value: '86' }, { label: '保留', value: '72h' } ], last_check: '6 秒前' },
-    { key: 'kafka', name: 'Kafka', role: '事件流 · 发布订阅', port: 9092, state: 'down', metrics: [ { label: '主题', value: '5' }, { label: '分区', value: '5' }, { label: 'Lag', value: '0' } ], last_check: '7 秒前' },
+    { key: 'nats', name: 'NATS', role: '神经总线 · 请求/回应', port: 4222, state: 'down', metrics: [ { label: '连接', value: '4' }, { label: '主题', value: '11' }, { label: '消息/分', value: '128' } ], last_check: '5 秒前' },
+    { key: 'nacos', name: 'Nacos', role: '服务注册与发现', port: 8848, state: 'down', console_url: 'http://127.0.0.1:8848/nacos', console_label: '控制台', metrics: [ { label: '注册服务', value: '4' }, { label: '健康实例', value: '4' }, { label: '配置数', value: '6' } ], last_check: '6 秒前' },
+    { key: 'minio', name: 'MinIO', role: '对象存储 · 采集暂存区', port: 9000, state: 'down', console_url: 'http://127.0.0.1:9001', console_label: '控制台', metrics: [ { label: '桶', value: '2' }, { label: '对象', value: '348' }, { label: '占用', value: '96 MB' } ], last_check: '7 秒前' },
+    { key: 'jaeger', name: 'Jaeger', role: '分布式链路追踪', port: 16686, state: 'up', console_url: 'http://127.0.0.1:16686', console_label: 'Jaeger UI', metrics: [ { label: '服务', value: '4' }, { label: 'Span/分', value: '86' }, { label: '保留', value: '72h' } ], last_check: '6 秒前' },
+    { key: 'kafka', name: 'Kafka', role: '事件流 · 发布订阅', port: 9092, state: 'up', metrics: [ { label: '主题', value: '5' }, { label: '分区', value: '5' }, { label: 'Lag', value: '0' } ], last_check: '7 秒前' },
   ],
 }
 

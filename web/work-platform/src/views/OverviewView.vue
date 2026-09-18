@@ -454,7 +454,14 @@ function pretty(value: unknown) {
 }
 
 async function applySuggestion(item: OptimizationSuggestion) {
-  const execution = await dataProvider.applySuggestion(item)
+  let execution: SuggestionExecution
+  try {
+    execution = await dataProvider.applySuggestion(item)
+  } catch (error) {
+    // `/suggestions/{id}/apply` 在契约中仍为 planned：失败不进队列，避免"看起来已执行"
+    ElMessage.error((error as Error)?.message || '下发优化动作失败，请稍后再试')
+    return
+  }
   executions.value = [execution, ...executions.value]
   ElMessage.success(`${item.title} 已进入优化执行队列`)
   startExecLoop()

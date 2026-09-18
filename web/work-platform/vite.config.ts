@@ -28,10 +28,11 @@ export default defineConfig({
     // host: true => 监听 ::（双栈），localhost 的 IPv6 (::1) 与 IPv4 (127.0.0.1) 均可达
     host: true,
     allowedHosts: true,
-    port: 3001,
+    // 开发代理目标可覆盖：换机 / 改端口时无需改代码（默认对齐 docker-compose 与本地脚本端口）
+    port: Number(process.env.WP_DEV_PORT || 3001),
     proxy: {
       '/api/wp': {
-        target: 'http://127.0.0.1:8090',
+        target: process.env.WP_BFF_URL || 'http://127.0.0.1:8090',
         changeOrigin: true,
         configure: proxy => {
           proxy.on('proxyReq', proxyReq => {
@@ -44,7 +45,7 @@ export default defineConfig({
         },
       },
       '/api': {
-        target: 'http://127.0.0.1:8080',
+        target: process.env.WP_GATEWAY_URL || 'http://127.0.0.1:8080',
         changeOrigin: true,
       },
     },

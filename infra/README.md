@@ -9,7 +9,7 @@ Agent-Lifeform 基础设施配置目录。
 | 组件 | 容器名 | 端口 | 用途 | 启用阶段 |
 |------|--------|:---:|------|:---:|
 | Redis | lifeform-redis | 6379 | 会话缓存 / 热存储 | P0 |
-| PostgreSQL (pgvector) | lifeform-postgres | 5432 | 冷存储 / 关系数据 | P0 |
+| PostgreSQL (pgvector 镜像) | lifeform-postgres | 5432 | 冷存储 / 关系数据（当前仅关系表，未启用 pgvector 列） | P0 |
 | Qdrant | lifeform-qdrant | 6333/6334 | 向量检索（温存储） | P0（P3 启用） |
 | NATS | lifeform-nats | 4222/8222 | 消息总线（JetStream） | P0（P1 启用） |
 | Nacos | lifeform-nacos | 8848/9848 | 服务注册 / 配置中心 | P0 |

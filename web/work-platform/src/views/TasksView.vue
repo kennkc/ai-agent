@@ -137,7 +137,13 @@ function openTask(row: TaskItem) {
 }
 
 async function retryTask(row: TaskItem) {
-  await dataProvider.retryTask(row.task_id)
+  try {
+    await dataProvider.retryTask(row.task_id)
+  } catch (error) {
+    // API 模式下 `/tasks/{id}/retry` 仍为 planned 端点：如实报错，不改本地状态冒充成功
+    ElMessage.error((error as Error)?.message || '重试请求失败，请稍后再试')
+    return
+  }
   row.state = 'running'
   row.progress = 1
   row.updated_at = '刚刚'

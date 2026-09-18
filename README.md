@@ -45,7 +45,7 @@ Phase 2 感官回路（已落地）：
 | 前端路由 | Vue Router |
 | DAG 可视化 | 自研 SVG + CSS 拓扑（Vue Flow 待编排期引入） |
 | 实时通信 | 当前为 REST 轮询；WebSocket 推送为设计目标，代码尚未接入 |
-| 数据层 | PostgreSQL + pgvector、Qdrant、Redis、MinIO |
+| 数据层 | PostgreSQL（关系元数据真相源；镜像为 pgvector 变体但当前**未启用向量列**）、Qdrant（向量主库）、Redis、MinIO |
 | 消息总线 | NATS JetStream + Kafka |
 | 可观测性 | OpenTelemetry + Jaeger + Prometheus + Grafana |
 | 契约 | Protobuf/gRPC + OpenAPI |

@@ -51,6 +51,23 @@ const safe = async (request: () => Promise<any>, fallback: any, scope = 'unknown
   }
 }
 
+/**
+ * **写路径的未实现端点处理**（2026-09-18）。
+ *
+ * 契约里标 `x-wp-status: planned` 的端点（`/tasks`、`/skills/{id}/install` 等）BFF 尚未实现。
+ * API 模式下直接 `await api.post(...)` 会抛出 axios 原始错误（`Request failed with status code 404`），
+ * 既不登记降级、也无法让界面说清"到底是接口没实现还是服务挂了"。
+ *
+ * 这里统一处理：**登记降级 + 抛出说明性错误**。
+ * 关键约束：**绝不返回伪造的成功** —— 写操作没生效就必须让调用方看到失败。
+ */
+function plannedEndpointError(scope: string, method: string, path: string, cause?: unknown): Error {
+  const status = (cause as { response?: { status?: number } })?.response?.status
+  const reason = status ? `HTTP ${status}` : ((cause as Error)?.message || 'request failed')
+  reportDegrade(scope, `端点未实现（planned）：${method} ${path}（${reason}）`)
+  return new Error(`${method} ${path} 尚未实现（契约标记 planned），操作未生效`)
+}
+
 const mockWorkbench = {
   overview: {
     metrics,
@@ -94,6 +111,14 @@ const mockMiddlewareFallback = (): MiddlewareOverview => ({
 // —— 躯体视图不受全局 mock 开关限制：知识量/检索指标必须反映体层真实状态 ——
 // VITE_DATA_SOURCE=mock 或体层不可达时给出演示数据，但一律带 data_source='mock' 标注，
 // 且体层不可用（BFF 200 + available=false）时不伪造知识量，直接展示"不可用"。
+//
+// 字段口径对齐（2026-09-18 实测 `GET /api/wp/knowledge` 后校正）：
+//   1. `embedding` / `reranker` 必须与真实后端**同一套取值**——权重未装时真实返回
+//      `hash-ngram-768` / `lexical-coverage` 且 `degraded=true`；此前 Mock 写
+//      `bge-m3` / `dim 1024` / `degraded=false`，与同对象的 `vector_store.vector_size=768`
+//      **自相矛盾**（照 Mock 建集合会因维度冲突失败），且凭空声称"未降级"。
+//   2. `storage.rules`（TierRouter 阈值）与 `retrieval` 的
+//      `documents / chunks / ingest_failures / sample_limit` 真实返回均有，Mock 此前缺字段。
 function mockKnowledgeStats(): KnowledgeStats {
   return {
     available: true,
@@ -103,18 +128,20 @@ function mockKnowledgeStats(): KnowledgeStats {
     note: '检索 P99/命中率口径为「最近 500 次采样」，非全量历史',
     knowledge: { documents: 6, chunks: 24, metadata_backend: 'pg', vector_points: 24 },
     retrieval: {
+      documents: 6, chunks: 24, ingest_failures: 0,
       searches: 48, searches_with_result: 45, search_hit_rate: 0.9375,
       cache_hits: 21, cache_hit_rate: 0.4375, rerank_calls: 27, rerank_degraded: 2,
       latency_p50_ms: 38, latency_p95_ms: 126, latency_p99_ms: 208,
-      sample_size: 48, p99_basis: 'sampled_recent_searches',
+      sample_size: 48, sample_limit: 500, p99_basis: 'sampled_recent_searches',
     },
     storage: {
       hot: { tier: 'HOT', store: 'redis', available: true, detail: '缓存优先策略（R3-08）', hit_rate: 0.4375, hits: 21, misses: 27 },
       warm: { tier: 'WARM', store: 'qdrant', available: true, detail: '向量主库（R3-04/R3-05）', collection: 'lifeform_knowledge', vector_size: 768 },
       cold: { tier: 'COLD', store: 'postgres', available: true, detail: '元数据真相源', backend: 'pg' },
+      rules: { hot_threshold: 2, warm_threshold: 1 },
     },
-    embedding: { backend: 'bge-m3', dim: 1024, available: true, degraded: false },
-    reranker: { backend: 'bge-reranker', available: true, degraded: false },
+    embedding: { backend: 'hash-ngram-768', dim: 768, available: true, degraded: true },
+    reranker: { backend: 'lexical-coverage', available: true, degraded: true },
     vector_store: { provider: 'qdrant', collection: 'lifeform_knowledge', available: true, vector_size: 768 },
     data_source: 'mock',
   }
@@ -151,7 +178,6 @@ function mockKnowledgeSearch(query: string, topK: number): KnowledgeSearchResult
 
 export const dataProvider = {
   mode: source,
-
   async getOverview() {
     if (source === 'mock') return mockWorkbench.overview
     try {
@@ -173,29 +199,44 @@ export const dataProvider = {
     }
   },
 
+  /**
+   * 任务 / 会话 / 结果 / 搜索：契约中仍为 `planned`（BFF 未实现）。
+   * API 模式下**回落演示数据并登记降级**（与 getWorkbenchData 同口径）——
+   * 这样切到 api 不会白屏，且顶栏徽标会如实指出"该域仍是 Mock"。
+   */
   async getTasks() {
     if (source === 'mock') return tasks
-    return asArray(await api.get('/tasks'))
+    return safe(() => api.get('/tasks').then(asArray), tasks, 'tasks')
   },
 
   async getChat(taskId = 'T-1042') {
     if (source === 'mock') return chatMessages
-    return asArray(await api.get(`/chat/${taskId}`))
+    return safe(() => api.get(`/chat/${taskId}`).then(asArray), chatMessages, 'chat')
   },
 
   async getResults(taskId = 'T-1042') {
     if (source === 'mock') return resultArtifacts
-    return asArray(await api.get(`/results/${taskId}`))
+    return safe(() => api.get(`/results/${taskId}`).then(asArray), resultArtifacts, 'results')
   },
 
+  /**
+   * 追问：契约中 `/chat/{task_id}` 的 POST 仍为 `planned`。
+   * api 模式下**不回落演示答复**——一条编造的"回答"比报错更危险（会被当成真实模型输出）。
+   */
   async ask(question: string, taskId = 'T-1042') {
-    if (source === 'api') return unwrap(await api.post(`/chat/${taskId}`, { question }))
-    return {
-      answer: `已基于任务上下文完成追问分析。本次问题：${question}。结论已追加到结果工作区，原有产物保持不变。`,
-      citations: [
-        { title: '任务上下文 T-1042', source: 'session-manager' },
-        { title: '知识检索结果', source: 'body-service' },
-      ],
+    if (source !== 'api') {
+      return {
+        answer: `已基于任务上下文完成追问分析。本次问题：${question}。结论已追加到结果工作区，原有产物保持不变。`,
+        citations: [
+          { title: '任务上下文 T-1042', source: 'session-manager' },
+          { title: '知识检索结果', source: 'body-service' },
+        ],
+      }
+    }
+    try {
+      return unwrap(await api.post(`/chat/${taskId}`, { question }))
+    } catch (error) {
+      throw plannedEndpointError('chat_ask', 'POST', `/chat/${taskId}`, error)
     }
   },
 
@@ -378,65 +419,80 @@ export const dataProvider = {
   },
 
   async getSearch(query: string) {
-    if (source === 'mock') {
+    const localSearch = () => {
       const keyword = query.trim().toLowerCase()
       if (!keyword) return searchIndex
       return searchIndex.filter(item => `${item.title}${item.text}${item.type}`.toLowerCase().includes(keyword))
     }
-    return asArray(await api.get('/search', { params: { q: query } }))
+    if (source === 'mock') return localSearch()
+    // `/search` 亦为 planned 端点：回落本地索引并登记降级，避免切 api 后搜索结果页白屏
+    return safe(() => api.get('/search', { params: { q: query } }).then(asArray), localSearch(), 'search')
   },
 
   async getNotifications() {
     return notifications
   },
 
+  // ─────────── 写路径（契约中多数字段仍为 planned）───────────
+  // 约定：api 模式下**不伪造成功**。端点未实现 → 登记降级 + 抛出说明性错误，
+  // 让界面显示"操作未生效"，而不是静默吞掉或假装成功。
   async createTask(payload: Record<string, unknown>) {
-    if (source === 'api') return unwrap(await api.post('/tasks', payload))
-    return payload
+    if (source !== 'api') return payload
+    try { return unwrap(await api.post('/tasks', payload)) }
+    catch (error) { throw plannedEndpointError('task_create', 'POST', '/tasks', error) }
   },
 
   async retryTask(taskId: string) {
-    if (source === 'api') return unwrap(await api.post(`/tasks/${taskId}/retry`))
-    return { task_id: taskId, state: 'running' }
+    if (source !== 'api') return { task_id: taskId, state: 'running' }
+    try { return unwrap(await api.post(`/tasks/${taskId}/retry`)) }
+    catch (error) { throw plannedEndpointError('task_retry', 'POST', `/tasks/${taskId}/retry`, error) }
   },
 
   async installSkill(skillId: string) {
-    if (source === 'api') return unwrap(await api.post(`/skills/${skillId}/install`))
-    return { skill_id: skillId, state: 'installed' }
+    if (source !== 'api') return { skill_id: skillId, state: 'installed' }
+    try { return unwrap(await api.post(`/skills/${skillId}/install`)) }
+    catch (error) { throw plannedEndpointError('skill_install', 'POST', `/skills/${skillId}/install`, error) }
   },
 
   async authorizeConnector(connectorId: string) {
-    if (source === 'api') return unwrap(await api.post(`/connectors/${connectorId}/authorize`))
-    return { connector_id: connectorId, state: 'online' }
+    if (source !== 'api') return { connector_id: connectorId, state: 'online' }
+    try { return unwrap(await api.post(`/connectors/${connectorId}/authorize`)) }
+    catch (error) { throw plannedEndpointError('connector_authorize', 'POST', `/connectors/${connectorId}/authorize`, error) }
   },
 
   async createAutomation(payload: Record<string, unknown>) {
-    if (source === 'api') return unwrap(await api.post('/automations', payload))
-    return payload
+    if (source !== 'api') return payload
+    try { return unwrap(await api.post('/automations', payload)) }
+    catch (error) { throw plannedEndpointError('automation_create', 'POST', '/automations', error) }
   },
 
   async patchAutomation(automationId: string, payload: Record<string, unknown>) {
-    if (source === 'api') return unwrap(await api.patch(`/automations/${automationId}`, payload))
-    return { automation_id: automationId, ...payload }
+    if (source !== 'api') return { automation_id: automationId, ...payload }
+    try { return unwrap(await api.patch(`/automations/${automationId}`, payload)) }
+    catch (error) { throw plannedEndpointError('automation_patch', 'PATCH', `/automations/${automationId}`, error) }
   },
 
   async reuseCase(caseId: string) {
-    if (source === 'api') return unwrap(await api.post(`/cases/${caseId}/reuse`))
-    return { case_id: caseId }
+    if (source !== 'api') return { case_id: caseId }
+    try { return unwrap(await api.post(`/cases/${caseId}/reuse`)) }
+    catch (error) { throw plannedEndpointError('case_reuse', 'POST', `/cases/${caseId}/reuse`, error) }
   },
 
   async decideApproval(approvalId: string, decision: 'approved' | 'rejected', reason = '') {
-    if (source === 'api') return unwrap(await api.post(`/approvals/${approvalId}/decision`, { decision, reason }))
-    return { approval_id: approvalId, state: decision, reason }
+    if (source !== 'api') return { approval_id: approvalId, state: decision, reason }
+    try { return unwrap(await api.post(`/approvals/${approvalId}/decision`, { decision, reason })) }
+    catch (error) { throw plannedEndpointError('approval_decision', 'POST', `/approvals/${approvalId}/decision`, error) }
   },
 
   async applySuggestion(suggestion: OptimizationSuggestion): Promise<SuggestionExecution> {
-    if (source === 'api') return unwrap(await api.post(`/suggestions/${suggestion.suggestion_id}/apply`))
-    return buildSuggestionExecution(suggestion, (executionSeq += 1))
+    if (source !== 'api') return buildSuggestionExecution(suggestion, (executionSeq += 1))
+    try { return unwrap(await api.post(`/suggestions/${suggestion.suggestion_id}/apply`)) }
+    catch (error) { throw plannedEndpointError('suggestion_apply', 'POST', `/suggestions/${suggestion.suggestion_id}/apply`, error) }
   },
 
   async updatePreferences(payload: Record<string, unknown>) {
-    if (source === 'api') return unwrap(await api.put('/preferences', payload))
-    return payload
+    if (source !== 'api') return payload
+    try { return unwrap(await api.put('/preferences', payload)) }
+    catch (error) { throw plannedEndpointError('preferences_update', 'PUT', '/preferences', error) }
   },
 }

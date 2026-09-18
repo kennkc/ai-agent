@@ -8,6 +8,8 @@ public enum ErrorCode {
 
     AGENT_BAD_REQUEST("AGENT_BAD_REQUEST", "请求参数不合法"),
     AGENT_NOT_FOUND("AGENT_NOT_FOUND", "资源不存在"),
+    /** 路径存在但不支持该 HTTP 方法（如对只读路径发 POST）——与 404 区分，避免误判为"接口不存在" */
+    AGENT_METHOD_NOT_ALLOWED("AGENT_METHOD_NOT_ALLOWED", "请求方法不被支持"),
     AGENT_UNAUTHORIZED("AGENT_UNAUTHORIZED", "未认证或 Token 无效"),
     AGENT_FORBIDDEN("AGENT_FORBIDDEN", "无权限访问"),
     AGENT_CONFLICT("AGENT_CONFLICT", "资源冲突"),

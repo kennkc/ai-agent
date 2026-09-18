@@ -926,7 +926,13 @@ function toggleAutomation(row: AutomationItem) {
 }
 
 async function retryAutomation(row: AutomationItem) {
-  await dataProvider.patchAutomation(row.automation_id, { state: 'active' })
+  try {
+    await dataProvider.patchAutomation(row.automation_id, { state: 'active' })
+  } catch (error) {
+    // `/automations/{id}` 在契约中仍为 planned：失败就不改本地状态
+    ElMessage.error((error as Error)?.message || '重入队列失败，请稍后再试')
+    return
+  }
   row.state = 'active'
   row.last_error = ''
   row.next_run = '按 Cron 计算'

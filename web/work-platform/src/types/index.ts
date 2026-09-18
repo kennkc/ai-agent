@@ -486,6 +486,10 @@ export interface KnowledgeStats {
     vector_points: number
   }
   retrieval?: {
+    /** 体层检索口径的文档/切片总数（与 knowledge 段同源，便于交叉核对） */
+    documents: number
+    chunks: number
+    ingest_failures: number
     searches: number
     searches_with_result: number
     search_hit_rate: number
@@ -497,6 +501,8 @@ export interface KnowledgeStats {
     latency_p95_ms: number
     latency_p99_ms: number
     sample_size: number
+    /** 采样上限（体层默认 500），P99 口径为「最近 N 次」而非全量历史 */
+    sample_limit: number
     p99_basis: string
   }
   storage?: { hot?: KnowledgeTier; warm?: KnowledgeTier; cold?: KnowledgeTier; rules?: { hot_threshold: number; warm_threshold: number } }
