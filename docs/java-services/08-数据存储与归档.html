@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>08 · 数据存储与归档</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-18 23:41 · 源文件 08-数据存储与归档.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">一、存储版图（哪个服务把数据放在哪）</a></li>
+<li><a href="#body-servicer3-01">二、分层存储路由（body-service，R3-01）</a></li>
+<li><a href="#_2">三、降级不变量（存储不可用时）</a></li>
+<li><a href="#db">四、db/ 目录（结构归档 + 运行态快照）</a></li>
+<li><a href="#_3">五、恢复指引（速查）</a></li>
+<li><a href="#_4">六、与其他文档的关系</a></li>
+<li><a href="#_5">七、变更台账</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="08">08 · 数据存储与归档<a class="headerlink" href="#08" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>目标读者：需要理解「数据存在哪、什么结构、怎么降级、怎么备份恢复」的开发者。
+本文是<strong>开发视角的存储总纲</strong>；逐字段的 DDL 与键设计在仓库 <code>db/</code> 目录（结构文档 + 运行态快照），两者同步维护。</p>
+</blockquote>
+<h2 id="_1">一、存储版图（哪个服务把数据放在哪）<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>存储</th>
+<th>内容</th>
+<th>生命周期</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gateway-service</td>
+<td>无</td>
+<td>纯路由/鉴权转发</td>
+<td>—</td>
+</tr>
+<tr>
+<td>session-manager</td>
+<td>Redis</td>
+<td>会话哈希 <code>session:{id}</code> + 消息列表 <code>session:{id}:messages</code></td>
+<td>TTL 2h，<strong>不持久</strong></td>
+</tr>
+<tr>
+<td>sense-service</td>
+<td>MinIO / 本地目录</td>
+<td>采集暂存批（<code>staging/{tenant}/{status}/batch-*</code>）</td>
+<td>采集→质检→消费→清理，<strong>短命</strong></td>
+</tr>
+<tr>
+<td>sense-service</td>
+<td>内存（有界 500 条）</td>
+<td>死信队列（重试耗尽的采集失败记录）</td>
+<td>重启清空</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td><strong>PostgreSQL（冷层真相源）</strong></td>
+<td><code>knowledge_document</code> / <code>knowledge_chunk</code> 元数据与正文</td>
+<td>长期</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td><strong>Qdrant（向量层）</strong></td>
+<td><code>lifeform_knowledge</code> 集合，point id = chunk_id</td>
+<td>长期（可由 PG + 重建恢复）</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td><strong>Redis（热层缓存）</strong></td>
+<td>检索结果缓存 <code>knowledge:search:*</code> + 访问计数 <code>knowledge:access:*</code></td>
+<td>TTL 1h / 计数长期</td>
+</tr>
+<tr>
+<td>nlp-service / wp-bff</td>
+<td>无</td>
+<td>无状态计算与代理</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>真相链</strong>：正文与元数据的真相在 PostgreSQL；向量的真相在 Qdrant（id 与 PG chunk 一一对应）；Redis 一律可清空重建；暂存区消费完即清理。因此<strong>备份恢复只需 PG + Qdrant 两份</strong>。</p>
+<h2 id="body-servicer3-01">二、分层存储路由（body-service，R3-01）<a class="headerlink" href="#body-servicer3-01" title="Permanent link">&para;</a></h2>
+<p><code>TierRouter</code> 依据热度决定读缓存还是回源：</p>
+<pre><code>hotness = (1 + ln(1 + 访问次数)) × 0.5^(age / 半衰期)
+半衰期 3600s · hot ≥ 2.0 → HOT（Redis 缓存优先）· warm ≥ 1.0 → WARM · 其余 → COLD（直连 PG+Qdrant）
+</code></pre>
+<p>三个阈值均可配（<code>app.body.tier.*</code>）。<strong>分层是读取路由，不是物理搬移</strong>——数据始终以 PG 为真相，Redis 只是加速层。</p>
+<h2 id="_2">三、降级不变量（存储不可用时）<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>故障</th>
+<th>行为</th>
+<th>可见性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PG 不可用</td>
+<td>回落 <code>InMemoryMetadataStore</code>（元数据内存态），恢复后<strong>不自动回灌</strong></td>
+<td>启动告警 + health 标注</td>
+</tr>
+<tr>
+<td>Redis 不可用</td>
+<td>绕过缓存直连 Qdrant</td>
+<td><code>cache_backend=unavailable</code>，命中率不虚增</td>
+</tr>
+<tr>
+<td>Qdrant / 嵌入不可用</td>
+<td>检索失败</td>
+<td><code>AGENT_UPSTREAM_UNAVAILABLE</code>（检索是 Must 项，不返回假结果）</td>
+</tr>
+<tr>
+<td>MinIO 不可用</td>
+<td>暂存降级本地 <code>data/sense-staging/</code></td>
+<td>warn 日志 + 引用格式变为本地路径</td>
+</tr>
+<tr>
+<td>会话 Redis 不可用</td>
+<td>会话创建失败</td>
+<td>会话是 Must 项，不静默降级</td>
+</tr>
+</tbody>
+</table>
+<h2 id="db">四、db/ 目录（结构归档 + 运行态快照）<a class="headerlink" href="#db" title="Permanent link">&para;</a></h2>
+<p>仓库根 <code>db/</code> 是存储结构与数据的<strong>归档层</strong>，与代码的同步约定：</p>
+<pre><code>db/
+├── README.md               总览：介质清单、分层路由、恢复指引、维护约定
+├── postgres/schema.sql     可执行 DDL（与 PgMetadataStore 内嵌 DDL 同源，幂等）
+├── postgres/schema.md      表结构说明（字段/索引/状态机/写入方）
+├── redis/keyspace.md       键空间设计（4 类键：类型/写入方/TTL）
+├── qdrant/collection.md    集合参数（768 维 Cosine / HNSW / payload 约定）
+├── minio/staging.md        暂存双后端与对象键约定 + 死信队列说明
+└── snapshots/              运行态真实数据导出（时间戳命名，只增不改）
+    ├── postgres-schema.sql / postgres-data.sql
+    ├── redis-keys.json     （导出脚本：scripts/export-redis-snapshot.py）
+    ├── qdrant-collection.json / qdrant-points.json
+    └── kafka-topics.txt
+</code></pre>
+<p><strong>维护约定</strong>：
+1. 改存储结构（DDL / 键设计 / 集合参数）→ 必须同步 <code>db/</code> 对应文档 + <code>schema.sql</code>，并在本文 §七登记。
+2. Java 侧 DDL（<code>PgMetadataStore</code> 内嵌常量）与 <code>db/postgres/schema.sql</code> 是<strong>同源双写</strong>：改一边必须改另一边（待引入 Flyway 后收敛为单源）。
+3. 快照含租户数据（default / tenant-b），归档行为本身无害，但<strong>对外分享仓库前需确认</strong>。</p>
+<h2 id="_3">五、恢复指引（速查）<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">docker compose up -d postgres redis qdrant minio kafka
+docker exec -i lifeform-postgres psql -U agent -d lifeform &lt; db/snapshots/postgres-schema.sql
+docker exec -i lifeform-postgres psql -U agent -d lifeform &lt; db/snapshots/postgres-data.sql
+# Qdrant：集合由 body-service ensureCollection 自举；points 从 qdrant-points.json POST 回灌
+# Redis / Kafka：无需恢复（会话自然过期、topic 自动创建）
+</code></pre>
+<p>完整步骤与注意事项见 <code>db/README.md</code>。</p>
+<h2 id="_4">六、与其他文档的关系<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<ul>
+<li>06-body-service：三层存储的<strong>实现细节</strong>（Store 类、对账）→ 本文只讲结构与约定</li>
+<li>04-session-manager / 05-sense-service：Redis 会话与暂存的<strong>业务行为</strong> → 本文只讲键与对象布局</li>
+<li>07-运行时配置与横切约定：连接串/环境变量口径 → 本文不重复</li>
+<li><code>db/README.md</code>：面向<strong>运维/归档</strong>的总览（恢复指引为全文主视角）</li>
+</ul>
+<h2 id="_5">七、变更台账<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>日期</th>
+<th>变更</th>
+<th>提交</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2026-09-18</td>
+<td>建立 <code>db/</code> 归档：4 份结构文档 + 首批运行态快照（PG 8 文档/12 分块、Qdrant 12 点、Redis 6 键、Kafka 2 业务 topic）</td>
+<td>本轮</td>
+</tr>
+</tbody>
+</table></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

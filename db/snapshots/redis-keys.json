@@ -1,0 +1,43 @@
+{
+  "exported_at": "2026-09-18T23:40:00+08:00",
+  "container": "lifeform-redis",
+  "key_count": 6,
+  "keys": [
+    {
+      "key": "knowledge:access:default:199bab0caaa7a96bab1921ebd973261a",
+      "type": "string",
+      "ttl_seconds": -1,
+      "value": "1"
+    },
+    {
+      "key": "knowledge:access:default:732dedd5ec68f9de0195437e4ec51d5c",
+      "type": "string",
+      "ttl_seconds": -1,
+      "value": "1"
+    },
+    {
+      "key": "knowledge:access:default:7eb3ce474919661d4a37b4e81066ef77",
+      "type": "string",
+      "ttl_seconds": -1,
+      "value": "1"
+    },
+    {
+      "key": "knowledge:access:default:bc4506e605c5dd08ad200171aa951205",
+      "type": "string",
+      "ttl_seconds": -1,
+      "value": "1"
+    },
+    {
+      "key": "knowledge:access:default:e7d6dece95226e2978f16a73a78dfed0",
+      "type": "string",
+      "ttl_seconds": -1,
+      "value": "1"
+    },
+    {
+      "key": "knowledge:access:tenant-b:cdc03b18f72ed363c75731250eda220e",
+      "type": "string",
+      "ttl_seconds": -1,
+      "value": "1"
+    }
+  ]
+}
