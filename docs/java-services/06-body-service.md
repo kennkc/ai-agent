@@ -1,7 +1,7 @@
 # 06 · body-service 躯体服务（Phase 3 躯体期）
 
 > 模块路径：`services/java/body-service/`
-> 源文件：**26 个主代码（2411 行）+ 6 个测试（635 行）**
+> 源文件：**27 个主代码（2721 行）+ 9 个测试（886 行）**
 > HTTP 端口：**8083** · gRPC 端口：**9094**
 > 外部依赖：PostgreSQL（冷层真相源）· Redis（热层缓存）· Qdrant（温层向量库）· Kafka（感官事件消费）· nlp-service（嵌入/重排）
 
@@ -10,9 +10,11 @@
 `body-service` 是生命体的**知识与记忆的躯体**。Phase 3 起承担三件事：
 
 1. **知识摄取**（R3-02/03/04/09）：`POST /api/body/knowledge` 单篇 / `/knowledge/batch` 批量，
-   经分块 → 嵌入 → 向量写入 → 元数据落库，状态机 `PENDING → INDEXED / FAILED`。
-2. **语义检索**（R3-05/06/08）：`POST /api/body/retrieve` 缓存优先 → Qdrant 召回 TOP-50 → 重排 TOP-K。
+   经**格式解析（`DocumentParser`）** → 分块 → 嵌入 → 向量写入 → 元数据落库，状态机 `PENDING → INDEXED / FAILED`。
+2. **语义检索**（R3-05/06/08）：`POST /api/body/retrieve` 缓存优先 → Qdrant 召回 TOP-50 → 重排 TOP-K；
+   `POST /api/body/retrieve/plan` 为 IN-05 迭代检索预留接口（参数就绪，循环 M1 后实现）。
 3. **RAG 回答**（R3-07）：`POST /api/body/rag/answer` 检索 + 引用组装（生成段仍为模板，DEBT-002）。
+4. **三层一致性对账**：`GET /api/body/knowledge/reconcile`（PG 真相源 vs Qdrant 点数，只读不改）。
 
 同时通过 `GET /api/body/knowledge/stats` 向工作平台躯体视图（R-C03）提供知识量、检索 P99、命中率与三层存储状态。
 
@@ -43,6 +45,7 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 |---|---|---:|---|
 | `BodyServiceApplication.java` | 启动类 | 7 | Spring Boot 入口 + Nacos 注册 |
 | `chunk/ChunkProcessor.java` | 组件 | 200 | R3-02 分块（与 Python `chunking.py` 同算法） |
+| `chunk/DocumentParser.java` | 工具 | 146 | R3-02 **格式解析步**：md/text/html 归一化（PDF/DOCX 显式拒绝，DEBT-013） |
 | `client/OutboundHttp.java` | 工具 | 48 | 出站 HTTP 统一出口，**强制 HTTP/1.1** |
 | `client/EmbeddingClient.java` | 客户端 | 92 | R3-03 嵌入（调 nlp-service） |
 | `client/RerankClient.java` | 客户端 | 92 | R3-06 重排（调 nlp-service，可降级） |
@@ -51,33 +54,35 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 | `common/BizException.java` | 异常 | 30 | 携带错误码与明细 |
 | `common/GlobalExceptionHandler.java` | 切面 | 48 | 错误码 → HTTP 响应体 |
 | `config/BodyStorageConfig.java` | 配置 | 55 | 冷层选型（PG / 内存回落）+ 分层规则注入 |
-| `controller/KnowledgeController.java` | 控制器 | 240 | 入库 / 检索 / RAG / 状态四组接口 |
+| `controller/KnowledgeController.java` | 控制器 | 306 | 入库 / 检索 / RAG / 状态 / 对账五组接口 |
 | `event/SenseCollectedConsumer.java` | 消费者 | 179 | R3-09 消费 `lifeform.sense.collected` |
 | `grpc/GrpcHealthServer.java` | 组件 | 24 | gRPC Health 探针 |
-| `service/IngestService.java` | 服务 | 152 | R3-02/03/04/09 入库管道与状态机 |
-| `service/RetrievalService.java` | 服务 | 154 | R3-05/06/08 检索链路 |
+| `service/IngestService.java` | 服务 | 172 | R3-02/03/04/09 入库管道与状态机 |
+| `service/RetrievalService.java` | 服务 | 183 | R3-05/06/08 检索链路 + IN-05 迭代检索预留 |
 | `service/RagPipeline.java` | 服务 | 97 | R3-07 RAG 回答与引用 |
 | `service/KnowledgeMetrics.java` | 服务 | 104 | 检索/缓存/重排指标（采样口径） |
 | `store/MetadataStore.java` | 接口 | 33 | 冷层抽象（真相源） |
 | `store/PgMetadataStore.java` | 实现 | 156 | R3-01 PG 实现（DDL 自举） |
 | `store/InMemoryMetadataStore.java` | 实现 | 80 | PG 不可用时的显式降级实现 |
 | `store/HotCacheStore.java` | 组件 | 158 | R3-08 Redis 缓存优先 + 查询指纹 |
-| `store/StorageFacade.java` | 门面 | 73 | R3-01 统一存储出口与三层状态 |
+| `store/StorageFacade.java` | 门面 | 122 | R3-01 统一存储出口、三层状态与**对账** |
 | `store/TierRouter.java` | 组件 | 78 | R3-01 分层规则（热度 = 频率 × 新鲜度） |
 | `store/StoredDocument.java` | record | 26 | 文档元数据 |
 | `store/StoredChunk.java` | record | 17 | 切片元数据 |
 | `store/DocumentStatus.java` | 枚举 | 9 | `PENDING / INDEXED / FAILED / DELETED` |
 
-### 3.2 测试（39 个用例，全绿）
+### 3.2 测试（54 个用例，全绿）
 
 | 文件 | 行数 | 覆盖验收点 |
 |---|---:|---|
 | `chunk/ChunkProcessorTest.java` | 98 | R3-02 无遗漏 / 标题前置 / 大小受控 / 边界可配 |
+| `chunk/DocumentParserTest.java` | 91 | R3-02 格式解析：HTML 去标签不吞正文 / 实体解码 / **pdf 显式拒绝不静默分块** |
 | `client/QdrantClientTest.java` | 38 | R3-04 **point id 必须是 UUID**（E2E 缺陷回归） |
 | `service/IngestServiceTest.java` | 128 | R3-09 状态机 / 失败置 FAILED / 重入库清理 |
-| `service/RetrievalServiceTest.java` | 147 | R3-05/06/08 缓存优先 / 重排降级不阻断 / 上游不可用不返回假结果 |
+| `service/RetrievalServiceTest.java` | 193 | R3-05/06/08 缓存优先 / 重排降级不阻断 / 上游不可用不返回假结果 / **IN-05 预留参数** |
 | `store/HotCacheStoreTest.java` | 84 | R3-08 指纹归一化 / Redis 不可用时不伪造命中 |
 | `store/InMemoryMetadataStoreTest.java` | 78 | R3-01 覆盖式写入 / 租户隔离 / 真相源语义 |
+| `store/StorageFacadeTest.java` | 114 | R3-01 **三层对账**：一致 / 缺向量 / 孤儿向量 / 向量库不可用不虚报一致 |
 | `store/TierRouterTest.java` | 62 | R3-01 热度模型可解释 / 规则可配置 |
 
 ## 4. 逐文件说明（关键实现）
@@ -168,17 +173,19 @@ Query → recordAccess（热度输入）
 - **入库失败不阻塞消费**：异常按文档粒度吞掉并计数，位点照常提交，
   避免一条坏数据卡死整条采集链路（与 Phase 2 死信思路一致）。
 
-### 4.8 `controller/KnowledgeController.java` · 控制器 · 240 行
+### 4.8 `controller/KnowledgeController.java` · 控制器 · 306 行
 
 | 方法 | 路径 | 说明 |
 |---|---|---|
-| `POST` | `/api/body/knowledge` | 单篇入库，返回 `chunk_count / status / vector_backend / degraded` |
+| `POST` | `/api/body/knowledge` | 单篇入库（`format=auto/md/text/html`），返回 `chunk_count / normalized_chars / status / vector_backend / degraded` |
 | `POST` | `/api/body/knowledge/batch` | 批量入库，**单篇失败不影响其余**，返回逐篇结果 |
 | `GET` | `/api/body/knowledge` | 文档列表 + `metadata_backend` |
 | `DELETE` | `/api/body/knowledge/{docId}` | 删除（PG + Qdrant + 缓存三处一起清） |
 | `POST` | `/api/body/retrieve` | 语义检索（兼容 Phase 1 字段） |
+| `POST` | `/api/body/retrieve/plan` | **IN-05 迭代检索预留接口**（`iteration` / `refine_query`），当前单轮 + 如实标注未启用循环 |
 | `POST` | `/api/body/rag/answer` | RAG 回答（含引用） |
 | `GET` | `/api/body/knowledge/stats` | 躯体视图指标 |
+| `GET` | `/api/body/knowledge/reconcile` | **三层一致性对账**（PG 真相源 vs Qdrant 点数，只读不改） |
 | `GET` | `/api/body/health` | 存活检查 |
 
 **租户来源**：网关注入的 `X-Tenant-Id`，**不信任请求体里的租户字段**。
@@ -194,6 +201,21 @@ Query → recordAccess（热度输入）
 | `cache_hit_rate` | 缓存命中次数 / 检索总次数（R3-08 验收 ≥ 30%） |
 | `latency_p99_ms` | 最近 500 次检索延迟采样的分位，字段同时给出 `sample_size` 与 `p99_basis` |
 
+### 4.10 `chunk/DocumentParser.java` · 格式解析 · 146 行
+
+入库存的是**正文纯文本**，而设计 §5.1 的链路是「上传 → **格式解析** → 分块」——
+本类补上此前缺失的格式解析步（改造前入库正文被直接当纯文本分块，HTML 标签会一起进向量库）。
+
+| 格式 | 处理 |
+|---|---|
+| `md` / `markdown` / `text` / `txt` | 直通（Markdown 结构由 `ChunkProcessor` 解析） |
+| `html` / `htm` | 去 `<script>/<style>` → 块级标签转换行 → 去标签 → 实体解码 → 折叠空行 |
+| `auto`（默认） | 内容嗅探：`<` 开头且含标签形 → html，否则 text |
+| `pdf` / `doc` / `docx` | **显式拒绝**（`AGENT_BAD_REQUEST`）并给出指引，登记 DEBT-013 |
+
+**红线**：绝不把 PDF 二进制当文本塞进分块器（会产出垃圾向量且无人察觉）——
+宁可报错，也不产出"看起来成功"的脏知识。
+
 ## 5. 降级清单（诚实上报，不虚构）
 
 | 组件 | 不可用表现 | 上报方式 |
@@ -204,6 +226,8 @@ Query → recordAccess（热度输入）
 | 嵌入（BGE-M3） | 降级 `hash-ngram-768`（768 维） | `embedding.degraded=true` + `backend` 字段 |
 | 重排 | 按召回分返回 | `retrieval.rerank_degraded` 计数 |
 | Kafka | 消费器启动失败不影响 HTTP 链路 | 启动 WARN + 消费统计 `running=false` |
+| 文档格式（PDF/DOCX） | **拒绝入库**（不静默按文本分块） | `AGENT_BAD_REQUEST` + 指引文案（DEBT-013） |
+| 迭代检索（IN-05） | 回落单轮检索 | `/retrieve/plan` 返回 `iteration_loop=not_enabled`，不伪造多轮 |
 
 ## 6. 配置项（`application.yml`）
 

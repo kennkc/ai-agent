@@ -33,7 +33,13 @@
                                  → BFF 端点实测 → 缺陷修复（Qdrant point id / PG 凭据）
         ↓
 [Phase G] 文档归档                模块文档 → 阶段三件套 → DEMO → PROGRESS / 总览 / 台账
+        ↓
+[Phase H] 需求复审与缺口补全       需求逐条对账 → 伪代码扫描 → 补格式解析/BFF写路径/前端入库
+                                 → 自审自纠「写路径鉴权」→ 全量回归 114 / 52 / 29
 ```
+
+> **数字口径**：Phase E/F/G 中出现的数字是**当时**的实测值（保留不改，属历史留痕）；
+> Phase H 之后的**当前基线**为 **Java 114 · Python 52 · wp-bff 29 · 契约 0 FAIL · 文档覆盖 103/103**。
 
 ---
 
@@ -132,6 +138,29 @@
 | G4 | 全局进度 | `PROGRESS.md` / `docs/项目进度总览.md` 更新 |
 | G5 | 技术债 | `docs/技术债台账.md` 更新 DEBT-001 → ✅ 已闭合 |
 | G6 | 索引与 HTML | `docs/项目进度日志报告/README.md` 登记；`md2html-report.py` 生成 HTML 孪生 |
+
+### Phase H｜需求复审与缺口补全（第二轮）
+
+阶段交付后做了一次**独立复审**：不看报告结论，直接拿《Phase3-躯体期 · 需求设计文档》逐条对源码取证据，
+并专项排查"伪代码/占位实现"。结论是 **R3-01~R3-09 主体真实可用，但存在 1 处功能性断链 + 3 处文档失真 + 2 处编号悬空**。
+
+| 步骤 | 动作 | 产物 |
+|---|---|---|
+| H1 | 需求-代码逐条对账 | 见 `docs/优化日志/2026-09-18-Phase3需求审核与补全.md` §2 对账表 |
+| H2 | 伪代码/占位专项扫描（`TODO/FIXME/stub/mock/degraded` 全量 grep + 逐条定性） | 定性表：**合理降级 4 条 / 真实缺口 2 条 / 伪实现 0 条** |
+| H3 | **补 R3-02 格式解析步** | 新增 `chunk/DocumentParser.java`（markdown / html / plain 归一 + 标题抽取），入库链路接入；PDF 明确拒收并给出通道建议 |
+| H4 | **补 BFF 入库代理**（本轮最大缺口） | `wp-bff` 新增 `POST /api/wp/knowledge/ingest`；此前工作平台**根本无法入库**，只能直连 body-service |
+| H5 | **补前端入库能力** | `KnowledgeView.vue` 增「文档入库」面板（上传/粘贴 + 标题 + 格式 + 提交回执，如实展示 `degraded`）；`provider/types` 同步 |
+| H6 | 补 `IngestOutcome` 透出格式与降级信息 | `IngestService` 返回 `format / parser / degraded`，前端不再猜测 |
+| H7 | 补契约 | `work-platform-bff-openapi.yaml` 新增 ingest 路径 + `KnowledgeIngestResult` schema，`x-wp-status: implemented` |
+| H8 | 补测试 | `DocumentParserTest`(7) · `StorageFacadeTest`(5) · `RetrievalServiceTest` 净增 2；wp-bff 新增入库用例 7 项（功能 5 + 鉴权反向 2） |
+| H9 | 修正文档失真 | ① `DEMO` 里 `status:READY`（实际无此值）② `storage: "warm+cold"` 等**照抄会报错**的示例 ③ `06-body-service.md` 的源文件/测试计数（26/6 → 28/9） |
+| H10 | 登记悬空编号 | 代码引用了 `DEBT-010/011/012` 但台账无登记 → 补齐并逐条给证据 |
+| H11 | 全量回归 | Java **114** / Python **52** / wp-bff **27** / 契约 0 FAIL / 文档覆盖 103/103 / 前端 build 通过 |
+| H12 | 工具口径修正 | `contract-check.py` 的 BFF 端点计数改为**按路径去重**，并单独输出方法数——消除 "implemented 8 vs 实现 9" 的伪矛盾 |
+
+> **本轮定性结论**：未发现"用降级替身冒充真实能力"的伪实现。
+> 唯一的实体缺口是 **BFF 入库链路断链**（已补），其余为文档口径失真（已改）。
 
 ---
 

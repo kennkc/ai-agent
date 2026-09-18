@@ -8,8 +8,8 @@
 | 分支 | `dev` / `codex/main` / `workbuddy/main`（三分支同内容对齐） |
 | 报告日期 | 2026-09-18 |
 | 代码基线 | `a5e0cd5` `feat(phase3): 躯体期知识入库与语义检索（R3-01~R3-09 + R-C03）` |
-| 需求范围 | R3-01 ~ R3-09（依据《Phase3-躯体期 · 需求设计文档》v1.6）+ 终端线 R-C03 |
-| 阶段结论 | **通过**（Must 项 7/7 全通过；Should 项 2/2 通过；1 项外部引擎依赖诚实降级，见 §6） |
+| 需求范围 | R3-01 ~ R3-09（依据《Phase3-躯体期 · 需求设计文档》v1.6）+ 终端线 R-C03（**IN/WB/MC 系列未纳入，见 §9**） |
+| 阶段结论 | **通过**（Must 项 7/7 全通过；Should 项 3/3 通过；1 项外部引擎依赖诚实降级，见 §6） |
 
 ---
 
@@ -37,11 +37,13 @@ Phase 3 的目标是**长出躯体**：让知识能够被**持久化、向量化
 
 ## 2. 交付物清单
 
-### 2.1 body-service（Java 主服务，重写：26 主源 + 7 测试类，主源 2411 行 / 测试 635 行）
+### 2.1 body-service（Java 主服务，重写：27 主源 + 9 测试类，主源 2721 行 / 测试 886 行）
+
+> 计数为 2026-09-18 审核补全轮后的实测值（补全前 26 主源 + 7 测试类，主源 2411 行 / 测试 635 行）。
 
 | 包 | 交付物 | 对应需求 |
 |---|---|---|
-| `chunk` | `ChunkProcessor`（标题/段落边界分块，标题入块，同标题合并，重叠尾巴） | R3-02 |
+| `chunk` | `DocumentParser`（格式归一：md/text/html/auto，PDF 显式拒绝）、`ChunkProcessor`（标题/段落边界分块，标题入块，同标题合并，重叠尾巴） | R3-02 |
 | `client` | `OutboundHttp`（HTTP/1.1 出站）、`EmbeddingClient`、`RerankClient`、`QdrantClient` | R3-03 / R3-06 |
 | `store` | `MetadataStore`（抽象）+ `PgMetadataStore` + `InMemoryMetadataStore`、`HotCacheStore`（Redis） | R3-01 |
 | `store` | `TierRouter`（热度分层）、`StorageFacade`（统一增删改查门面） | R3-01 |
@@ -120,14 +122,15 @@ Phase 3 的目标是**长出躯体**：让知识能够被**持久化、向量化
 
 | 层次 | 命令 | 结果 |
 |---|---|---|
-| Java 全量单测 | `services/java && ../../scripts/mvn-dev.sh -pl body-service -am test` | **100 通过 / 0 失败**（gateway 2 · session 10 · sense 48 · body 40） |
+| Java 全量单测 | `services/java && ../../scripts/mvn-dev.sh test` | **114 通过 / 0 失败**（gateway 2 · session 10 · sense 48 · body 54） |
 | Python nlp-service | `venv/Scripts/python.exe -m pytest` | **52 通过**（意图 15 + OCR 4 + 分块 12 + 嵌入 13 + 重排 8） |
-| wp-bff | `node --test` | **22 通过 / 0 失败** |
-| 契约校验 | `python scripts/contract-check.py --work-platform` | 实现端点 8 ↔ BFF 8，**0 FAIL** |
-| Java 文档覆盖 | `python scripts/java-doc-coverage.py` | body-service 33/33，全仓 **100/100** |
+| wp-bff | `node --test` | **29 通过 / 0 失败**（含 2 条写路径鉴权反向用例） |
+| 契约校验 | `python scripts/contract-check.py --work-platform` | 实现端点 8 路径 ↔ BFF 8 路径（9 方法），**0 FAIL** |
+| Java 文档覆盖 | `python scripts/java-doc-coverage.py` | body-service 36/36，全仓 **103/103** |
 | 前端 | `vue-tsc --noEmit` + `vite build` | 类型检查通过、构建通过 |
 
-> body-service 由 Phase 2 的 1 项测试扩至 **40 项**（新增分块、分层、缓存、元数据、入库、检索、Qdrant 共 7 个测试类）。
+> body-service 由 Phase 2 的 1 项测试扩至 **54 项**（新增格式解析、分块、分层、缓存、元数据、
+> 存储门面、入库、检索、Qdrant 共 9 个测试类）。上表为 2026-09-18 复审后的实测值。
 
 ---
 
@@ -165,3 +168,47 @@ Phase 3 全部 Must 需求（R3-01~R3-05、R3-07）与 Should 需求（R3-06、R
 采到的知识被持久化、向量化，并可通过语义相似度被召回，DEBT-001 正式销项。
 
 > 达标 → Phase 3 验收通过 → 下一阶段 Phase 4（大脑期·推理与生成）
+
+---
+
+## 9. 补记 · 2026-09-18 需求审核与补全轮
+
+> 本节由审核轮追加，**不改变 §1~§8 的主体结论**（实现真实、无伪代码）。
+> 完整审核记录见 [`docs/优化日志/2026-09-18-Phase3需求审核与补全.md`](../优化日志/2026-09-18-Phase3需求审核与补全.md)。
+
+### 9.1 审核结论摘要
+
+| 维度 | 结论 |
+|---|---|
+| 伪代码排查 | ✅ **生产代码 0 处** TODO / 占位 / 假实现；所有能力缺失均以「降级后端 + `degraded` 标记」诚实暴露 |
+| 阶段范围内缺失 | ⚠️ 发现 4 项（工作平台入库链路断裂、格式解析步缺失、IN-05 参数未预留、对账能力缺失）—— **本轮已全部补全** |
+| **安全边界不一致** | 🔴 补入库链路时，写路径初始沿用了 `/knowledge` 的**只读免令牌**豁免 → 浏览器直连 8090 即可**无鉴权写入知识库** —— 已修（与 `/middleware` 同级 origin-allowlist + control-token，附 2 条断言"鉴权失败不触达体层"的反向用例） |
+| DEBT 记账 | ⚠️ `DEBT-010/011/012` 代码已引用但台账未登记 —— 已补齐并新开 `DEBT-013`，达成双向 100% 覆盖 |
+| 文档失真 | ⚠️ `Phase3-DEMO.md` 有 6 处接口示例与真实返回值不符（含会 404 的 `/api/body/rag`）—— 已逐条修正 |
+| 设计↔实现口径 | ⚠️ 2 处（`PG+pgvector`、`Redis 语义缓存`）设计选型未落地 —— 已登记台账 §4.6，不违反验收条款 |
+| **阶段范围缺口** | 🔴 **IN-01 / WB-03 / WB-05 / MC-01 从未进入本阶段交付范围**，而需求文档 §8/§9 列有其验收标准 —— 已登记待规划侧决策 |
+
+### 9.2 补全内容（详见 commit）
+
+| 层 | 补全项 |
+|---|---|
+| Java body-service | `DocumentParser`（格式解析，R3-02）；`/retrieve/plan`（IN-05 预留）；`/knowledge/reconcile`（三层对账）；`IngestService` 增 `format`；新增测试 15 项 |
+| wp-bff | `POST /api/wp/knowledge` 知识入库代理（单篇 + 批量）；体层错误码识别（不把拒绝当成功）；新增测试 5 项 |
+| 前端 | `KnowledgeView` 新增「文档入库」卡片（粘贴 + 文件读取），入库后知识量实时刷新；`provider.insertKnowledge`（写路径不回落 Mock） |
+| 契约 | `/knowledge` 增 `post` 定义 + `KnowledgeIngestResult` schema；实现端点 8 → 9 |
+| 文档 | 台账 / java-services / DEMO / 本报告 / 测试验收报告 / 优化日志 |
+
+### 9.3 补全后测试基线
+
+**193 / 193 通过**（Java 114 + Python 52 + wp-bff 27），契约 0 FAIL，Java 文档覆盖 103/103，前端构建通过。
+
+### 9.4 关于「阶段范围缺口」的说明
+
+需求文档 `Phase3-躯体期/需求设计文档.md` §8（IN 系列）与 §9（WB/MC 系列）列出了
+**IN-01 技能包模型（Must）**、IN-05 迭代检索、**WB-03 专家中心**、**WB-05 技能市场**、**MC-01 协作总线服务化**
+及其验收标准，但本阶段「需求范围」只声明了 `R3-01~R3-09 + R-C03`。
+
+- IN-05 已在本轮补交付（预留接口）；
+- **IN-01 / WB-03 / WB-05 / MC-01 仍未实现** —— 四者各需独立服务（技能包存储与注册、专家档案 CRUD、
+  技能市场审核流、NATS 协作总线），不是能塞进阶段尾巴的改动量；
+- 建议规划侧明确归属（Phase 4 并行线 / 独立 P3.5 迭代），**不要在报告里静默省略**。

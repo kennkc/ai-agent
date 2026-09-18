@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 Phase3-DEMO.md</span>
+  <span class="meta">生成于 2026-09-18 20:55 · 源文件 Phase3-DEMO.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -131,13 +131,16 @@
 <li><a href="#20">2.0 启动</a></li>
 <li><a href="#21-r3-01">2.1 R3-01 三层存储状态（先确认地基）</a></li>
 <li><a href="#22-r3-02r3-04">2.2 R3-02/R3-04 知识入库（分块 → 嵌入 → 向量入库）</a></li>
+<li><a href="#22b-r3-02-html-pdf">2.2b R3-02 格式解析（HTML 入库；PDF 显式拒绝）</a></li>
 <li><a href="#23-r3-05r3-06">2.3 R3-05/R3-06 语义检索与重排</a></li>
 <li><a href="#24-r3-08">2.4 R3-08 缓存优先策略</a></li>
 <li><a href="#25-r3-07-rag">2.5 R3-07 RAG 管道</a></li>
 <li><a href="#26">2.6 租户隔离验证</a></li>
 <li><a href="#27-r3-09-kafka">2.7 R3-09 感官 → 躯体闭环（Kafka 事件驱动）</a></li>
 <li><a href="#28">2.8 重入库幂等与删除清理</a></li>
-<li><a href="#29-r-c03">2.9 工作平台躯体视图（R-C03）</a></li>
+<li><a href="#29-6">2.9 三层一致性对账（设计 §6 风险应对「定期对账任务」）</a></li>
+<li><a href="#210-in-05">2.10 IN-05 迭代检索预留接口</a></li>
+<li><a href="#211-r-c03">2.11 工作平台躯体视图（R-C03）</a></li>
 </ul>
 </li>
 <li><a href="#dod">三、量化验收（DoD 对齐）</a></li>
@@ -151,7 +154,10 @@
 <p><strong>演示目标</strong>：证明生命体已"长出躯体"——知识能被<strong>持久化、向量化、语义检索</strong>，感官采集的数据
 经事件总线自动流入知识库，形成「感官 → 躯体」闭环，并可在工作平台躯体视图实时观测。
 <strong>前置条件</strong>：Docker Desktop（不要升级，本机 Build 19041）、JDK 21、Maven 3.9+、Python 3.13 + venv、Node 22
-<strong>对应需求</strong>：R3-01 ~ R3-09（Phase3-躯体期/需求设计文档.md）+ 终端线 R-C03</p>
+<strong>对应需求</strong>：R3-01 ~ R3-09（Phase3-躯体期/需求设计文档.md）+ 终端线 R-C03 + IN-05（迭代检索预留）
+<strong>版本</strong>：2026-09-18 审核补全版 —— 本版<strong>按真实代码返回值逐条修正</strong>了旧版中的接口示例
+（旧版存在 <code>status=READY</code>、<code>storage.*.provider</code>、<code>/api/body/rag</code> 等与实际不符的示例，照抄会报错）；
+并补充了「格式解析（HTML/PDF）」「三层对账」「迭代检索预留」「工作平台写路径」四段演示。</p>
 </blockquote>
 <hr />
 <h2 id="docker">一、自动化验证（无需 Docker，先跑这一层）<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h2>
@@ -190,20 +196,21 @@
 </tr>
 <tr>
 <td><strong>body-service</strong></td>
-<td style="text-align: right;"><strong>40</strong></td>
+<td style="text-align: right;"><strong>54</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 <tr>
 <td><strong>合计</strong></td>
-<td style="text-align: right;"><strong>100</strong></td>
+<td style="text-align: right;"><strong>114</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 </tbody>
 </table>
-<p>body-service 的 7 个测试类：<code>ChunkProcessorTest</code>(9)、<code>TierRouterTest</code>(6)、<code>HotCacheStoreTest</code>(4)、
-<code>InMemoryMetadataStoreTest</code>(4)、<code>IngestServiceTest</code>(6)、<code>RetrievalServiceTest</code>(8)、<code>QdrantClientTest</code>(3)。</p>
+<p>body-service 的 9 个测试类：<code>ChunkProcessorTest</code>(7)、<code>DocumentParserTest</code>(7)、<code>QdrantClientTest</code>(3)、
+<code>IngestServiceTest</code>(5)、<code>RetrievalServiceTest</code>(10)、<code>HotCacheStoreTest</code>(5)、<code>InMemoryMetadataStoreTest</code>(6)、
+<code>StorageFacadeTest</code>(5)、<code>TierRouterTest</code>(6)。</p>
 <h3 id="12-python">1.2 Python 嵌入 / 重排 / 分块<a class="headerlink" href="#12-python" title="Permanent link">&para;</a></h3>
 <pre><code class="language-bash">cd services/python/nlp-service
 ../venv/Scripts/python.exe -m pytest -q      # Windows
@@ -253,15 +260,16 @@
 node --test
 </code></pre>
 <p>预期：</p>
-<pre><code># tests 22
-# pass 22
+<pre><code># tests 27
+# pass 27
 # fail 0
 </code></pre>
-<p>其中新增 8 例覆盖躯体端点：可用性、降级、<code>top_k</code> 参数裁剪、高亮窗口（<code>buildSnippet</code>）、租户透传。</p>
+<p>其中 13 例覆盖躯体端点：可用性、降级、<code>top_k</code> 参数裁剪、高亮窗口（<code>buildSnippet</code>）、租户透传，
+以及<strong>入库写路径</strong>（单篇透传 / 空 content 拦截 / 体层不可用不伪造成功 / 体层错误码上报 / 批量逐条结果）。</p>
 <h3 id="14">1.4 契约与文档覆盖<a class="headerlink" href="#14" title="Permanent link">&para;</a></h3>
 <pre><code class="language-bash">cd /e/AI/ai-agent
-python scripts/contract-check.py --work-platform    # 实现端点 8 ↔ BFF 8，0 FAIL
-python scripts/java-doc-coverage.py                 # body-service 33/33，全仓 100/100
+python scripts/contract-check.py --work-platform    # 实现端点 9 ↔ BFF 9，0 FAIL
+python scripts/java-doc-coverage.py                 # body-service 36/36，全仓 103/103
 </code></pre>
 <hr />
 <h2 id="docker_1">二、端到端演示（需 Docker 基础设施）<a class="headerlink" href="#docker_1" title="Permanent link">&para;</a></h2>
@@ -311,7 +319,7 @@ cd body-service
 <td>对齐 docker-compose</td>
 </tr>
 <tr>
-<td><code>app.body.qdrant.url</code></td>
+<td><code>app.body.qdrant.base-url</code></td>
 <td><code>http://127.0.0.1:6333</code></td>
 <td>温层向量库</td>
 </tr>
@@ -331,9 +339,9 @@ cd body-service
 <td>感官事件订阅</td>
 </tr>
 <tr>
-<td><code>app.body.retrieve.top-k</code></td>
-<td>5</td>
-<td>默认召回数</td>
+<td><code>app.body.retrieval.candidate-top-k</code></td>
+<td>50</td>
+<td>召回候选数（重排前）</td>
 </tr>
 </tbody>
 </table>
@@ -342,17 +350,22 @@ cd body-service
 </code></pre>
 <p>预期关键字段：</p>
 <pre><code class="language-json">{
+  &quot;tenant_id&quot;: &quot;default&quot;,
   &quot;knowledge&quot;: { &quot;documents&quot;: 0, &quot;chunks&quot;: 0, &quot;vector_points&quot;: 0, &quot;metadata_backend&quot;: &quot;pg&quot; },
   &quot;storage&quot;: {
-    &quot;hot&quot;:  { &quot;provider&quot;: &quot;redis&quot;,      &quot;available&quot;: true },
-    &quot;warm&quot;: { &quot;provider&quot;: &quot;qdrant&quot;,     &quot;available&quot;: true, &quot;collection&quot;: &quot;lifeform_knowledge&quot; },
-    &quot;cold&quot;: { &quot;provider&quot;: &quot;postgresql&quot;, &quot;available&quot;: true }
+    &quot;hot&quot;:  { &quot;tier&quot;: &quot;HOT&quot;,  &quot;store&quot;: &quot;redis&quot;,      &quot;available&quot;: true, &quot;hit_rate&quot;: 0.0, &quot;hits&quot;: 0, &quot;misses&quot;: 0 },
+    &quot;warm&quot;: { &quot;tier&quot;: &quot;WARM&quot;, &quot;store&quot;: &quot;qdrant&quot;,     &quot;available&quot;: true, &quot;collection&quot;: &quot;lifeform_knowledge&quot;, &quot;vector_size&quot;: 768 },
+    &quot;cold&quot;: { &quot;tier&quot;: &quot;COLD&quot;, &quot;store&quot;: &quot;postgres&quot;,   &quot;available&quot;: true, &quot;backend&quot;: &quot;pg&quot; },
+    &quot;rules&quot;: { &quot;hot_threshold&quot;: 2.0, &quot;warm_threshold&quot;: 1.0 }
   },
-  &quot;embedding&quot;: { &quot;provider&quot;: &quot;nlp-service&quot;, &quot;backend&quot;: &quot;...&quot;, &quot;degraded&quot;: false },
-  &quot;reranker&quot;:  { &quot;provider&quot;: &quot;nlp-service&quot; }
+  &quot;embedding&quot;: { &quot;backend&quot;: &quot;hash-ngram-768&quot;, &quot;dim&quot;: 768, &quot;available&quot;: true, &quot;degraded&quot;: true },
+  &quot;reranker&quot;:  { &quot;backend&quot;: &quot;lexical-coverage&quot;, &quot;available&quot;: true, &quot;degraded&quot;: true },
+  &quot;vector_store&quot;: { &quot;provider&quot;: &quot;qdrant&quot;, &quot;collection&quot;: &quot;lifeform_knowledge&quot;, &quot;available&quot;: true, &quot;vector_size&quot;: 768 }
 }
 </code></pre>
 <blockquote>
+<p>注意字段名是 <strong><code>store</code></strong>（不是 <code>provider</code>）：三层用 <code>store</code>，<code>embedding</code>/<code>reranker</code>/<code>vector_store</code> 用 <code>backend</code>/<code>provider</code>——
+以 <code>StorageFacade.tierStatus()</code> 与 <code>KnowledgeController.stats()</code> 的实际返回为准。</p>
 <p><strong>R3-01 达标</strong>：三层 <code>available</code> 全 true、<code>metadata_backend=pg</code> 即证冷层真相源生效；
 <code>TierRouter</code> 的分层阈值可配置（<code>TierRouterTest</code> 覆盖）。</p>
 </blockquote>
@@ -367,19 +380,47 @@ EOF
 cat /tmp/doc.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8083/api/body/knowledge \
   -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: default&quot; --data-binary @-
 </code></pre>
-<p>预期响应：</p>
+<p>预期响应（<strong>字段以代码为准</strong>，<code>KnowledgeController.ingest</code>）：</p>
 <pre><code class="language-json">{
   &quot;doc_id&quot;: &quot;phase3-arch&quot;,
   &quot;chunk_count&quot;: 3,
-  &quot;vector_points&quot;: 3,
-  &quot;embedding_backend&quot;: &quot;...&quot;,
-  &quot;storage&quot;: &quot;warm+cold&quot;,
-  &quot;status&quot;: &quot;READY&quot;
+  &quot;status&quot;: &quot;INDEXED&quot;,
+  &quot;vector_backend&quot;: &quot;hash-ngram-768&quot;,
+  &quot;degraded&quot;: true,
+  &quot;normalized_chars&quot;: 168,
+  &quot;success&quot;: true
 }
 </code></pre>
 <blockquote>
 <p><strong>R3-02 达标</strong>：块数由标题/段落边界决定、单块 ≤ 800 字。
-<strong>R3-04 达标</strong>：批次入库返回 <code>vector_points = chunk_count</code>，可被后续检索命中，且按租户隔离。</p>
+<strong>R3-04 达标</strong>：批次入库后切片可被检索命中，且按租户隔离。
+<code>status</code> 的取值是 <code>PENDING / INDEXED / FAILED</code>（<strong>没有 <code>READY</code></strong>）；
+<code>degraded=true</code> 表示嵌入走了哈希降级后端（装 BGE-M3 后自动变 false）。</p>
+</blockquote>
+<h3 id="22b-r3-02-html-pdf">2.2b R3-02 格式解析（HTML 入库；PDF 显式拒绝）<a class="headerlink" href="#22b-r3-02-html-pdf" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cat &gt; /tmp/doc-html.json &lt;&lt;'EOF'
+{
+  &quot;doc_id&quot;: &quot;phase3-html&quot;,
+  &quot;title&quot;: &quot;HTML 文档入库验证&quot;,
+  &quot;format&quot;: &quot;html&quot;,
+  &quot;content&quot;: &quot;&lt;html&gt;&lt;body&gt;&lt;h1&gt;存储分层&lt;/h1&gt;&lt;p&gt;热层用 &lt;b&gt;Redis&lt;/b&gt;，温层用 &lt;b&gt;Qdrant&lt;/b&gt;，冷层用 &lt;b&gt;PostgreSQL&lt;/b&gt;。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;&quot;
+}
+EOF
+cat /tmp/doc-html.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8083/api/body/knowledge \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: default&quot; --data-binary @-
+</code></pre>
+<p>预期：入库成功，且切片正文中<strong>不含 <code>&lt;b&gt;</code> / <code>&lt;p&gt;</code> 等标签</strong>（<code>normalized_chars</code> 小于原始 payload 长度）。</p>
+<p>PDF 会被明确拒绝（不是静默当文本分块）：</p>
+<pre><code class="language-bash">cat &gt; /tmp/doc-pdf.json &lt;&lt;'EOF'
+{ &quot;doc_id&quot;: &quot;phase3-pdf&quot;, &quot;title&quot;: &quot;PDF 文档&quot;, &quot;format&quot;: &quot;pdf&quot;, &quot;content&quot;: &quot;%PDF-1.7 binary....&quot; }
+EOF
+cat /tmp/doc-pdf.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8083/api/body/knowledge \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: default&quot; --data-binary @-
+# → {&quot;code&quot;:&quot;AGENT_BAD_REQUEST&quot;,&quot;message&quot;:&quot;暂不支持 format=pdf：PDF 需版面还原；请先经 OCR/文档解析通道转文本后入库（DEBT-013）&quot;}
+</code></pre>
+<blockquote>
+<p><strong>达标口径</strong>：R3-02 的「格式解析」步真实存在且可验证；PDF 属登记在案的缺口（DEBT-013），
+<strong>宁可报错也不产出含二进制的脏切片</strong>。</p>
 </blockquote>
 <h3 id="23-r3-05r3-06">2.3 R3-05/R3-06 语义检索与重排<a class="headerlink" href="#23-r3-05r3-06" title="Permanent link">&para;</a></h3>
 <pre><code class="language-bash">cat &gt; /tmp/q.json &lt;&lt;'EOF'
@@ -388,7 +429,9 @@ EOF
 cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8083/api/body/retrieve \
   -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: default&quot; --data-binary @- | python -m json.tool
 </code></pre>
-<p>预期：返回 TOP-5 命中，每条含 <code>chunk_id / doc_id / content / score（召回分）/ rerank_score（重排分）/ tier</code>。</p>
+<p>预期：返回 <strong>命中数组</strong>（顶层就是数组，不是对象），每条含
+<code>chunk_id / doc_id / title / heading / chunk_index / content / source / score（召回分）/ rerank_score（重排分）/ ingest_time_iso</code>。
+数组元素<strong>没有</strong> <code>tier</code> 字段——分层信息在 <code>/knowledge/stats</code> 的 <code>storage</code> 里查。</p>
 <blockquote>
 <p><strong>R3-05 达标</strong>：语义相近即可召回（查询与正文无逐字重合仍命中）。
 <strong>R3-06 达标</strong>：<code>rerank_score</code> 与 <code>score</code> 同时返回，可对照观察重排带来的名次变化；
@@ -410,7 +453,7 @@ curl -s --noproxy '*' http://127.0.0.1:8083/api/body/knowledge/stats | python -c
 <pre><code class="language-bash">cat &gt; /tmp/rag.json &lt;&lt;'EOF'
 { &quot;query&quot;: &quot;知识以什么方式被持久化？&quot;, &quot;top_k&quot;: 3 }
 EOF
-cat /tmp/rag.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8083/api/body/rag \
+cat /tmp/rag.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8083/api/body/rag/answer \
   -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: default&quot; --data-binary @- | python -m json.tool
 </code></pre>
 <p>预期：返回 <code>answer</code> + <code>citations</code>（每条含可回溯的 <code>doc_id</code> / <code>chunk_id</code>）+ <code>generator</code>。</p>
@@ -460,7 +503,38 @@ curl -s --noproxy '*' -X DELETE http://127.0.0.1:8083/api/body/knowledge/phase3-
 </code></pre>
 <p>预期：重入库后同 doc 切片数受控；删除返回 <code>{"deleted": true}</code>，文档不再被召回，
 <code>stats</code> 的 <code>documents</code> 与 <code>vector_points</code> 同步下降（无孤儿向量）。</p>
-<h3 id="29-r-c03">2.9 工作平台躯体视图（R-C03）<a class="headerlink" href="#29-r-c03" title="Permanent link">&para;</a></h3>
+<h3 id="29-6">2.9 三层一致性对账（设计 §6 风险应对「定期对账任务」）<a class="headerlink" href="#29-6" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">curl -s --noproxy '*' http://127.0.0.1:8083/api/body/knowledge/reconcile \
+  -H &quot;X-Tenant-Id: default&quot; | python -m json.tool
+</code></pre>
+<p>预期：</p>
+<pre><code class="language-json">{
+  &quot;tenant_id&quot;: &quot;default&quot;,
+  &quot;truth_source&quot;: &quot;postgres&quot;,
+  &quot;documents&quot;: 3, &quot;chunks&quot;: 8, &quot;vector_points&quot;: 8,
+  &quot;vector_store_available&quot;: true,
+  &quot;missing_vectors&quot;: 0, &quot;orphan_vectors&quot;: 0,
+  &quot;consistent&quot;: true,
+  &quot;action&quot;: &quot;三层一致，无需处置&quot;
+}
+</code></pre>
+<blockquote>
+<p><strong>达标口径</strong>：PG 是真相源，Qdrant 点数应与之相等；<strong>只读对账不改数据</strong>（修复由人或定时任务执行）。
+向量库不可用时 <code>vector_points = -1</code> 且 <code>consistent = false</code> —— <strong>不把"不可用"报成"一致"</strong>。</p>
+</blockquote>
+<h3 id="210-in-05">2.10 IN-05 迭代检索预留接口<a class="headerlink" href="#210-in-05" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cat &gt; /tmp/plan.json &lt;&lt;'EOF'
+{ &quot;query&quot;: &quot;躯体层的三级存储分别用什么中间件？&quot;, &quot;iteration&quot;: 1, &quot;top_k&quot;: 3, &quot;use_cache&quot;: false }
+EOF
+cat /tmp/plan.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8083/api/body/retrieve/plan \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: default&quot; --data-binary @- | python -m json.tool
+</code></pre>
+<p>预期：<code>iteration_loop=single_pass</code>、<code>agentic_rag_status=reserved</code>、<code>rounds</code> 含第 1 轮；
+把 <code>iteration</code> 改成 2 时回 <code>iteration_loop=not_enabled</code> —— <strong>接口就绪但循环未实现，如实标注，不伪造多轮结果</strong>。</p>
+<blockquote>
+<p><strong>IN-05 达标</strong>：检索接口预留参数（<code>iteration</code> / <code>refine_query</code>）可传可用。</p>
+</blockquote>
+<h3 id="211-r-c03">2.11 工作平台躯体视图（R-C03）<a class="headerlink" href="#211-r-c03" title="Permanent link">&para;</a></h3>
 <p>启动 wp-bff 与前端（wp-bff 默认 8090；如已被占用，可换端口演示）：</p>
 <pre><code class="language-bash">cd services/node/wp-bff
 WP_BFF_CONTROL_TOKEN=demo-token node server.js
@@ -489,18 +563,33 @@ cd web/work-platform &amp;&amp; npm run dev
 <td>热（Redis）/ 温（Qdrant）/ 冷（PostgreSQL）可用性</td>
 </tr>
 <tr>
+<td><strong>文档入库</strong></td>
+<td>粘贴正文或「从文件读取」(.md/.txt/.html) → 点「入库」→ <strong>知识量/向量点立即增加</strong></td>
+</tr>
+<tr>
 <td>检索测试</td>
 <td>输入查询 → 展示 TOP-K 命中 + <strong>高亮片段</strong> + 召回分/重排分对照</td>
 </tr>
 </tbody>
 </table>
+<p>演示链路（对应开发设计文档 §7）：<strong>入库一篇文档 → 观察知识量增加 → 用相关问题检索 → 看到高亮命中片段与来源</strong>。</p>
 <p>预期：以上数据来自真实 API（非 Mock）；也可直接打 BFF 端点核对：</p>
 <pre><code class="language-bash">curl -s --noproxy '*' http://127.0.0.1:8090/api/wp/knowledge -H &quot;X-Tenant-Id: default&quot; | python -m json.tool
+
+# 写路径：经 BFF 入库（工作平台侧唯一入口）
+cat &gt; /tmp/wp-doc.json &lt;&lt;'EOF'
+{ &quot;doc_id&quot;: &quot;wp-demo-1&quot;, &quot;title&quot;: &quot;工作平台入库验证&quot;, &quot;format&quot;: &quot;md&quot;,
+  &quot;content&quot;: &quot;# 躯体视图入库\n## 写路径\n工作平台经 BFF 代理把文档交给体层，依次完成格式解析、分块、嵌入与向量入库。&quot; }
+EOF
+cat /tmp/wp-doc.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/knowledge \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: default&quot; --data-binary @- | python -m json.tool
+
 cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/knowledge/search \
   -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: default&quot; --data-binary @- | python -m json.tool
 </code></pre>
 <blockquote>
-<p><strong>R-C03 达标</strong>：躯体视图展示知识总量、检索 P99、命中率指标面板，且数据来自真实 API。</p>
+<p><strong>R-C03 达标</strong>：躯体视图展示知识总量、检索 P99、命中率指标面板，且数据来自真实 API；
+<strong>R3-09 达标</strong>：知识入库在工作平台侧可达（BFF 写路径），不再需要绕过工作平台直连 8083。</p>
 </blockquote>
 <hr />
 <h2 id="dod">三、量化验收（DoD 对齐）<a class="headerlink" href="#dod" title="Permanent link">&para;</a></h2>
@@ -521,16 +610,28 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 <td>✅</td>
 </tr>
 <tr>
+<td>R3-01+</td>
+<td>三层一致性对账（设计 §6 风险应对）</td>
+<td><code>/knowledge/reconcile</code> 只读对账；<code>StorageFacadeTest</code> 5 项覆盖一致/缺向量/孤儿/不可用</td>
+<td>✅</td>
+</tr>
+<tr>
 <td>R3-02</td>
 <td>分块无遗漏；块大小 200-800 字</td>
 <td>Java 9 项 + Python 12 项（跨语言同算法）</td>
 <td>✅</td>
 </tr>
 <tr>
+<td>R3-02+</td>
+<td>入库「格式解析」步（MD/HTML 可用；PDF 显式拒绝）</td>
+<td><code>DocumentParser</code> + 7 项单测；HTML 去标签不吞正文；PDF 返回 <code>AGENT_BAD_REQUEST</code>（DEBT-013）</td>
+<td>✅（PDF 见缺口）</td>
+</tr>
+<tr>
 <td>R3-03</td>
 <td>嵌入延迟 P95 &lt; 200ms；维度正确</td>
-<td>768 维确定性后端；入库零失败</td>
-<td>✅</td>
+<td>768 维确定性后端；入库零失败（<strong>真实 BGE-M3 未装，degraded=true 如实上报</strong>）</td>
+<td>✅（降级）</td>
 </tr>
 <tr>
 <td>R3-04</td>
@@ -541,7 +642,7 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 <tr>
 <td>R3-05</td>
 <td>检索 P99 &lt; 500ms；命中质量合格</td>
-<td><strong>P99 366ms</strong>；命中率 <strong>0.925</strong></td>
+<td><strong>P99 366ms</strong>；命中率 <strong>0.925</strong>（2026-09-18 端到端实测）</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -559,24 +660,35 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 <tr>
 <td>R3-08</td>
 <td>重复查询缓存命中 ≥ 30%</td>
-<td><strong>45%</strong>（hit P50 23.1ms &lt; miss 28.8ms）</td>
+<td><strong>45%</strong>（hit P50 23.1ms &lt; miss 28.8ms；<strong>为精确指纹缓存，非向量语义缓存</strong>，见台账 §4.6）</td>
 <td>✅</td>
 </tr>
 <tr>
 <td>R3-09</td>
 <td>API 全通；索引异步更新</td>
-<td>7 端点全通；Kafka 事件驱动入库</td>
+<td>body 侧 10 个路由全通；BFF 写路径已补（4 项单测）；Kafka 事件驱动入库</td>
 <td>✅</td>
 </tr>
 <tr>
 <td>R-C03</td>
 <td>躯体视图展示知识量/检索 P99/命中率</td>
-<td><code>KnowledgeView</code> 三面板 + 检索测试高亮；真实 API 数据</td>
+<td><code>KnowledgeView</code> 三面板 + <strong>文档入库卡</strong> + 检索测试高亮；真实 API 数据</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>IN-05</td>
+<td>迭代检索接口就绪（预留参数可传）</td>
+<td><code>/api/body/retrieve/plan</code>；<code>iteration</code>/<code>refine_query</code> 可传；多轮回 <code>not_enabled</code></td>
 <td>✅</td>
 </tr>
 </tbody>
 </table>
-<p><strong>端到端验收脚本：35 项 PASS / 0 FAIL</strong>（<code>PASS 35 / FAIL 0</code>）。</p>
+<p><strong>端到端验收脚本：35 项 PASS / 0 FAIL</strong>（<code>PASS 35 / FAIL 0</code>，2026-09-18 端到端实测，脚本 <code>PASS 35 / FAIL 0</code>）。</p>
+<blockquote>
+<p>⚠️ <strong>口径说明</strong>：上表中带 <code>+</code> 或标注「本轮」的验收项，其<strong>端到端脚本尚未重跑</strong>（需 Docker 基础设施），
+当前结论由<strong>单元测试 + 契约校验</strong>支撑（Java 114 项 / wp-bff 27 项 / 契约 0 FAIL）。
+重跑端到端时请一并核对：HTML 入库、<code>/knowledge/reconcile</code>、<code>/retrieve/plan</code>、BFF 写路径。</p>
+</blockquote>
 <hr />
 <h2 id="_1">四、故障排查<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
 <table>
@@ -628,15 +740,18 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 <hr />
 <h2 id="_2">五、演示完成标准<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
 <ul>
-<li>[x] Java 全量 <code>-pl body-service -am test</code> 通过，100 测试 0 失败</li>
-<li>[x] Python 52 项、wp-bff 22 项全通过</li>
+<li>[x] Java 全量 <code>test</code> 通过，114 测试 0 失败</li>
+<li>[x] Python 52 项、wp-bff 29 项全通过</li>
 <li>[x] 检索 P99 &lt; 500ms（实测 366ms）、缓存命中 ≥ 30%（实测 45%）达标</li>
 <li>[x] 文档入库 → 语义检索命中（语义相近可召回）</li>
+<li>[x] <strong>HTML 入库经格式解析（切片不含标签）；PDF 被显式拒绝并给出指引</strong></li>
+<li>[x] <strong>三层一致性对账端点可用（缺向量/孤儿向量可识别）</strong></li>
+<li>[x] <strong>IN-05 迭代检索预留接口可传参，未实现循环如实标注</strong></li>
 <li>[x] RAG 管道端到端可用，引用可回溯</li>
 <li>[x] 租户数据隔离实测生效</li>
 <li>[x] 感官 → 躯体闭环（Kafka 事件驱动入库并可召回）</li>
-<li>[x] 工作平台躯体视图随阶段交付，取真实 API 数据</li>
-<li>[x] 端到端验收脚本 35/35 通过</li>
+<li>[x] 工作平台躯体视图随阶段交付，取真实 API 数据，<strong>并可从界面完成文档入库</strong></li>
+<li>[x] 端到端验收脚本 35/35 通过（2026-09-18；本轮新增项待重跑，见 §三 口径说明）</li>
 </ul>
 <blockquote>
 <p>达标 → Phase 3 验收通过 → 进入 Phase 4（大脑期·推理与生成）</p>

@@ -110,16 +110,21 @@ body-service 消费 → 入库 → 语义检索召回该事件文档 →「感�
 | Java · gateway-service | 2 | 2 | 0 |
 | Java · session-manager | 10 | 10 | 0 |
 | Java · sense-service | 48 | 48 | 0 |
-| Java · **body-service** | **40** | **40** | **0** |
-| **Java 小计** | **100** | **100** | **0** |
+| Java · **body-service** | **54** | **54** | **0** |
+| **Java 小计** | **114** | **114** | **0** |
 | Python · nlp-service | 52 | 52 | 0 |
-| Node · wp-bff | 22 | 22 | 0 |
-| **合计** | **174** | **174** | **0** |
+| Node · wp-bff | 29 | 29 | 0 |
+| **合计** | **195** | **195** | **0** |
 
-其它校验：契约 `0 FAIL`（实现端点 8 ↔ BFF 8）· Java 文档覆盖 `100/100` · 前端 typecheck + build 通过。
+其它校验：契约 `0 FAIL`（实现端点 8 路径 ↔ BFF 8 路径 / 9 个方法）· Java 文档覆盖 `103/103` · 前端 typecheck + build 通过。
 
-body-service 的 7 个测试类：`ChunkProcessorTest`(9) · `TierRouterTest`(6) · `HotCacheStoreTest`(4) ·
-`InMemoryMetadataStoreTest`(4) · `IngestServiceTest`(6) · `RetrievalServiceTest`(8) · `QdrantClientTest`(3)。
+body-service 的 9 个测试类：`ChunkProcessorTest`(7) · `DocumentParserTest`(7) · `TierRouterTest`(6) ·
+`InMemoryMetadataStoreTest`(6) · `HotCacheStoreTest`(5) · `StorageFacadeTest`(5) · `IngestServiceTest`(5) ·
+`RetrievalServiceTest`(10) · `QdrantClientTest`(3)。
+
+> 上表为 **2026-09-18 第二轮复审后的实测值**（复审新增 `DocumentParserTest` / `StorageFacadeTest`，
+> wp-bff 用例由 22 扩至 29，其中 2 条为**写路径鉴权反向用例**）。
+> PASS/FAIL 数字均取自命令原始输出，非估算。
 
 ---
 
@@ -156,8 +161,57 @@ body-service 的 7 个测试类：`ChunkProcessorTest`(9) · `TierRouterTest`(6)
 | Should 需求（R3-06、R3-08、R3-09） | **3/3 通过** |
 | 阶段 DoD（5 项） | **5/5 通过** |
 | 终端线 R-C03 / R-C09 | **达标** |
-| 测试总基线 | **174 / 174 通过** |
+| 测试总基线 | **195 / 195 通过**（审核补全轮后；补全前 174） |
 | 端到端验收 | **35 / 35 通过** |
 | **阶段总结论** | **通过** |
 
 > Phase 3 验收通过，DEBT-001 正式销项（内存检索 → Qdrant 向量检索），进入 Phase 4（大脑期）。
+
+---
+
+## 11. 补记 · 2026-09-18 需求审核与补全轮
+
+> 本节由审核轮追加。**原 §1~§10 的结论保持不变**（Phase 3 主体实现真实可用、验收成立），
+> 本节记录审核发现的范围口径偏差与随后补全的项，完整记录见
+> [`docs/优化日志/2026-09-18-Phase3需求审核与补全.md`](../优化日志/2026-09-18-Phase3需求审核与补全.md)。
+
+### 11.1 审核方法
+
+需求文档逐条对账 + 生产代码伪实现扫描（TODO/占位/mock/假实现）+ DEBT 代码↔台账双向差集 +
+前端→BFF→body 全链路可达性核查 + DEMO 示例与真实返回值逐条比对。
+
+### 11.2 发现的问题
+
+| 类别 | 问题 | 定性 |
+|---|---|---|
+| 伪代码排查 | 生产代码 **0 处** TODO/占位/假实现；降级项均带 `degraded` 标记 | ✅ 无问题 |
+| 阶段范围内缺失 | **知识入库在工作平台不可达**（BFF 无写路径、前端无入库入口）→ 演示链路第一段断裂 | ⚠️ 真实缺口，已补 |
+| 阶段范围内缺失 | **R3-02「格式解析」步缺失**（HTML 标签会进向量库） | ⚠️ 真实缺口，已补 |
+| 阶段范围内缺失 | **IN-05 预留参数不存在**（无从"预留"） | ⚠️ 真实缺口，已补 |
+| 阶段范围内缺失 | **对账能力缺失**（设计 §6 风险应对要求"定期对账任务"） | ⚠️ 真实缺口，已补 |
+| **安全边界不一致** | 补入库链路时，写路径初始沿用了 `/knowledge` 的**只读免令牌**豁免 → 浏览器直连 8090 即可**无鉴权写入知识库** | 🔴 真实安全缺口，已补（同级 origin-allowlist + control-token，附 2 条反向用例） |
+| DEBT 记账 | `DEBT-010/011/012` 代码已引用、**台账未登记**（违反台账 §4.4 自身约定） | ⚠️ 已补齐，并新开 DEBT-013 |
+| 文档失真 | **DEMO 文档 6 处接口示例与真实返回值不符**（含 `/api/body/rag` 会 404、`status=READY` 不存在） | ⚠️ 已逐条修正 |
+| 设计↔实现 | 设计写 `PG+pgvector` / `Redis 语义缓存`，实现均未采用 | ⚠️ 不违反验收，已登记台账 §4.6 |
+| **阶段范围缺口** | **IN-01 / WB-03 / WB-05 / MC-01 未实现**，而需求文档 §8/§9 列有其验收标准 | 🔴 报告范围未涵盖，已登记待规划侧决策 |
+
+### 11.3 补全后的验证基线（2026-09-18 实测）
+
+| 层次 | 命令 | 补全前 | 补全后 |
+|---|---|---|---|
+| Java 全量单测 | `scripts/mvn-dev.sh test` | 100 通过 | **114 通过 / 0 失败**（body 40 → 54） |
+| Python nlp-service | `pytest -q` | 52 通过 | **52 通过**（未变） |
+| wp-bff | `node --test` | 22 通过 | **29 通过 / 0 失败**（含 2 条写路径鉴权反向用例） |
+| 契约校验 | `contract-check.py --work-platform` | 0 FAIL | **0 FAIL**（实现端点 8 路径 ↔ BFF 8 路径 / 9 方法） |
+| Java 文档覆盖 | `java-doc-coverage.py` | 100/100 | **103/103（100%）** |
+| 前端 | `vue-tsc --noEmit` + `vite build` | 通过 | **通过** |
+| 测试总基线 | — | 174 / 174 | **195 / 195** |
+
+### 11.4 对原验收结论的影响
+
+| 项 | 结论 |
+|---|---|
+| Phase 3 主体实现（R3-01~R3-09 + R-C03） | **原验收结论成立**，实现真实、无伪代码 |
+| 验收范围口径 | **原报告范围偏窄** —— 需求文档 §8/§9 的 IN/WB/MC 系列从未进入交付范围；本轮已如实登记（台账 §6-12） |
+| 端到端脚本 | **本轮未重跑**（需 Docker）；新增项由单测 + 契约覆盖，重跑清单见 DEMO §三 口径说明 |
+| 新增验证待办 | HTML 入库、`/knowledge/reconcile`、`/retrieve/plan`、BFF 写路径 —— 端到端重跑时一并核对 |

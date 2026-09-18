@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 Phase3-测试验收报告.md</span>
+  <span class="meta">生成于 2026-09-18 20:55 · 源文件 Phase3-测试验收报告.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -130,6 +130,13 @@
 <li><a href="#8">8. 缺陷与修复验证</a></li>
 <li><a href="#9">9. 待补验证项（不影响本阶段结论）</a></li>
 <li><a href="#10">10. 验收签字</a></li>
+<li><a href="#11-2026-09-18">11. 补记 · 2026-09-18 需求审核与补全轮</a><ul>
+<li><a href="#111">11.1 审核方法</a></li>
+<li><a href="#112">11.2 发现的问题</a></li>
+<li><a href="#113-2026-09-18">11.3 补全后的验证基线（2026-09-18 实测）</a></li>
+<li><a href="#114">11.4 对原验收结论的影响</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </nav>
@@ -451,14 +458,14 @@ body-service 消费 → 入库 → 语义检索召回该事件文档 →「感�
 </tr>
 <tr>
 <td>Java · <strong>body-service</strong></td>
-<td style="text-align: right;"><strong>40</strong></td>
-<td style="text-align: right;"><strong>40</strong></td>
+<td style="text-align: right;"><strong>54</strong></td>
+<td style="text-align: right;"><strong>54</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 <tr>
 <td><strong>Java 小计</strong></td>
-<td style="text-align: right;"><strong>100</strong></td>
-<td style="text-align: right;"><strong>100</strong></td>
+<td style="text-align: right;"><strong>114</strong></td>
+<td style="text-align: right;"><strong>114</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 <tr>
@@ -469,21 +476,27 @@ body-service 消费 → 入库 → 语义检索召回该事件文档 →「感�
 </tr>
 <tr>
 <td>Node · wp-bff</td>
-<td style="text-align: right;">22</td>
-<td style="text-align: right;">22</td>
+<td style="text-align: right;">29</td>
+<td style="text-align: right;">29</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr>
 <td><strong>合计</strong></td>
-<td style="text-align: right;"><strong>174</strong></td>
-<td style="text-align: right;"><strong>174</strong></td>
+<td style="text-align: right;"><strong>195</strong></td>
+<td style="text-align: right;"><strong>195</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 </tbody>
 </table>
-<p>其它校验：契约 <code>0 FAIL</code>（实现端点 8 ↔ BFF 8）· Java 文档覆盖 <code>100/100</code> · 前端 typecheck + build 通过。</p>
-<p>body-service 的 7 个测试类：<code>ChunkProcessorTest</code>(9) · <code>TierRouterTest</code>(6) · <code>HotCacheStoreTest</code>(4) ·
-<code>InMemoryMetadataStoreTest</code>(4) · <code>IngestServiceTest</code>(6) · <code>RetrievalServiceTest</code>(8) · <code>QdrantClientTest</code>(3)。</p>
+<p>其它校验：契约 <code>0 FAIL</code>（实现端点 8 路径 ↔ BFF 8 路径 / 9 个方法）· Java 文档覆盖 <code>103/103</code> · 前端 typecheck + build 通过。</p>
+<p>body-service 的 9 个测试类：<code>ChunkProcessorTest</code>(7) · <code>DocumentParserTest</code>(7) · <code>TierRouterTest</code>(6) ·
+<code>InMemoryMetadataStoreTest</code>(6) · <code>HotCacheStoreTest</code>(5) · <code>StorageFacadeTest</code>(5) · <code>IngestServiceTest</code>(5) ·
+<code>RetrievalServiceTest</code>(10) · <code>QdrantClientTest</code>(3)。</p>
+<blockquote>
+<p>上表为 <strong>2026-09-18 第二轮复审后的实测值</strong>（复审新增 <code>DocumentParserTest</code> / <code>StorageFacadeTest</code>，
+wp-bff 用例由 22 扩至 29，其中 2 条为<strong>写路径鉴权反向用例</strong>）。
+PASS/FAIL 数字均取自命令原始输出，非估算。</p>
+</blockquote>
 <hr />
 <h2 id="8">8. 缺陷与修复验证<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
 <table>
@@ -594,7 +607,7 @@ body-service 消费 → 入库 → 语义检索召回该事件文档 →「感�
 </tr>
 <tr>
 <td>测试总基线</td>
-<td><strong>174 / 174 通过</strong></td>
+<td><strong>195 / 195 通过</strong>（审核补全轮后；补全前 174）</td>
 </tr>
 <tr>
 <td>端到端验收</td>
@@ -608,7 +621,161 @@ body-service 消费 → 入库 → 语义检索召回该事件文档 →「感�
 </table>
 <blockquote>
 <p>Phase 3 验收通过，DEBT-001 正式销项（内存检索 → Qdrant 向量检索），进入 Phase 4（大脑期）。</p>
-</blockquote></main>
+</blockquote>
+<hr />
+<h2 id="11-2026-09-18">11. 补记 · 2026-09-18 需求审核与补全轮<a class="headerlink" href="#11-2026-09-18" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>本节由审核轮追加。<strong>原 §1~§10 的结论保持不变</strong>（Phase 3 主体实现真实可用、验收成立），
+本节记录审核发现的范围口径偏差与随后补全的项，完整记录见
+<a href="../优化日志/2026-09-18-Phase3需求审核与补全.md"><code>docs/优化日志/2026-09-18-Phase3需求审核与补全.md</code></a>。</p>
+</blockquote>
+<h3 id="111">11.1 审核方法<a class="headerlink" href="#111" title="Permanent link">&para;</a></h3>
+<p>需求文档逐条对账 + 生产代码伪实现扫描（TODO/占位/mock/假实现）+ DEBT 代码↔台账双向差集 +
+前端→BFF→body 全链路可达性核查 + DEMO 示例与真实返回值逐条比对。</p>
+<h3 id="112">11.2 发现的问题<a class="headerlink" href="#112" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>问题</th>
+<th>定性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>伪代码排查</td>
+<td>生产代码 <strong>0 处</strong> TODO/占位/假实现；降级项均带 <code>degraded</code> 标记</td>
+<td>✅ 无问题</td>
+</tr>
+<tr>
+<td>阶段范围内缺失</td>
+<td><strong>知识入库在工作平台不可达</strong>（BFF 无写路径、前端无入库入口）→ 演示链路第一段断裂</td>
+<td>⚠️ 真实缺口，已补</td>
+</tr>
+<tr>
+<td>阶段范围内缺失</td>
+<td><strong>R3-02「格式解析」步缺失</strong>（HTML 标签会进向量库）</td>
+<td>⚠️ 真实缺口，已补</td>
+</tr>
+<tr>
+<td>阶段范围内缺失</td>
+<td><strong>IN-05 预留参数不存在</strong>（无从"预留"）</td>
+<td>⚠️ 真实缺口，已补</td>
+</tr>
+<tr>
+<td>阶段范围内缺失</td>
+<td><strong>对账能力缺失</strong>（设计 §6 风险应对要求"定期对账任务"）</td>
+<td>⚠️ 真实缺口，已补</td>
+</tr>
+<tr>
+<td><strong>安全边界不一致</strong></td>
+<td>补入库链路时，写路径初始沿用了 <code>/knowledge</code> 的<strong>只读免令牌</strong>豁免 → 浏览器直连 8090 即可<strong>无鉴权写入知识库</strong></td>
+<td>🔴 真实安全缺口，已补（同级 origin-allowlist + control-token，附 2 条反向用例）</td>
+</tr>
+<tr>
+<td>DEBT 记账</td>
+<td><code>DEBT-010/011/012</code> 代码已引用、<strong>台账未登记</strong>（违反台账 §4.4 自身约定）</td>
+<td>⚠️ 已补齐，并新开 DEBT-013</td>
+</tr>
+<tr>
+<td>文档失真</td>
+<td><strong>DEMO 文档 6 处接口示例与真实返回值不符</strong>（含 <code>/api/body/rag</code> 会 404、<code>status=READY</code> 不存在）</td>
+<td>⚠️ 已逐条修正</td>
+</tr>
+<tr>
+<td>设计↔实现</td>
+<td>设计写 <code>PG+pgvector</code> / <code>Redis 语义缓存</code>，实现均未采用</td>
+<td>⚠️ 不违反验收，已登记台账 §4.6</td>
+</tr>
+<tr>
+<td><strong>阶段范围缺口</strong></td>
+<td><strong>IN-01 / WB-03 / WB-05 / MC-01 未实现</strong>，而需求文档 §8/§9 列有其验收标准</td>
+<td>🔴 报告范围未涵盖，已登记待规划侧决策</td>
+</tr>
+</tbody>
+</table>
+<h3 id="113-2026-09-18">11.3 补全后的验证基线（2026-09-18 实测）<a class="headerlink" href="#113-2026-09-18" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>命令</th>
+<th>补全前</th>
+<th>补全后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 全量单测</td>
+<td><code>scripts/mvn-dev.sh test</code></td>
+<td>100 通过</td>
+<td><strong>114 通过 / 0 失败</strong>（body 40 → 54）</td>
+</tr>
+<tr>
+<td>Python nlp-service</td>
+<td><code>pytest -q</code></td>
+<td>52 通过</td>
+<td><strong>52 通过</strong>（未变）</td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><code>node --test</code></td>
+<td>22 通过</td>
+<td><strong>29 通过 / 0 失败</strong>（含 2 条写路径鉴权反向用例）</td>
+</tr>
+<tr>
+<td>契约校验</td>
+<td><code>contract-check.py --work-platform</code></td>
+<td>0 FAIL</td>
+<td><strong>0 FAIL</strong>（实现端点 8 路径 ↔ BFF 8 路径 / 9 方法）</td>
+</tr>
+<tr>
+<td>Java 文档覆盖</td>
+<td><code>java-doc-coverage.py</code></td>
+<td>100/100</td>
+<td><strong>103/103（100%）</strong></td>
+</tr>
+<tr>
+<td>前端</td>
+<td><code>vue-tsc --noEmit</code> + <code>vite build</code></td>
+<td>通过</td>
+<td><strong>通过</strong></td>
+</tr>
+<tr>
+<td>测试总基线</td>
+<td>—</td>
+<td>174 / 174</td>
+<td><strong>195 / 195</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="114">11.4 对原验收结论的影响<a class="headerlink" href="#114" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phase 3 主体实现（R3-01~R3-09 + R-C03）</td>
+<td><strong>原验收结论成立</strong>，实现真实、无伪代码</td>
+</tr>
+<tr>
+<td>验收范围口径</td>
+<td><strong>原报告范围偏窄</strong> —— 需求文档 §8/§9 的 IN/WB/MC 系列从未进入交付范围；本轮已如实登记（台账 §6-12）</td>
+</tr>
+<tr>
+<td>端到端脚本</td>
+<td><strong>本轮未重跑</strong>（需 Docker）；新增项由单测 + 契约覆盖，重跑清单见 DEMO §三 口径说明</td>
+</tr>
+<tr>
+<td>新增验证待办</td>
+<td>HTML 入库、<code>/knowledge/reconcile</code>、<code>/retrieve/plan</code>、BFF 写路径 —— 端到端重跑时一并核对</td>
+</tr>
+</tbody>
+</table></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

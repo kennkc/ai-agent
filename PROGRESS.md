@@ -20,9 +20,23 @@ and CI additions — merged on a semantic basis, no side was overwritten).
 Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12; after the D-1 cross-service
 fix (2026-09-13) and the hardening pass below the suite stood at **61 Java tests green**.
 Phase 3 (躯体期 / body stage, R3-01~R3-09 + R-C03) landed on 2026-09-18 — body-service was
-rewritten into a persisted knowledge pipeline (chunk -> embed -> three-tier store -> semantic
-retrieve -> rerank -> RAG) and **DEBT-001 closed**; the suite now stands at
-**100 Java + 52 Python + 22 wp-bff tests green** with an end-to-end acceptance of 35/35.
+rewritten into a persisted knowledge pipeline (parse -> chunk -> embed -> three-tier store ->
+semantic retrieve -> rerank -> RAG) and **DEBT-001 closed**.
+
+A **requirement-audit & gap-closure pass** followed on 2026-09-18 (see
+`docs/优化日志/2026-09-18-Phase3需求审核与补全.md`): every Phase 3 requirement was reconciled
+against the code, the production tree was scanned for stub/placeholder implementations
+(**none found**), and the DEBT registry was cross-checked against the `DEBT-0xx` markers in code.
+Four in-scope gaps were found and closed — knowledge ingest was unreachable from the work
+platform (no BFF write path), the R3-02 "format parse" step was missing, the IN-05 iteration
+parameters did not exist, and the three-tier reconciliation task required by the design's risk
+section was absent. Four **out-of-scope** requirements from the Phase 3 requirement doc
+(IN-01 skill packages, WB-03 expert center, WB-05 skill marketplace, MC-01 collaboration-bus
+service) were never delivered and are now registered instead of silently dropped.
+
+The suite now stands at **114 Java + 52 Python + 27 wp-bff tests green**, contract check 0 FAIL,
+Java doc coverage 103/103; end-to-end acceptance remains 35/35 from the 2026-09-18 run
+(new items are covered by unit + contract tests and have not been re-run end-to-end).
 
 ## Phase 0
 
@@ -117,9 +131,10 @@ and `web/work-platform`. Closes **DEBT-001** (in-memory retrieval -> Qdrant vect
 - [x] R3-07 `RagPipeline`: retrieve -> compose answer + traceable citations; reports
       `generator=template` truthfully (DEBT-002 still open, Phase 4)
 - [x] R3-08 cache-first strategy: normalized query fingerprint, documented hit rate
-- [x] R3-09 `KnowledgeController`: `POST/GET /api/body/knowledge`, `POST /api/body/retrieve`,
-      `POST /api/body/rag`, `GET /api/body/knowledge/stats`, `DELETE /api/body/knowledge/{docId}`,
-      `GET /api/body/health`
+- [x] R3-09 `KnowledgeController`: `POST/GET /api/body/knowledge`, `POST /api/body/knowledge/batch`,
+      `POST /api/body/retrieve`, `POST /api/body/retrieve/plan`, `POST /api/body/rag/answer`,
+      `GET /api/body/knowledge/stats`, `GET /api/body/knowledge/reconcile`,
+      `DELETE /api/body/knowledge/{docId}`, `GET /api/body/health`
 - [x] Sense -> body closed loop: `SenseCollectedConsumer` subscribes `lifeform.sense.collected`;
       `SenseEventPublisher` payload extended with `title`/`content` so events are self-contained
 - [x] Removed the superseded in-memory implementation (`BodyStore`, `BodyController`,
@@ -139,17 +154,45 @@ and `web/work-platform`. Closes **DEBT-001** (in-memory retrieval -> Qdrant vect
 
 ### Verification (2026-09-18)
 
-- Java `-pl body-service -am test`: **100 passed / 0 failed** (gateway 2 · session 10 · sense 48 ·
-  body 40; body-service grew from 1 test to 40 across 7 classes)
+- Java full suite `scripts/mvn-dev.sh test`: **114 passed / 0 failed** (gateway 2 · session 10 ·
+  sense 48 · body 54; body-service grew from 1 test to 54 across 9 classes)
 - `nlp-service` pytest: **52 passed** (intent 15 + OCR 4 + chunking 12 + embedding 13 + rerank 8)
-- wp-bff `node --test`: **22 passed**
-- `contract-check.py --work-platform`: implemented 8 <-> BFF 8, **0 FAIL**
-- `java-doc-coverage.py`: body-service 33/33, repo-wide **100/100**
+- wp-bff `node --test`: **27 passed**
+- `contract-check.py --work-platform`: implemented 8 paths <-> BFF 8 paths (9 methods), **0 FAIL**
+- `java-doc-coverage.py`: body-service 36/36, repo-wide **103/103** hand-written sources
 - Frontend `vue-tsc --noEmit` + `vite build`: passed
 - End-to-end (Docker: qdrant/redis/postgres/kafka/jaeger + 3 services):
   **35 PASS / 0 FAIL** — retrieval P99 **366 ms**, hit rate **0.925**, cache hit rate **0.45**,
   ingest failures 0, tenant isolation enforced, re-ingest idempotent, delete purges vectors
   (no orphans), Kafka sense event ingested and recalled
+
+### Phase 3 requirement re-audit (2026-09-18, second pass)
+
+An independent audit re-read the Phase 3 requirement spec against the actual source instead of
+trusting the phase reports. Outcome: **no fake/placeholder implementation found** (4 honest
+degradations, 2 real gaps, 0 pseudo-implementations), but one functional break and several
+stale doc figures were fixed:
+
+- [x] **Gap — R3-02 format parsing step was missing**: added `chunk/DocumentParser.java`
+  (md / html / text normalisation + heading extraction); PDF is explicitly rejected with a
+  unified error code instead of being silently chunked as text (DEBT-013)
+- [x] **Gap — work platform could not ingest at all** (biggest find): added BFF
+  `POST /api/wp/knowledge` ingest proxy + `KnowledgeView.vue` ingest panel (upload/paste,
+  format selector, honest `degraded` reporting)
+- [x] `IngestService` now surfaces `format / parser / degraded` in `IngestOutcome`
+- [x] Contract: `/knowledge` POST documented with `KnowledgeIngestResult` schema; `contract-check.py`
+  count semantics aligned (path-level vs method-level no longer look contradictory)
+- [x] Tests added: `DocumentParserTest` (7) · `StorageFacadeTest` (5) · wp-bff ingest cases (+5)
+- [x] **Security gap closed on the write path**: the new `POST /api/wp/knowledge` initially bypassed
+  auth (it reused the read-only `/knowledge` exemption), i.e. an unauthenticated write path into the
+  knowledge base. It now passes the same `origin-allowlist + X-WP-Control-Token` check as
+  `/middleware/{key}/start|stop`; 2 negative cases added (401 without token / 403 off-allowlist,
+  neither may reach body-service). The Vite dev proxy already injects the token for `/api/wp/*`,
+  so the front end is unaffected — direct access to :8090 is now rejected.
+- [x] Doc truthfulness fixes: removed non-existent `status: READY` and non-runnable curl examples
+  from the DEMO; corrected source/test counts across module docs
+- [x] Registered dangling `DEBT-010/011/012` that code referenced but the registry did not list
+
 
 ## Frontend
 

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 01-模块总览与架构.md</span>
+  <span class="meta">生成于 2026-09-18 20:55 · 源文件 01-模块总览与架构.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -247,7 +247,7 @@
 <td><code>body-service</code></td>
 <td style="text-align: right;">8083</td>
 <td style="text-align: right;">9094</td>
-<td>三层存储 + 语义检索 + 重排 + RAG + 感官事件入库</td>
+<td>格式解析 + 三层存储 + 语义检索 + 重排 + RAG + 对账 + 感官事件入库</td>
 </tr>
 </tbody>
 </table>
@@ -361,11 +361,11 @@ POST /api/session/{id}/ask            → 提问
 │       ├── security/              # R2-02 SSRF 出站守卫
 │       ├── staging/               # R2-10 隔离暂存（多后端）
 │       └── util/                  # HTTP 客户端构建器 / 文本抽取
-└── body-service/                  # 26 main + 7 test
+└── body-service/                  # 27 main + 9 test
     ├── pom.xml
     └── src/main/java/com/agent/body/
         ├── BodyServiceApplication.java
-        ├── chunk/                 # R3-02 文档分块器（与 Python 同算法）
+        ├── chunk/                 # R3-02 文档格式解析 + 分块器（与 Python 同算法）
         ├── client/                # 出站 HTTP / 嵌入 / 重排 / Qdrant 客户端
         ├── common/                # 统一错误码 + 业务异常 + 全局异常处理
         ├── config/                # 三层存储装配

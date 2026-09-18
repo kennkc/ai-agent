@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-18 20:55 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -130,6 +130,10 @@
 <li><a href="#debt-006">DEBT-006 · 五渠道集成测试缺口</a></li>
 <li><a href="#debt-007-l0-bert">DEBT-007 · L0 意图模型为统计分类器（非 BERT）</a></li>
 <li><a href="#debt-009">DEBT-009 · 消息链路测试缺口</a></li>
+<li><a href="#debt-010-n-gram-bge-m3">DEBT-010 · 嵌入走字符 n-gram 哈希后端（非 BGE-M3）</a></li>
+<li><a href="#debt-011">DEBT-011 · 重排走词法覆盖率打分（非交叉编码器）</a></li>
+<li><a href="#debt-012">DEBT-012 · 采集事件携带正文（超限无回读路径）</a></li>
+<li><a href="#debt-013-pdf-docx">DEBT-013 · 不支持 PDF / DOCX 文档解析（本轮审核新开）</a></li>
 </ul>
 </li>
 <li><a href="#_4">三、关联未实现项（不属于技术债，但常被一起问到）</a></li>
@@ -139,6 +143,8 @@
 <li><a href="#43">4.3 生成物注释滞后（已闭合债务仍写着旧实现）</a></li>
 <li><a href="#44">4.4 编号跳号</a></li>
 <li><a href="#45">4.5 验收口径待对齐</a></li>
+<li><a href="#46-2026-09-18">4.6 设计选型 ↔ 实现口径差异（2026-09-18 审核新登记）</a></li>
+<li><a href="#47-wp-bff-2026-09-18">4.7 wp-bff 写路径一度缺失鉴权（2026-09-18 审核发现并已闭合 ✅）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -149,7 +155,7 @@
 </nav>
   <main class="doc"><h1 id="debt-registry">技术债台账（DEBT Registry）<a class="headerlink" href="#debt-registry" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-18（Phase 3 躯体期落地后复核） · <strong>代码基线</strong>：<code>a5e0cd5</code>（Phase 3 代码收口）
+<p><strong>口径时间</strong>：2026-09-18（Phase 3 躯体期落地后复核 · 含 Phase 3 审核补全） · <strong>代码基线</strong>：<code>a5e0cd5</code>（Phase 3 代码收口）+ 审核补全轮
 <strong>来源</strong>：设计文档《D5-冻结前收尾/D5-1-简化版演进规范》§5.1 清单 —— 本文件是<strong>仓库内的权威副本</strong></p>
 </blockquote>
 <h2 id="_1">为什么把台账搬进仓库<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
@@ -232,10 +238,45 @@
 <td>P2</td>
 <td>🔴</td>
 </tr>
+<tr>
+<td><strong>DEBT-010</strong></td>
+<td>nlp-service（嵌入）</td>
+<td>字符 n-gram 哈希（768 维），<strong>非语义相似</strong></td>
+<td>BAAI/bge-m3（1024 维）</td>
+<td>装 <code>sentence-transformers</code> + 权重</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-011</strong></td>
+<td>nlp-service（重排）</td>
+<td>词法覆盖率打分（非交叉编码器）</td>
+<td>bge-reranker-v2-m3</td>
+<td>装 <code>sentence-transformers</code> + 权重</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-012</strong></td>
+<td>sense-service（事件投递）</td>
+<td>采集事件<strong>携带正文</strong>入库；超 Kafka 单消息上限时无回读路径</td>
+<td>按 <code>staging_ref</code> 回读暂存对象（MinIO）</td>
+<td>正文 &gt; 1MB</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-013</strong></td>
+<td>body-service（文档解析）</td>
+<td><strong>不支持 PDF/DOCX 解析</strong>（显式拒绝，不静默当文本）</td>
+<td>接入文档解析通道（PDFBox / OCR）</td>
+<td>需要上传 PDF 时</td>
+<td>🟡</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
-<p><code>DEBT-004</code> / <code>DEBT-008</code> <strong>从未被使用</strong>（编号跳号，见 §4.4）。</p>
+<p><code>DEBT-004</code> / <code>DEBT-008</code> <strong>从未被使用</strong>（编号跳号，见 §4.4）。
+<strong>2026-09-18 补记</strong>：DEBT-010 / 011 / 012 在代码里早已引用（<code>nlp-service</code> 两处 + <code>SenseEventPublisher</code> 一处），
+但此前<strong>未登记本表</strong> —— 与 §4.4「后续新债从 DEBT-010 起编」的约定直接冲突。本轮审核已补齐，
+并新开 DEBT-013（PDF 解析缺口）。</p>
 </blockquote>
 <hr />
 <h2 id="_3">二、逐条详情<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
@@ -320,6 +361,51 @@
 <li><strong>状态</strong>：🔴 未闭合（触发点已到）</li>
 <li><strong>证据</strong>：<code>services/java/session-manager/src/test/java/com/agent/session/</code> 下无 NATS/Kafka 用例。</li>
 <li>备注：同 DEBT-006，《G1-验证追踪视图》中 C09 数据总线代理的验收方法即本项，状态标 🟡 待验。</li>
+</ul>
+<h3 id="debt-010-n-gram-bge-m3">DEBT-010 · 嵌入走字符 n-gram 哈希后端（非 BGE-M3）<a class="headerlink" href="#debt-010-n-gram-bge-m3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：<code>HashNgramEngine</code> —— 字符 1/2/3-gram + 英文词元做 blake2b 哈希分桶（768 维）+ 亚线性 TF 加权 + L2 归一化。
+  <strong>纯本地、零依赖、跨进程确定性</strong>，但其相似度本质是「字面特征重叠」，<strong>不等价于语义相似度</strong>。</li>
+<li><strong>正式目标</strong>：BAAI/bge-m3（sentence-transformers，1024 维）。</li>
+<li><strong>触发点</strong>：安装 <code>sentence-transformers</code> + 下载 BGE-M3 权重（本机未装）。</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到）—— 但<strong>不构成 Phase 3 验收阻塞</strong>：
+  R3-03 的验收口径是「嵌入延迟 P95 &lt; 200ms；向量维度正确」，降级后端满足；且引擎链<strong>自动优先 BGE-M3</strong>，
+  装好即切换，无需改代码。</li>
+<li><strong>证据</strong>：<code>services/python/nlp-service/app/embedding.py:1,95-123</code>；<code>app/main.py:3</code>；
+  切换后须重建 Qdrant 集合（维度 768→1024），见 <code>QdrantClient.ensureCollection</code>。</li>
+<li>⚠️ <strong>切换影响面</strong>：换后端 = 换向量空间 → <strong>必须全量重索引 + 评测回归</strong>（设计 §6 回归注意）。</li>
+</ul>
+<h3 id="debt-011">DEBT-011 · 重排走词法覆盖率打分（非交叉编码器）<a class="headerlink" href="#debt-011" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：<code>LexicalRerankerEngine</code> —— 查询特征覆盖率 0.7 + 词元命中率 0.3，再乘长度惩罚（理想区间 120–640 字）。
+  与 DEBT-010 的哈希嵌入<strong>同源共享 <code>_features</code></strong>，故降级链路上排序单调一致。</li>
+<li><strong>正式目标</strong>：bge-reranker-v2-m3（CrossEncoder）。</li>
+<li><strong>触发点</strong>：安装 <code>sentence-transformers</code> + 权重。</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到）。R3-06 属 Should 项，验收为「重排后相关性提升可量化」——
+  当前返回 <code>score</code>（召回分）与 <code>rerank_score</code>（重排分）双列可对照，且重排不可用时<strong>降级不阻断主链路</strong>。</li>
+<li><strong>证据</strong>：<code>services/python/nlp-service/app/reranker.py:1,76-107</code>；<code>app/main.py:4</code>。</li>
+</ul>
+<h3 id="debt-012">DEBT-012 · 采集事件携带正文（超限无回读路径）<a class="headerlink" href="#debt-012" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：Phase 2 的 <code>SenseEventPublisher</code> 事件荷载增加 <code>title</code> / <code>content</code> 正文字段，
+  使「感官 → 躯体」闭环<strong>不依赖 MinIO 在线</strong>即可自洽。</li>
+<li><strong>正式目标</strong>：正文超过 Kafka 单消息上限（默认 1MB）时，改为按 <code>staging_ref</code> <strong>回读暂存对象</strong>（MinIO）。</li>
+<li><strong>触发点</strong>：采集正文 &gt; 1MB 的文档。</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到）。当前超限时 <code>SenseCollectedConsumer</code> 会<strong>如实记录"事件只带暂存引用时无法直接入库"</strong>，不静默丢弃。</li>
+<li><strong>证据</strong>：<code>services/java/sense-service/src/main/java/com/agent/sense/event/SenseEventPublisher.java:67</code>；
+  <code>services/java/body-service/src/main/java/com/agent/body/event/SenseCollectedConsumer.java:134</code>。</li>
+</ul>
+<h3 id="debt-013-pdf-docx">DEBT-013 · 不支持 PDF / DOCX 文档解析（本轮审核新开）<a class="headerlink" href="#debt-013-pdf-docx" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：<code>DocumentParser</code> 支持 <code>md / markdown / text / txt / html / htm / auto</code>，
+  对 <code>pdf</code> / <code>doc</code> / <code>docx</code> <strong>显式抛出 <code>AGENT_BAD_REQUEST</code> 并给出指引</strong>——PDF 需版面还原（PDFBox）或走 OCR 通道。</li>
+<li><strong>正式目标</strong>：接入文档解析通道（PDFBox / Apache Tika 或复用 Phase 2 OCR），使设计 §7「上传文档（MD/PDF）」的 PDF 分支可用。</li>
+<li><strong>触发点</strong>：演示/生产需要上传 PDF 时。</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到，降级行为诚实）。</li>
+<li><strong>为什么不开成"已支持"</strong>：把 PDF 二进制当文本塞进分块器会产出<strong>垃圾向量且无人察觉</strong>，
+  属于典型"看起来成功"的伪实现——本仓库红线是宁可报错也不产脏知识。</li>
+<li><strong>证据</strong>：<code>services/java/body-service/src/main/java/com/agent/body/chunk/DocumentParser.java:47-49,81-84</code>；
+  回归用例 <code>chunk/DocumentParserTest.unsupportedFormatsAreRejectedWithGuidanceNotSilentlyChunked</code>。</li>
 </ul>
 <hr />
 <h2 id="_4">三、关联未实现项（<strong>不属于技术债</strong>，但常被一起问到）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
@@ -420,6 +506,76 @@
 DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2 报告已宣告验收通过。
 <strong>处置</strong>：属"诚实留痕"的正常结果，但建议在 <code>项目进度总览.md</code> 中把这两项<strong>显式登记为验收留有余项</strong>，
 避免"阶段已验收"被读成"所有验证方法都已跑过"。</p>
+<h3 id="46-2026-09-18">4.6 设计选型 ↔ 实现口径差异（2026-09-18 审核新登记）<a class="headerlink" href="#46-2026-09-18" title="Permanent link">&para;</a></h3>
+<p>Phase 3 审核发现两处「设计文档写了、实现没这么做」的差异。<strong>均不违反 R3-01/R3-08 的验收条款</strong>
+（R3-01 验收 = 统一增删改查 + 分层规则可配置；R3-08 验收 = 重复查询命中 ≥ 30%），
+但设计文档的选型描述与实况不一致，必须留痕，否则后人读设计会误判技术栈。</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>设计文档口径</th>
+<th>实现实况</th>
+<th>定性</th>
+<th>处置建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>Phase3-开发设计文档</code> §1/§3.1：冷层为 <strong>PG + pgvector</strong>（「向量+SQL 混合」）</td>
+<td>冷层是<strong>纯 PG 关系表</strong> <code>knowledge_document</code> / <code>knowledge_chunk</code>（<code>content TEXT</code>，<strong>无 vector 列</strong>）；向量只在 Qdrant</td>
+<td>设计选型未落地（非债务：R3-01 交付物只要求 <code>StorageFacade</code> + <code>TierRouter</code>，已交付）</td>
+<td>二选一：① 改设计文档对齐实况（推荐，Qdrant 已承担向量主库职责，PG 再存向量属冗余）；② Phase 4+ 补 pgvector 列做冷备份</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>Phase3-需求设计文档</code> §2 技术选型：Redis <strong>语义缓存（向量相似 0.95）</strong></td>
+<td>热层是<strong>精确指纹缓存</strong>：问题归一化（去空白/小写/去尾标点）后 SHA-256 → key。<strong>不做向量相似匹配</strong></td>
+<td>设计选型未落地（非债务：R3-08 验收为"重复查询缓存命中 ≥ 30%"，实测 45%，达标）</td>
+<td>若要语义缓存，需在 <code>HotCacheStore</code> 增加「query 向量 → 近邻查缓存」路径；当前口径更省资源且可解释，建议改设计文档</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>共同点</strong>：两处都是"设计写得比实现更先进"。本仓库的红线是<strong>不伪造能力</strong>——
+实现没做就写清楚没做，而不是把设计文档的选型当成已交付结果写进报告。</p>
+</blockquote>
+<h3 id="47-wp-bff-2026-09-18">4.7 wp-bff 写路径一度缺失鉴权（2026-09-18 审核<strong>发现并已闭合</strong> ✅）<a class="headerlink" href="#47-wp-bff-2026-09-18" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>现象</td>
+<td>补「工作平台知识入库」时新增了 <code>POST /api/wp/knowledge</code>，但它落在 <code>/knowledge</code> 这个<strong>只读免令牌</strong>路径下，而未被 <code>authorizeControl()</code> 覆盖 → 浏览器直连 <code>:8090</code> 即可<strong>无鉴权写入知识库</strong></td>
+</tr>
+<tr>
+<td>为什么算"一致性"问题而非单纯 bug</td>
+<td><code>docs/功能开发流程.md</code> 当时写着「只读端点（<strong>含 <code>/knowledge</code></strong>）不需控制令牌」——该文档以<strong>路径</strong>为单位描述安全边界，而实际安全边界应以<strong>方法</strong>为单位。文档口径与安全模型错位，才让新写的 POST 显得"合规"</td>
+</tr>
+<tr>
+<td>影响</td>
+<td>仅暴露在本机开发端口（8090 默认不对外），<strong>未进入任何提交时的生产配置</strong>；但属真实写入后门，必须修</td>
+</tr>
+<tr>
+<td>修复</td>
+<td>① <code>handleKnowledgeIngest</code> 前置 <code>authorizeControl()</code>：来源白名单 + <code>X-WP-Control-Token</code>，401/403 且<strong>不触达体层</strong>；② 契约按方法分标 <code>x-wp-security</code>（读 <code>origin-allowlist</code> / 写 <code>origin-allowlist + control-token</code>）；③ 补 2 条反向用例，两条均断言 <code>jsonRequest</code> <strong>未被调用</strong>；④ 文档口径改为「<strong>按方法判定，不按路径</strong>」</td>
+</tr>
+<tr>
+<td>现状</td>
+<td>✅ <strong>已闭合</strong>（<code>node --test</code> 29 项全绿）。开发链路不受影响：Vite 代理对 <code>/api/wp/*</code> 统一注入令牌；直连 8090 被拒</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>台账记这一条，不是因为存在未偿债务，而是因为<strong>它的成因（"路径级安全描述"与"方法级安全实现"错位）
+会在下次新增写端点时重演</strong>。判断口径已写入 <code>docs/功能开发流程.md</code> §3.8。</p>
+</blockquote>
 <hr />
 <h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>
 <ul>
@@ -495,6 +651,30 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>首次流水线运行后确认；脚本用 <code>find</code> 自适应 Maven 输出目录，失败时会打印明确排查提示</td>
 <td>待首跑确认</td>
 </tr>
+<tr>
+<td>10</td>
+<td>~~DEBT-010/011/012 代码已引用但台账未登记~~</td>
+<td>✅ <strong>2026-09-18 已补齐</strong>（含新增 DEBT-013），§7 索引同步</td>
+<td>已完成</td>
+</tr>
+<tr>
+<td>11</td>
+<td>设计文档 §1/§3.1 写「PG+pgvector」、§2 写「Redis 语义缓存（向量相似 0.95）」，实现均未采用</td>
+<td>见 §4.6：建议改设计文档对齐实况（Qdrant 已承担向量主库；精确指纹缓存实测命中 45% &gt; 30% 验收）</td>
+<td>设计侧确认</td>
+</tr>
+<tr>
+<td>12</td>
+<td><strong>Phase 3 需求文档 §8/§9 的 IN-01 / IN-05 / WB-03 / WB-05 / MC-01 未被列入交付范围</strong></td>
+<td>IN-05 已于 2026-09-18 补交付（<code>/retrieve/plan</code> 预留接口）；IN-01（技能包 MinIO+etcd）、WB-03（专家中心）、WB-05（技能市场）、MC-01（NATS 协作总线服务化）<strong>仍未实现</strong> —— 属<strong>阶段范围缺口</strong>，需在规划侧确认归属阶段</td>
+<td>规划侧确认</td>
+</tr>
+<tr>
+<td>13</td>
+<td>wp-bff 的安全边界曾以<strong>路径</strong>为单位描述（"只读端点含 <code>/knowledge</code>"），而实现按<strong>方法</strong>判定 → 下次给同一路径加写方法时会再次误判为免鉴权（§4.7 即此成因）</td>
+<td>已改为按方法描述。<strong>机制化建议</strong>：把「需要控制令牌的方法集合」提为 <code>CONTROL_REQUIRED</code> 常量，并加一条测试断言"所有非 GET 的业务方法都在该集合内"，从结构上杜绝重演</td>
+<td>下轮加固</td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -535,13 +715,34 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td><code>services/python/nlp-service/app/main.py:2</code> · <code>app/intent/l0_model.py:10</code></td>
 <td>DEBT-007</td>
 </tr>
+<tr>
+<td><code>services/python/nlp-service/app/embedding.py:1,7</code> · <code>app/main.py:3</code></td>
+<td>DEBT-010</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/app/reranker.py:1,7</code> · <code>app/main.py:4</code></td>
+<td>DEBT-011</td>
+</tr>
+<tr>
+<td><code>services/java/sense-service/.../event/SenseEventPublisher.java:67</code></td>
+<td>DEBT-012</td>
+</tr>
+<tr>
+<td><code>services/java/body-service/.../chunk/DocumentParser.java</code>（类注释）</td>
+<td>DEBT-013</td>
+</tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>2026-09-18 审核补记</strong>：DEBT-010/011/012 此前只存在于代码注释、未登记本表（已补齐）；
+DEBT-013 为本轮新开。<strong>登记率现已 100%</strong>：代码中出现的每个 <code>DEBT-0xx</code> 都能在本表查到。</p>
+</blockquote>
 <hr />
 <p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em>
 <em>状态核实方式：逐条对源码取证据（文件 + 行号），非沿用设计文档描述</em>
 <em>2026-09-17 更新：§6-5 / §6-6 落地的门禁 = <code>scripts/proto-sync-check.sh</code>（本地可跑）+ <code>.gitlab-ci.yml</code> 的 <code>proto-check-python</code> / <code>proto-check-java</code>（CI 阻断）</em>
-<em>相关文档：<code>docs/proto契约使用说明.md</code>（契约侧使用现状与生成链路）、<code>docs/功能开发流程.md</code> §3.10（契约治理流程）</em></p></main>
+<em>2026-09-18 更新：Phase 3 审核补记 —— 补齐 DEBT-010/011/012 登记、新开 DEBT-013、登记 §4.6 两处设计↔实现口径差异、§6 新增 3 条待办</em>
+<em>相关文档：<code>docs/proto契约使用说明.md</code>（契约侧使用现状与生成链路）、<code>docs/功能开发流程.md</code> §3.10（契约治理流程）、<code>docs/优化日志/2026-09-18-Phase3需求审核与补全.md</code>（本轮审核全记录）</em></p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

@@ -116,13 +116,13 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 Phase3-阶段性报告.md</span>
+  <span class="meta">生成于 2026-09-18 20:55 · 源文件 Phase3-阶段性报告.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#1">1. 阶段目标回顾</a></li>
 <li><a href="#2">2. 交付物清单</a><ul>
-<li><a href="#21-body-servicejava-26-7-2411-635">2.1 body-service（Java 主服务，重写：26 主源 + 7 测试类，主源 2411 行 / 测试 635 行）</a></li>
+<li><a href="#21-body-servicejava-27-9-2721-886">2.1 body-service（Java 主服务，重写：27 主源 + 9 测试类，主源 2721 行 / 测试 886 行）</a></li>
 <li><a href="#22-nlp-servicepython-3-3-763">2.2 nlp-service（Python，新增 3 模块 + 3 测试文件，共 763 行）</a></li>
 <li><a href="#23-session-manager">2.3 session-manager（会话侧切换语义检索）</a></li>
 <li><a href="#24-wp-bff-bff">2.4 wp-bff（工作平台 BFF，新增躯体视图代理）</a></li>
@@ -136,6 +136,13 @@
 <li><a href="#6">6. 问题与解决</a></li>
 <li><a href="#7">7. 遗留项与技术债</a></li>
 <li><a href="#8">8. 阶段结论</a></li>
+<li><a href="#9-2026-09-18">9. 补记 · 2026-09-18 需求审核与补全轮</a><ul>
+<li><a href="#91">9.1 审核结论摘要</a></li>
+<li><a href="#92-commit">9.2 补全内容（详见 commit）</a></li>
+<li><a href="#93">9.3 补全后测试基线</a></li>
+<li><a href="#94">9.4 关于「阶段范围缺口」的说明</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </nav>
@@ -174,11 +181,11 @@
 </tr>
 <tr>
 <td>需求范围</td>
-<td>R3-01 ~ R3-09（依据《Phase3-躯体期 · 需求设计文档》v1.6）+ 终端线 R-C03</td>
+<td>R3-01 ~ R3-09（依据《Phase3-躯体期 · 需求设计文档》v1.6）+ 终端线 R-C03（<strong>IN/WB/MC 系列未纳入，见 §9</strong>）</td>
 </tr>
 <tr>
 <td>阶段结论</td>
-<td><strong>通过</strong>（Must 项 7/7 全通过；Should 项 2/2 通过；1 项外部引擎依赖诚实降级，见 §6）</td>
+<td><strong>通过</strong>（Must 项 7/7 全通过；Should 项 3/3 通过；1 项外部引擎依赖诚实降级，见 §6）</td>
 </tr>
 </tbody>
 </table>
@@ -198,7 +205,10 @@
 <p>本阶段的全部实现即围绕这条链路落地，并<strong>销掉 DEBT-001</strong>（内存检索 → Qdrant 向量检索）。</p>
 <hr />
 <h2 id="2">2. 交付物清单<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
-<h3 id="21-body-servicejava-26-7-2411-635">2.1 body-service（Java 主服务，重写：26 主源 + 7 测试类，主源 2411 行 / 测试 635 行）<a class="headerlink" href="#21-body-servicejava-26-7-2411-635" title="Permanent link">&para;</a></h3>
+<h3 id="21-body-servicejava-27-9-2721-886">2.1 body-service（Java 主服务，重写：27 主源 + 9 测试类，主源 2721 行 / 测试 886 行）<a class="headerlink" href="#21-body-servicejava-27-9-2721-886" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>计数为 2026-09-18 审核补全轮后的实测值（补全前 26 主源 + 7 测试类，主源 2411 行 / 测试 635 行）。</p>
+</blockquote>
 <table>
 <thead>
 <tr>
@@ -210,7 +220,7 @@
 <tbody>
 <tr>
 <td><code>chunk</code></td>
-<td><code>ChunkProcessor</code>（标题/段落边界分块，标题入块，同标题合并，重叠尾巴）</td>
+<td><code>DocumentParser</code>（格式归一：md/text/html/auto，PDF 显式拒绝）、<code>ChunkProcessor</code>（标题/段落边界分块，标题入块，同标题合并，重叠尾巴）</td>
 <td>R3-02</td>
 </tr>
 <tr>
@@ -417,8 +427,8 @@
 <tbody>
 <tr>
 <td>Java 全量单测</td>
-<td><code>services/java &amp;&amp; ../../scripts/mvn-dev.sh -pl body-service -am test</code></td>
-<td><strong>100 通过 / 0 失败</strong>（gateway 2 · session 10 · sense 48 · body 40）</td>
+<td><code>services/java &amp;&amp; ../../scripts/mvn-dev.sh test</code></td>
+<td><strong>114 通过 / 0 失败</strong>（gateway 2 · session 10 · sense 48 · body 54）</td>
 </tr>
 <tr>
 <td>Python nlp-service</td>
@@ -428,17 +438,17 @@
 <tr>
 <td>wp-bff</td>
 <td><code>node --test</code></td>
-<td><strong>22 通过 / 0 失败</strong></td>
+<td><strong>29 通过 / 0 失败</strong>（含 2 条写路径鉴权反向用例）</td>
 </tr>
 <tr>
 <td>契约校验</td>
 <td><code>python scripts/contract-check.py --work-platform</code></td>
-<td>实现端点 8 ↔ BFF 8，<strong>0 FAIL</strong></td>
+<td>实现端点 8 路径 ↔ BFF 8 路径（9 方法），<strong>0 FAIL</strong></td>
 </tr>
 <tr>
 <td>Java 文档覆盖</td>
 <td><code>python scripts/java-doc-coverage.py</code></td>
-<td>body-service 33/33，全仓 <strong>100/100</strong></td>
+<td>body-service 36/36，全仓 <strong>103/103</strong></td>
 </tr>
 <tr>
 <td>前端</td>
@@ -448,7 +458,8 @@
 </tbody>
 </table>
 <blockquote>
-<p>body-service 由 Phase 2 的 1 项测试扩至 <strong>40 项</strong>（新增分块、分层、缓存、元数据、入库、检索、Qdrant 共 7 个测试类）。</p>
+<p>body-service 由 Phase 2 的 1 项测试扩至 <strong>54 项</strong>（新增格式解析、分块、分层、缓存、元数据、
+存储门面、入库、检索、Qdrant 共 9 个测试类）。上表为 2026-09-18 复审后的实测值。</p>
 </blockquote>
 <hr />
 <h2 id="6">6. 问题与解决<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
@@ -546,7 +557,95 @@
 采到的知识被持久化、向量化，并可通过语义相似度被召回，DEBT-001 正式销项。</p>
 <blockquote>
 <p>达标 → Phase 3 验收通过 → 下一阶段 Phase 4（大脑期·推理与生成）</p>
-</blockquote></main>
+</blockquote>
+<hr />
+<h2 id="9-2026-09-18">9. 补记 · 2026-09-18 需求审核与补全轮<a class="headerlink" href="#9-2026-09-18" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>本节由审核轮追加，<strong>不改变 §1~§8 的主体结论</strong>（实现真实、无伪代码）。
+完整审核记录见 <a href="../优化日志/2026-09-18-Phase3需求审核与补全.md"><code>docs/优化日志/2026-09-18-Phase3需求审核与补全.md</code></a>。</p>
+</blockquote>
+<h3 id="91">9.1 审核结论摘要<a class="headerlink" href="#91" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>伪代码排查</td>
+<td>✅ <strong>生产代码 0 处</strong> TODO / 占位 / 假实现；所有能力缺失均以「降级后端 + <code>degraded</code> 标记」诚实暴露</td>
+</tr>
+<tr>
+<td>阶段范围内缺失</td>
+<td>⚠️ 发现 4 项（工作平台入库链路断裂、格式解析步缺失、IN-05 参数未预留、对账能力缺失）—— <strong>本轮已全部补全</strong></td>
+</tr>
+<tr>
+<td><strong>安全边界不一致</strong></td>
+<td>🔴 补入库链路时，写路径初始沿用了 <code>/knowledge</code> 的<strong>只读免令牌</strong>豁免 → 浏览器直连 8090 即可<strong>无鉴权写入知识库</strong> —— 已修（与 <code>/middleware</code> 同级 origin-allowlist + control-token，附 2 条断言"鉴权失败不触达体层"的反向用例）</td>
+</tr>
+<tr>
+<td>DEBT 记账</td>
+<td>⚠️ <code>DEBT-010/011/012</code> 代码已引用但台账未登记 —— 已补齐并新开 <code>DEBT-013</code>，达成双向 100% 覆盖</td>
+</tr>
+<tr>
+<td>文档失真</td>
+<td>⚠️ <code>Phase3-DEMO.md</code> 有 6 处接口示例与真实返回值不符（含会 404 的 <code>/api/body/rag</code>）—— 已逐条修正</td>
+</tr>
+<tr>
+<td>设计↔实现口径</td>
+<td>⚠️ 2 处（<code>PG+pgvector</code>、<code>Redis 语义缓存</code>）设计选型未落地 —— 已登记台账 §4.6，不违反验收条款</td>
+</tr>
+<tr>
+<td><strong>阶段范围缺口</strong></td>
+<td>🔴 <strong>IN-01 / WB-03 / WB-05 / MC-01 从未进入本阶段交付范围</strong>，而需求文档 §8/§9 列有其验收标准 —— 已登记待规划侧决策</td>
+</tr>
+</tbody>
+</table>
+<h3 id="92-commit">9.2 补全内容（详见 commit）<a class="headerlink" href="#92-commit" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>补全项</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java body-service</td>
+<td><code>DocumentParser</code>（格式解析，R3-02）；<code>/retrieve/plan</code>（IN-05 预留）；<code>/knowledge/reconcile</code>（三层对账）；<code>IngestService</code> 增 <code>format</code>；新增测试 15 项</td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><code>POST /api/wp/knowledge</code> 知识入库代理（单篇 + 批量）；体层错误码识别（不把拒绝当成功）；新增测试 5 项</td>
+</tr>
+<tr>
+<td>前端</td>
+<td><code>KnowledgeView</code> 新增「文档入库」卡片（粘贴 + 文件读取），入库后知识量实时刷新；<code>provider.insertKnowledge</code>（写路径不回落 Mock）</td>
+</tr>
+<tr>
+<td>契约</td>
+<td><code>/knowledge</code> 增 <code>post</code> 定义 + <code>KnowledgeIngestResult</code> schema；实现端点 8 → 9</td>
+</tr>
+<tr>
+<td>文档</td>
+<td>台账 / java-services / DEMO / 本报告 / 测试验收报告 / 优化日志</td>
+</tr>
+</tbody>
+</table>
+<h3 id="93">9.3 补全后测试基线<a class="headerlink" href="#93" title="Permanent link">&para;</a></h3>
+<p><strong>193 / 193 通过</strong>（Java 114 + Python 52 + wp-bff 27），契约 0 FAIL，Java 文档覆盖 103/103，前端构建通过。</p>
+<h3 id="94">9.4 关于「阶段范围缺口」的说明<a class="headerlink" href="#94" title="Permanent link">&para;</a></h3>
+<p>需求文档 <code>Phase3-躯体期/需求设计文档.md</code> §8（IN 系列）与 §9（WB/MC 系列）列出了
+<strong>IN-01 技能包模型（Must）</strong>、IN-05 迭代检索、<strong>WB-03 专家中心</strong>、<strong>WB-05 技能市场</strong>、<strong>MC-01 协作总线服务化</strong>
+及其验收标准，但本阶段「需求范围」只声明了 <code>R3-01~R3-09 + R-C03</code>。</p>
+<ul>
+<li>IN-05 已在本轮补交付（预留接口）；</li>
+<li><strong>IN-01 / WB-03 / WB-05 / MC-01 仍未实现</strong> —— 四者各需独立服务（技能包存储与注册、专家档案 CRUD、
+  技能市场审核流、NATS 协作总线），不是能塞进阶段尾巴的改动量；</li>
+<li>建议规划侧明确归属（Phase 4 并行线 / 独立 P3.5 迭代），<strong>不要在报告里静默省略</strong>。</li>
+</ul></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

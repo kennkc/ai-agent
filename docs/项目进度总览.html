@@ -116,14 +116,14 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-18 20:55 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#_1">一、当前状态一句话</a></li>
 <li><a href="#_2">二、阶段进度</a></li>
 <li><a href="#_3">三、功能交付矩阵</a><ul>
-<li><a href="#31-java100-80-20-90-proto">3.1 后端 Java（100 个手写源文件 = 80 主 + 20 测；另有 90 个 proto 生成文件）</a></li>
+<li><a href="#31-java103-81-22-90-proto">3.1 后端 Java（103 个手写源文件 = 81 主 + 22 测；另有 90 个 proto 生成文件）</a></li>
 <li><a href="#32-pythonservicespythonnlp-service10-py-12-proto">3.2 Python（services/python/nlp-service，10 个业务 py + 12 个 proto 生成文件）</a></li>
 <li><a href="#33-webwork-platformvue-3-vite-ts-element-plus9-vue-8-ts">3.3 前端（web/work-platform，Vue 3 + Vite + TS + Element Plus，9 vue + 8 ts）</a></li>
 <li><a href="#34-ops-bffservicesnodewp-bff-node-8090">3.4 Ops BFF（services/node/wp-bff，零依赖 Node，端口 8090）</a></li>
@@ -150,16 +150,23 @@
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 项目进度总览<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-18（Phase 3 躯体期落地后） · <strong>代码基线</strong>：<code>a5e0cd5</code>（Phase 3 代码收口；<code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> 同提交）
+<p><strong>口径时间</strong>：2026-09-18（Phase 3 躯体期落地 + <strong>需求审核补全轮</strong>） · <strong>代码基线</strong>：<code>a5e0cd5</code>（Phase 3 代码收口）+ 审核补全轮（<code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> 同提交）
 <strong>数据来源</strong>：仓库 <code>PROGRESS.md</code>、<code>docs/项目进度日志报告/</code>、<code>docs/优化日志/</code>、各服务源码实测统计
 <strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73/61 项测试）<strong>不回改</strong>，以本文件为准。</p>
 </blockquote>
 <hr />
 <h2 id="_1">一、当前状态一句话<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
 <p><strong>Phase 0 / 1 / 2 / 3 已交付并验收</strong>，项目当前进入 <strong>Phase 3 之后的收口期</strong>（可在 Phase 4 大脑期开工）。
-<strong>Phase 3 躯体期</strong>把 body-service 从"内存检索"重写为<strong>持久化知识管道</strong>：分块 → 嵌入 → 三层存储
+<strong>Phase 3 躯体期</strong>把 body-service 从"内存检索"重写为<strong>持久化知识管道</strong>：格式解析 → 分块 → 嵌入 → 三层存储
 （Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG，并打通<strong>感官→躯体闭环</strong>，
 <strong>DEBT-001 正式销项</strong>。</p>
+<blockquote>
+<p><strong>2026-09-18 追加一轮需求审核与补全</strong>：逐条对账需求文档、扫描生产代码伪实现、核对 DEBT 记账、
+核查全链路可达性。结论：<strong>无伪代码实现</strong>，但发现 4 项阶段范围内缺失（工作平台入库链路断裂、
+格式解析步缺失、IN-05 参数未预留、对账能力缺失）—— <strong>已全部补全</strong>；另发现 <strong>IN-01 / WB-03 /
+WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，已如实登记待规划侧决策。
+记录见 <a href="./优化日志/2026-09-18-Phase3需求审核与补全.md"><code>docs/优化日志/2026-09-18-Phase3需求审核与补全.md</code></a>。</p>
+</blockquote>
 <p>阶段间还经历过一段 <strong>2026-09-15 ~ 09-16 的工程化加固期</strong>（观测区接真数据、契约与实现对齐、
 控制面加鉴权、数据源降级可见），那段不新增阶段能力。<strong>Phase 4+ 处于冻结状态</strong>。</p>
 <p>唯一未闭合的验收项是 <strong>OCR 端到端</strong>，阻塞原因是需要外部引擎（PaddleOCR / Tesseract）尚未安装 ——
@@ -209,9 +216,9 @@
 <tr>
 <td>Phase 3</td>
 <td>躯体期</td>
-<td>✅ <strong>已验收（09-17）</strong></td>
-<td><strong>R3-01~R3-09 + R-C03</strong> 全覆盖：三级存储抽象、文档分块、嵌入服务、Qdrant 向量入库、语义检索、结果重排、RAG 管道、缓存优先、知识管理 API；感官→躯体闭环；<strong>DEBT-001 销项</strong></td>
-<td><code>docs/demo/Phase3-DEMO.md</code> + 三份阶段报告</td>
+<td>✅ <strong>已验收（09-17）</strong>，09-18 审核补全</td>
+<td><strong>R3-01~R3-09 + R-C03</strong> 全覆盖：三级存储抽象、文档格式解析、文档分块、嵌入服务、Qdrant 向量入库、语义检索、结果重排、RAG 管道、缓存优先、知识管理 API、三层对账；感官→躯体闭环；<strong>DEBT-001 销项</strong>；09-18 补全工作平台写路径 + IN-05 预留接口</td>
+<td><code>docs/demo/Phase3-DEMO.md</code> + 三份阶段报告 + <code>docs/优化日志/2026-09-18-*</code></td>
 </tr>
 <tr>
 <td>Phase 4-8</td>
@@ -231,7 +238,7 @@
 </table>
 <hr />
 <h2 id="_3">三、功能交付矩阵<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
-<h3 id="31-java100-80-20-90-proto">3.1 后端 Java（100 个手写源文件 = 80 主 + 20 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java100-80-20-90-proto" title="Permanent link">&para;</a></h3>
+<h3 id="31-java103-81-22-90-proto">3.1 后端 Java（103 个手写源文件 = 81 主 + 22 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java103-81-22-90-proto" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -271,9 +278,9 @@
 <tr>
 <td><code>body-service</code></td>
 <td>8083</td>
-<td><strong>躯体期知识管道</strong>：分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG；知识管理 REST API；<strong>消费 <code>lifeform.sense.collected</code> 形成感官→躯体闭环</strong>；统一错误码 + OTLP 链路</td>
-<td><code>KnowledgeController</code> · <code>IngestService</code> · <code>RetrievalService</code> · <code>RagPipeline</code> · <code>StorageFacade</code> · <code>QdrantClient</code> · <code>SenseCollectedConsumer</code></td>
-<td>40</td>
+<td><strong>躯体期知识管道</strong>：<strong>格式解析（md/text/html）</strong> → 分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG；知识管理 REST API（含<strong>三层一致性对账</strong>与 <strong>IN-05 迭代检索预留接口</strong>）；<strong>消费 <code>lifeform.sense.collected</code> 形成感官→躯体闭环</strong>；统一错误码 + OTLP 链路</td>
+<td><code>KnowledgeController</code> · <code>DocumentParser</code> · <code>ChunkProcessor</code> · <code>IngestService</code> · <code>RetrievalService</code> · <code>RagPipeline</code> · <code>StorageFacade</code> · <code>QdrantClient</code> · <code>SenseCollectedConsumer</code></td>
+<td>54</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -382,7 +389,7 @@
 <td>✅</td>
 </tr>
 <tr>
-<td><strong>躯体视图（R-C03）</strong>：知识总量 / 检索质量（P99·命中率·缓存命中率）/ 三层存储健康度 / 检索测试（高亮片段 + 召回·重排分对照）</td>
+<td><strong>躯体视图（R-C03）</strong>：知识总量 / 检索质量（P99·命中率·缓存命中率）/ 三层存储健康度 / <strong>文档入库（粘贴或文件读取）</strong> / 检索测试（高亮片段 + 召回·重排分对照）</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -433,6 +440,10 @@
 <td>✅</td>
 </tr>
 <tr>
+<td><strong><code>POST /api/wp/knowledge</code></strong> —— <strong>知识入库写路径</strong>（单篇 / 批量导入；<code>format</code> 透传；体层拒绝时上报错误码而不算成功）</td>
+<td>✅</td>
+</tr>
+<tr>
 <td><strong><code>POST /api/wp/knowledge/search</code></strong> —— 检索测试（查询词解析 + 命中片段高亮 + 召回/重排分对照）</td>
 <td>✅</td>
 </tr>
@@ -442,7 +453,7 @@
 </tr>
 <tr>
 <td>回归测试 <code>node --test</code></td>
-<td>✅ 22 项</td>
+<td>✅ 29 项</td>
 </tr>
 </tbody>
 </table>
@@ -475,7 +486,7 @@
 </table>
 <hr />
 <h2 id="_4">四、测试与验证基线<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
-<p><strong>口径：2026-09-18 Phase 3 落地后的实测值</strong>（历史归档中的 54 / 73 / 61 项是当时口径）</p>
+<p><strong>口径：2026-09-18 Phase 3 落地 + 审核补全轮后的实测值</strong>（历史归档中的 54 / 73 / 61 / 174 项是当时口径）</p>
 <table>
 <thead>
 <tr>
@@ -487,8 +498,8 @@
 <tbody>
 <tr>
 <td>Java</td>
-<td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh -pl body-service -am test</code></td>
-<td><strong>100 测试 / 0 失败</strong>（gateway 2 · session-manager 10 · sense-service 48 · <strong>body-service 40</strong>）</td>
+<td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh test</code></td>
+<td><strong>114 测试 / 0 失败</strong>（gateway 2 · session-manager 10 · sense-service 48 · <strong>body-service 54</strong>）</td>
 </tr>
 <tr>
 <td>Python</td>
@@ -503,12 +514,12 @@
 <tr>
 <td>契约（工作平台）</td>
 <td><code>python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml</code></td>
-<td>39 端点，implemented <strong>8</strong> / planned 31，<strong>0 FAIL</strong></td>
+<td>39 端点，implemented <strong>8 路径 / 9 方法</strong> / planned 31，<strong>0 FAIL</strong></td>
 </tr>
 <tr>
 <td>wp-bff</td>
 <td><code>cd services/node/wp-bff &amp;&amp; node --test</code></td>
-<td><strong>22 通过</strong></td>
+<td><strong>29 通过</strong>（含 2 条写路径鉴权反向用例）</td>
 </tr>
 <tr>
 <td>前端</td>
@@ -518,7 +529,7 @@
 <tr>
 <td>端到端（Docker）</td>
 <td><code>.workbuddy/tmp/phase3-e2e.py</code>（入库→检索→缓存→隔离→RAG→指标→重入库/删除）</td>
-<td><strong>35 PASS / 0 FAIL</strong> · P99 <strong>366ms</strong> · 命中率 <strong>0.925</strong> · 缓存命中率 <strong>0.45</strong></td>
+<td><strong>35 PASS / 0 FAIL</strong> · P99 <strong>366ms</strong> · 命中率 <strong>0.925</strong> · 缓存命中率 <strong>0.45</strong>（2026-09-18；本轮新增项<strong>未重跑</strong>，见 DEMO §三 口径说明）</td>
 </tr>
 <tr>
 <td>感官→躯体闭环</td>
@@ -533,7 +544,7 @@
 <tr>
 <td>文档覆盖率</td>
 <td><code>python scripts/java-doc-coverage.py</code></td>
-<td><strong>100/100</strong> 业务源文件已登记（body-service 33/33）</td>
+<td><strong>103/103</strong> 业务源文件已登记（body-service 36/36）</td>
 </tr>
 </tbody>
 </table>
@@ -666,6 +677,12 @@ git push origin codex/main:workbuddy/main
 <td>《G1-验证追踪视图》中 C09 数据总线代理、C16 感官渠道管理器标 🟡 待验</td>
 <td>即 <a href="./技术债台账.md">DEBT-009 / DEBT-006</a>，详见 §6.3 —— <strong>"阶段已验收"不等于"所有验证方法都已跑过"</strong></td>
 </tr>
+<tr>
+<td>7</td>
+<td><strong>Phase 3 阶段范围缺口：IN-01 / WB-03 / WB-05 / MC-01 未实现</strong></td>
+<td>Phase 3 需求文档 §8/§9 列有其需求与验收标准，但阶段报告「需求范围」只声明 <code>R3-01~R3-09 + R-C03</code></td>
+<td>技能包模型（MinIO+etcd）、专家中心、技能市场、NATS 协作总线服务化 —— <strong>各需独立服务</strong>，需规划侧确认归属阶段；已登记 <a href="./技术债台账.md">技术债台账 §6-12</a></td>
+</tr>
 </tbody>
 </table>
 <h3 id="62-docsjava-services07-md">6.2 已登记的工程缺口（源自 <code>docs/java-services/07-运行时配置与横切约定.md</code>）<a class="headerlink" href="#62-docsjava-services07-md" title="Permanent link">&para;</a></h3>
@@ -749,6 +766,46 @@ git push origin codex/main:workbuddy/main
 <td>消息链路测试</td>
 <td>P2</td>
 <td>🔴 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-010</td>
+<td>nlp-service（嵌入）</td>
+<td>字符 n-gram 哈希（768 维，<strong>非语义相似</strong>）</td>
+<td>BGE-M3（1024 维）</td>
+<td>装权重</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-011</td>
+<td>nlp-service（重排）</td>
+<td>词法覆盖率打分</td>
+<td>bge-reranker-v2-m3</td>
+<td>装权重</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-012</td>
+<td>sense-service（事件）</td>
+<td>事件携带正文；超 1MB 无回读路径</td>
+<td>按 <code>staging_ref</code> 回读 MinIO</td>
+<td>正文 &gt; 1MB</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-013</td>
+<td>body-service（解析）</td>
+<td><strong>不支持 PDF/DOCX</strong>（显式拒绝，不静默当文本）</td>
+<td>接入 PDFBox/Tika 或 OCR 通道</td>
+<td>需上传 PDF 时</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>—</td>
+<td>body-service（口径）</td>
+<td>冷层为纯 PG 表（<strong>未用 pgvector</strong>）；缓存为<strong>精确指纹</strong>（非向量语义缓存）</td>
+<td>见台账 §4.6</td>
+<td>设计侧确认</td>
+<td>⚠️ 设计↔实现差异</td>
 </tr>
 </tbody>
 </table>
@@ -834,7 +891,7 @@ DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<
 </tr>
 <tr>
 <td><code>docs/java-services/</code></td>
-<td>Java 逐文件说明（7 篇，覆盖 72 个源文件 + 90 个生成文件）</td>
+<td>Java 逐文件说明（7 篇，覆盖 103 个手写源文件 + 90 个生成文件）</td>
 <td>增删 Java 文件后</td>
 </tr>
 <tr>

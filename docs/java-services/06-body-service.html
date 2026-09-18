@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 06-body-service.md</span>
+  <span class="meta">生成于 2026-09-18 20:55 · 源文件 06-body-service.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -124,7 +124,7 @@
 <li><a href="#2-phase-12">2. 与 Phase 1/2 的关系（替换点已生效）</a></li>
 <li><a href="#3">3. 文件清单</a><ul>
 <li><a href="#31">3.1 主代码</a></li>
-<li><a href="#32-39">3.2 测试（39 个用例，全绿）</a></li>
+<li><a href="#32-54">3.2 测试（54 个用例，全绿）</a></li>
 </ul>
 </li>
 <li><a href="#4">4. 逐文件说明（关键实现）</a><ul>
@@ -135,8 +135,9 @@
 <li><a href="#45-storehotcachestorejava-158">4.5 store/HotCacheStore.java · 热层 · 158 行</a></li>
 <li><a href="#46-storepgmetadatastorejava-156">4.6 store/PgMetadataStore.java · 冷层 · 156 行</a></li>
 <li><a href="#47-eventsensecollectedconsumerjava-179">4.7 event/SenseCollectedConsumer.java · 感官事件消费 · 179 行</a></li>
-<li><a href="#48-controllerknowledgecontrollerjava-240">4.8 controller/KnowledgeController.java · 控制器 · 240 行</a></li>
+<li><a href="#48-controllerknowledgecontrollerjava-306">4.8 controller/KnowledgeController.java · 控制器 · 306 行</a></li>
 <li><a href="#49-serviceknowledgemetricsjava-104">4.9 service/KnowledgeMetrics.java · 指标 · 104 行</a></li>
+<li><a href="#410-chunkdocumentparserjava-146">4.10 chunk/DocumentParser.java · 格式解析 · 146 行</a></li>
 </ul>
 </li>
 <li><a href="#5">5. 降级清单（诚实上报，不虚构）</a></li>
@@ -149,7 +150,7 @@
   <main class="doc"><h1 id="06-body-service-phase-3">06 · body-service 躯体服务（Phase 3 躯体期）<a class="headerlink" href="#06-body-service-phase-3" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>模块路径：<code>services/java/body-service/</code>
-源文件：<strong>26 个主代码（2411 行）+ 6 个测试（635 行）</strong>
+源文件：<strong>27 个主代码（2721 行）+ 9 个测试（886 行）</strong>
 HTTP 端口：<strong>8083</strong> · gRPC 端口：<strong>9094</strong>
 外部依赖：PostgreSQL（冷层真相源）· Redis（热层缓存）· Qdrant（温层向量库）· Kafka（感官事件消费）· nlp-service（嵌入/重排）</p>
 </blockquote>
@@ -157,9 +158,11 @@ HTTP 端口：<strong>8083</strong> · gRPC 端口：<strong>9094</strong>
 <p><code>body-service</code> 是生命体的<strong>知识与记忆的躯体</strong>。Phase 3 起承担三件事：</p>
 <ol>
 <li><strong>知识摄取</strong>（R3-02/03/04/09）：<code>POST /api/body/knowledge</code> 单篇 / <code>/knowledge/batch</code> 批量，
-   经分块 → 嵌入 → 向量写入 → 元数据落库，状态机 <code>PENDING → INDEXED / FAILED</code>。</li>
-<li><strong>语义检索</strong>（R3-05/06/08）：<code>POST /api/body/retrieve</code> 缓存优先 → Qdrant 召回 TOP-50 → 重排 TOP-K。</li>
+   经<strong>格式解析（<code>DocumentParser</code>）</strong> → 分块 → 嵌入 → 向量写入 → 元数据落库，状态机 <code>PENDING → INDEXED / FAILED</code>。</li>
+<li><strong>语义检索</strong>（R3-05/06/08）：<code>POST /api/body/retrieve</code> 缓存优先 → Qdrant 召回 TOP-50 → 重排 TOP-K；
+   <code>POST /api/body/retrieve/plan</code> 为 IN-05 迭代检索预留接口（参数就绪，循环 M1 后实现）。</li>
 <li><strong>RAG 回答</strong>（R3-07）：<code>POST /api/body/rag/answer</code> 检索 + 引用组装（生成段仍为模板，DEBT-002）。</li>
+<li><strong>三层一致性对账</strong>：<code>GET /api/body/knowledge/reconcile</code>（PG 真相源 vs Qdrant 点数，只读不改）。</li>
 </ol>
 <p>同时通过 <code>GET /api/body/knowledge/stats</code> 向工作平台躯体视图（R-C03）提供知识量、检索 P99、命中率与三层存储状态。</p>
 <h2 id="2-phase-12">2. 与 Phase 1/2 的关系（替换点已生效）<a class="headerlink" href="#2-phase-12" title="Permanent link">&para;</a></h2>
@@ -232,6 +235,12 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <td>R3-02 分块（与 Python <code>chunking.py</code> 同算法）</td>
 </tr>
 <tr>
+<td><code>chunk/DocumentParser.java</code></td>
+<td>工具</td>
+<td style="text-align: right;">146</td>
+<td>R3-02 <strong>格式解析步</strong>：md/text/html 归一化（PDF/DOCX 显式拒绝，DEBT-013）</td>
+</tr>
+<tr>
 <td><code>client/OutboundHttp.java</code></td>
 <td>工具</td>
 <td style="text-align: right;">48</td>
@@ -282,8 +291,8 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <tr>
 <td><code>controller/KnowledgeController.java</code></td>
 <td>控制器</td>
-<td style="text-align: right;">240</td>
-<td>入库 / 检索 / RAG / 状态四组接口</td>
+<td style="text-align: right;">306</td>
+<td>入库 / 检索 / RAG / 状态 / 对账五组接口</td>
 </tr>
 <tr>
 <td><code>event/SenseCollectedConsumer.java</code></td>
@@ -300,14 +309,14 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <tr>
 <td><code>service/IngestService.java</code></td>
 <td>服务</td>
-<td style="text-align: right;">152</td>
+<td style="text-align: right;">172</td>
 <td>R3-02/03/04/09 入库管道与状态机</td>
 </tr>
 <tr>
 <td><code>service/RetrievalService.java</code></td>
 <td>服务</td>
-<td style="text-align: right;">154</td>
-<td>R3-05/06/08 检索链路</td>
+<td style="text-align: right;">183</td>
+<td>R3-05/06/08 检索链路 + IN-05 迭代检索预留</td>
 </tr>
 <tr>
 <td><code>service/RagPipeline.java</code></td>
@@ -348,8 +357,8 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <tr>
 <td><code>store/StorageFacade.java</code></td>
 <td>门面</td>
-<td style="text-align: right;">73</td>
-<td>R3-01 统一存储出口与三层状态</td>
+<td style="text-align: right;">122</td>
+<td>R3-01 统一存储出口、三层状态与<strong>对账</strong></td>
 </tr>
 <tr>
 <td><code>store/TierRouter.java</code></td>
@@ -377,7 +386,7 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </tr>
 </tbody>
 </table>
-<h3 id="32-39">3.2 测试（39 个用例，全绿）<a class="headerlink" href="#32-39" title="Permanent link">&para;</a></h3>
+<h3 id="32-54">3.2 测试（54 个用例，全绿）<a class="headerlink" href="#32-54" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -393,6 +402,11 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <td>R3-02 无遗漏 / 标题前置 / 大小受控 / 边界可配</td>
 </tr>
 <tr>
+<td><code>chunk/DocumentParserTest.java</code></td>
+<td style="text-align: right;">91</td>
+<td>R3-02 格式解析：HTML 去标签不吞正文 / 实体解码 / <strong>pdf 显式拒绝不静默分块</strong></td>
+</tr>
+<tr>
 <td><code>client/QdrantClientTest.java</code></td>
 <td style="text-align: right;">38</td>
 <td>R3-04 <strong>point id 必须是 UUID</strong>（E2E 缺陷回归）</td>
@@ -404,8 +418,8 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </tr>
 <tr>
 <td><code>service/RetrievalServiceTest.java</code></td>
-<td style="text-align: right;">147</td>
-<td>R3-05/06/08 缓存优先 / 重排降级不阻断 / 上游不可用不返回假结果</td>
+<td style="text-align: right;">193</td>
+<td>R3-05/06/08 缓存优先 / 重排降级不阻断 / 上游不可用不返回假结果 / <strong>IN-05 预留参数</strong></td>
 </tr>
 <tr>
 <td><code>store/HotCacheStoreTest.java</code></td>
@@ -416,6 +430,11 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <td><code>store/InMemoryMetadataStoreTest.java</code></td>
 <td style="text-align: right;">78</td>
 <td>R3-01 覆盖式写入 / 租户隔离 / 真相源语义</td>
+</tr>
+<tr>
+<td><code>store/StorageFacadeTest.java</code></td>
+<td style="text-align: right;">114</td>
+<td>R3-01 <strong>三层对账</strong>：一致 / 缺向量 / 孤儿向量 / 向量库不可用不虚报一致</td>
 </tr>
 <tr>
 <td><code>store/TierRouterTest.java</code></td>
@@ -513,7 +532,7 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <li><strong>入库失败不阻塞消费</strong>：异常按文档粒度吞掉并计数，位点照常提交，
   避免一条坏数据卡死整条采集链路（与 Phase 2 死信思路一致）。</li>
 </ul>
-<h3 id="48-controllerknowledgecontrollerjava-240">4.8 <code>controller/KnowledgeController.java</code> · 控制器 · 240 行<a class="headerlink" href="#48-controllerknowledgecontrollerjava-240" title="Permanent link">&para;</a></h3>
+<h3 id="48-controllerknowledgecontrollerjava-306">4.8 <code>controller/KnowledgeController.java</code> · 控制器 · 306 行<a class="headerlink" href="#48-controllerknowledgecontrollerjava-306" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -526,7 +545,7 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <tr>
 <td><code>POST</code></td>
 <td><code>/api/body/knowledge</code></td>
-<td>单篇入库，返回 <code>chunk_count / status / vector_backend / degraded</code></td>
+<td>单篇入库（<code>format=auto/md/text/html</code>），返回 <code>chunk_count / normalized_chars / status / vector_backend / degraded</code></td>
 </tr>
 <tr>
 <td><code>POST</code></td>
@@ -550,6 +569,11 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </tr>
 <tr>
 <td><code>POST</code></td>
+<td><code>/api/body/retrieve/plan</code></td>
+<td><strong>IN-05 迭代检索预留接口</strong>（<code>iteration</code> / <code>refine_query</code>），当前单轮 + 如实标注未启用循环</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
 <td><code>/api/body/rag/answer</code></td>
 <td>RAG 回答（含引用）</td>
 </tr>
@@ -557,6 +581,11 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <td><code>GET</code></td>
 <td><code>/api/body/knowledge/stats</code></td>
 <td>躯体视图指标</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/body/knowledge/reconcile</code></td>
+<td><strong>三层一致性对账</strong>（PG 真相源 vs Qdrant 点数，只读不改）</td>
 </tr>
 <tr>
 <td><code>GET</code></td>
@@ -591,6 +620,37 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </tr>
 </tbody>
 </table>
+<h3 id="410-chunkdocumentparserjava-146">4.10 <code>chunk/DocumentParser.java</code> · 格式解析 · 146 行<a class="headerlink" href="#410-chunkdocumentparserjava-146" title="Permanent link">&para;</a></h3>
+<p>入库存的是<strong>正文纯文本</strong>，而设计 §5.1 的链路是「上传 → <strong>格式解析</strong> → 分块」——
+本类补上此前缺失的格式解析步（改造前入库正文被直接当纯文本分块，HTML 标签会一起进向量库）。</p>
+<table>
+<thead>
+<tr>
+<th>格式</th>
+<th>处理</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>md</code> / <code>markdown</code> / <code>text</code> / <code>txt</code></td>
+<td>直通（Markdown 结构由 <code>ChunkProcessor</code> 解析）</td>
+</tr>
+<tr>
+<td><code>html</code> / <code>htm</code></td>
+<td>去 <code>&lt;script&gt;/&lt;style&gt;</code> → 块级标签转换行 → 去标签 → 实体解码 → 折叠空行</td>
+</tr>
+<tr>
+<td><code>auto</code>（默认）</td>
+<td>内容嗅探：<code>&lt;</code> 开头且含标签形 → html，否则 text</td>
+</tr>
+<tr>
+<td><code>pdf</code> / <code>doc</code> / <code>docx</code></td>
+<td><strong>显式拒绝</strong>（<code>AGENT_BAD_REQUEST</code>）并给出指引，登记 DEBT-013</td>
+</tr>
+</tbody>
+</table>
+<p><strong>红线</strong>：绝不把 PDF 二进制当文本塞进分块器（会产出垃圾向量且无人察觉）——
+宁可报错，也不产出"看起来成功"的脏知识。</p>
 <h2 id="5">5. 降级清单（诚实上报，不虚构）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -630,6 +690,16 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <td>Kafka</td>
 <td>消费器启动失败不影响 HTTP 链路</td>
 <td>启动 WARN + 消费统计 <code>running=false</code></td>
+</tr>
+<tr>
+<td>文档格式（PDF/DOCX）</td>
+<td><strong>拒绝入库</strong>（不静默按文本分块）</td>
+<td><code>AGENT_BAD_REQUEST</code> + 指引文案（DEBT-013）</td>
+</tr>
+<tr>
+<td>迭代检索（IN-05）</td>
+<td>回落单轮检索</td>
+<td><code>/retrieve/plan</code> 返回 <code>iteration_loop=not_enabled</code>，不伪造多轮</td>
 </tr>
 </tbody>
 </table>

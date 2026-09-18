@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 Phase3-开发执行日志.md</span>
+  <span class="meta">生成于 2026-09-18 20:55 · 源文件 Phase3-开发执行日志.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -129,6 +129,7 @@
 <li><a href="#phase-e">Phase E｜构建与测试收敛</a></li>
 <li><a href="#phase-f">Phase F｜端到端验收与缺陷修复</a></li>
 <li><a href="#phase-g">Phase G｜文档归档</a></li>
+<li><a href="#phase-h">Phase H｜需求复审与缺口补全（第二轮）</a></li>
 </ul>
 </li>
 <li><a href="#_3">三、提交台账</a></li>
@@ -194,7 +195,14 @@
                                  → BFF 端点实测 → 缺陷修复（Qdrant point id / PG 凭据）
         ↓
 [Phase G] 文档归档                模块文档 → 阶段三件套 → DEMO → PROGRESS / 总览 / 台账
+        ↓
+[Phase H] 需求复审与缺口补全       需求逐条对账 → 伪代码扫描 → 补格式解析/BFF写路径/前端入库
+                                 → 自审自纠「写路径鉴权」→ 全量回归 114 / 52 / 29
 </code></pre>
+<blockquote>
+<p><strong>数字口径</strong>：Phase E/F/G 中出现的数字是<strong>当时</strong>的实测值（保留不改，属历史留痕）；
+Phase H 之后的<strong>当前基线</strong>为 <strong>Java 114 · Python 52 · wp-bff 29 · 契约 0 FAIL · 文档覆盖 103/103</strong>。</p>
+</blockquote>
 <hr />
 <h2 id="_2">二、分阶段执行记录<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
 <h3 id="phase-a">Phase A｜前置同步与需求对账<a class="headerlink" href="#phase-a" title="Permanent link">&para;</a></h3>
@@ -576,6 +584,84 @@
 </tr>
 </tbody>
 </table>
+<h3 id="phase-h">Phase H｜需求复审与缺口补全（第二轮）<a class="headerlink" href="#phase-h" title="Permanent link">&para;</a></h3>
+<p>阶段交付后做了一次<strong>独立复审</strong>：不看报告结论，直接拿《Phase3-躯体期 · 需求设计文档》逐条对源码取证据，
+并专项排查"伪代码/占位实现"。结论是 <strong>R3-01~R3-09 主体真实可用，但存在 1 处功能性断链 + 3 处文档失真 + 2 处编号悬空</strong>。</p>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>动作</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>H1</td>
+<td>需求-代码逐条对账</td>
+<td>见 <code>docs/优化日志/2026-09-18-Phase3需求审核与补全.md</code> §2 对账表</td>
+</tr>
+<tr>
+<td>H2</td>
+<td>伪代码/占位专项扫描（<code>TODO/FIXME/stub/mock/degraded</code> 全量 grep + 逐条定性）</td>
+<td>定性表：<strong>合理降级 4 条 / 真实缺口 2 条 / 伪实现 0 条</strong></td>
+</tr>
+<tr>
+<td>H3</td>
+<td><strong>补 R3-02 格式解析步</strong></td>
+<td>新增 <code>chunk/DocumentParser.java</code>（markdown / html / plain 归一 + 标题抽取），入库链路接入；PDF 明确拒收并给出通道建议</td>
+</tr>
+<tr>
+<td>H4</td>
+<td><strong>补 BFF 入库代理</strong>（本轮最大缺口）</td>
+<td><code>wp-bff</code> 新增 <code>POST /api/wp/knowledge/ingest</code>；此前工作平台<strong>根本无法入库</strong>，只能直连 body-service</td>
+</tr>
+<tr>
+<td>H5</td>
+<td><strong>补前端入库能力</strong></td>
+<td><code>KnowledgeView.vue</code> 增「文档入库」面板（上传/粘贴 + 标题 + 格式 + 提交回执，如实展示 <code>degraded</code>）；<code>provider/types</code> 同步</td>
+</tr>
+<tr>
+<td>H6</td>
+<td>补 <code>IngestOutcome</code> 透出格式与降级信息</td>
+<td><code>IngestService</code> 返回 <code>format / parser / degraded</code>，前端不再猜测</td>
+</tr>
+<tr>
+<td>H7</td>
+<td>补契约</td>
+<td><code>work-platform-bff-openapi.yaml</code> 新增 ingest 路径 + <code>KnowledgeIngestResult</code> schema，<code>x-wp-status: implemented</code></td>
+</tr>
+<tr>
+<td>H8</td>
+<td>补测试</td>
+<td><code>DocumentParserTest</code>(7) · <code>StorageFacadeTest</code>(5) · <code>RetrievalServiceTest</code> 净增 2；wp-bff 新增入库用例 7 项（功能 5 + 鉴权反向 2）</td>
+</tr>
+<tr>
+<td>H9</td>
+<td>修正文档失真</td>
+<td>① <code>DEMO</code> 里 <code>status:READY</code>（实际无此值）② <code>storage: "warm+cold"</code> 等<strong>照抄会报错</strong>的示例 ③ <code>06-body-service.md</code> 的源文件/测试计数（26/6 → 28/9）</td>
+</tr>
+<tr>
+<td>H10</td>
+<td>登记悬空编号</td>
+<td>代码引用了 <code>DEBT-010/011/012</code> 但台账无登记 → 补齐并逐条给证据</td>
+</tr>
+<tr>
+<td>H11</td>
+<td>全量回归</td>
+<td>Java <strong>114</strong> / Python <strong>52</strong> / wp-bff <strong>27</strong> / 契约 0 FAIL / 文档覆盖 103/103 / 前端 build 通过</td>
+</tr>
+<tr>
+<td>H12</td>
+<td>工具口径修正</td>
+<td><code>contract-check.py</code> 的 BFF 端点计数改为<strong>按路径去重</strong>，并单独输出方法数——消除 "implemented 8 vs 实现 9" 的伪矛盾</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>本轮定性结论</strong>：未发现"用降级替身冒充真实能力"的伪实现。
+唯一的实体缺口是 <strong>BFF 入库链路断链</strong>（已补），其余为文档口径失真（已改）。</p>
+</blockquote>
 <hr />
 <h2 id="_3">三、提交台账<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
 <table>
