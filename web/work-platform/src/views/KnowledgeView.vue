@@ -90,6 +90,69 @@
       </article>
     </section>
 
+    <!-- 文档入库（R3-09 写路径 · 演示「上传文档 → 提问 → 高亮命中」链路的起点） -->
+    <el-card shadow="never" class="ingest-card">
+      <template #header>
+        <div class="card-head">
+          <span>文档入库</span>
+          <span class="card-hint">
+            支持 Markdown / 纯文本 / HTML（体层在分块前做格式解析）；入库后知识量与向量点实时增加
+          </span>
+        </div>
+      </template>
+
+      <div class="ingest-grid">
+        <el-input v-model="draft.title" placeholder="文档标题（缺省用 doc_id）" clearable />
+        <el-input v-model="draft.source" placeholder="来源标识，如 manual / wiki" clearable />
+        <el-select v-model="draft.format" class="format-select" size="default">
+          <el-option label="自动识别" value="auto" />
+          <el-option label="Markdown" value="md" />
+          <el-option label="纯文本" value="text" />
+          <el-option label="HTML" value="html" />
+        </el-select>
+        <el-upload
+          class="ingest-upload"
+          :auto-upload="false"
+          :show-file-list="false"
+          accept=".md,.markdown,.txt,.html,.htm"
+          :on-change="onFilePicked"
+        >
+          <el-button size="default" :icon="Upload">从文件读取</el-button>
+        </el-upload>
+      </div>
+
+      <el-input
+        v-model="draft.content"
+        type="textarea"
+        :rows="6"
+        resize="vertical"
+        placeholder="粘贴正文，或点「从文件读取」选择 .md / .txt / .html 文件（PDF 需先经文档解析通道转文本）"
+      />
+
+      <div class="ingest-foot">
+        <span class="ingest-count">{{ draft.content.length }} 字</span>
+        <el-button
+          type="primary"
+          :loading="ingesting"
+          :disabled="!draft.content.trim()"
+          @click="submitIngest"
+        >
+          入库
+        </el-button>
+      </div>
+
+      <el-alert
+        v-if="ingestNotice"
+        :closable="true"
+        :type="ingestNotice.type"
+        show-icon
+        class="result-alert"
+        :title="ingestNotice.title"
+        :description="ingestNotice.detail"
+        @close="ingestNotice = null"
+      />
+    </el-card>
+
     <!-- 检索测试 -->
     <el-card shadow="never" class="search-card">
       <template #header>
@@ -164,6 +227,9 @@
 
 <script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
+import { ElMessage } from 'element-plus'
+import type { UploadFile } from 'element-plus'
+import { Upload } from '@element-plus/icons-vue'
 import { dataProvider } from '../api/provider'
 import { useAppStore } from '../stores/app'
 import type { KnowledgeSearchResult, KnowledgeStats } from '../types'
@@ -175,6 +241,16 @@ const stats = ref<KnowledgeStats | null>(null)
 const result = ref<KnowledgeSearchResult | null>(null)
 const query = ref('')
 const topK = ref(5)
+
+// ── 文档入库（R3-09 写路径）──
+const ingesting = ref(false)
+const draft = ref<{ title: string; source: string; format: 'auto' | 'md' | 'text' | 'html'; content: string }>({
+  title: '',
+  source: 'manual',
+  format: 'auto',
+  content: '',
+})
+const ingestNotice = ref<{ type: 'success' | 'error' | 'warning'; title: string; detail?: string } | null>(null)
 
 const live = computed(() => stats.value?.data_source === 'live' && stats.value?.available === true)
 const unavailable = computed(() => stats.value !== null && stats.value.available === false)
@@ -264,6 +340,80 @@ async function runSearch() {
   }
 }
 
+const FILE_FORMAT: Record<string, 'md' | 'text' | 'html'> = {
+  md: 'md', markdown: 'md', txt: 'text', text: 'text', html: 'html', htm: 'html',
+}
+
+/** 文件读取：只接受体层能解析的文本型格式；PDF/DOCX 明确提示走解析通道，不静默空转 */
+function onFilePicked(file: UploadFile) {
+  const name = String(file?.name || '')
+  const extension = name.includes('.') ? name.split('.').pop()!.toLowerCase() : ''
+  if (extension === 'pdf' || extension === 'docx' || extension === 'doc') {
+    ingestNotice.value = {
+      type: 'warning',
+      title: `暂不支持直接上传 .${extension}`,
+      detail: 'PDF/DOCX 需版面还原，请先经文档解析通道转成 Markdown/文本后入库（DEBT-013）。',
+    }
+    return
+  }
+  const format = FILE_FORMAT[extension]
+  if (!format) {
+    ingestNotice.value = {
+      type: 'warning',
+      title: `未识别的文件类型 .${extension || '(无扩展名)'}`,
+      detail: '支持 .md / .markdown / .txt / .html / .htm；也可直接粘贴正文。',
+    }
+    return
+  }
+  const raw = file?.raw
+  if (!raw) return
+  const reader = new FileReader()
+  reader.onload = () => {
+    draft.value.content = String(reader.result ?? '')
+    draft.value.format = format
+    if (!draft.value.title.trim()) draft.value.title = name.replace(/\.[^.]+$/, '')
+    ingestNotice.value = null
+  }
+  reader.onerror = () => {
+    ingestNotice.value = { type: 'error', title: '文件读取失败', detail: name }
+  }
+  reader.readAsText(raw)
+}
+
+async function submitIngest() {
+  const content = draft.value.content.trim()
+  if (!content) return
+  ingesting.value = true
+  ingestNotice.value = null
+  try {
+    const outcome = await dataProvider.insertKnowledge({
+      title: draft.value.title.trim() || undefined,
+      source: draft.value.source.trim() || undefined,
+      format: draft.value.format,
+      content,
+    })
+    if (!outcome.available || outcome.success === false) {
+      ingestNotice.value = {
+        type: 'error',
+        title: outcome.reason || '入库失败',
+        detail: outcome.error_code ? `错误码 ${outcome.error_code}` : undefined,
+      }
+      return
+    }
+    const degraded = outcome.degraded ? '（嵌入为降级后端，已如实标注）' : ''
+    ingestNotice.value = {
+      type: 'success',
+      title: `已入库 ${outcome.doc_id} · ${outcome.chunk_count} 个切片${degraded}`,
+      detail: `解析后 ${outcome.normalized_chars ?? content.length} 字 · 向量后端 ${outcome.vector_backend ?? '-'}`,
+    }
+    ElMessage.success('文档已入库，知识量已刷新')
+    // 入库成功 → 立即刷新知识量/向量点，闭合「上传后知识量实时增加」的演示要求
+    await refresh()
+  } finally {
+    ingesting.value = false
+  }
+}
+
 onMounted(refresh)
 </script>
 
@@ -293,6 +443,13 @@ onMounted(refresh)
 .tier-meta span { color: var(--wp-sub); }
 .tier-meta em { font-style: normal; color: var(--wp-text); }
 .search-card :deep(.el-card__header) { padding: 12px 16px; }
+.ingest-card :deep(.el-card__header) { padding: 12px 16px; }
+.ingest-grid { display: grid; grid-template-columns: minmax(180px, 1fr) minmax(160px, 1fr) 130px auto; gap: 10px; margin-bottom: 10px; }
+.format-select { width: 130px; }
+.ingest-upload { justify-self: end; }
+.ingest-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 10px; }
+.ingest-count { color: var(--wp-sub); font-size: 11px; }
+@media (max-width: 900px) { .ingest-grid { grid-template-columns: 1fr 1fr; } }
 .card-head { display: flex; align-items: baseline; gap: 10px; }
 .card-hint { color: var(--wp-sub); font-size: 11px; }
 .search-bar { display: flex; gap: 10px; }

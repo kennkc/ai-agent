@@ -526,6 +526,28 @@ components:
         checked_at: { type: string }
         reason: { type: string }
         highlight_note: { type: string }
+    KnowledgeIngestResult:
+      type: object
+      required: [available, mode]
+      properties:
+        available: { type: boolean, description: 体层是否可用；false 时不返回任何入库结果字段 }
+        mode: { type: string, enum: [single, batch] }
+        tenant_id: { type: string }
+        checked_at: { type: string }
+        latency_ms: { type: integer }
+        reason: { type: string, description: available=false 时的原因（体层不可用 / 被体层拒绝） }
+        error_code: { type: string, description: 被体层拒绝时的统一错误码，如 AGENT_BAD_REQUEST }
+        doc_id: { type: string, description: mode=single 时的文档 ID }
+        chunk_count: { type: integer }
+        status: { type: string, enum: [PENDING, INDEXED, FAILED] }
+        vector_backend: { type: string }
+        degraded: { type: boolean }
+        normalized_chars: { type: integer, description: 格式解析后的正文字数（真正参与分块的长度） }
+        success: { type: boolean, description: mode=single 时体层写入是否成功 }
+        total: { type: integer, description: mode=batch 时的文档总数 }
+        succeeded: { type: integer }
+        failed: { type: integer }
+        results: { type: array, items: { type: object }, description: mode=batch 时的逐条结果 }
 paths:
   /overview:
     x-wp-status: implemented
@@ -550,10 +572,12 @@ paths:
   /knowledge:
     x-wp-status: implemented
     get:
+      x-wp-security: origin-allowlist
       summary: 躯体层知识统计（知识量 / 检索 P99 / 命中率 / 三层存储）
       description: |
         代理体层 GET /api/body/knowledge/stats。body-service 未启动时返回 available=false
         并列出 gaps，前端据此标注降级——不以 0 冒充"知识量为零"。
+        **读路径**：按设计免控制令牌，仅回显白名单来源的 CORS 头。
       security: [{ bearerAuth: [] }]
       parameters:
         - name: X-Tenant-Id
@@ -571,14 +595,78 @@ paths:
                   - type: object
                     properties:
                       data: { $ref: '#/components/schemas/KnowledgeStats' }
+    post:
+      x-wp-security: origin-allowlist + control-token
+      summary: 知识入库（单篇 / 批量导入）—— 工作平台侧唯一写路径
+      description: |
+        代理体层 POST /api/body/knowledge（单篇，请求体含 content）与
+        POST /api/body/knowledge/batch（请求体含 documents 数组）。
+        content 的格式由 format 字段声明（auto/md/text/html），体层在分块前做格式解析；
+        pdf/docx 由体层显式拒绝并回传统一错误码（DEBT-013），BFF 原样上报而不吞错。
+        体层不可用或入库被拒时返回 available=false 与 reason，绝不返回伪造的 success。
+
+        **写路径鉴权**：同一路径的 GET 免令牌，但本 POST 会真实改动知识库，
+        因此与 `/middleware/{key}/start|stop` 同级校验：来源白名单 + `X-WP-Control-Token`。
+        开发环境下由 Vite 代理对 `/api/wp/*` 统一注入令牌，前端无需额外处理；
+        浏览器直连 8090 将得到 401/403，不存在无鉴权写入后门。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                doc_id: { type: string, description: 缺省时由体层生成 doc-<uuid> }
+                title: { type: string }
+                content: { type: string, description: 单篇入库必填（非空） }
+                source: { type: string, description: 来源标识，批量模式下可作默认值 }
+                format: { type: string, enum: [auto, md, markdown, text, txt, html, htm], default: auto }
+                documents:
+                  type: array
+                  description: 批量导入时提交；与 content 二选一
+                  items:
+                    type: object
+                    properties:
+                      doc_id: { type: string }
+                      title: { type: string }
+                      content: { type: string }
+                      source: { type: string }
+                      format: { type: string }
+      responses:
+        '200':
+          description: OK（体层不可用/被拒时同样 200，但 available=false）
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/KnowledgeIngestResult' }
+        '400':
+          description: content 为空 / documents 为空数组 / 请求体非法或过大
+        '401':
+          description: 控制令牌缺失或无效（X-WP-Control-Token）—— 鉴权失败时不触达体层
+        '403':
+          description: 来源不在白名单（Origin/Referer 校验失败）—— CSRF 防护
   /knowledge/search:
     x-wp-status: implemented
     post:
+      x-wp-security: origin-allowlist
       summary: 检索测试（语义检索 + 命中片段高亮）
       description: |
         代理体层 POST /api/body/retrieve（缓存优先 → 向量召回 TOP-50 → 重排 TOP-K）。
         matched_terms 与截窗 snippet 由 BFF 计算，供前端高亮命中片段；
         体层不可用时返回 available=false，不返回伪造结果。
+
+        **只读语义**：虽为 POST（需靠请求体传查询词），但不改动任何数据，故与
+        `GET /knowledge` 一样免控制令牌——与写路径 `POST /knowledge` 的区别在此。
       security: [{ bearerAuth: [] }]
       requestBody:
         required: true

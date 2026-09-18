@@ -1,6 +1,7 @@
 package com.agent.body.service;
 
 import com.agent.body.chunk.ChunkProcessor;
+import com.agent.body.chunk.DocumentParser;
 import com.agent.body.client.EmbeddingClient;
 import com.agent.body.client.QdrantClient;
 import com.agent.body.common.BizException;
@@ -52,7 +53,19 @@ public class IngestService {
         this.embedBatchSize = Math.max(1, embedBatchSize);
     }
 
+    /** 兼容入口：格式按内容嗅探（{@code auto}） */
     public IngestOutcome ingest(String tenantId, String docId, String title, String content, String source) {
+        return ingest(tenantId, docId, title, content, source, DocumentParser.FORMAT_AUTO);
+    }
+
+    /**
+     * 入库主流程。
+     *
+     * @param format 上传物格式（{@code auto/md/text/html}）——「格式解析」步在分块之前，
+     *               由 {@link DocumentParser} 归一化为纯文本；不支持格式显式报错（见 DEBT-013）
+     */
+    public IngestOutcome ingest(String tenantId, String docId, String title, String content, String source,
+                                String format) {
         String resolvedDocId = docId == null || docId.isBlank() ? "doc-" + UUID.randomUUID() : docId;
         String resolvedTitle = title == null || title.isBlank() ? resolvedDocId : title;
         long now = System.currentTimeMillis();
@@ -64,7 +77,8 @@ public class IngestService {
         metadata.saveDocument(pending);
 
         try {
-            List<ChunkProcessor.Chunk> chunks = chunkProcessor.chunk(content);
+            String text = DocumentParser.normalize(content, format);
+            List<ChunkProcessor.Chunk> chunks = chunkProcessor.chunk(text);
             if (chunks.isEmpty()) {
                 throw new BizException(ErrorCode.AGENT_BAD_REQUEST, "分块结果为空");
             }
@@ -85,12 +99,18 @@ public class IngestService {
             }
             qdrant.upsert(points);
             metadata.replaceChunks(tenantId, resolvedDocId, storedChunks);
-            metadata.saveDocument(pending.withStatus(DocumentStatus.INDEXED, storedChunks.size(), null));
+            // char_count 记的是**解析后的正文长度**（真正参与分块与索引的文本），
+            // 与上传体积区分开：HTML 去标签后体积会明显小于原始 payload。
+            StoredDocument indexed = new StoredDocument(resolvedDocId, tenantId, resolvedTitle,
+                    source == null ? "manual" : source, text.length(), storedChunks.size(),
+                    DocumentStatus.INDEXED, batch.backend(), now, now, null);
+            metadata.saveDocument(indexed);
 
-            log.info("知识入库完成 tenant={} doc={} chunks={} backend={} degraded={}",
-                    tenantId, resolvedDocId, storedChunks.size(), batch.backend(), batch.degraded());
+            log.info("知识入库完成 tenant={} doc={} format={} chars={} chunks={} backend={} degraded={}",
+                    tenantId, resolvedDocId, format == null ? DocumentParser.FORMAT_AUTO : format,
+                    text.length(), storedChunks.size(), batch.backend(), batch.degraded());
             return new IngestOutcome(resolvedDocId, storedChunks.size(), DocumentStatus.INDEXED,
-                    batch.backend(), batch.degraded(), contentHash(content));
+                    batch.backend(), batch.degraded(), contentHash(text), text.length());
         } catch (RuntimeException e) {
             String reason = e.getMessage() == null ? e.getClass().getSimpleName() : e.getMessage();
             metadata.saveDocument(pending.withStatus(DocumentStatus.FAILED, 0, truncate(reason)));
@@ -148,5 +168,5 @@ public class IngestService {
 
     /** 入库结果（含向量后端与降级标记，供前端躯体视图如实展示） */
     public record IngestOutcome(String docId, int chunkCount, DocumentStatus status, String vectorBackend,
-                                boolean degraded, String contentHash) { }
+                                boolean degraded, String contentHash, int normalizedChars) { }
 }

@@ -16,6 +16,12 @@ const TOKEN = 'test-control-token-0123456789'
 const ALLOWED_ORIGIN = 'http://127.0.0.1:3001'
 const OS_TMP = process.env.TEMP || process.env.TMPDIR || '/tmp'
 
+/**
+ * 写路径（POST /api/wp/knowledge）与 /middleware/:key/start|stop 同级鉴权：
+ * 来源白名单 + 控制令牌。开发环境下这一步由 Vite 代理自动注入，浏览器无感。
+ */
+const CONTROL_HEADERS = { origin: ALLOWED_ORIGIN, 'x-wp-control-token': TOKEN }
+
 function request(server, { method = 'GET', path = '/', headers = {}, body = null } = {}) {
   const { port } = server.address()
   const payload = body == null ? null : Buffer.from(JSON.stringify(body), 'utf8')
@@ -335,6 +341,128 @@ test('检索测试：查询词通过请求体下发时也能解析（含 top_k �
     assert.equal(res.json.data.top_k, 20, 'top_k 须收敛到上界 20')
     assert.equal(res.json.data.available, false, '体层不可用时应诚实标注')
   }, { jsonRequest: async () => null })
+})
+
+// ─────────── R3-09 知识入库（/api/wp/knowledge 写路径）───────────
+//
+// 写路径鉴权用例：`/knowledge` 的 GET 是只读免令牌，POST 会真实改动知识库，
+// 因此必须与 /middleware 控制端点同级校验。两条反向用例 + 一条"合法令牌放行"守住边界。
+
+test('知识入库写路径：缺少控制令牌 -> 401，且不调用体层（无鉴权写入后门回归）', async () => {
+  let called = false
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge',
+      headers: { 'Content-Type': 'application/json', origin: ALLOWED_ORIGIN },
+      body: { title: '未授权写入', content: '试图直连 8090 写入知识库。' },
+    })
+    assert.equal(res.status, 401)
+    assert.match(res.json.error, /控制令牌/)
+  }, { jsonRequest: async () => { called = true; return null } })
+  assert.equal(called, false, '鉴权失败时绝不能触达体层 — 否则即为无鉴权写入后门')
+})
+
+test('知识入库写路径：来源不在白名单 -> 403（CSRF 防护），且不调用体层', async () => {
+  let called = false
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge',
+      headers: { 'Content-Type': 'application/json', origin: 'http://evil.example.com', 'x-wp-control-token': TOKEN },
+      body: { title: '跨站写入', content: 'CSRF 尝试。' },
+    })
+    assert.equal(res.status, 403)
+    assert.match(res.json.error, /来源/)
+  }, { jsonRequest: async () => { called = true; return null } })
+  assert.equal(called, false, '来源非法时不应调用体层')
+})
+
+test('知识入库：代理体层单篇端点并透传 doc_id/format', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge',
+      headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': 'tenant-a', ...CONTROL_HEADERS },
+      body: { doc_id: 'doc-9', title: '躯体层设计', content: '<h1>存储分层</h1><p>热层 Redis。</p>', format: 'html' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.mode, 'single')
+    assert.equal(res.json.data.doc_id, 'doc-9')
+    assert.equal(res.json.data.chunk_count, 2)
+  }, { jsonRequest: async (url, options) => {
+    assert.ok(url.endsWith('/api/body/knowledge'), '单篇应代理到体层 /api/body/knowledge')
+    assert.equal(options.method, 'POST')
+    assert.equal(options.headers['X-Tenant-Id'], 'tenant-a')
+    assert.equal(options.body.format, 'html', 'format 必须透传，否则体层无法按 HTML 解析')
+    assert.equal(options.body.doc_id, 'doc-9')
+    return { doc_id: 'doc-9', chunk_count: 2, status: 'INDEXED', vector_backend: 'hash-ngram-768', success: true }
+  } })
+})
+
+test('知识入库：content 为空 -> 400，不发起体层请求', async () => {
+  let called = false
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge',
+      headers: { 'Content-Type': 'application/json', ...CONTROL_HEADERS },
+      body: { title: '空文档', content: '   ' },
+    })
+    assert.equal(res.status, 400)
+  }, { jsonRequest: async () => { called = true; return null } })
+  assert.equal(called, false, '参数非法时不应调用体层')
+})
+
+test('知识入库：体层不可用 -> available=false，不伪造成功', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge',
+      headers: { 'Content-Type': 'application/json', ...CONTROL_HEADERS },
+      body: { title: '文档', content: '正文内容。' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, false)
+    assert.equal(res.json.data.success, undefined, '不得返回伪造的 success')
+    assert.match(String(res.json.data.reason), /体层不可用/)
+  }, { jsonRequest: async () => null })
+})
+
+test('知识入库：体层统一错误码（如 pdf 被拒）原样上报，不算入库成功', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge',
+      headers: { 'Content-Type': 'application/json', ...CONTROL_HEADERS },
+      body: { title: 'PDF 文档', content: '%PDF-1.7 binary', format: 'pdf' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, false)
+    assert.equal(res.json.data.error_code, 'AGENT_BAD_REQUEST')
+    assert.match(String(res.json.data.reason), /入库被体层拒绝/)
+  }, { jsonRequest: async () => ({ code: 'AGENT_BAD_REQUEST', message: '暂不支持 format=pdf（DEBT-013）' }) })
+})
+
+test('知识入库：批量导入代理到 /knowledge/batch 并保留逐条结果', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge',
+      headers: { 'Content-Type': 'application/json', ...CONTROL_HEADERS },
+      body: { documents: [{ doc_id: 'd1', title: 'A', content: '甲' }, { doc_id: 'd2', title: 'B', content: '乙' }] },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.mode, 'batch')
+    assert.equal(res.json.data.total, 2)
+    assert.equal(res.json.data.failed, 1, '逐条失败信息应保留')
+  }, { jsonRequest: async (url, options) => {
+    assert.ok(url.endsWith('/api/body/knowledge/batch'), '批量应代理到体层 batch 端点')
+    assert.equal(options.body.documents.length, 2)
+    assert.equal(options.body.documents[0].doc_id, 'd1')
+    return { total: 2, succeeded: 1, failed: 1, results: [{ doc_id: 'd1', success: true }, { doc_id: 'd2', success: false }] }
+  } })
 })
 
 test('queryTerms：中文无空格查询也能产出 2-gram 高亮词', () => {

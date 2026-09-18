@@ -8,7 +8,7 @@ import {
 } from './mock'
 import { reportApiOk, reportDegrade } from './status'
 import type {
-  KnowledgeHit, KnowledgeSearchResult, KnowledgeStats,
+  KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
   MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SuggestionExecution, TracingOverview,
 } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
@@ -293,6 +293,39 @@ export const dataProvider = {
     } catch (error) {
       reportDegrade('knowledge_search', (error as Error)?.message || 'BFF /knowledge/search 不可达')
       return { ...mockKnowledgeSearch(query, topK), available: false, reason: 'BFF /knowledge/search 不可达' }
+    }
+  },
+
+  /**
+   * 文档入库（R3-09 写路径）：把图文正文交给体层做「格式解析 → 分块 → 嵌入 → 向量入库」。
+   *
+   * 约定：**写路径绝不回落到 Mock** —— Mock 里造一个"入库成功"没有任何意义，
+   * 只会让人误以为知识已落库。Mock 模式下如实返回 `available=false` 并说明原因。
+   */
+  async insertKnowledge(input: KnowledgeIngestInput): Promise<KnowledgeIngestResult> {
+    if (source === 'mock') {
+      return {
+        available: false,
+        data_source: 'mock',
+        reason: '当前为 Mock 数据源（VITE_DATA_SOURCE=mock），入库不可用；请切换为 api 后重试',
+      }
+    }
+    try {
+      const payload = unwrapBody(await api.post('/knowledge', input))
+      if (payload && typeof payload === 'object' && 'available' in payload) {
+        if (payload.available === false) {
+          reportDegrade('knowledge_ingest', payload.reason || '体层入库不可用')
+        } else {
+          reportApiOk('knowledge_ingest')
+        }
+        return { data_source: 'live', ...(payload as KnowledgeIngestResult) }
+      }
+      reportDegrade('knowledge_ingest', '响应缺少 available 字段')
+      return { available: false, reason: '响应结构不符合契约' }
+    } catch (error) {
+      const reason = (error as Error)?.message || 'BFF /knowledge 写路径不可达'
+      reportDegrade('knowledge_ingest', reason)
+      return { available: false, reason }
     }
   },
 

@@ -38,8 +38,7 @@ public class StorageFacade {
     public TierRouter router() { return tierRouter; }
 
     /** 三层存储状态（R-C03 躯体视图数据源；探针失败如实标注，不虚构可用） */
-    public Map<String, Object> tierStatus() {
-        Map<String, Object> status = new LinkedHashMap<>();
+    public Map<String, Object> tierStatus() {        Map<String, Object> status = new LinkedHashMap<>();
         status.put("hot", Map.of(
                 "tier", "HOT",
                 "store", "redis",
@@ -65,6 +64,56 @@ public class StorageFacade {
                 "hot_threshold", tierRouter.hotThreshold(),
                 "warm_threshold", tierRouter.warmThreshold()));
         return status;
+    }
+
+    /**
+     * 三层一致性对账（设计 §6 风险应对：「Qdrant 与 PG 数据不一致 → 元数据为真相源，定期对账任务」）。
+     *
+     * <p>口径：**PG 元数据是唯一真相源**，Qdrant 的向量点数应当与之相等。对账只做比对与定性
+     * （缺向量 / 孤儿向量），**不做自动修复** —— 修复动作（重索引 / 清孤儿）留给人或定时任务，
+     * 避免对账过程本身写坏数据。
+     *
+     * @return 对账报告；向量库不可用时 {@code vector_store_available=false} 且差值字段为 -1
+     *         （**不以 0 冒充"完全一致"**）
+     */
+    public Map<String, Object> reconcile(String tenantId) {
+        long documents = metadataStore.countDocuments(tenantId);
+        long chunks = metadataStore.countChunks(tenantId);
+        boolean vectorStoreAvailable = qdrant.available();
+        long points = vectorStoreAvailable ? qdrant.count(tenantId) : -1;
+        long missingVectors = vectorStoreAvailable ? Math.max(0, chunks - points) : -1;
+        long orphanVectors = vectorStoreAvailable ? Math.max(0, points - chunks) : -1;
+        boolean consistent = vectorStoreAvailable && missingVectors == 0 && orphanVectors == 0;
+
+        Map<String, Object> report = new LinkedHashMap<>();
+        report.put("tenant_id", tenantId);
+        report.put("truth_source", "postgres");
+        report.put("documents", documents);
+        report.put("chunks", chunks);
+        report.put("vector_points", points);
+        report.put("vector_store_available", vectorStoreAvailable);
+        report.put("missing_vectors", missingVectors);
+        report.put("orphan_vectors", orphanVectors);
+        report.put("consistent", consistent);
+        report.put("action", action(vectorStoreAvailable, consistent, missingVectors, orphanVectors));
+        return report;
+    }
+
+    private String action(boolean vectorStoreAvailable, boolean consistent, long missing, long orphan) {
+        if (!vectorStoreAvailable) {
+            return "向量库不可用，无法对账；对账仅在 Qdrant 可达时有效";
+        }
+        if (consistent) {
+            return "三层一致，无需处置";
+        }
+        StringBuilder builder = new StringBuilder();
+        if (missing > 0) {
+            builder.append("缺向量 ").append(missing).append(" 个 → 对相关文档重索引；");
+        }
+        if (orphan > 0) {
+            builder.append("孤儿向量 ").append(orphan).append(" 个 → 按 doc_id 清理（删除已不存在的文档向量）；");
+        }
+        return builder.toString();
     }
 
     private double round(double value) {

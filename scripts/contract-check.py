@@ -106,14 +106,32 @@ def parse_openapi_paths(path):
 
 
 def parse_js_implemented_endpoints(path):
-    """提取 wp-bff server.js 中 IMPLEMENTED_ENDPOINTS 的路径清单"""
+    """提取 wp-bff server.js 中 IMPLEMENTED_ENDPOINTS 的路径清单（按路径去重）
+
+    去重口径说明：登记表按 (method, path) 逐个登记，同一路径可能出现在多个方法下
+    （例如 `/knowledge` 同时有 GET 统计与 POST 入库）。而契约侧的 `x-wp-status`
+    是挂在**路径**上的，因此这里必须按路径去重，两侧口径才可比——
+    否则会打印出 "implemented 8 | wp-bff 实现 9" 这种看似矛盾的计数。
+    方法级明细由 count_js_implemented_methods 单独给出。
+    """
     if not os.path.exists(path):
         return []
     text = open(path, encoding="utf-8").read()
     block = re.search(r"const IMPLEMENTED_ENDPOINTS = \[(.*?)\]", text, re.S)
     if not block:
         return []
-    return re.findall(r"path:\s*'([^']+)'", block.group(1))
+    return sorted(set(re.findall(r"path:\s*'([^']+)'", block.group(1))))
+
+
+def count_js_implemented_methods(path):
+    """IMPLEMENTED_ENDPOINTS 的 (method, path) 条目数——方法级口径"""
+    if not os.path.exists(path):
+        return 0
+    text = open(path, encoding="utf-8").read()
+    block = re.search(r"const IMPLEMENTED_ENDPOINTS = \[(.*?)\]", text, re.S)
+    if not block:
+        return 0
+    return len(re.findall(r"method:\s*'[A-Z]+'\s*,\s*path:\s*'[^']+'", block.group(1)))
 
 
 def parse_frontend_endpoints(path):
@@ -214,9 +232,11 @@ def check_work_platform(openapi_path):
         issues.append(f"WARN 端点缺少 x-wp-status 标记: {len(unmarked)} 个（{', '.join(unmarked[:3])} …）")
 
     impl_n = sum(1 for v in wp_status.values() if v == "implemented")
+    impl_methods = count_js_implemented_methods(
+        str(REPO_ROOT / "services" / "node" / "wp-bff" / "server.js"))
     print(f"扫描端点: {len(paths)} 个 | WS 事件: {len(ws_events)} 个 | P1 层: {len(WP_P1_ENDPOINTS)} | 阶段层: {len(WP_STAGE_ENDPOINTS)}")
-    print(f"实现分层: implemented {impl_n} | planned {len(paths) - impl_n} | "
-          f"wp-bff 实现 {len(impl_paths)} | 前端调用 {len(fe_paths)}")
+    print(f"实现分层: implemented {impl_n} 路径 | planned {len(paths) - impl_n} 路径 | "
+          f"wp-bff 实现 {len(impl_paths)} 路径（{impl_methods} 个方法） | 前端调用 {len(fe_paths)} 路径")
     return issues
 
 

@@ -538,6 +538,37 @@ export interface KnowledgeSearchResult {
   data_source?: 'live' | 'mock'
 }
 
+/** 文档入库（R3-09 写路径）：单篇与批量共用 */
+export interface KnowledgeIngestInput {
+  doc_id?: string
+  title?: string
+  content: string
+  source?: string
+  /** 体层 DocumentParser 支持的格式；auto 按内容嗅探 */
+  format?: 'auto' | 'md' | 'markdown' | 'text' | 'txt' | 'html' | 'htm'
+}
+
+export interface KnowledgeIngestResult {
+  available: boolean
+  mode?: 'single' | 'batch'
+  tenant_id?: string
+  latency_ms?: number
+  checked_at?: string
+  reason?: string
+  error_code?: string
+  doc_id?: string
+  chunk_count?: number
+  status?: 'PENDING' | 'INDEXED' | 'FAILED'
+  vector_backend?: string
+  degraded?: boolean
+  normalized_chars?: number
+  success?: boolean
+  total?: number
+  succeeded?: number
+  failed?: number
+  data_source?: 'live' | 'mock'
+}
+
 export interface TodaySummaryMetric {
   label: string
   value: string | number

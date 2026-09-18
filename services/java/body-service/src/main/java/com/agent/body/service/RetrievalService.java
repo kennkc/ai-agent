@@ -38,6 +38,9 @@ public class RetrievalService {
 
     private static final Logger log = LoggerFactory.getLogger(RetrievalService.class);
 
+    /** IN-05 迭代检索轮数上限（设计：检索→验证→再检索 ≤3 轮） */
+    public static final int MAX_ITERATIONS = 3;
+
     private final EmbeddingClient embeddingClient;
     private final QdrantClient qdrant;
     private final RerankClient rerankClient;
@@ -125,9 +128,30 @@ public class RetrievalService {
                 point.ingestTime() > 0 ? Instant.ofEpochMilli(point.ingestTime()).toString() : "");
     }
 
+    /**
+     * 迭代检索预留（IN-05 Agentic RAG · 设计：预留 iteration / refine_query，M1 后实现循环）。
+     *
+     * <p>可信边界：本方法**只执行一轮**检索。
+     * <ul>
+     *   <li>{@code refine_query} 非空 → 以它作为实际检索词（等价调用方已自行改写查询）；</li>
+     *   <li>{@code iteration > 1} → 如实返回 {@code iterationLoop=not_enabled}，**不伪造多轮结果**；</li>
+     *   <li>{@code iteration == 1} → {@code single_pass}（本轮即完整链路）。</li>
+     * </ul>
+     * 多轮「检索→验证→再检索」循环由 M1 在本骨架内填充，接口与语义已冻结。
+     */
+    public PlanOutcome retrievePlan(String tenantId, String query, String refineQuery, int iteration,
+                                    int topK, boolean useCache) {
+        int effectiveIteration = Math.max(1, Math.min(iteration, MAX_ITERATIONS));
+        String refined = refineQuery == null ? "" : refineQuery.trim();
+        String effectiveQuery = refined.isEmpty() ? query : refined;
+        RetrievalOutcome outcome = retrieve(tenantId, effectiveQuery, topK, useCache);
+        return new PlanOutcome(query, effectiveQuery, refined, effectiveIteration, MAX_ITERATIONS,
+                effectiveIteration > 1 ? "not_enabled" : "single_pass", outcome.hits(), outcome.latencyMs(),
+                outcome.cacheHit(), outcome.tier());
+    }
+
     /** 该查询当前的热度分层（R3-01 分层可观测：HOT/WARM/COLD） */
-    public Map<String, Object> tierView(String tenantId, String query) {
-        long accessCount = storage.hot().accessCount(tenantId, query);
+    public Map<String, Object> tierView(String tenantId, String query) {        long accessCount = storage.hot().accessCount(tenantId, query);
         TierRouter.Tier tier = storage.router().tierFor((int) accessCount, 0);
         Map<String, Object> view = new LinkedHashMap<>();
         view.put("tier", tier.name());
@@ -151,4 +175,9 @@ public class RetrievalService {
 
     public record RetrievalOutcome(List<SearchHit> hits, boolean cacheHit, long latencyMs, int candidateCount,
                                    boolean rerankCalled, String tier, String cacheBackend) { }
+
+    /** 迭代检索计划（IN-05 预留；M1 后由多轮循环填充 rounds） */
+    public record PlanOutcome(String query, String effectiveQuery, String refineQuery, int iteration,
+                              int maxIterations, String iterationLoop, List<SearchHit> hits, long latencyMs,
+                              boolean cacheHit, String tier) { }
 }

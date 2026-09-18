@@ -30,10 +30,13 @@ import java.util.Map;
  *
  * <p>路由契约（与 {@code contracts/work-platform-bff-openapi.yaml} 的 /knowledge 段对齐）：
  * <ul>
- *   <li>{@code POST /api/body/knowledge} 入库（单篇）/ {@code /knowledge/batch} 批量导入</li>
+ *   <li>{@code POST /api/body/knowledge} 入库（单篇，支持 {@code format=auto/md/text/html}）/
+ *       {@code /knowledge/batch} 批量导入</li>
  *   <li>{@code GET /api/body/knowledge} 文档列表 / {@code DELETE /api/body/knowledge/{docId}}</li>
  *   <li>{@code GET /api/body/knowledge/stats} 躯体视图指标（知识量/检索 P99/命中率/三层存储）</li>
+ *   <li>{@code GET /api/body/knowledge/reconcile} 三层一致性对账（PG 真相源 vs Qdrant 点数）</li>
  *   <li>{@code POST /api/body/retrieve} 语义检索（保留 query/top_k 旧契约字段）</li>
+ *   <li>{@code POST /api/body/retrieve/plan} 迭代检索预留接口（IN-05：iteration/refine_query）</li>
  *   <li>{@code POST /api/body/rag/answer} RAG 回答（含引用）</li>
  * </ul>
  *
@@ -70,7 +73,7 @@ public class KnowledgeController {
     public Map<String, Object> ingest(@RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId,
                                       @RequestBody KnowledgeRequest request) {
         IngestService.IngestOutcome outcome = ingestService.ingest(tenantId, request.doc_id(), request.title(),
-                request.content(), request.source());
+                request.content(), request.source(), request.format());
         metrics.recordIngest(outcome.chunkCount(), true);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("doc_id", outcome.docId());
@@ -78,6 +81,7 @@ public class KnowledgeController {
         result.put("status", outcome.status().name());
         result.put("vector_backend", outcome.vectorBackend());
         result.put("degraded", outcome.degraded());
+        result.put("normalized_chars", outcome.normalizedChars());
         result.put("success", true);
         return result;
     }
@@ -91,7 +95,7 @@ public class KnowledgeController {
         for (KnowledgeRequest item : request.documents()) {
             try {
                 IngestService.IngestOutcome outcome = ingestService.ingest(tenantId, item.doc_id(), item.title(),
-                        item.content(), item.source() == null ? request.source() : item.source());
+                        item.content(), item.source() == null ? request.source() : item.source(), item.format());
                 metrics.recordIngest(outcome.chunkCount(), true);
                 success++;
                 results.add(Map.of("doc_id", outcome.docId(), "chunk_count", outcome.chunkCount(),
@@ -148,6 +152,50 @@ public class KnowledgeController {
         return Map.of("doc_id", docId, "deleted", true);
     }
 
+    /**
+     * 迭代检索**预留接口**（IN-05 Agentic RAG · 设计：「body service 检索接口预留迭代参数
+     * （iteration / refine_query），M1 后实现 Agentic RAG 循环」）。
+     *
+     * <p>本端点即该预留的落地点：参数可传、语义可观测，但**不伪造多轮迭代**——
+     * 当前只做单轮检索并把轮次计划如实返回；{@code iteration > 1} 时明确回
+     * {@code iteration_loop=not_enabled}（触发点 M1 后实现检索→验证→再检索循环）。
+     */
+    @PostMapping("/retrieve/plan")
+    public Map<String, Object> retrievePlan(
+            @RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId,
+            @RequestBody RetrieveRequest request) {
+        int iteration = request.iteration() == null ? 1 : request.iteration();
+        boolean useCache = request.use_cache() == null || request.use_cache();
+        int topK = request.top_k() == null ? 5 : request.top_k();
+
+        RetrievalService.PlanOutcome plan = retrievalService.retrievePlan(tenantId, request.query(),
+                request.refine_query(), iteration, topK, useCache);
+        List<Map<String, Object>> hits = hitRows(plan.hits());
+
+        Map<String, Object> round = new LinkedHashMap<>();
+        round.put("round", 1);
+        round.put("query", plan.effectiveQuery());
+        round.put("hit_count", hits.size());
+        round.put("status", hits.isEmpty() ? "no_result" : "retrieved");
+
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("query", plan.query());
+        result.put("effective_query", plan.effectiveQuery());
+        result.put("refine_query", plan.refineQuery());
+        result.put("iteration", plan.iteration());
+        result.put("max_iterations", plan.maxIterations());
+        result.put("iteration_loop", plan.iterationLoop());
+        result.put("agentic_rag_status", "reserved");
+        result.put("hits", hits);
+        result.put("latency_ms", plan.latencyMs());
+        result.put("cache_hit", plan.cacheHit());
+        result.put("tier", plan.tier());
+        result.put("rounds", List.of(round));
+        result.put("note", "IN-05 Agentic RAG（检索→验证→再检索，≤3 轮）为 M1 后实现；"
+                + "当前 iteration>1 会回落为单轮检索，不做伪造的多轮结果");
+        return result;
+    }
+
     // ─────────── 检索 / RAG ───────────
     @PostMapping("/retrieve")
     public List<Map<String, Object>> retrieve(
@@ -156,9 +204,13 @@ public class KnowledgeController {
         int topK = request.top_k() == null ? 5 : request.top_k();
         boolean useCache = request.use_cache() == null || request.use_cache();
         RetrievalService.RetrievalOutcome outcome = retrievalService.retrieve(tenantId, request.query(), topK, useCache);
+        return hitRows(outcome.hits());
+    }
+
+    /** 命中行（兼容 Phase 1 旧契约字段 content / title / source） */
+    private List<Map<String, Object>> hitRows(List<RetrievalService.SearchHit> hits) {
         List<Map<String, Object>> rows = new ArrayList<>();
-        for (RetrievalService.SearchHit hit : outcome.hits()) {
-            // 兼容 Phase 1 旧契约字段（content / title / source），新增语义检索字段
+        for (RetrievalService.SearchHit hit : hits) {
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("chunk_id", hit.chunkId());
             row.put("doc_id", hit.docId());
@@ -194,6 +246,18 @@ public class KnowledgeController {
     }
 
     // ─────────── 状态（R-C03 躯体视图）───────────
+    /**
+     * 三层一致性对账（设计 §6 风险应对「定期对账任务」）。
+     *
+     * <p>**只读对账，不做自动修复**：PG 为真相源，Qdrant 点数应与之相等；
+     * 返回缺向量 / 孤儿向量计数与建议动作，由人或定时任务执行修复。
+     */
+    @GetMapping("/knowledge/reconcile")
+    public Map<String, Object> reconcile(
+            @RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId) {
+        return storage.reconcile(tenantId);
+    }
+
     @GetMapping("/knowledge/stats")
     public Map<String, Object> stats(
             @RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId) {
@@ -232,9 +296,11 @@ public class KnowledgeController {
         return Map.of("service", "body-service", "status", "ok");
     }
 
-    public record KnowledgeRequest(String doc_id, String title, String content, String source) { }
+    public record KnowledgeRequest(String doc_id, String title, String content, String source, String format) { }
 
     public record BatchRequest(List<KnowledgeRequest> documents, String source) { }
 
-    public record RetrieveRequest(String query, Integer top_k, Boolean use_cache) { }
+    /** {@code iteration} / {@code refine_query} 为 IN-05 迭代检索预留字段（见 {@code /retrieve/plan}） */
+    public record RetrieveRequest(String query, Integer top_k, Boolean use_cache, Integer iteration,
+                                  String refine_query) { }
 }

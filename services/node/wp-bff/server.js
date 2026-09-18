@@ -8,12 +8,14 @@
  *   POST /api/wp/middleware/:key/stop    白名单内执行 docker compose stop <key>
  *   GET  /api/wp/tracing                 Jaeger 服务注册与最近 trace 聚合
  *   GET  /api/wp/knowledge               躯体层知识统计（知识量 / 检索 P99 / 命中率 / 三层存储）
+ *   POST /api/wp/knowledge               知识入库（单篇）—— 代理体层，工作平台侧写路径
  *   POST /api/wp/knowledge/search        检索测试（返回命中片段与高亮词，供前端标注）
  *   GET  /api/wp/healthz                 进程存活 + 控制面配置自检（只读）
  *
- * 安全模型（2026-09-16 加固）：
+ * 安全模型（2026-09-16 加固，09-18 补写路径边界）：
  *   1. 读端点（GET）开放但仅面向白名单来源回显 CORS 头
  *   2. 控制端点（POST）双重校验：来源白名单（Origin/Referer）+ 控制令牌 X-WP-Control-Token
+ *      —— 判定按**方法**而非路径：`/knowledge` 的 GET 免令牌，其 POST（写知识库）需令牌
  *   3. 控制令牌来自 WP_BFF_CONTROL_TOKEN；未配置时启动生成一次性随机令牌并写入 logs/ 与 stdout
  *   4. CORS 不再使用通配符，仅回显 WP_BFF_ALLOWED_ORIGINS 内的来源
  *   5. key 白名单 + 固定命令形态，无任意参数透传；控制操作写审计日志
@@ -159,6 +161,7 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'POST', path: '/middleware/{key}/stop' },
   { method: 'GET', path: '/tracing' },
   { method: 'GET', path: '/knowledge' },
+  { method: 'POST', path: '/knowledge' },
   { method: 'POST', path: '/knowledge/search' },
 ]
 
@@ -641,6 +644,100 @@ function createServer(options = {}) {
     })
   }
 
+  /**
+   * 知识入库（R3-09 知识管理 API 的**写路径** · 工作平台侧唯一入口）
+   *
+   * <p>代理体层 {@code POST /api/body/knowledge}（单篇）与 {@code POST /api/body/knowledge/batch}（批量导入）。
+   * 改造前躯体视图只有"读 + 检索"，文档只能绕过工作平台直连 8083 入库——
+   * 演示 §7「上传文档 → 提问 → 高亮命中」链路因此断裂，本端点即补上该缺口。
+   *
+   * <p>请求体：{@code { doc_id?, title, content, source?, format? }} 单篇；
+   * {@code { documents: [...], source? }} 批量。
+   * {@code format} 支持 {@code auto/md/text/html}（体层 {@code DocumentParser}），
+   * pdf/docx 由体层显式拒绝并回传原因（DEBT-013），BFF 原样透传不吞错。
+   */
+  async function handleKnowledgeIngest(req, res) {
+    // 写路径鉴权（与 /middleware/{key}/start|stop 同级）：来源白名单 + 控制令牌。
+    // 注意 `/knowledge` 的 GET 是只读、按设计免令牌；但同一路径的 POST 会真实改动
+    // 知识库（写入向量与元数据），若沿用只读豁免就形成"无鉴权写入后门"。
+    // 开发环境下 Vite 代理对 /api/wp/* 统一注入令牌，因此前端无需额外处理。
+    const auth = authorizeControl(req)
+    if (!auth.ok) {
+      audit('REJECT_AUTH', 'knowledge', `ingest ${auth.error}`)
+      return send(req, res, auth.code, { error: auth.error })
+    }
+    let payload
+    try {
+      payload = await readJsonBody(req, 2 * 1024 * 1024)
+    } catch (error) {
+      return send(req, res, 400, { error: String(error.message || error) })
+    }
+    const tenantId = String(req.headers['x-tenant-id'] || payload.tenant_id || 'default')
+    const isBatch = Array.isArray(payload.documents)
+    if (isBatch && payload.documents.length === 0) {
+      return send(req, res, 400, { error: 'documents 不能为空数组' })
+    }
+    if (!isBatch && !String(payload.content ?? '').trim()) {
+      return send(req, res, 400, { error: 'content 不能为空' })
+    }
+    const target = isBatch ? '/api/body/knowledge/batch' : '/api/body/knowledge'
+    const outbound = isBatch
+      ? { documents: payload.documents.map(pickDocumentFields), source: payload.source }
+      : pickDocumentFields(payload)
+    const startedAt = Date.now()
+    const result = await jsonRequest(`${bodyUrl}${target}`, {
+      method: 'POST',
+      headers: { 'X-Tenant-Id': tenantId },
+      body: outbound,
+      timeoutMs: 30000,
+    })
+    const latencyMs = Date.now() - startedAt
+    if (!result || typeof result !== 'object') {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          tenant_id: tenantId,
+          mode: isBatch ? 'batch' : 'single',
+          latency_ms: latencyMs,
+          checked_at: nowTime(),
+          reason: '体层不可用：body-service 未启动或入库接口异常',
+        },
+      })
+    }
+    // 体层错误经统一错误码返回（AGENT_*），不得当作入库成功
+    if (result.code) {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          tenant_id: tenantId,
+          mode: isBatch ? 'batch' : 'single',
+          latency_ms: latencyMs,
+          checked_at: nowTime(),
+          reason: `入库被体层拒绝：${result.message || result.code}`,
+          error_code: result.code,
+        },
+      })
+    }
+    send(req, res, 200, {
+      data: {
+        available: true,
+        tenant_id: tenantId,
+        mode: isBatch ? 'batch' : 'single',
+        latency_ms: latencyMs,
+        checked_at: nowTime(),
+        ...result,
+      },
+    })
+  }
+
+  function pickDocumentFields(source) {
+    const document = {}
+    for (const key of ['doc_id', 'title', 'content', 'source', 'format']) {
+      if (source[key] !== undefined && source[key] !== null) document[key] = source[key]
+    }
+    return document
+  }
+
   function handleHealthz(req, res) {
     send(req, res, 200, {
       data: {
@@ -670,6 +767,7 @@ function createServer(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/tracing') return handleTracing(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/knowledge') return handleKnowledge(req, res)
+    if (req.method === 'POST' && url.pathname === '/api/wp/knowledge') return handleKnowledgeIngest(req, res)
     if (req.method === 'POST' && url.pathname === '/api/wp/knowledge/search') return handleKnowledgeSearch(req, res)
     if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])
     return send(req, res, 404, { error: 'not found' })

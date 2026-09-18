@@ -144,4 +144,50 @@ class RetrievalServiceTest {
         assertNotNull(view.get("store"));
         assertTrue(((Number) view.get("hotness")).doubleValue() > 0);
     }
+
+    // ─────────── IN-05 迭代检索预留（接口就绪，循环未实现须如实标注）───────────
+
+    @Test
+    void retrievePlanRunsSinglePassAndDeclaresLoopNotImplemented() {
+        stubEmbedding();
+        Mockito.when(qdrant.search(anyString(), any(), anyInt())).thenReturn(List.of(point("c1", 0.9)));
+        Mockito.when(rerankClient.rerank(anyString(), any(), anyInt()))
+                .thenReturn(new RerankClient.RerankBatch(
+                        List.of(new RerankClient.RerankedHit("c1", 0.9, 0.95, 0, 0)), "lexical", false));
+
+        RetrievalService.PlanOutcome single = retrievalService.retrievePlan("t1", "原始问题", null, 1, 5, false);
+
+        assertEquals("原始问题", single.effectiveQuery());
+        assertEquals("single_pass", single.iterationLoop());
+        assertEquals(3, single.maxIterations());
+        assertEquals(1, single.hits().size());
+    }
+
+    @Test
+    void retrievePlanUsesRefineQueryAndHonestlyMarksMultiRoundAsDisabled() {
+        stubEmbedding();
+        Mockito.when(qdrant.search(anyString(), any(), anyInt())).thenReturn(List.of(point("c1", 0.9)));
+        Mockito.when(rerankClient.rerank(anyString(), any(), anyInt()))
+                .thenReturn(new RerankClient.RerankBatch(List.of(), "unavailable", true));
+
+        RetrievalService.PlanOutcome multi = retrievalService.retrievePlan("t1", "原始问题", "改写后问题", 5, 5, false);
+
+        assertEquals("改写后问题", multi.effectiveQuery(), "refine_query 非空时应以它作为实际检索词");
+        assertEquals(3, multi.iteration(), "迭代轮数应被裁剪到上限 3");
+        assertEquals("not_enabled", multi.iterationLoop(), "多轮循环未实现必须如实标注，不得伪造多轮结果");
+        assertFalse(multi.hits().isEmpty(), "降级仍应返回单轮召回结果");
+    }
+
+    @Test
+    void retrievePlanBlankRefineQueryFallsBackToOriginalQuery() {
+        stubEmbedding();
+        Mockito.when(qdrant.search(anyString(), any(), anyInt())).thenReturn(List.of());
+        Mockito.when(rerankClient.rerank(anyString(), any(), anyInt()))
+                .thenReturn(new RerankClient.RerankBatch(List.of(), "skipped", false));
+
+        RetrievalService.PlanOutcome plan = retrievalService.retrievePlan("t1", "原始问题", "   ", 1, 5, false);
+
+        assertEquals("原始问题", plan.effectiveQuery());
+        assertEquals("", plan.refineQuery());
+    }
 }
