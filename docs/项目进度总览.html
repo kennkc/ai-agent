@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:23 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-18 22:42 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -452,8 +452,12 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <td>✅</td>
 </tr>
 <tr>
+<td><strong>路由层错误语义 + 统一错误信封</strong>：路径不存在 → 404 / 方法不支持 → 405（附 <code>Allow</code>）/ 全部错误体为 <code>{code,message,details}</code>（2026-09-18 对齐全平台，见 <code>docs/异常流程归纳.md</code>）</td>
+<td>✅</td>
+</tr>
+<tr>
 <td>回归测试 <code>node --test</code></td>
-<td>✅ 29 项</td>
+<td>✅ 34 项</td>
 </tr>
 </tbody>
 </table>
@@ -486,7 +490,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 </table>
 <hr />
 <h2 id="_4">四、测试与验证基线<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
-<p><strong>口径：2026-09-18 Phase 3 落地 + 审核补全轮 + 路由语义修正轮后的实测值</strong>（历史归档中的 54 / 73 / 61 / 114 / 174 项是当时口径）</p>
+<p><strong>口径：2026-09-18 Phase 3 落地 + 审核补全轮 + 路由语义修正轮 + 全平台错误信封统一轮后的实测值</strong>（历史归档中的 54 / 73 / 61 / 114 / 174 项是当时口径）</p>
 <table>
 <thead>
 <tr>
@@ -504,7 +508,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td>Python</td>
 <td><code>../venv/Scripts/python.exe -m pytest</code>（nlp-service 下）</td>
-<td><strong>52 通过</strong>（意图 15 + OCR 4 + 分块 12 + 嵌入 13 + 重排 8）</td>
+<td><strong>62 通过</strong>（意图 15 + <strong>HTTP 层错误语义 10</strong> + OCR 4 + 分块 12 + 嵌入 13 + 重排 8）</td>
 </tr>
 <tr>
 <td>契约（跨服务）</td>
@@ -519,7 +523,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td>wp-bff</td>
 <td><code>cd services/node/wp-bff &amp;&amp; node --test</code></td>
-<td><strong>29 通过</strong>（含 2 条写路径鉴权反向用例）</td>
+<td><strong>34 通过</strong>（含 2 条写路径鉴权反向用例 + 3 条路由层错误语义用例）</td>
 </tr>
 <tr>
 <td>前端</td>
@@ -882,6 +886,11 @@ DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<
 <td><code>docs/技术债台账.md</code></td>
 <td><strong><code>DEBT-00X</code> 权威台账</strong>（简化实现 / 正式目标 / 触发点 / 状态 + 源码证据）</td>
 <td>创建或关闭任何债务时</td>
+</tr>
+<tr>
+<td><code>docs/异常流程归纳.md</code></td>
+<td><strong>异常流程总图</strong>：运行期分层错误语义（统一信封 / 路由层分流 / 鉴权 / 降级 / planned 三态判定 / 处置决策树）+ 研发期过程异常 30 条与规范动作清单</td>
+<td>发现新异常模式或调整错误语义时</td>
 </tr>
 <tr>
 <td><code>docs/项目进度日志报告/</code></td>

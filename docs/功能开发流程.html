@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:23 · 源文件 功能开发流程.md</span>
+  <span class="meta">生成于 2026-09-18 22:42 · 源文件 功能开发流程.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -349,7 +349,10 @@
 <li><strong>关键约定</strong>：</li>
 <li><strong>诚实降级</strong>：引擎链逐个探测（BGE-M3 → 确定性 hash n-gram 768 维），上报 <code>backend</code> 与 <code>degraded</code>；不可用时<strong>不伪造</strong>结果</li>
 <li><strong>分块与 Java 同算法</strong>：改 <code>chunking.py</code> 必须同步 <code>services/java/body-service/.../chunk/ChunkProcessor.java</code>，否则跨语言校验失效</li>
-<li><strong>测试</strong>：<code>tests/test_embedding.py</code> 13 项 · <code>tests/test_rerank.py</code> 8 项 · <code>tests/test_chunking.py</code> 12 项</li>
+<li><strong>错误出口统一信封</strong>（2026-09-18 对齐）：<code>app/main.py</code> 的三个 <code>@app.exception_handler</code> 把
+    HTTP 层异常、请求体校验失败、兜底异常分别映射为 <code>{code,message,details}</code>；
+    <strong>422 一律归并为 400</strong>，使状态码语义与 Java/BFF 一致（路径不存在才 404、方法不支持才 405）</li>
+<li><strong>测试</strong>：<code>tests/test_embedding.py</code> 13 项 · <code>tests/test_rerank.py</code> 8 项 · <code>tests/test_chunking.py</code> 12 项 · <strong><code>tests/test_http_errors.py</code> 10 项（HTTP 层错误语义，2026-09-18 新增，此前该层零覆盖）</strong></li>
 <li><strong>开发步骤</strong>：①改模块 ②<code>pytest -q</code> ③若动分块规则，两语言都要改并各自跑测试</li>
 </ul>
 <h3 id="36-body-service8083-phase-3">3.6 躯体服务（<code>body-service</code>，8083）—— Phase 3 已交付<a class="headerlink" href="#36-body-service8083-phase-3" title="Permanent link">&para;</a></h3>
@@ -415,7 +418,11 @@
 <li>命令形状固定 + <strong>8 键白名单</strong>；未登记的 key → 403</li>
 <li>Vite 代理<strong>在服务端读令牌文件</strong>再注入请求头 → 令牌不进浏览器包；且<strong>不重写 <code>Origin</code></strong>（保持 CSRF 检查有效）</li>
 <li><strong>鉴权按方法判定，不按路径</strong>：只读（GET，以及只读语义的 <code>POST /knowledge/search</code>）免控制令牌，但需透传 <code>X-Tenant-Id</code>（租户隔离）；<strong>写路径 <code>POST /knowledge</code> 会真实改动知识库，必须与 <code>/middleware/{key}/start|stop</code> 同级校验（来源白名单 + <code>X-WP-Control-Token</code>）</strong>。开发环境由 Vite 代理对 <code>/api/wp/*</code> 统一注入令牌，前端无需处理——但<strong>直连 8090 会被 401/403 拒绝</strong>，这是有意的（曾因沿用只读豁免短暂出现无鉴权写入后门，已修复）</li>
-<li><strong>测试</strong>：<code>node --test</code> 29 项（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据、躯体读端点与降级、<strong>知识写路径鉴权反向用例</strong>）</li>
+<li><strong>错误语义与全平台一致</strong>（2026-09-18 对齐）：错误体统一为 <code>{code,message,details}</code>；
+    路由层分流 —— 路径不存在 → 404 <code>AGENT_NOT_FOUND</code>，路径存在但方法不支持 → <strong>405 <code>AGENT_METHOD_NOT_ALLOWED</code> + <code>Allow</code> 头</strong>。
+    该分流由 <code>ROUTE_GUARD</code> 实现，<strong>由 <code>IMPLEMENTED_ENDPOINTS</code> 派生</strong>（不另立第三份端点真相），
+    因此<strong>新增端点只需登记一处</strong>。完整异常语义见 <code>docs/异常流程归纳.md</code> §2.2</li>
+<li><strong>测试</strong>：<code>node --test</code> 34 项（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据、躯体读端点与降级、<strong>知识写路径鉴权反向用例</strong>、<strong>404/405 错误语义与 <code>ROUTE_GUARD</code> 同源性</strong>）</li>
 <li><strong>开发步骤</strong>：①改契约（<code>x-wp-status</code>）②改 <code>server.js</code> ③补回归用例 ④<code>node --test</code> ⑤实测 <code>curl</code> 一次真实端点</li>
 </ul>
 <h3 id="39-docker-composeyml-scripts">3.9 基础设施编排（<code>docker-compose.yml</code> + <code>scripts/</code>）<a class="headerlink" href="#39-docker-composeyml-scripts" title="Permanent link">&para;</a></h3>
@@ -473,7 +480,7 @@
 [ ] 3. 实现：单模块最小改动，不夹带其他阶段内容
 [ ] 4. 测试：单测 + 覆盖本次修复的回归用例
 [ ] 5. 文档：PROGRESS.md / 阶段文档 / docs 索引 / java-services 登记
-[ ] 6. 验证：Java 130 + Python 52 + 契约 0 FAIL + wp-bff 29 + Vue typecheck/build + 文档覆盖率 106/106
+[ ] 6. 验证：Java 130 + Python 62 + 契约 0 FAIL + wp-bff 34 + Vue typecheck/build + 文档覆盖率 106/106
 [ ] 7. 提交：一句话说清「改了什么、为什么」，中文
 [ ] 8. 对齐：三分支 ff-only，推送前先 fetch 并等用户授权
 </code></pre>

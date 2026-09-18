@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:23 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-18 22:42 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -150,6 +150,7 @@
 <li><a href="#410-2026-09-18">4.10 前端对「未实现端点」的降级语义（2026-09-18 发现并已改造 ✅）</a></li>
 <li><a href="#411-2026-09-18">4.11 开发代理目标硬编码（2026-09-18 配置对齐发现并已修复 ✅）</a></li>
 <li><a href="#412-2026-09-18-docs">4.12 模块功能说明文档的「基线数字」无人守（2026-09-18 docs 核对发现并已修复 ✅）</a></li>
+<li><a href="#413-bff-4042026-09-18">4.13 全平台错误信封不一致 + BFF 方法不支持返回 404（2026-09-18 质量审核发现并已闭合 ✅）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -788,6 +789,57 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 而不是沿用上一轮的字符串。下次回填时按「<strong>总览 ↔ 模块文档 ↔ 流程文档</strong>三处一起核」执行。</p>
 </blockquote>
 <hr />
+<h3 id="413-bff-4042026-09-18">4.13 全平台错误信封不一致 + BFF 方法不支持返回 404（2026-09-18 质量审核<strong>发现并已闭合</strong> ✅）<a class="headerlink" href="#413-bff-4042026-09-18" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>现象 ①</td>
+<td>错误响应体在平台内有<strong>三个形状</strong>：Java 三服务 / gateway 为 <code>{code,message,details}</code>、<code>wp-bff</code> 为 <code>{error}</code>、<code>nlp-service</code> 为 FastAPI 默认 <code>{detail}</code> —— 客户端需维护三套解析逻辑，与 §5 明文约定「沿用同一格式」直接相违</td>
+</tr>
+<tr>
+<td>现象 ②</td>
+<td><code>wp-bff</code> 对「路径存在但方法不支持」返回 <strong>404</strong>（<code>server.js</code> 兜底 <code>send(req,res,404,{error:'not found'})</code>），而 Java 三服务已统一为 <strong>405 + <code>Allow</code> 头</strong>。前端据 404 判定「端点未实现（<code>x-wp-status: planned</code>）」，因此<strong>方法用错会被误判成端点未实现</strong></td>
+</tr>
+<tr>
+<td>现象 ③</td>
+<td><code>nlp-service</code> <strong>只有算法单测，HTTP 层错误出口零覆盖</strong>（未映射路由 / 方法不支持 / 请求体校验 / 兜底 500 全无测试）—— 单测全绿掩盖了这一层</td>
+</tr>
+<tr>
+<td>修复</td>
+<td>① <code>wp-bff</code> 新增 <code>fail()</code> 统一信封；② 新增 <code>ROUTE_GUARD</code>（<strong>由 <code>IMPLEMENTED_ENDPOINTS</code> 派生</strong>，避免第三份端点真相）→ 405 + <code>Allow</code>；③ <code>nlp-service</code> 新增三个 <code>@app.exception_handler</code>，<strong>422 归并为 400</strong>；④ 契约补 <code>ErrorEnvelope</code> schema 与 404/405 声明；⑤ 补测试：wp-bff <strong>29→34</strong>、nlp <strong>52→62</strong></td>
+</tr>
+<tr>
+<td>现状</td>
+<td>✅ 已修（<code>6616616</code>）。运行态 9 项探测全通过（三服务 404/405/400/401/403 语义与信封一致）</td>
+</tr>
+<tr>
+<td>行为变更</td>
+<td><code>wp-bff</code> 的 <code>error</code> 字段不再出现，<strong>外部消费方需改读 <code>message</code></strong>（仓库内消费方已全部核对：前端只读 HTTP 状态码，4 处旧断言已改写）</td>
+</tr>
+<tr>
+<td>未验证项</td>
+<td><code>gateway-service</code>（8080）本轮<strong>未做运行态验证</strong>，其未匹配路由的响应体是否统一信封<strong>未确认</strong> —— 如实登记，不作断言（Gateway 为 WebFlux，不走 <code>@ControllerAdvice</code>，需单独确认，见待办 19）</td>
+</tr>
+<tr>
+<td>机制建议</td>
+<td>见待办 18</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>教训</strong>：平台级约定（错误信封）<strong>没有门禁守着</strong> —— 契约检查只看端点存在性与命名，不看响应体结构。
+新服务 / 新写路径落地时，这类「跨服务的同构性」只能靠评审清单覆盖。
+已把该条写入 <code>docs/异常流程归纳.md</code> §4 的规范化动作清单。</p>
+<p><strong>附：本轮同时修掉一处上一轮的丢写残留</strong> —— 待办 11（设计文档 pgvector 口径）随 §4.6 一并闭合后，
+销项标记未落盘（同批编辑里 14 落了、11 丢了），导致「§4.6 说已闭合、待办 11 说待确认」自相矛盾。
+本轮已补销项。这正是 <code>docs/异常流程归纳.md</code> D-22 记录的现象，本轮<strong>再次复现</strong>，说明该坑是高频的。</p>
+</blockquote>
 <h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>创建</strong>：任何简化实现落地时同步创建 —— 代码 <code>// DEBT-00X</code> 注释 <strong>+ 登记本文件</strong></li>
@@ -870,9 +922,9 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 </tr>
 <tr>
 <td>11</td>
-<td>设计文档 §1/§3.1 写「PG+pgvector」、§2 写「Redis 语义缓存（向量相似 0.95）」，实现均未采用</td>
-<td>见 §4.6：建议改设计文档对齐实况（Qdrant 已承担向量主库；精确指纹缓存实测命中 45% &gt; 30% 验收）</td>
-<td>设计侧确认</td>
+<td>~~设计文档 §1/§3.1 写「PG+pgvector」、§2 写「Redis 语义缓存（向量相似 0.95）」，实现均未采用~~</td>
+<td>✅ <strong>2026-09-18 已闭合</strong>：见 §4.6 的两步收口记录与待办 14（用户确认方案①后已改设计文档并对齐实况）</td>
+<td>已完成</td>
 </tr>
 <tr>
 <td>12</td>
@@ -891,6 +943,24 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>~~<strong>设计文档 pgvector / 语义缓存口径待落笔</strong>（§4.6）~~</td>
 <td>✅ <strong>2026-09-18 已落笔（用户确认方案①）</strong>：改 <code>Phase3-需求设计文档</code> §3 R3-01 + <code>Phase3-开发设计文档</code> §1/§2/§3.1，新增「与实现的对齐说明」引用块，两份 HTML 孪生同步重生成</td>
 <td>已完成</td>
+</tr>
+<tr>
+<td>18</td>
+<td><strong>错误信封无门禁</strong>（§4.13）：<code>contract-check.py</code> 只看端点存在性与命名，<strong>不校验错误响应体结构</strong> → 新服务可能再引入第四种形状</td>
+<td>建议加一条：扫描各服务错误响应构造点（Java <code>body(...)</code> / BFF <code>fail(</code> / Python <code>_envelope(</code>），断言键集合恒为 <code>{code,message,details}</code>；同时断言「方法不支持 → 405」而非 404</td>
+<td>下轮加固</td>
+</tr>
+<tr>
+<td>19</td>
+<td><strong><code>gateway-service</code> 未纳入路由层分流验证</strong>（§4.13）：8080 为 WebFlux、不实现 <code>GlobalExceptionHandler</code>，未匹配路由的响应体格式<strong>未确认</strong></td>
+<td>起 8080 后探测未映射路由与方法不支持，按 <code>docs/异常流程归纳.md</code> §2.2 对齐；若默认 body 非信封，需加 <code>ErrorWebExceptionHandler</code></td>
+<td>下轮加固</td>
+</tr>
+<tr>
+<td>20</td>
+<td>BFF 体层不可用返回 <strong>HTTP 200 + <code>available=false</code></strong> 的取舍（<code>docs/异常流程归纳.md</code> §2.5 ④）</td>
+<td><strong>保留当前设计</strong>（对知识视图而言是「要展示的状态」而非异常）；代价是监控需读 <code>available</code> 字段而不能只看状态码。若要按状态码告警，需改 502 并在 <code>KnowledgeView</code> 同步调整</td>
+<td>已登记为取舍</td>
 </tr>
 <tr>
 <td>15</td>

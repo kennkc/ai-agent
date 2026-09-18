@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:23 · 源文件 07-运行时配置与横切约定.md</span>
+  <span class="meta">生成于 2026-09-18 22:42 · 源文件 07-运行时配置与横切约定.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -588,7 +588,7 @@ Phase 3 已补齐 OTLP（原为缺口）。</p>
 </ol>
 <h2 id="5">5. 统一响应与错误码<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <p><strong>成功响应</strong>：各接口自定义结构（无统一包装层）。</p>
-<p><strong>错误响应</strong>（三个服务一致）：</p>
+<p><strong>错误响应</strong>（<strong>全平台一致</strong>，2026-09-18 起）：</p>
 <pre><code class="language-json">{ &quot;code&quot;: &quot;AGENT_NOT_FOUND&quot;, &quot;message&quot;: &quot;session not found: xxx&quot;, &quot;details&quot;: {} }
 </code></pre>
 <p><strong>错误码表</strong>（<code>session-manager</code> / <code>sense-service</code> / <code>body-service</code> <strong>各有一份内容完全相同</strong>的
@@ -706,6 +706,29 @@ Phase 3 已补齐 OTLP（原为缺口）。</p>
 <p><strong>回归守卫</strong>：三个模块各有一个 <code>common/GlobalExceptionHandlerTest</code>（session 5 / sense 5 / body 6 项），
 其中 <code>genuineServerFaultStillMapsTo500</code> 是<strong>必需的边界用例</strong>——防止为了修 404 而把兜底分支整体改掉。
 新增 HTTP 服务模块时请照抄这套用例。</p>
+<p><strong>非 Java 侧的同一套语义</strong>（2026-09-18 对齐；此前二者分别用了 <code>{error}</code> 与 FastAPI 默认 <code>{detail}</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>实现落点</th>
+<th>404 / 405</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>wp-bff</code></td>
+<td><code>server.js</code> 的 <code>fail()</code> + <code>ROUTE_GUARD</code></td>
+<td>路径不存在 → 404；路径命中但方法不符 → 405 + <code>Allow</code> 头（<code>ROUTE_GUARD</code> <strong>由 <code>IMPLEMENTED_ENDPOINTS</code> 派生</strong>，不另立端点真相）</td>
+</tr>
+<tr>
+<td><code>nlp-service</code></td>
+<td><code>app/main.py</code> 的三个 <code>@app.exception_handler</code></td>
+<td>同左（透传框架 <code>Allow</code> 头）；<strong>422 归并为 400</strong></td>
+</tr>
+</tbody>
+</table>
+<p>完整端到端异常传播链（含降级链路、planned 三态判定与排障决策树）见 <strong><code>docs/异常流程归纳.md</code></strong>。</p>
 <p><strong>注意</strong>：<code>gateway-service</code> <strong>不实现</strong> <code>GlobalExceptionHandler</code> ——
 它在 <code>JwtAuthFilter.reject()</code> 里手写同样格式的 JSON，以保持客户端只需一套解析逻辑。
 新增网关侧错误响应时请沿用 <code>{"code","message","details":{}}</code> 格式。</p>

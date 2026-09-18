@@ -1,0 +1,982 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent-Lifeform 异常流程归纳</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-18 22:42 · 源文件 异常流程归纳.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#0">0. 为什么要单独有一份</a></li>
+<li><a href="#1">1. 运行期链路总览</a><ul>
+<li><a href="#11">1.1 调用拓扑</a></li>
+<li><a href="#12">1.2 各层的异常职责（不要跨层越权处理）</a></li>
+</ul>
+</li>
+<li><a href="#2">2. 运行期异常流程</a><ul>
+<li><a href="#21">2.1 统一错误信封（全平台唯一格式）</a></li>
+<li><a href="#22-404-405-415">2.2 路由层分流：404 / 405 / 415（三种语义必须可区分）</a></li>
+<li><a href="#23">2.3 信封不一致的历史（三个形状 → 一个）</a></li>
+<li><a href="#24-401-403">2.4 鉴权异常流程（401 / 403）</a></li>
+<li><a href="#25">2.5 降级链路（逐服务）</a></li>
+<li><a href="#26-planned">2.6 planned 端点：三态判定</a></li>
+<li><a href="#27">2.7 异常处置决策树（排障用）</a></li>
+</ul>
+</li>
+<li><a href="#3-d">3. 研发期异常流程（过程性，D 组）</a><ul>
+<li><a href="#31">3.1 环境与工具类</a></li>
+<li><a href="#32">3.2 构建与运行类</a></li>
+<li><a href="#33">3.3 测试与验收类</a></li>
+<li><a href="#34">3.4 门禁与一致性类</a></li>
+<li><a href="#35">3.5 文档与口径类</a></li>
+<li><a href="#36">3.6 安全类（最高优先，出现必查全仓）</a></li>
+</ul>
+</li>
+<li><a href="#4">4. 规范化动作清单</a><ul>
+<li><a href="#41">4.1 新增一个端点时</a></li>
+<li><a href="#42">4.2 新增一条写路径时（安全红线）</a></li>
+<li><a href="#43">4.3 发现一个异常时</a></li>
+<li><a href="#44">4.4 每轮收尾</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 未闭合项与后续加固</a></li>
+<li><a href="#6">6. 变更台账（本文档同轮）</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 异常流程归纳<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>口径时间</td>
+<td>2026-09-18</td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td><code>6616616</code>（本轮代码提交，见文末「变更台账」）</td>
+</tr>
+<tr>
+<td>覆盖范围</td>
+<td>运行期异常流程（§2，共 7 节）+ 研发期异常流程（§3，编号 D-01 ~ D-30，共 30 条）</td>
+</tr>
+<tr>
+<td>编制依据</td>
+<td>源码 + 运行态实测（非文档转述）；历史过程记录见 <code>docs/项目进度日志报告/Phase*/</code>、<code>docs/优化日志/</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="0">0. 为什么要单独有一份<a class="headerlink" href="#0" title="Permanent link">&para;</a></h2>
+<p>异常处理的知识此前是<strong>散落</strong>的：</p>
+<table>
+<thead>
+<tr>
+<th>位置</th>
+<th>覆盖的部分</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>java-services/07-运行时配置与横切约定.md</code> §5 / §5.1 / §5.2</td>
+<td>错误码表 + Java 三服务的路由层分流</td>
+</tr>
+<tr>
+<td><code>java-services/04/05/06-*.md</code> 各自章节</td>
+<td>单服务的异常出口与降级清单</td>
+</tr>
+<tr>
+<td><code>wp-bff/server.js</code> 注释</td>
+<td>BFF 的鉴权与 <code>available=false</code> 语义</td>
+</tr>
+<tr>
+<td><code>web/work-platform/src/api/status.ts</code></td>
+<td>前端的降级登记约定</td>
+</tr>
+<tr>
+<td>各阶段报告 §问题与解决、<code>优化日志/</code></td>
+<td>研发期踩过的坑（按当时情境记录）</td>
+</tr>
+</tbody>
+</table>
+<p>缺的是<strong>一张端到端的总图</strong>：一次失败在链路上经过哪些层、每层给出什么状态码与错误码、是否降级、谁能看见。本文补这一层，并把研发期异常一并归纳为可复用的规范动作。</p>
+<blockquote>
+<p><strong>一个必须说清的口径</strong>：本文描述的<strong>运行期异常流程全部有实测证据</strong>（状态码与响应体为 <code>curl</code> 实拍）；<strong>研发期异常流程</strong>来自本项目各阶段的真实记录，非推测。</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 运行期链路总览<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<h3 id="11">1.1 调用拓扑<a class="headerlink" href="#11" title="Permanent link">&para;</a></h3>
+<pre><code>浏览器 (Vue3 + Element Plus)
+  │  /api/wp/*    ← 开发期经 Vite(3001) 代理注入 X-WP-Control-Token
+  ▼
+wp-bff (8090, Node)          ← 工作平台聚合层；唯一面向前端的 BFF
+  ├──→ body-service  (8083, Java)   ──→ nlp-service (8000, Python)   嵌入 / 重排 / 分块
+  ├──→ middleware 探针（TCP，8 个）
+  └──→ Jaeger（链路追踪聚合）
+
+浏览器 / 其他客户端
+  │  /api/*       ← 需 Bearer JWT
+  ▼
+gateway-service (8080, Java WebFlux)
+  ├──→ session-manager (8081)   ──→ nlp-service(8000) · body-service(8083)
+  └──→ sense-service   (8082)   ──→ nlp-service(8000) OCR 通道
+                                     └─→ Kafka `lifeform.sense.collected` → body-service
+</code></pre>
+<h3 id="12">1.2 各层的异常职责（<strong>不要跨层越权处理</strong>）<a class="headerlink" href="#12" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>只负责</th>
+<th>明确不做</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gateway</td>
+<td>认证/租户（401/403），转发</td>
+<td>不实现 <code>GlobalExceptionHandler</code>，<code>JwtAuthFilter.reject()</code> 手写同格式 JSON</td>
+</tr>
+<tr>
+<td>BFF</td>
+<td>聚合、代理、<strong>写路径鉴权</strong>、路由层分流</td>
+<td>不吞体层错误（体层错误码原样上报）</td>
+</tr>
+<tr>
+<td>Java 三服务</td>
+<td>业务异常 → 错误码 → HTTP，<strong>路由层分流</strong></td>
+<td>不伪造上游结果</td>
+</tr>
+<tr>
+<td>nlp-service</td>
+<td>算法与请求校验</td>
+<td>不决定业务语义</td>
+</tr>
+<tr>
+<td>前端</td>
+<td>降级判定与<strong>可见化</strong></td>
+<td>不静默回落 Mock</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2">2. 运行期异常流程<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21">2.1 统一错误信封（全平台唯一格式）<a class="headerlink" href="#21" title="Permanent link">&para;</a></h3>
+<p><strong>所有错误响应都是 <code>{code, message, details}</code></strong>（R1-08）。客户端只需一套解析逻辑。</p>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>出处</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gateway-service</td>
+<td><code>JwtAuthFilter.reject()</code> 手写 JSON（WebFlux 不走 <code>@ControllerAdvice</code>）</td>
+</tr>
+<tr>
+<td>session-manager / sense-service / body-service</td>
+<td><code>common/GlobalExceptionHandler</code> + <code>ErrorCode</code> 枚举</td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><code>server.js</code> → <code>fail(req,res,status,code,message,details)</code></td>
+</tr>
+<tr>
+<td>nlp-service</td>
+<td><code>app/main.py</code> → 三个 <code>@app.exception_handler</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="22-404-405-415">2.2 路由层分流：404 / 405 / 415（<strong>三种语义必须可区分</strong>）<a class="headerlink" href="#22-404-405-415" title="Permanent link">&para;</a></h3>
+<p><strong>为什么必须区分</strong>：前端据 <strong>404</strong> 判定「端点未实现（契约 <code>x-wp-status: planned</code>）」，据 <strong>5xx</strong> 判定「服务故障」。若未映射路由落进兜底 500，两者不可区分，前端既不能降级也不能报障。</p>
+<table>
+<thead>
+<tr>
+<th>情形</th>
+<th>HTTP</th>
+<th>错误码</th>
+<th>响应头/明细</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>路径不存在</td>
+<td><strong>404</strong></td>
+<td><code>AGENT_NOT_FOUND</code></td>
+<td>Java <code>details={}</code>；BFF <code>details={path}</code></td>
+</tr>
+<tr>
+<td>路径存在、方法不支持</td>
+<td><strong>405</strong></td>
+<td><code>AGENT_METHOD_NOT_ALLOWED</code></td>
+<td>必带 <code>Allow</code> 头；<code>details={method, supported}</code></td>
+</tr>
+<tr>
+<td>Content-Type 不支持</td>
+<td><strong>415</strong></td>
+<td><code>AGENT_BAD_REQUEST</code></td>
+<td><code>details={content_type}</code>（Java 侧）</td>
+</tr>
+<tr>
+<td>请求体不合法</td>
+<td><strong>400</strong></td>
+<td><code>AGENT_BAD_REQUEST</code></td>
+<td><code>details</code> 为「字段 → 原因」映射</td>
+</tr>
+</tbody>
+</table>
+<p><strong>各服务实现落点</strong></p>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>机制</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 三服务</td>
+<td><code>@ExceptionHandler({NoResourceFoundException, NoHandlerFoundException})</code> → 404；<code>HttpRequestMethodNotSupportedException</code> → 405；<code>HttpMediaTypeNotSupportedException</code> → 415</td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><code>ROUTE_GUARD</code>（<strong>由 <code>IMPLEMENTED_ENDPOINTS</code> 派生</strong>，不另立第三份端点真相）→ 命中路径但方法不符则 405 + <code>Allow</code>；否则 404</td>
+</tr>
+<tr>
+<td>nlp-service</td>
+<td><code>StarletteHTTPException</code> 统一处理器（透传框架的 <code>Allow</code> 头）；<strong>422 一律归并为 400</strong>，使状态码语义与 Java/BFF 一致</td>
+</tr>
+</tbody>
+</table>
+<p><strong>实测证据</strong>（2026-09-18，运行态）</p>
+<table>
+<thead>
+<tr>
+<th>探测</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET 8083 /api/body/definitely-not-a-route</code></td>
+<td>404 <code>AGENT_NOT_FOUND</code></td>
+</tr>
+<tr>
+<td><code>DELETE 8083 /api/body/knowledge</code></td>
+<td>405 <code>AGENT_METHOD_NOT_ALLOWED</code>，<code>details.supported=[POST, GET]</code></td>
+</tr>
+<tr>
+<td><code>POST 8083 /api/body/rag/answer</code> + <code>text/plain</code></td>
+<td>415 <code>AGENT_BAD_REQUEST</code></td>
+</tr>
+<tr>
+<td><code>GET 8090 /api/wp/not-exist</code></td>
+<td>404 <code>AGENT_NOT_FOUND</code>，<code>details={path}</code></td>
+</tr>
+<tr>
+<td><code>GET 8090 /api/wp/knowledge/search</code></td>
+<td>405 + <code>Allow: POST</code></td>
+</tr>
+<tr>
+<td><code>GET 8090 /api/wp/middleware/redis/start</code></td>
+<td>405 + <code>Allow: POST</code>（参数化路径同样覆盖）</td>
+</tr>
+<tr>
+<td><code>GET 8000 /api/nlp/not-exist</code></td>
+<td>404 <code>AGENT_NOT_FOUND</code></td>
+</tr>
+<tr>
+<td><code>GET 8000 /api/nlp/embed</code></td>
+<td>405 + <code>allow: POST</code></td>
+</tr>
+<tr>
+<td><code>POST 8000 /api/nlp/embed</code> <code>{"texts":"abc"}</code></td>
+<td>400 <code>details={texts: Input should be a valid list}</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="23">2.3 信封不一致的历史（<strong>三个形状 → 一个</strong>）<a class="headerlink" href="#23" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>2026-09-18 之前</th>
+<th>现在</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 三服务 / gateway</td>
+<td><code>{code,message,details}</code></td>
+<td>不变（基准）</td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><code>{error: "..."}</code></td>
+<td>✅ 已统一</td>
+</tr>
+<tr>
+<td>nlp-service</td>
+<td>FastAPI 默认 <code>{detail: ...}</code></td>
+<td>✅ 已统一</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>行为变更提示</strong>：任何解析 BFF 旧 <code>error</code> 字段的外部消费方需改读 <code>message</code>。仓库内消费方已全部核对：前端只读 HTTP 状态码（<code>error.response.status</code>），4 处旧断言已改写为断言 <code>code</code>/<code>message</code>。</p>
+<p><strong>规范性结论</strong>：新增服务的错误出口<strong>必须</strong>沿用该信封，<code>07-运行时配置与横切约定</code> §5 已有明文约定。</p>
+</blockquote>
+<h3 id="24-401-403">2.4 鉴权异常流程（401 / 403）<a class="headerlink" href="#24-401-403" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>触发</th>
+<th>HTTP</th>
+<th>错误码</th>
+<th>硬约束</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>无 / 非法 Bearer（gateway）</td>
+<td>401</td>
+<td><code>AGENT_UNAUTHORIZED</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>JWT 缺 <code>tenant_id</code>（gateway）</td>
+<td>403</td>
+<td><code>AGENT_FORBIDDEN</code></td>
+<td>—</td>
+</tr>
+<tr>
+<td>BFF 控制端点无令牌 / 令牌错</td>
+<td>401</td>
+<td><code>AGENT_UNAUTHORIZED</code></td>
+<td><strong>不触达下游</strong></td>
+</tr>
+<tr>
+<td>BFF 写路径来源不在白名单</td>
+<td>403</td>
+<td><code>AGENT_FORBIDDEN</code></td>
+<td><strong>不触达下游（CSRF 防护）</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>判定的核心不变量：鉴权必须按「方法」判定，不能按「路径」判定。</strong> <code>GET /api/wp/knowledge</code> 免令牌（只读），但 <code>POST</code>（写）必须与 <code>/middleware/{key}/start|stop</code> 同级校验。反向用例必须断言「鉴权失败时下游零调用」——否则写成 <code>assert status==401</code> 却漏了后门。</p>
+<p>实测：无令牌 <code>401</code>、伪造 <code>Origin</code> <code>403</code>，且测试断言 <code>jsonRequest</code> 未被调用。</p>
+<h3 id="25">2.5 降级链路（逐服务）<a class="headerlink" href="#25" title="Permanent link">&para;</a></h3>
+<p><strong>① session-manager —— 上游不可用时的业务降级</strong></p>
+<table>
+<thead>
+<tr>
+<th>上游</th>
+<th>降级行为</th>
+<th>开关</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>nlp-service</td>
+<td>意图识别退化为 <code>FALLBACK</code>（<code>intent=闲聊, confidence=0.5, engine=FALLBACK</code>），<strong>让问答链路继续走模板回答而非整链路 503</strong></td>
+<td><code>app.nlp.degrade-on-failure</code>（默认 true）</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td>检索退化为空结果</td>
+<td><code>app.body.degrade-on-failure</code>（默认 true）</td>
+</tr>
+</tbody>
+</table>
+<p>关掉开关 → 抛 <code>BizException(AGENT_UPSTREAM_UNAVAILABLE)</code> → <strong>502</strong>。</p>
+<p><strong>② body-service —— 上游引擎缺失时的确定性降级</strong></p>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>缺失时</th>
+<th>标记</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>嵌入</td>
+<td>回落 <code>hash-ngram-768</code> 确定性后端（DEBT-010）</td>
+<td><code>degraded=true</code></td>
+</tr>
+<tr>
+<td>重排</td>
+<td>回落 <code>lexical-coverage</code> 词法打分（DEBT-011）</td>
+<td><code>degraded=true</code></td>
+</tr>
+</tbody>
+</table>
+<p>入库失败<strong>不留半成品</strong>：文档状态机 <code>PENDING → INDEXED</code>，异常时写 <code>FAILED</code> 并把原因截断落库后<strong>原样抛出</strong>（不吞错、不假装成功）。
+重排不可用<strong>不阻断检索</strong>（保留召回顺序 + <code>log.warn</code>）。</p>
+<p><strong>③ sense-service —— 渠道级自愈</strong></p>
+<p><code>渠道故障 → 健康监控自动隔离 → 路由降级到候选渠道 → 指数退避重试（默认 maxAttempts=3）→ 重试耗尽入死信（DeadLetterStore）</code>。</p>
+<p><strong>④ wp-bff —— 体层不可用时的「可用性信封」（</strong>设计取舍，非缺陷<strong>）</strong></p>
+<p>体层不可用/被拒时返回 <strong>HTTP 200 + <code>{available:false, reason, error_code?}</code></strong>，而不是 5xx。理由：对知识视图而言「体层不可用」是一种<strong>要展示的状态</strong>（页面渲染「体层不可用」标签），且需保持响应体结构统一。</p>
+<blockquote>
+<p><strong>已知代价</strong>：监控无法仅凭状态码区分该情形，需读 <code>available</code> 字段。若要按状态码告警，需改为 502 并在前端同步调整——<strong>当前不改</strong>，如实登记为取舍。</p>
+</blockquote>
+<p><strong>⑤ 前端 —— 降级必须可见</strong></p>
+<p><code>status.ts</code> 的 <code>reportDegrade(scope, reason)</code> / <code>reportApiOk(scope)</code>：失败即登记，成功即清除；顶栏徽标 <code>API · 降级 N</code> + 全局横幅 + 逐模块提示。</p>
+<ul>
+<li><strong>读端点</strong>：可回落演示数据，但必须登记降级 + 页面标注「演示数据」</li>
+<li><strong>写端点</strong>：一律走 <code>plannedEndpointError()</code> —— 登记降级 + 抛说明性错误，<strong>绝不伪造成功</strong></li>
+<li>视图层 retry/apply 类动作全部 <code>try/catch</code>，<strong>失败不改本地状态</strong></li>
+</ul>
+<h3 id="26-planned">2.6 planned 端点：三态判定<a class="headerlink" href="#26-planned" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>状态码</th>
+<th>语义</th>
+<th>前端动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>2xx</td>
+<td>正常（含 BFF 的 <code>available=false</code> 可用性信封）</td>
+<td>直接用，读 <code>available</code> 判降级</td>
+</tr>
+<tr>
+<td><strong>404</strong></td>
+<td>契约 <code>x-wp-status: planned</code>，本阶段不提供</td>
+<td>登记降级 → 展示演示数据或禁用入口</td>
+</tr>
+<tr>
+<td>400 / 401 / 403 / 405 / 415</td>
+<td>客户端用错（参数/凭据/方法/媒体类型）</td>
+<td><strong>报错并上抛</strong>，不得静默降级</td>
+</tr>
+<tr>
+<td>5xx</td>
+<td>服务故障</td>
+<td>登记降级 + 报障</td>
+</tr>
+</tbody>
+</table>
+<p><code>x-wp-status: planned</code> 的端点在第 2.5 ④ 与本节共同约束下，<strong>不会出现「静默拿 Mock 冒充真实结果」</strong>。</p>
+<h3 id="27">2.7 异常处置决策树（排障用）<a class="headerlink" href="#27" title="Permanent link">&para;</a></h3>
+<pre><code>现象
+├─ 拿到 404？
+│   ├─ 该路径在契约里是 planned ──────────→ 正常，前端走降级展示
+│   └─ 契约里是 implemented ─────────────→ 真问题：查路由是否注册（@PostMapping / 检查 ROUTE_GUARD 派生）
+├─ 拿到 405？ ────────────────────────────→ 客户端方法用错，看 Allow 头自纠；若 Allow 与预期不符 → 契约与实现不一致
+├─ 拿到 415？ ────────────────────────────→ Content-Type 必须是 application/json
+├─ 拿到 401 / 403？
+│   ├─ 直连 8090 写路径 ─────────────────→ 预期行为（令牌由 Vite 代理注入，浏览器直连必然 401）
+│   └─ 经代理仍 401 ────────────────────→ 令牌文件与进程不一致（重启后令牌会重新生成）
+├─ 拿到 502 / 503？ ─────────────────────→ 上游不可用：看该链路的 degrade-on-failure 开关与上游健康
+├─ 拿到 500？ ──────────────────────────→ 兜底分支。**只记日志、不回内部消息**；查服务日志 &quot;Unhandled exception&quot;
+└─ 200 但数据不对？ ────────────────────→ 读 available / degraded / data_source 三个字段，别只看状态码
+</code></pre>
+<hr />
+<h2 id="3-d">3. 研发期异常流程（过程性，D 组）<a class="headerlink" href="#3-d" title="Permanent link">&para;</a></h2>
+<p><strong>编排原则</strong>：这一类异常不产生业务代码，却反复消耗时间。归纳成「现象 → 根因 → 规范动作」，可直接前置检查。</p>
+<h3 id="31">3.1 环境与工具类<a class="headerlink" href="#31" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>现象</th>
+<th>根因</th>
+<th>规范动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-01</td>
+<td><code>ls</code>/<code>head</code>/<code>tail</code>/<code>dirname</code> 报 <code>command not found</code></td>
+<td>WorkBuddy 注入的 <code>shell-runtime-bash-env.sh</code> 打坏了 PATH</td>
+<td>每条命令前 <code>export PATH="/usr/bin:/bin:/c/Windows/System32:$PATH"</code></td>
+</tr>
+<tr>
+<td>D-02</td>
+<td><code>mvn</code> 报找不到 POM</td>
+<td>根目录无 POM，聚合 POM 在 <code>services/java</code></td>
+<td>一律 <code>cd services/java</code> 再跑</td>
+</tr>
+<tr>
+<td>D-03</td>
+<td>托管 Python 与系统 Python 都没有 pytest</td>
+<td>依赖装在项目 venv</td>
+<td>用 <code>services/python/venv/Scripts/python.exe -m pytest</code></td>
+</tr>
+<tr>
+<td>D-04</td>
+<td>HTML 孪生生成失败（<code>markdown</code> 缺失）</td>
+<td>曾用 anaconda，已卸载</td>
+<td>用托管 Python + <code>PYTHONPATH=E:\AI\核心知识\.workbuddy\tmp\pylibs</code></td>
+</tr>
+<tr>
+<td>D-05</td>
+<td><code>wmic</code> / <code>Start-Process</code> / <code>rm -rf target</code> 被安全策略拦截</td>
+<td>沙箱黑名单</td>
+<td>换 <code>Get-CimInstance</code>、<code>WMI Invoke-CimMethod</code>、Maven <code>clean</code></td>
+</tr>
+<tr>
+<td>D-06</td>
+<td><code>taskkill //PID</code> 在 Git Bash 报「无效参数」</td>
+<td>MSYS 参数转义</td>
+<td>改用 PowerShell <code>Stop-Process -Id &lt;pid&gt; -Force</code></td>
+</tr>
+<tr>
+<td>D-07</td>
+<td><code>curl --data-binary @/tmp/x.json</code> 请求体被破坏</td>
+<td>MSYS 把 <code>/tmp</code> 改写成 Windows 路径</td>
+<td>用 stdin：<code>cat file \| curl --data-binary @-</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="32">3.2 构建与运行类<a class="headerlink" href="#32" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>现象</th>
+<th>根因</th>
+<th>规范动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-08</td>
+<td><code>Unable to rename ...jar.original</code> 打包失败</td>
+<td><strong>Windows 文件锁</strong>：运行中的实例锁住 <code>target/</code></td>
+<td>先 <code>Stop-Process</code> 停实例，再 <code>package</code></td>
+</tr>
+<tr>
+<td>D-09</td>
+<td>服务起在随机端口（如 53568）</td>
+<td>环境注入了 WorkBuddy 路由变量，被 Spring <strong>松散绑定</strong>误读为 <code>server.port</code></td>
+<td>启动显式 <code>--server.port=&lt;port&gt;</code></td>
+</tr>
+<tr>
+<td>D-10</td>
+<td>PG 冷层不可用，静默回落内存</td>
+<td>配置默认凭据 <code>lifeform/lifeform</code> 与 compose 的 <code>agent/agent123</code> 不符</td>
+<td>默认值对齐 <code>docker-compose.yml</code></td>
+</tr>
+<tr>
+<td>D-11</td>
+<td>后台起的服务在命令结束后消失</td>
+<td><code>nohup ... &amp;</code> 随 shell 退出被回收</td>
+<td>用<strong>后台任务</strong>方式起常驻进程</td>
+</tr>
+<tr>
+<td>D-12</td>
+<td>8090 跑的是旧版代码（端点 404）</td>
+<td>运行态与代码不同步</td>
+<td>改动后<strong>必须重建 + 重启</strong>，并用 <code>netstat</code> 反查 PID 确认进程身份</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33">3.3 测试与验收类<a class="headerlink" href="#33" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>现象</th>
+<th>根因</th>
+<th>规范动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-13</td>
+<td>单测全绿但端到端失败（Qdrant 拒收 point id）</td>
+<td><strong>服务端约束单测无法覆盖</strong></td>
+<td>构建期单测 + 运行时 E2E <strong>双层验收</strong>，缺一不可</td>
+</tr>
+<tr>
+<td>D-14</td>
+<td>E2E 判定不确定</td>
+<td>上一轮残留数据污染</td>
+<td>每轮先清残留：DB TRUNCATE + Qdrant 集合 DELETE + Redis FLUSHALL</td>
+</tr>
+<tr>
+<td>D-15</td>
+<td>中文请求体落库后乱码</td>
+<td>Git Bash <strong>内联 <code>-d '中文'</code></strong> 的编码转换</td>
+<td>用文件 + stdin 传体；断言时校验<strong>中文往返</strong>（查询回显 + 锚点词命中）</td>
+</tr>
+<tr>
+<td>D-16</td>
+<td>30 分钟排查后发现请求根本没发出去</td>
+<td>只看状态码不读响应体</td>
+<td>异常用例必须同时断言 <strong>状态码 + 错误码 + <code>details</code></strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="34">3.4 门禁与一致性类<a class="headerlink" href="#34" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>现象</th>
+<th>根因</th>
+<th>规范动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-17</td>
+<td>覆盖率门禁红灯 <code>103/106</code></td>
+<td>新增测试文件未登记进模块文档</td>
+<td>新增源文件必同步 <code>docs/java-services/*</code>（有门禁，会拦）</td>
+</tr>
+<tr>
+<td>D-18</td>
+<td>门禁全绿，但文档里的用例数/行数/端点数<strong>全错</strong></td>
+<td><strong>门禁只守「存在性」，不守「准确性」</strong></td>
+<td>数字必须拿实测输出对（<code>grep -c @Test</code>、<code>wc -l</code>、<code>contract-check</code>）；已提台账待办 17 做自动化断言</td>
+</tr>
+<tr>
+<td>D-19</td>
+<td>同一提交里"红灯亮了、数字全错却静默通过"</td>
+<td>见 D-18</td>
+<td>收尾自检清单逐项核，不依赖门禁</td>
+</tr>
+<tr>
+<td>D-20</td>
+<td>一台机器改完，另一台收到的是过期基线</td>
+<td>未先拉远端</td>
+<td>开发前先 <code>git fetch</code> + 用 <code>git ls-remote</code> 比哈希（<code>git rev-list --count</code> 在缺 tracking ref 时<strong>静默输出空行</strong>，会误判为落后 0）</td>
+</tr>
+<tr>
+<td>D-21</td>
+<td><code>git push origin</code> 无限挂起</td>
+<td><code>origin</code> 是 <code>ghfast.top</code> 加速代理</td>
+<td><strong>一律用 <code>github</code>（SSH）</strong>；<code>main</code> 分支刻意停初始提交，不要推</td>
+</tr>
+<tr>
+<td>D-22</td>
+<td>同一消息对同一文件发多个编辑，部分<strong>静默丢写</strong>（每个都报"成功"）</td>
+<td>工具层并发写覆盖</td>
+<td>同文件多处改动用<strong>脚本 + 命中次数断言</strong>，或逐个改；改完用 <code>grep -q</code> 复验落盘</td>
+</tr>
+</tbody>
+</table>
+<h3 id="35">3.5 文档与口径类<a class="headerlink" href="#35" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>现象</th>
+<th>根因</th>
+<th>规范动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-23</td>
+<td>报告"验收通过"，实测端点却 404</td>
+<td>报告里的路径是<strong>照抄会 404</strong> 的写法（<code>/api/body/rag</code> 实为 <code>/rag/answer</code>）</td>
+<td>文档里每条端点路径用 <code>grep -n "@PostMapping\|@GetMapping"</code> 反查；示例逐条与真实返回值比对</td>
+</tr>
+<tr>
+<td>D-24</td>
+<td>读设计的人误判技术栈（以为用了 pgvector）</td>
+<td>设计写「PG+pgvector」「Redis 语义缓存」，实现是纯 PG 关系表 + 精确指纹缓存</td>
+<td><strong>分两层处置</strong>：实现侧自述（注释/<code>role</code> 文案/README）可直接改准；<strong>需求·设计文档原文属口径变更，先问用户再落笔</strong></td>
+</tr>
+<tr>
+<td>D-25</td>
+<td>Mock 与真实 API 字段漂移，切 <code>api</code> 后静默丢数据</td>
+<td>只做<strong>单向</strong>核对（"Mock 有的真实有没有"），漏掉"真实多出来的字段"</td>
+<td><strong>双向</strong>逐字段核对：值/枚举/文案三类都要比；同一份数据有多处字面量要一起改</td>
+</tr>
+<tr>
+<td>D-26</td>
+<td>中间件 up/down 状态前端显示与实况相反</td>
+<td>Mock 快照与实况写反</td>
+<td>Mock 快照要按<strong>实测</strong>校准，不靠记忆</td>
+</tr>
+<tr>
+<td>D-27</td>
+<td>阶段报告内部数字互相矛盾</td>
+<td>回填时只改了总数没改分项（或反之）</td>
+<td>「合计 + 分项 + 交叉引用」<strong>三处一起核</strong>；分项之和必须等于总数</td>
+</tr>
+<tr>
+<td>D-28</td>
+<td>改了 <code>.md</code> 忘了重生 <code>.html</code></td>
+<td>孪生需显式生成</td>
+<td>收尾跑 STALE 检查：<code>[ "$md" -nt "$html" ] &amp;&amp; echo STALE</code></td>
+</tr>
+</tbody>
+</table>
+<h3 id="36">3.6 安全类（<strong>最高优先，出现必查全仓</strong>）<a class="headerlink" href="#36" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>现象</th>
+<th>根因</th>
+<th>规范动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-29</td>
+<td>浏览器直连 8090 即可<strong>无鉴权写入知识库</strong></td>
+<td>补写路径时沿用了 <code>/knowledge</code> 的「只读免令牌」豁免</td>
+<td><strong>安全边界按方法判定，不按路径</strong>；新增写方法一律与既有控制端点同级校验（来源白名单 + 控制令牌），并补<strong>反向用例断言「鉴权失败不触达下游」</strong></td>
+</tr>
+<tr>
+<td>D-30</td>
+<td>未映射路由返回 500 而非 404</td>
+<td>三服务 <code>GlobalExceptionHandler</code> 只有「业务/参数/兜底」三档，路由层异常全落兜底</td>
+<td>见 §2.2；三服务同源，改一处要查其余</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4">4. 规范化动作清单<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41">4.1 新增一个端点时<a class="headerlink" href="#41" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] 契约 <code>contracts/work-platform-bff-openapi.yaml</code> 加 x-wp-status（implemented / planned）</li>
+<li>[ ] BFF：加进 <code>IMPLEMENTED_ENDPOINTS</code>（<code>ROUTE_GUARD</code> 自动派生 405 分流）</li>
+<li>[ ] Java：确认 <code>GlobalExceptionHandler</code> 四档齐备（业务 / 路由层 404·405·415 / 参数 / 兜底）</li>
+<li>[ ] 补测试：正常 + 404 + 405（+ 415 若收 body）</li>
+<li>[ ] 文档：<code>java-services/*</code> 端点表、<code>功能开发流程</code> 端点清单、<code>项目进度总览</code> 功能矩阵</li>
+</ul>
+<h3 id="42">4.2 新增一条<strong>写路径</strong>时（安全红线）<a class="headerlink" href="#42" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] 与既有控制端点<strong>同级</strong>校验（来源白名单 + 控制令牌），<strong>先查是否误沿用了只读豁免</strong></li>
+<li>[ ] 补反向用例：无令牌 → 401、伪造来源 → 403，且<strong>断言下游零调用</strong></li>
+<li>[ ] 契约里该端点补 401/403 响应</li>
+<li>[ ] E2E 手测写入 → 检索 → 指标三段</li>
+</ul>
+<h3 id="43">4.3 发现一个异常时<a class="headerlink" href="#43" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] 判性质：<strong>可闭环</strong> → 改代码 + 补测试；<strong>超范围/需规划决策</strong> → 登记台账（<strong>不静默略过</strong>）</li>
+<li>[ ] 判口径：<code>degraded=true</code> + 降级后端 = <strong>可接受取舍</strong>；返回假结果 / 静默回落 / 假装成功 = <strong>伪实现（红线）</strong></li>
+<li>[ ] 若属「设计↔实现」差异 → 实现侧自述可自改；<strong>设计原文先问用户</strong></li>
+</ul>
+<h3 id="44">4.4 每轮收尾<a class="headerlink" href="#44" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[ ] 六道门禁全绿（Java / Python / wp-bff / 契约 / 文档覆盖 / 前端）</li>
+<li>[ ] <strong>数字与实测输出对齐</strong>（门禁不守准确性）</li>
+<li>[ ] HTML 孪生重生，STALE 为空</li>
+<li>[ ] 编辑落盘复验（同文件多处改动）</li>
+<li>[ ] 提交推 <strong><code>github</code></strong> 三分支，核对同哈希，工作区干净</li>
+</ul>
+<hr />
+<h2 id="5">5. 未闭合项与后续加固<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>BFF 体层不可用返回 200</strong> 的取舍</td>
+<td>已登记为取舍（§2.5 ④）；若要按状态码告警需改 502 + 前端同步</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>gateway 未纳入路由层分流</strong>：8080 本轮<strong>未做运行态验证</strong>，其未匹配路由的响应体是否统一信封<strong>未确认</strong></td>
+<td>待验证（已如实标注，不作断言）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>台账待办 17：把「用例数/行数/端点数」做成自动化断言（解 D-18/D-19 的结构性防线）</td>
+<td>下轮加固</td>
+</tr>
+<tr>
+<td>4</td>
+<td>台账待办 16：Mock ↔ 真实响应字段一致性自动化校验（解 D-25）</td>
+<td>下轮加固</td>
+</tr>
+<tr>
+<td>5</td>
+<td>嵌入/重排真实模型权重未安装（DEBT-010/011）</td>
+<td>诚实降级，装模型后自动切换</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>DEBT-002</code> RAG 生成仍为模板拼接（<code>generator=template</code>）</td>
+<td>Phase 4 大脑期</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6">6. 变更台账（本文档同轮）<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>改动</th>
+<th>文件</th>
+<th>验证</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BFF 统一错误信封 + 路由层 405 分流</td>
+<td><code>services/node/wp-bff/server.js</code></td>
+<td>wp-bff 测试 <strong>29 → 34</strong>（+5）；运行态 9 项探测全通过</td>
+</tr>
+<tr>
+<td>BFF 测试断言改 <code>code</code>/<code>message</code></td>
+<td><code>services/node/wp-bff/test/server.test.js</code></td>
+<td>同上</td>
+</tr>
+<tr>
+<td>nlp-service 统一错误信封（原 FastAPI <code>{detail}</code>）</td>
+<td><code>services/python/nlp-service/app/main.py</code></td>
+<td>pytest <strong>52 → 62</strong>（+10）</td>
+</tr>
+<tr>
+<td>nlp-service <strong>补 HTTP 层测试</strong>（此前只有算法单测）</td>
+<td><code>services/python/nlp-service/tests/test_http_errors.py</code></td>
+<td>新增 10 项</td>
+</tr>
+<tr>
+<td>契约：<code>ErrorEnvelope</code> schema + 404/405 响应声明</td>
+<td><code>contracts/work-platform-bff-openapi.yaml</code></td>
+<td>契约检查 0 FAIL；YAML 解析通过</td>
+</tr>
+<tr>
+<td>本文档</td>
+<td><code>docs/异常流程归纳.md</code></td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<p><strong>回归基线（本轮实测）</strong>：Java <strong>130/130</strong>（gateway 2 · session 15 · sense 53 · body 60）·
+Python <strong>62/62</strong> · wp-bff <strong>34/34</strong> · 契约 <strong>0 FAIL</strong> · 文档覆盖 <strong>106/106</strong> · 前端 <code>vue-tsc</code> + <code>vite build</code> 通过</p>
+<hr />
+<p><em>编制：WorkBuddy · 口径时间：2026-09-18 · 代码基线：<code>6616616</code></em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
