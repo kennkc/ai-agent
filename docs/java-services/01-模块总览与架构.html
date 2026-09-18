@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-16 14:36 · 源文件 01-模块总览与架构.md</span>
+  <span class="meta">生成于 2026-09-18 20:05 · 源文件 01-模块总览与架构.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -171,8 +171,8 @@
 <tr>
 <td>躯体层</td>
 <td>知识库、向量检索、RAG</td>
-<td><code>body-service</code>（本地检索 MVP）</td>
-<td>Phase 3 待做</td>
+<td><code>body-service</code>（三层存储 + 语义检索 + RAG）</td>
+<td><strong>Phase 3 已实现</strong></td>
 </tr>
 <tr>
 <td>四肢层</td>
@@ -247,7 +247,7 @@
 <td><code>body-service</code></td>
 <td style="text-align: right;">8083</td>
 <td style="text-align: right;">9094</td>
-<td>本地知识检索（Phase 3 将换为向量库）</td>
+<td>三层存储 + 语义检索 + 重排 + RAG + 感官事件入库</td>
 </tr>
 </tbody>
 </table>
@@ -361,13 +361,19 @@ POST /api/session/{id}/ask            → 提问
 │       ├── security/              # R2-02 SSRF 出站守卫
 │       ├── staging/               # R2-10 隔离暂存（多后端）
 │       └── util/                  # HTTP 客户端构建器 / 文本抽取
-└── body-service/                  # 4 main + 1 test
+└── body-service/                  # 26 main + 7 test
     ├── pom.xml
     └── src/main/java/com/agent/body/
         ├── BodyServiceApplication.java
-        ├── controller/
+        ├── chunk/                 # R3-02 文档分块器（与 Python 同算法）
+        ├── client/                # 出站 HTTP / 嵌入 / 重排 / Qdrant 客户端
+        ├── common/                # 统一错误码 + 业务异常 + 全局异常处理
+        ├── config/                # 三层存储装配
+        ├── controller/            # KnowledgeController（知识管理 REST API）
+        ├── event/                 # R3-09 感官采集事件消费者
         ├── grpc/
-        └── store/                 # 内存检索实现
+        ├── service/               # 入库 / 检索 / RAG / 指标
+        └── store/                 # 三层存储（PG 冷 / Redis 热 / 门面 + 分层路由）
 </code></pre>
 <h2 id="6">6. 技术基线<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
 <table>
@@ -493,7 +499,7 @@ POST /api/session/{id}/ask            → 提问
 <li>要改接口或路由 → <a href="03-gateway-service.md">03-gateway-service</a></li>
 <li>要改问答链路 → <a href="04-session-manager.md">04-session-manager</a></li>
 <li>要加采集渠道 / 调质检策略 → <a href="05-sense-service.md">05-sense-service</a></li>
-<li>要接入向量库 → <a href="06-body-service.md">06-body-service</a></li>
+<li>要接入 / 调试知识库 → <a href="06-body-service.md">06-body-service</a></li>
 <li>要部署或排查环境问题 → <a href="07-运行时配置与横切约定.md">07-运行时配置与横切约定</a></li>
 </ul></main>
 </div>

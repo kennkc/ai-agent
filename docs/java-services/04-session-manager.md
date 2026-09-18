@@ -203,11 +203,14 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 - **`fallback()` 的语义**：`{"intent":"闲聊","confidence":0.5,"engine":"FALLBACK"}` ——
   特意带上 `engine` 字段，让调用方/前端能区分「真实识别」与「降级兜底」，避免把兜底结果当成识别结果展示。
 
-### 4.8 `orchestration/BodyClient.java` · 客户端 · 44 行
+### 4.8 `orchestration/BodyClient.java` · 客户端 · 52 行
 
-- **职责**：调用 `body-service` 的 `POST /api/body/retrieve` 做知识检索。
-- **请求**：`{"query": question, "top_k": 3}` + `X-Tenant-Id` 头。**`top_k` 硬编码为 3**，
-  目前不可配置 —— 若要调整召回数量需改代码。
+- **职责**：调用 `body-service` 的 `POST /api/body/retrieve` 做**语义检索**（Phase 3 起由
+  `RetrievalService` 承载：缓存优先 → 向量召回 → 重排）。
+- **请求**：`{"query": question, "top_k": 5, "use_cache": true}` + `X-Tenant-Id` 头。
+  显式声明 `top_k` 与缓存优先语义（对齐 R3-08 口径）；召回复核与重排由躯体层负责。
+- **响应**：原样透传作为 `citations`（引用可回溯）—— 在 Phase 2 的 `content/title/source` 之上
+  补充 `chunk_id / doc_id / heading / score / rerank_score / ingest_time_iso`，结构向后兼容。
 - **配置**：`app.body.base-url`（默认 `http://127.0.0.1:8083`）、`app.body.degrade-on-failure`（默认 `true`）。
 - **降级**：返回 `List.of()`（空结果），使 `buildAnswer` 走「未找到足够信息」话术。
 
@@ -349,7 +352,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 |---|---|
 | 新增会话相关接口 | `SessionController`，**必须调用 `requireOwnedSession`** |
 | 调整会话 TTL | `SessionController.SESSION_TTL`（当前硬编码 2 小时，未配置化） |
-| 调整召回数量 | `BodyClient.retrieve` 里硬编码的 `top_k=3`（建议后续配置化） |
+| 调整召回数量 | `BodyClient.retrieve` 里的 `top_k`（当前 5，随请求显式声明；如需配置化可提为 `app.body.top-k`） |
 | 新增跨服务调用 | 新建 Client 类，**必须用 `OutboundHttp.restClient`** |
 | 新增错误码 | `common/ErrorCode` + `GlobalExceptionHandler` 的 switch（注意与 `sense-service` 同名文件同步） |
 | 新增领域事件 | `KafkaEventPublisher.publish(domain, event, key, payload)`，主题自动拼为 `lifeform.{domain}.{event}` |

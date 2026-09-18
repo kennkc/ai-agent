@@ -10,25 +10,30 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const { EventEmitter } = require('node:events')
 
-const { createServer, MIDDLEWARE, resolveAllowedOrigins } = require('../server')
+const { createServer, MIDDLEWARE, resolveAllowedOrigins, queryTerms, buildSnippet } = require('../server')
 
 const TOKEN = 'test-control-token-0123456789'
 const ALLOWED_ORIGIN = 'http://127.0.0.1:3001'
 const OS_TMP = process.env.TEMP || process.env.TMPDIR || '/tmp'
 
-function request(server, { method = 'GET', path = '/', headers = {} } = {}) {
+function request(server, { method = 'GET', path = '/', headers = {}, body = null } = {}) {
   const { port } = server.address()
+  const payload = body == null ? null : Buffer.from(JSON.stringify(body), 'utf8')
+  const finalHeaders = payload
+    ? { 'Content-Type': 'application/json', 'Content-Length': payload.length, ...headers }
+    : headers
   return new Promise((resolve, reject) => {
-    const req = http.request({ host: '127.0.0.1', port, method, path, headers }, res => {
-      let body = ''
-      res.on('data', chunk => { body += chunk })
+    const req = http.request({ host: '127.0.0.1', port, method, path, headers: finalHeaders }, res => {
+      let responseBody = ''
+      res.on('data', chunk => { responseBody += chunk })
       res.on('end', () => {
         let json = null
-        try { json = JSON.parse(body) } catch { /* 非 JSON 响应 */ }
-        resolve({ status: res.statusCode, headers: res.headers, body, json })
+        try { json = JSON.parse(responseBody) } catch { /* 非 JSON 响应 */ }
+        resolve({ status: res.statusCode, headers: res.headers, body: responseBody, json })
       })
     })
     req.on('error', reject)
+    if (payload) req.write(payload)
     req.end()
   })
 }
@@ -241,4 +246,115 @@ test('tracing 聚合标注采样口径（sample_size / p99_basis）', async () =
       ? { data: ['session-manager'] }
       : { data: traces }),
   })
+})
+
+// ─────────── R-C03 躯体视图（/api/wp/knowledge）───────────
+
+test('体层不可用时 /knowledge 返回 available=false 而不是伪造 0 知识量', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/knowledge' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, false)
+    assert.ok(res.json.data.reason.includes('体层不可用'))
+    assert.ok(Array.isArray(res.json.data.gaps) && res.json.data.gaps.includes('knowledge'))
+    assert.equal(res.json.data.knowledge, undefined, '不得返回伪造的知识量字段')
+  }, { jsonRequest: async () => null })
+})
+
+test('/knowledge 透传体层统计（知识量 / 检索指标 / 三层存储）', async () => {
+  const stats = {
+    tenant_id: 'tenant-a',
+    knowledge: { documents: 3, chunks: 12, metadata_backend: 'pg', vector_points: 12 },
+    retrieval: { latency_p99_ms: 42, search_hit_rate: 0.83, cache_hit_rate: 0.4, sample_size: 30 },
+    storage: { hot: { available: true }, warm: { available: true }, cold: { available: true } },
+  }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/knowledge', headers: { 'X-Tenant-Id': 'tenant-a' } })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.knowledge.documents, 3)
+    assert.equal(res.json.data.retrieval.latency_p99_ms, 42)
+    assert.equal(res.json.data.checked_at !== undefined, true)
+    assert.ok(res.json.data.note.includes('采样'))
+  }, { jsonRequest: async (url, options) => {
+    assert.ok(url.endsWith('/api/body/knowledge/stats'), '应代理到体层 stats 端点')
+    assert.equal(options.headers['X-Tenant-Id'], 'tenant-a', '租户须透传')
+    return stats
+  } })
+})
+
+test('检索测试：空 query -> 400', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/knowledge/search', headers: { 'Content-Type': 'application/json' },
+    })
+    assert.equal(res.status, 400)
+  }, { jsonRequest: async () => null })
+})
+
+test('检索测试：返回命中片段与高亮词，且租户透传体层', async () => {
+  const hits = [{
+    chunk_id: 'doc-1#0', doc_id: 'doc-1', title: '躯体层设计', heading: '存储分层', chunk_index: 0,
+    content: '热层用 Redis 缓存高频问题，温层用 Qdrant 向量库，冷层用 PostgreSQL 保存元数据真相。',
+    score: 0.81, rerank_score: 0.93, source: 'manual', ingest_time_iso: '2026-09-16T10:00:00Z',
+  }]
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge/search',
+      headers: { 'Content-Type': 'application/json', 'X-Tenant-Id': 'tenant-b' },
+      body: { query: 'Redis 缓存优先' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.hit_count, 1)
+    const hit = res.json.data.hits[0]
+    assert.equal(hit.rank, 1)
+    assert.equal(hit.doc_id, 'doc-1')
+    assert.ok(hit.matched_terms.includes('Redis'), '高亮词应包含命中实体')
+    assert.ok(hit.matched_terms.includes('缓存'), '中文 2-gram 也应参与高亮')
+    assert.ok(hit.snippet.includes('Redis'))
+    assert.equal(typeof res.json.data.latency_ms, 'number')
+  }, { jsonRequest: async (url, options) => {
+    assert.ok(url.endsWith('/api/body/retrieve'), '应代理到体层检索端点')
+    assert.equal(options.headers['X-Tenant-Id'], 'tenant-b')
+    assert.equal(options.body.use_cache, true, '默认走缓存优先策略')
+    return hits
+  } })
+})
+
+test('检索测试：查询词通过请求体下发时也能解析（含 top_k 上界收敛）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/knowledge/search',
+      headers: { 'Content-Type': 'application/json' },
+      body: { query: '语义检索链路', top_k: 999 },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.top_k, 20, 'top_k 须收敛到上界 20')
+    assert.equal(res.json.data.available, false, '体层不可用时应诚实标注')
+  }, { jsonRequest: async () => null })
+})
+
+test('queryTerms：中文无空格查询也能产出 2-gram 高亮词', () => {
+  const terms = queryTerms('语义检索链路')
+  assert.ok(terms.includes('语义检索链路'))
+  assert.ok(terms.includes('语义'))
+  assert.ok(terms.includes('检索'))
+  assert.ok(terms.every(term => term.length >= 2))
+})
+
+test('buildSnippet：命中词在尾部时返回带省略号的窗口片段', () => {
+  const content = `${'前置无关文本'.repeat(60)}Redis 缓存优先策略`
+  const { snippet, matched_terms } = buildSnippet(content, ['Redis'])
+  assert.ok(snippet.startsWith('…'), '截窗前应有省略号')
+  assert.ok(snippet.includes('Redis'))
+  assert.deepEqual(matched_terms, ['Redis'])
+})
+
+test('buildSnippet：无命中词时退化为头部片段且不虚报命中', () => {
+  const { snippet, matched_terms } = buildSnippet('无关内容'.repeat(50), ['不存在的词'])
+  assert.equal(matched_terms.length, 0)
+  assert.ok(snippet.length > 0)
 })

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>06 · body-service 躯体服务</title>
+<title>06 · body-service 躯体服务（Phase 3 躯体期）</title>
 <style>
   :root {
     --brand: #185fa5;
@@ -116,79 +116,99 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-16 14:36 · 源文件 06-body-service.md</span>
+  <span class="meta">生成于 2026-09-18 20:05 · 源文件 06-body-service.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#1">1. 模块职责</a></li>
-<li><a href="#2">2. 当前实现的定位（重要）</a></li>
-<li><a href="#3">3. 文件清单</a></li>
-<li><a href="#4">4. 逐文件说明</a><ul>
-<li><a href="#41-bodyserviceapplicationjava-7">4.1 BodyServiceApplication.java · 启动类 · 7 行</a></li>
-<li><a href="#42-controllerbodycontrollerjava-39">4.2 controller/BodyController.java · 控制器 · 39 行</a></li>
-<li><a href="#43-storebodystorejava-52">4.3 store/BodyStore.java · 组件 · 52 行</a></li>
-<li><a href="#44-grpcgrpchealthserverjava-24">4.4 grpc/GrpcHealthServer.java · 组件 · 24 行</a></li>
-<li><a href="#45-testbodystoretestjava-14-1">4.5 test/…/BodyStoreTest.java · 测试 · 14 行 · 1 个用例</a></li>
+<li><a href="#2-phase-12">2. 与 Phase 1/2 的关系（替换点已生效）</a></li>
+<li><a href="#3">3. 文件清单</a><ul>
+<li><a href="#31">3.1 主代码</a></li>
+<li><a href="#32-39">3.2 测试（39 个用例，全绿）</a></li>
 </ul>
 </li>
-<li><a href="#5">5. 接口调用示例</a></li>
-<li><a href="#6">6. 配置项</a></li>
+<li><a href="#4">4. 逐文件说明（关键实现）</a><ul>
+<li><a href="#41-chunkchunkprocessorjava-200">4.1 chunk/ChunkProcessor.java · 分块器 · 200 行</a></li>
+<li><a href="#42-clientqdrantclientjava-229">4.2 client/QdrantClient.java · 向量库客户端 · 229 行</a></li>
+<li><a href="#43-serviceingestservicejava-152">4.3 service/IngestService.java · 入库管道 · 152 行</a></li>
+<li><a href="#44-serviceretrievalservicejava-154">4.4 service/RetrievalService.java · 检索链路 · 154 行</a></li>
+<li><a href="#45-storehotcachestorejava-158">4.5 store/HotCacheStore.java · 热层 · 158 行</a></li>
+<li><a href="#46-storepgmetadatastorejava-156">4.6 store/PgMetadataStore.java · 冷层 · 156 行</a></li>
+<li><a href="#47-eventsensecollectedconsumerjava-179">4.7 event/SenseCollectedConsumer.java · 感官事件消费 · 179 行</a></li>
+<li><a href="#48-controllerknowledgecontrollerjava-240">4.8 controller/KnowledgeController.java · 控制器 · 240 行</a></li>
+<li><a href="#49-serviceknowledgemetricsjava-104">4.9 service/KnowledgeMetrics.java · 指标 · 104 行</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 降级清单（诚实上报，不虚构）</a></li>
+<li><a href="#6-applicationyml">6. 配置项（application.yml）</a></li>
 <li><a href="#7">7. 修改指引</a></li>
+<li><a href="#8">8. 接口调用示例</a></li>
 </ul>
 </div>
 </nav>
-  <main class="doc"><h1 id="06-body-service">06 · body-service 躯体服务<a class="headerlink" href="#06-body-service" title="Permanent link">&para;</a></h1>
+  <main class="doc"><h1 id="06-body-service-phase-3">06 · body-service 躯体服务（Phase 3 躯体期）<a class="headerlink" href="#06-body-service-phase-3" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>模块路径：<code>services/java/body-service/</code>
-源文件：<strong>4 个主代码 + 1 个测试</strong>（主代码 122 行）
+源文件：<strong>26 个主代码（2411 行）+ 6 个测试（635 行）</strong>
 HTTP 端口：<strong>8083</strong> · gRPC 端口：<strong>9094</strong>
-主要依赖：Spring Web（仅此一项业务依赖，无 Redis / 无数据库 / 无 Nacos 之外的外部组件）</p>
+外部依赖：PostgreSQL（冷层真相源）· Redis（热层缓存）· Qdrant（温层向量库）· Kafka（感官事件消费）· nlp-service（嵌入/重排）</p>
 </blockquote>
 <h2 id="1">1. 模块职责<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
-<p><code>body-service</code> 是生命体的<strong>知识与记忆的躯体</strong>，当前处于 <strong>MVP 阶段</strong>：</p>
+<p><code>body-service</code> 是生命体的<strong>知识与记忆的躯体</strong>。Phase 3 起承担三件事：</p>
 <ol>
-<li><strong>知识入库</strong>（<code>ingest</code>）：接收文档，切分为片段并存起来。</li>
-<li><strong>知识检索</strong>（<code>retrieve</code>）：按查询串做<strong>基于字符命中的简易打分</strong>，返回 top-K 片段。</li>
+<li><strong>知识摄取</strong>（R3-02/03/04/09）：<code>POST /api/body/knowledge</code> 单篇 / <code>/knowledge/batch</code> 批量，
+   经分块 → 嵌入 → 向量写入 → 元数据落库，状态机 <code>PENDING → INDEXED / FAILED</code>。</li>
+<li><strong>语义检索</strong>（R3-05/06/08）：<code>POST /api/body/retrieve</code> 缓存优先 → Qdrant 召回 TOP-50 → 重排 TOP-K。</li>
+<li><strong>RAG 回答</strong>（R3-07）：<code>POST /api/body/rag/answer</code> 检索 + 引用组装（生成段仍为模板，DEBT-002）。</li>
 </ol>
-<p>它是 VS1 问答链路的<strong>最后一环</strong>：<code>session-manager</code> 调它拿到知识片段，再拼装成模板回答。</p>
-<h2 id="2">2. 当前实现的定位（重要）<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
-<p><strong>这是一个刻意做的「可替换实现」，不是最终形态。</strong> 理解这一点可以避免两类误解：</p>
+<p>同时通过 <code>GET /api/body/knowledge/stats</code> 向工作平台躯体视图（R-C03）提供知识量、检索 P99、命中率与三层存储状态。</p>
+<h2 id="2-phase-12">2. 与 Phase 1/2 的关系（替换点已生效）<a class="headerlink" href="#2-phase-12" title="Permanent link">&para;</a></h2>
+<p>Phase 1 的 <code>BodyStore</code>（进程内 <code>ConcurrentHashMap</code> + 字符命中率打分）<strong>已随 Phase 3 删除</strong>，
+DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：</p>
 <table>
 <thead>
 <tr>
 <th>维度</th>
-<th>现状</th>
-<th>目标（Phase 3 躯体期）</th>
+<th>Phase 1（已删除）</th>
+<th>Phase 3（当前）</th>
 </tr>
 </thead>
 <tbody>
 <tr>
 <td>存储</td>
-<td><strong>进程内 <code>ConcurrentHashMap</code></strong>（重启即丢）</td>
-<td>Qdrant / pgvector 向量库</td>
+<td>进程内 <code>ConcurrentHashMap</code>（重启即丢）</td>
+<td>PG 真实元数据 + Qdrant 向量 + Redis 缓存</td>
 </tr>
 <tr>
 <td>检索</td>
-<td>字符串包含 + 字符命中率打分</td>
-<td>语义向量相似度检索</td>
+<td>字符串包含 / 字符命中率</td>
+<td>语义向量相似度 + 重排</td>
 </tr>
 <tr>
-<td>切分</td>
-<td>按空行 + 300 字硬切</td>
-<td>语义分块（按标题层级/句义）</td>
+<td>分块</td>
+<td>空行 + 300 字硬切</td>
+<td>Markdown 标题切小节 + 段落累加 800 字 + 50 字重叠</td>
 </tr>
 <tr>
-<td>多租户</td>
+<td>租户隔离</td>
 <td>Map 的 key 是 <code>tenantId</code></td>
-<td>向量库的租户分区/命名空间</td>
+<td>Qdrant payload filter + PG 租户列 + 缓存键前缀（三重）</td>
+</tr>
+<tr>
+<td>降级</td>
+<td>无</td>
+<td>逐层显式降级并<strong>如实上报</strong>（见 §5）</td>
 </tr>
 </tbody>
 </table>
-<p><strong>存在的意义</strong>：让 Phase 1 的 VS1 问答链路能端到端跑通（<code>session → intent → retrieval → answer</code>），
-而把「检索质量」这件事整体推迟到 Phase 3。届时替换点是 <code>BodyStore</code> 一个类 ——
-<code>BodyController</code> 暴露的 HTTP 契约（<code>/api/body/ingest</code>、<code>/api/body/retrieve</code>）不需要变化。</p>
-<p><strong>不要在 MVP 上做性能或召回优化</strong> —— 那属于 Phase 3 的范围，此处投入会直接废弃。</p>
+<p><code>/api/body/retrieve</code> 的请求体（<code>query</code> / <code>top_k</code>）与响应字段（<code>content</code> / <code>title</code> / <code>source</code>）保持兼容，
+并新增 <code>chunk_id</code> / <code>doc_id</code> / <code>heading</code> / <code>score</code> / <code>rerank_score</code> / <code>ingest_time_iso</code>，
+因此 <code>session-manager</code> 无需改动调用即可切到语义检索（仅把 <code>top_k</code> 从 3 提到 5、显式 <code>use_cache=true</code>）。</p>
+<blockquote>
+<p>注意：<code>/api/body/ingest</code> 已被 <code>/api/body/knowledge</code> 取代（旧控制器删除，路由不再冲突）。</p>
+</blockquote>
 <h2 id="3">3. 文件清单<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<h3 id="31">3.1 主代码<a class="headerlink" href="#31" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -203,19 +223,73 @@ HTTP 端口：<strong>8083</strong> · gRPC 端口：<strong>9094</strong>
 <td><code>BodyServiceApplication.java</code></td>
 <td>启动类</td>
 <td style="text-align: right;">7</td>
-<td>Spring Boot 入口（单行体，最简启动类）</td>
+<td>Spring Boot 入口 + Nacos 注册</td>
 </tr>
 <tr>
-<td><code>controller/BodyController.java</code></td>
-<td>控制器</td>
-<td style="text-align: right;">39</td>
-<td>入库 / 检索 / 健康检查三个接口</td>
-</tr>
-<tr>
-<td><code>store/BodyStore.java</code></td>
+<td><code>chunk/ChunkProcessor.java</code></td>
 <td>组件</td>
-<td style="text-align: right;">52</td>
-<td>内存存储与打分检索的核心实现</td>
+<td style="text-align: right;">200</td>
+<td>R3-02 分块（与 Python <code>chunking.py</code> 同算法）</td>
+</tr>
+<tr>
+<td><code>client/OutboundHttp.java</code></td>
+<td>工具</td>
+<td style="text-align: right;">48</td>
+<td>出站 HTTP 统一出口，<strong>强制 HTTP/1.1</strong></td>
+</tr>
+<tr>
+<td><code>client/EmbeddingClient.java</code></td>
+<td>客户端</td>
+<td style="text-align: right;">92</td>
+<td>R3-03 嵌入（调 nlp-service）</td>
+</tr>
+<tr>
+<td><code>client/RerankClient.java</code></td>
+<td>客户端</td>
+<td style="text-align: right;">92</td>
+<td>R3-06 重排（调 nlp-service，可降级）</td>
+</tr>
+<tr>
+<td><code>client/QdrantClient.java</code></td>
+<td>客户端</td>
+<td style="text-align: right;">229</td>
+<td>R3-04 向量库 REST 客户端 + point id 派生</td>
+</tr>
+<tr>
+<td><code>common/ErrorCode.java</code></td>
+<td>枚举</td>
+<td style="text-align: right;">30</td>
+<td>统一错误码（R1-08 对齐副本）</td>
+</tr>
+<tr>
+<td><code>common/BizException.java</code></td>
+<td>异常</td>
+<td style="text-align: right;">30</td>
+<td>携带错误码与明细</td>
+</tr>
+<tr>
+<td><code>common/GlobalExceptionHandler.java</code></td>
+<td>切面</td>
+<td style="text-align: right;">48</td>
+<td>错误码 → HTTP 响应体</td>
+</tr>
+<tr>
+<td><code>config/BodyStorageConfig.java</code></td>
+<td>配置</td>
+<td style="text-align: right;">55</td>
+<td>冷层选型（PG / 内存回落）+ 分层规则注入</td>
+</tr>
+<tr>
+<td><code>controller/KnowledgeController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">240</td>
+<td>入库 / 检索 / RAG / 状态四组接口</td>
+</tr>
+<tr>
+<td><code>event/SenseCollectedConsumer.java</code></td>
+<td>消费者</td>
+<td style="text-align: right;">179</td>
+<td>R3-09 消费 <code>lifeform.sense.collected</code></td>
 </tr>
 <tr>
 <td><code>grpc/GrpcHealthServer.java</code></td>
@@ -224,214 +298,417 @@ HTTP 端口：<strong>8083</strong> · gRPC 端口：<strong>9094</strong>
 <td>gRPC Health 探针</td>
 </tr>
 <tr>
-<td><code>test/…/BodyStoreTest.java</code></td>
-<td>测试</td>
-<td style="text-align: right;">14</td>
-<td>租户隔离检索</td>
+<td><code>service/IngestService.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">152</td>
+<td>R3-02/03/04/09 入库管道与状态机</td>
+</tr>
+<tr>
+<td><code>service/RetrievalService.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">154</td>
+<td>R3-05/06/08 检索链路</td>
+</tr>
+<tr>
+<td><code>service/RagPipeline.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">97</td>
+<td>R3-07 RAG 回答与引用</td>
+</tr>
+<tr>
+<td><code>service/KnowledgeMetrics.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">104</td>
+<td>检索/缓存/重排指标（采样口径）</td>
+</tr>
+<tr>
+<td><code>store/MetadataStore.java</code></td>
+<td>接口</td>
+<td style="text-align: right;">33</td>
+<td>冷层抽象（真相源）</td>
+</tr>
+<tr>
+<td><code>store/PgMetadataStore.java</code></td>
+<td>实现</td>
+<td style="text-align: right;">156</td>
+<td>R3-01 PG 实现（DDL 自举）</td>
+</tr>
+<tr>
+<td><code>store/InMemoryMetadataStore.java</code></td>
+<td>实现</td>
+<td style="text-align: right;">80</td>
+<td>PG 不可用时的显式降级实现</td>
+</tr>
+<tr>
+<td><code>store/HotCacheStore.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">158</td>
+<td>R3-08 Redis 缓存优先 + 查询指纹</td>
+</tr>
+<tr>
+<td><code>store/StorageFacade.java</code></td>
+<td>门面</td>
+<td style="text-align: right;">73</td>
+<td>R3-01 统一存储出口与三层状态</td>
+</tr>
+<tr>
+<td><code>store/TierRouter.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">78</td>
+<td>R3-01 分层规则（热度 = 频率 × 新鲜度）</td>
+</tr>
+<tr>
+<td><code>store/StoredDocument.java</code></td>
+<td>record</td>
+<td style="text-align: right;">26</td>
+<td>文档元数据</td>
+</tr>
+<tr>
+<td><code>store/StoredChunk.java</code></td>
+<td>record</td>
+<td style="text-align: right;">17</td>
+<td>切片元数据</td>
+</tr>
+<tr>
+<td><code>store/DocumentStatus.java</code></td>
+<td>枚举</td>
+<td style="text-align: right;">9</td>
+<td><code>PENDING / INDEXED / FAILED / DELETED</code></td>
 </tr>
 </tbody>
 </table>
-<h2 id="4">4. 逐文件说明<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
-<h3 id="41-bodyserviceapplicationjava-7">4.1 <code>BodyServiceApplication.java</code> · 启动类 · 7 行<a class="headerlink" href="#41-bodyserviceapplicationjava-7" title="Permanent link">&para;</a></h3>
+<h3 id="32-39">3.2 测试（39 个用例，全绿）<a class="headerlink" href="#32-39" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th style="text-align: right;">行数</th>
+<th>覆盖验收点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>chunk/ChunkProcessorTest.java</code></td>
+<td style="text-align: right;">98</td>
+<td>R3-02 无遗漏 / 标题前置 / 大小受控 / 边界可配</td>
+</tr>
+<tr>
+<td><code>client/QdrantClientTest.java</code></td>
+<td style="text-align: right;">38</td>
+<td>R3-04 <strong>point id 必须是 UUID</strong>（E2E 缺陷回归）</td>
+</tr>
+<tr>
+<td><code>service/IngestServiceTest.java</code></td>
+<td style="text-align: right;">128</td>
+<td>R3-09 状态机 / 失败置 FAILED / 重入库清理</td>
+</tr>
+<tr>
+<td><code>service/RetrievalServiceTest.java</code></td>
+<td style="text-align: right;">147</td>
+<td>R3-05/06/08 缓存优先 / 重排降级不阻断 / 上游不可用不返回假结果</td>
+</tr>
+<tr>
+<td><code>store/HotCacheStoreTest.java</code></td>
+<td style="text-align: right;">84</td>
+<td>R3-08 指纹归一化 / Redis 不可用时不伪造命中</td>
+</tr>
+<tr>
+<td><code>store/InMemoryMetadataStoreTest.java</code></td>
+<td style="text-align: right;">78</td>
+<td>R3-01 覆盖式写入 / 租户隔离 / 真相源语义</td>
+</tr>
+<tr>
+<td><code>store/TierRouterTest.java</code></td>
+<td style="text-align: right;">62</td>
+<td>R3-01 热度模型可解释 / 规则可配置</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 逐文件说明（关键实现）<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41-chunkchunkprocessorjava-200">4.1 <code>chunk/ChunkProcessor.java</code> · 分块器 · 200 行<a class="headerlink" href="#41-chunkchunkprocessorjava-200" title="Permanent link">&para;</a></h3>
+<p>顺序：<strong>标题切小节 → 空行切段落 → 超长段按句末标点切分（回退硬切）→ 段落累加至 <code>max-chars</code>(800)
+→ 同小节小块合并（跨小节不合并）→ 块首组装</strong>。</p>
+<p>块内容格式固定为 <code>[标题] → [上块重叠尾巴] → [本块正文]</code>：</p>
 <ul>
-<li><strong>职责</strong>：Spring Boot 入口，<code>@EnableDiscoveryClient</code> 注册到 Nacos。</li>
-<li><strong>特点</strong>：全项目最简启动类，全部逻辑压缩到一行。没有 <code>@ConfigurationProperties</code>，
-  配置只有端口与 Nacos 地址（见 §6）。</li>
-<li><strong>对比</strong>：不像 <code>sense-service</code> 需要 <code>@EnableScheduling</code>（有定时任务）与 <code>@ConfigurationPropertiesScan</code>（配置类多），
-  本模块两者都不需要。</li>
+<li><strong>标题必须在最前</strong>：这是「块首携带标题」验收口径的前提；初版把重叠尾巴放在标题前，
+  导致第 N 块的 <code>content</code> 以上一块的正文开头，标题被顶到中间，单测 <code>eachChunkKeepsItsHeading</code> 因此失败并已修正。</li>
+<li><strong>过小块只与同标题相邻块合并</strong>：跨小节合并会破坏 heading 归属与语义边界（回归测试守卫）。</li>
+<li>参数非法（<code>maxChars&lt;=0</code>、<code>minChars&gt;maxChars</code>、<code>overlap&gt;=maxChars</code>）直接抛 <code>IllegalArgumentException</code>，
+  避免运行期出现自膨胀的块。</li>
 </ul>
-<h3 id="42-controllerbodycontrollerjava-39">4.2 <code>controller/BodyController.java</code> · 控制器 · 39 行<a class="headerlink" href="#42-controllerbodycontrollerjava-39" title="Permanent link">&para;</a></h3>
+<p>与 Python 侧 <code>services/python/nlp-service/app/chunking.py</code> <strong>同算法</strong>，两侧用例一一对应
+（<code>ChunkProcessorTest</code> ↔ <code>tests/test_chunking.py</code>），并由 <code>POST /api/nlp/chunk</code> 支持跨语言一致性校验。</p>
+<h3 id="42-clientqdrantclientjava-229">4.2 <code>client/QdrantClient.java</code> · 向量库客户端 · 229 行<a class="headerlink" href="#42-clientqdrantclientjava-229" title="Permanent link">&para;</a></h3>
+<p>走 Qdrant REST（6333），不引入额外 SDK。三条硬约束：</p>
+<ol>
+<li><strong>point id 必须是「无符号整数或 UUID」</strong>。业务 <code>chunk_id</code> 形如 <code>phase3-arch#0</code>，
+   直接当 id 会被 Qdrant 以 400 <code>not a valid point ID</code> 拒绝（E2E 首次跑出的真实缺陷）。
+   现由 <code>pointId(chunkId)</code> 用 name-based UUID（v3/MD5）稳定派生：同一 chunk 每次得到相同 id，
+   <strong>重入库天然幂等</strong>；人类可读的 <code>chunk_id</code> 随 payload 存储并在检索时回填。</li>
+<li><strong>tenant 隔离靠 payload filter</strong>（<code>tenant_id</code> must-match），不靠调用方自觉过滤结果。</li>
+<li><strong>维度不一致必须重建集合</strong>：<code>ensureCollection(dim)</code> 检测现有维度，不一致时删旧建新并返回 <code>true</code>
+   （调用方据此全量重索引）——嵌入模型升级的回归风险点。</li>
+</ol>
+<p>其余方法：<code>upsert</code>（<code>wait=true</code>，返回即可检索）、<code>search</code>（TOP-N + payload 还原）、
+<code>deleteByDocument</code>（重入库清理旧向量）、<code>count</code>（躯体视图"知识量"口径）、<code>available</code>（真实性探针）。</p>
+<h3 id="43-serviceingestservicejava-152">4.3 <code>service/IngestService.java</code> · 入库管道 · 152 行<a class="headerlink" href="#43-serviceingestservicejava-152" title="Permanent link">&para;</a></h3>
+<p>状态机：写 <code>PENDING</code> → 分块 → 分批嵌入（<code>embed-batch-size</code>=16）→ <code>ensureCollection</code> →
+按 doc 清旧向量 → upsert → PG 覆盖式写切片 → 置 <code>INDEXED</code>；任一异常置 <code>FAILED</code> + 截断原因（≤900 字）后<strong>重抛</strong>。</p>
+<p>关键取舍：</p>
 <ul>
-<li><strong>职责</strong>：HTTP 入口，把请求转成 <code>BodyStore</code> 调用并把记录（<code>record</code>）映射为 <code>Map</code> 响应。</li>
-<li><strong>接口</strong>：</li>
+<li><strong>不伪造向量质量</strong>：嵌入失败即失败，绝不写入随机向量制造"看起来入库成功、检索永不命中"。</li>
+<li><strong>批量嵌入按 <code>embed-batch-size</code> 分片</strong>，避免一次请求过大把嵌入服务打挂。</li>
+<li>每次入库都 <code>deleteByDocument</code>，因此重入库不会残留旧切片（E2E 断言"同 doc 切片数受控"）。</li>
 </ul>
+<h3 id="44-serviceretrievalservicejava-154">4.4 <code>service/RetrievalService.java</code> · 检索链路 · 154 行<a class="headerlink" href="#44-serviceretrievalservicejava-154" title="Permanent link">&para;</a></h3>
+<pre><code class="language-text">Query → recordAccess（热度输入）
+      → 缓存查（Redis，命中即返回，cacheHit=true / tier=HOT）
+      → 未命中：embedOne → Qdrant TOP-50（tenant 过滤）
+      → 重排 TOP-K（不可用则按召回分返回并标记 degraded）
+      → 写缓存 → 返回（附 source / score / rerank_score / ingest_time）
+</code></pre>
+<p>失败语义（<strong>既不静默也不伪造</strong>）：</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>不可用时行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>重排（Should）</td>
+<td>按召回分返回 TOP-K，<code>rerank_degraded</code> 计数 +1，<strong>不阻断检索</strong></td>
+</tr>
+<tr>
+<td>缓存（可选）</td>
+<td>直连 Qdrant，<code>cache_backend=unavailable</code>，命中率<strong>不虚增</strong></td>
+</tr>
+<tr>
+<td>嵌入 / 向量库（Must）</td>
+<td>抛 <code>AGENT_UPSTREAM_UNAVAILABLE</code>，<strong>不返回假结果</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="45-storehotcachestorejava-158">4.5 <code>store/HotCacheStore.java</code> · 热层 · 158 行<a class="headerlink" href="#45-storehotcachestorejava-158" title="Permanent link">&para;</a></h3>
+<ul>
+<li>缓存键 <code>knowledge:search:{tenant}:{SHA-256(归一化问题)前 32 位}</code>，TTL 可配（默认 1h）。
+  归一化 = 去空白 + 小写 + 去尾部标点，使「什么是躯体层？」与「  什么是躯体层  」命中同一缓存。</li>
+<li>键<strong>带租户前缀</strong>，既保证隔离又支持按租户批量失效（<code>invalidateTenant</code>）。</li>
+<li>Redis 故障时 <code>available=false</code> 并<strong>只降级一次</strong>（<code>markUnavailable</code> 幂等），
+  后续读写直接跳过——不会因 Redis 宕机把每个请求都拖到超时。</li>
+</ul>
+<h3 id="46-storepgmetadatastorejava-156">4.6 <code>store/PgMetadataStore.java</code> · 冷层 · 156 行<a class="headerlink" href="#46-storepgmetadatastorejava-156" title="Permanent link">&para;</a></h3>
+<p>两张表 <code>knowledge_document</code>（真相源）+ <code>knowledge_chunk</code>（切片明细），<code>CREATE TABLE IF NOT EXISTS</code> 自举，
+不引入 Flyway（后续阶段可换）。写入语义：文档 <code>ON CONFLICT (doc_id) DO UPDATE</code>；
+切片 <code>DELETE ... WHERE doc_id</code> 后重插（<strong>覆盖式，避免重入库残留</strong>）。</p>
+<p>真相源语义：Qdrant 只是「向量 + 冗余 payload」，<strong>元数据以本表为准</strong>，
+对账任务（设计 §6 风险应对）按此判定向量库与元数据是否一致。</p>
+<h3 id="47-eventsensecollectedconsumerjava-179">4.7 <code>event/SenseCollectedConsumer.java</code> · 感官事件消费 · 179 行<a class="headerlink" href="#47-eventsensecollectedconsumerjava-179" title="Permanent link">&para;</a></h3>
+<ul>
+<li>主题 <code>lifeform.sense.collected</code>（Phase 2 侧 <code>SenseEventPublisher</code> 发布），
+  原生 <code>KafkaConsumer</code> 跑在守护线程（未引入 spring-kafka，避免为一个消费器拉入整套依赖）。</li>
+<li>只处理 <code>staging_status=ACCEPTED</code> 且<strong>带正文</strong>的事件；不带正文的（只有 <code>staging_ref</code>）记 <code>failed</code> 并跳过，
+  日志显式说明原因——<strong>不猜测、不回读暂存区</strong>（MinIO 大文档回读登记为后续债）。</li>
+<li><strong>入库失败不阻塞消费</strong>：异常按文档粒度吞掉并计数，位点照常提交，
+  避免一条坏数据卡死整条采集链路（与 Phase 2 死信思路一致）。</li>
+</ul>
+<h3 id="48-controllerknowledgecontrollerjava-240">4.8 <code>controller/KnowledgeController.java</code> · 控制器 · 240 行<a class="headerlink" href="#48-controllerknowledgecontrollerjava-240" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
 <th>方法</th>
 <th>路径</th>
-<th>请求体</th>
-<th>响应</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>ingest</code></td>
-<td><code>POST /api/body/ingest</code></td>
-<td><code>IngestRequest(doc_id, title, content, source)</code></td>
-<td><code>{doc_id, chunk_count, success}</code></td>
-</tr>
-<tr>
-<td><code>retrieve</code></td>
-<td><code>POST /api/body/retrieve</code></td>
-<td><code>RetrieveRequest(query, top_k)</code></td>
-<td>片段数组 <code>[{chunk_id, doc_id, title, content, source}]</code></td>
-</tr>
-<tr>
-<td><code>health</code></td>
-<td><code>GET /api/body/health</code></td>
-<td>—</td>
-<td><code>{service:"body-service", status:"ok"}</code></td>
-</tr>
-</tbody>
-</table>
-<ul>
-<li><strong>租户来源</strong>：三个接口全部从 <code>@RequestHeader("X-Tenant-Id")</code> 读取，默认值 <code>"default"</code>。
-  <strong>默认值的存在意味着未携带该头时不会报错，而是落到 default 租户</strong> ——
-  这在生产环境是危险的（网关注入失效时会静默串租户），但作为 MVP 的便利性取舍被接受。</li>
-<li>
-<p><strong>参数细节</strong>：</p>
-</li>
-<li>
-<p><code>retrieve</code> 中 <code>top_k</code> 为 null 时默认 <strong>3</strong>（与 <code>session-manager</code> 的 <code>BodyClient</code> 硬编码值一致）。</p>
-</li>
-<li><code>ingest</code> 的 <code>success</code> 定义为 <code>chunk_count &gt; 0</code>，即内容为空/全空白时返回 <code>success=false</code> 但<strong>仍是 200</strong>。
-    调用方需要读 <code>success</code> 字段判断，不能只看 HTTP 状态码。</li>
-<li><strong>DTO 用 <code>record</code> 而非类</strong>：<code>IngestRequest</code> / <code>RetrieveRequest</code> 是控制器内部的嵌套 record，
-  字段名即 JSON 键名（<code>doc_id</code> / <code>top_k</code> 是 snake_case，与前端约定一致）。</li>
-<li><strong>协作</strong>：只依赖 <code>BodyStore</code>，不依赖任何其他服务。</li>
-</ul>
-<h3 id="43-storebodystorejava-52">4.3 <code>store/BodyStore.java</code> · 组件 · 52 行<a class="headerlink" href="#43-storebodystorejava-52" title="Permanent link">&para;</a></h3>
-<p>检索 MVP 的核心实现。</p>
-<p><strong>存储结构</strong>：</p>
-<pre><code class="language-java">Map&lt;String, List&lt;StoredChunk&gt;&gt; tenantChunks   // ConcurrentHashMap：tenantId → 片段列表
-</code></pre>
-<p>用 <code>ConcurrentHashMap</code> 保证并发写入安全；但<strong>列表本身是 <code>ArrayList</code></strong>，
-<code>computeIfAbsent</code> 之后对列表的 <code>add</code> <strong>没有同步保护</strong> —— 高并发写入同一租户存在丢片段的可能。
-MVP 阶段可接受，Phase 3 换实现时一并消解。</p>
-<p><strong>方法</strong>：</p>
-<table>
-<thead>
-<tr>
-<th>方法</th>
 <th>说明</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>ingest(tenantId, docId, title, content, source)</code></td>
-<td>空内容返回 0；否则切分后逐个入列，返回片段数</td>
+<td><code>POST</code></td>
+<td><code>/api/body/knowledge</code></td>
+<td>单篇入库，返回 <code>chunk_count / status / vector_backend / degraded</code></td>
 </tr>
 <tr>
-<td><code>retrieve(tenantId, query, topK)</code></td>
-<td>空查询返回空列表；否则打分、过滤 <code>score &gt; 0</code>、降序、取前 <code>clamp(topK, 1, 10)</code></td>
+<td><code>POST</code></td>
+<td><code>/api/body/knowledge/batch</code></td>
+<td>批量入库，<strong>单篇失败不影响其余</strong>，返回逐篇结果</td>
 </tr>
 <tr>
-<td><code>split(content)</code></td>
-<td>私有：按空行切块，单块超 300 字硬切</td>
+<td><code>GET</code></td>
+<td><code>/api/body/knowledge</code></td>
+<td>文档列表 + <code>metadata_backend</code></td>
 </tr>
 <tr>
-<td><code>score(query, content)</code></td>
-<td>私有：打分函数</td>
+<td><code>DELETE</code></td>
+<td><code>/api/body/knowledge/{docId}</code></td>
+<td>删除（PG + Qdrant + 缓存三处一起清）</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/body/retrieve</code></td>
+<td>语义检索（兼容 Phase 1 字段）</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/body/rag/answer</code></td>
+<td>RAG 回答（含引用）</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/body/knowledge/stats</code></td>
+<td>躯体视图指标</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/body/health</code></td>
+<td>存活检查</td>
 </tr>
 </tbody>
 </table>
-<p><strong>打分算法</strong>（两档，很朴素但确定性好）：</p>
-<pre><code class="language-text">若 content 完整包含 query            → 1.0（最高分，字面命中）
-否则 去掉 query 中空白后，统计其字符在 content 中出现的比例 → 命中字符数 / query 长度
-</code></pre>
-<p>特点与局限：</p>
-<ul>
-<li>字符级匹配，<strong>无分词、无词序、无权重</strong> —— 中文按单字命中，容易被常用字虚高。</li>
-<li>只做 <code>&gt; 0</code> 过滤，即<strong>只要命中一个字符就会返回</strong>，召回宽松、精度低。</li>
-<li>确定性好、零依赖、无需索引 —— 这正是 MVP 想要的性质。</li>
-</ul>
-<p><strong><code>topK</code> 的钳制</strong>：<code>Math.max(1, Math.min(topK, 10))</code> —— 下限 1、<strong>上限 10</strong>。
-即使调用方传 1000 也不会返回超过 10 条，这是对内存与响应体的保护。</p>
-<p><strong>内部类型</strong>：</p>
+<p><strong>租户来源</strong>：网关注入的 <code>X-Tenant-Id</code>，<strong>不信任请求体里的租户字段</strong>。
+<code>defaultValue="default"</code> 的便利性取舍仍在（缺头时落 default 而非报错），生产前需评估（见 §7）。</p>
+<h3 id="49-serviceknowledgemetricsjava-104">4.9 <code>service/KnowledgeMetrics.java</code> · 指标 · 104 行<a class="headerlink" href="#49-serviceknowledgemetricsjava-104" title="Permanent link">&para;</a></h3>
+<p>口径必须读准，避免误读：</p>
 <table>
 <thead>
 <tr>
-<th>类型</th>
-<th>可见性</th>
-<th>说明</th>
+<th>指标</th>
+<th>口径</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>record StoredChunk(chunk_id, doc_id, title, content, source)</code></td>
-<td><code>public</code></td>
-<td>对外返回的片段结构</td>
+<td><code>search_hit_rate</code></td>
+<td><strong>有结果</strong>的检索次数 / 检索总次数</td>
 </tr>
 <tr>
-<td><code>record ScoredChunk(StoredChunk chunk, double score)</code></td>
-<td><code>private</code></td>
-<td>排序用的中间结构，不对外暴露</td>
+<td><code>cache_hit_rate</code></td>
+<td>缓存命中次数 / 检索总次数（R3-08 验收 ≥ 30%）</td>
+</tr>
+<tr>
+<td><code>latency_p99_ms</code></td>
+<td>最近 500 次检索延迟采样的分位，字段同时给出 <code>sample_size</code> 与 <code>p99_basis</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>协作</strong>：被 <code>BodyController</code> 使用；无下游依赖。</p>
-<h3 id="44-grpcgrpchealthserverjava-24">4.4 <code>grpc/GrpcHealthServer.java</code> · 组件 · 24 行<a class="headerlink" href="#44-grpcgrpchealthserverjava-24" title="Permanent link">&para;</a></h3>
-<p>与 <code>gateway-service</code> / <code>session-manager</code> / <code>sense-service</code> 的同名类逻辑相同（仅端口不同），
-压缩到 24 行（方法体合并为单行）。职责与设计取舍见 <a href="03-gateway-service.md">03-gateway-service</a> §4.2。</p>
-<h3 id="45-testbodystoretestjava-14-1">4.5 <code>test/…/BodyStoreTest.java</code> · 测试 · 14 行 · 1 个用例<a class="headerlink" href="#45-testbodystoretestjava-14-1" title="Permanent link">&para;</a></h3>
+<h2 id="5">5. 降级清单（诚实上报，不虚构）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>用例</th>
-<th>验证内容</th>
+<th>组件</th>
+<th>不可用表现</th>
+<th>上报方式</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>retrievesWithinTenantOnly</code></td>
-<td>以 <code>tenant-a</code> 入库后：<code>tenant-a</code> 能检索到、<code>tenant-b</code> <strong>检索为空</strong></td>
+<td>PostgreSQL</td>
+<td>回落 <code>InMemoryMetadataStore</code></td>
+<td>启动 WARN + <code>metadata_backend=memory</code></td>
+</tr>
+<tr>
+<td>Redis</td>
+<td>跳过缓存，直连向量库</td>
+<td><code>storage.hot.available=false</code>，命中率不虚增</td>
+</tr>
+<tr>
+<td>Qdrant</td>
+<td>入库置 FAILED；检索抛上游不可用</td>
+<td>入库响应 <code>status=FAILED</code> + <code>error</code></td>
+</tr>
+<tr>
+<td>嵌入（BGE-M3）</td>
+<td>降级 <code>hash-ngram-768</code>（768 维）</td>
+<td><code>embedding.degraded=true</code> + <code>backend</code> 字段</td>
+</tr>
+<tr>
+<td>重排</td>
+<td>按召回分返回</td>
+<td><code>retrieval.rerank_degraded</code> 计数</td>
+</tr>
+<tr>
+<td>Kafka</td>
+<td>消费器启动失败不影响 HTTP 链路</td>
+<td>启动 WARN + 消费统计 <code>running=false</code></td>
 </tr>
 </tbody>
 </table>
-<p><strong>这是全项目唯一的租户隔离测试之一</strong>（另一个在 <code>session-manager</code> 的 <code>SessionControllerTest</code>）。
-它守卫的是多租户架构的底线：<strong>A 租户的知识不能被 B 租户检索到</strong>。
-将来换向量库实现时，这个用例必须继续通过 —— 它是判断「替换实现是否保持语义」的最小验收标准。</p>
-<h2 id="5">5. 接口调用示例<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
-<pre><code class="language-bash"># 入库
-curl -X POST http://127.0.0.1:8083/api/body/ingest \
-  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: demo&quot; \
-  -d '{&quot;doc_id&quot;:&quot;doc-1&quot;,&quot;title&quot;:&quot;架构说明&quot;,&quot;content&quot;:&quot;agent gateway session knowledge retrieval&quot;,&quot;source&quot;:&quot;manual&quot;}'
-# → {&quot;doc_id&quot;:&quot;doc-1&quot;,&quot;chunk_count&quot;:1,&quot;success&quot;:true}
-
-# 检索
-curl -X POST http://127.0.0.1:8083/api/body/retrieve \
-  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: demo&quot; \
-  -d '{&quot;query&quot;:&quot;knowledge&quot;,&quot;top_k&quot;:3}'
-# → [{&quot;chunk_id&quot;:&quot;...&quot;,&quot;doc_id&quot;:&quot;doc-1&quot;,&quot;title&quot;:&quot;架构说明&quot;,&quot;content&quot;:&quot;...&quot;,&quot;source&quot;:&quot;manual&quot;}]
-</code></pre>
-<p>经网关访问时把主机换成 <code>http://127.0.0.1:8080</code>（路由 <code>/api/body/**</code>），
-并且<strong>必须带 <code>Authorization: Bearer &lt;token&gt;</code></strong> —— 网关会校验令牌并覆写 <code>X-Tenant-Id</code>。</p>
-<h2 id="6">6. 配置项<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
-<p>配置极简，仅 <code>src/main/resources/application.yml</code>：</p>
+<h2 id="6-applicationyml">6. 配置项（<code>application.yml</code>）<a class="headerlink" href="#6-applicationyml" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
 <th>配置</th>
-<th>值</th>
+<th>默认</th>
+<th>说明</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>server.port</code></td>
-<td>8083</td>
+<td><code>server.port</code> / <code>grpc.port</code></td>
+<td>8083 / 9094</td>
+<td>HTTP / gRPC</td>
 </tr>
 <tr>
-<td><code>grpc.port</code></td>
-<td><code>${GRPC_PORT:9094}</code></td>
+<td><code>app.body.nlp.base-url</code></td>
+<td><code>http://127.0.0.1:8000</code></td>
+<td>嵌入 / 重排</td>
 </tr>
 <tr>
-<td><code>spring.application.name</code></td>
-<td><code>body-service</code></td>
+<td><code>app.body.qdrant.base-url</code> / <code>collection</code></td>
+<td><code>:6333</code> / <code>lifeform_knowledge</code></td>
+<td>向量库</td>
 </tr>
 <tr>
-<td><code>spring.cloud.nacos.discovery.server-addr</code></td>
-<td><code>${NACOS_ADDR:127.0.0.1:8848}</code></td>
+<td><code>app.body.chunk.max-chars</code> / <code>min-chars</code> / <code>overlap</code></td>
+<td>800 / 200 / 50</td>
+<td>分块</td>
 </tr>
 <tr>
-<td><code>management.endpoints.web.exposure.include</code></td>
-<td><code>health,info</code></td>
+<td><code>app.body.tier.half-life-seconds</code> / <code>hot-threshold</code> / <code>warm-threshold</code></td>
+<td>3600 / 2.0 / 1.0</td>
+<td><strong>分层规则可配置</strong></td>
+</tr>
+<tr>
+<td><code>app.body.cache.ttl-seconds</code></td>
+<td>3600</td>
+<td>缓存 TTL</td>
+</tr>
+<tr>
+<td><code>app.body.retrieval.candidate-top-k</code></td>
+<td>50</td>
+<td>重排候选数</td>
+</tr>
+<tr>
+<td><code>app.body.ingest.embed-batch-size</code></td>
+<td>16</td>
+<td>嵌入批大小</td>
+</tr>
+<tr>
+<td><code>app.body.kafka.bootstrap</code> / <code>topic</code> / <code>consume-enabled</code></td>
+<td><code>:9092</code> / <code>lifeform.sense.collected</code> / true</td>
+<td>感官事件</td>
+</tr>
+<tr>
+<td><code>spring.datasource.url/username/password</code></td>
+<td><code>jdbc:postgresql://127.0.0.1:5432/lifeform</code> / <code>agent</code> / <code>agent123</code></td>
+<td>对齐 <code>docker-compose.yml</code></td>
+</tr>
+<tr>
+<td><code>spring.data.redis.host/port</code></td>
+<td><code>127.0.0.1</code> / 6379</td>
+<td>热层</td>
+</tr>
+<tr>
+<td><code>management.otlp.tracing.endpoint</code></td>
+<td><code>http://localhost:4318/v1/traces</code></td>
+<td><strong>已补齐</strong>（Phase 1/2 缺口）</td>
 </tr>
 </tbody>
 </table>
-<p><strong>注意本模块没有 OTLP 追踪配置</strong>（<code>management.otlp.tracing.endpoint</code> 缺失），
-而 <code>gateway-service</code> / <code>session-manager</code> / <code>sense-service</code> 都有 ——
-即 <code>body-service</code> 的调用<strong>不会出现在 Jaeger 链路里</strong>。若要做全链路追踪，这里是缺口。</p>
+<blockquote>
+<p>运行注意：本机（WorkBuddy 环境）注入的代理环境变量会被 Spring 的宽松绑定误解析为端口，
+导致 Tomcat 落到随机端口。<strong>启动时显式传 <code>--server.port=8083</code></strong> 可绕开。</p>
+</blockquote>
 <h2 id="7">7. 修改指引<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -442,31 +719,48 @@ curl -X POST http://127.0.0.1:8083/api/body/retrieve \
 </thead>
 <tbody>
 <tr>
-<td>接入向量库（Phase 3）</td>
-<td>替换 <code>BodyStore</code> 实现，保持 <code>BodyController</code> 契约不变</td>
+<td>调整分块策略</td>
+<td><code>ChunkProcessor</code>（<strong>同时改 Python <code>chunking.py</code></strong>，否则跨语言一致性用例失败）</td>
 </tr>
 <tr>
-<td>调整切分策略</td>
-<td><code>BodyStore.split()</code>（当前：空行 + 300 字硬切）</td>
+<td>换嵌入模型（维度变化）</td>
+<td>只需改 nlp-service；<code>ensureCollection</code> 会自动重建集合并需<strong>全量重索引</strong></td>
 </tr>
 <tr>
-<td>提高检索质量</td>
-<td><code>BodyStore.score()</code>（当前：字符命中率，需换成向量相似度才能真正解决）</td>
+<td>接入 LLM 生成</td>
+<td><code>RagPipeline.compose()</code>（检索/引用/降级逻辑不变，闭合 DEBT-002）</td>
 </tr>
 <tr>
-<td>调整召回上限</td>
-<td><code>BodyStore.retrieve()</code> 里的 <code>Math.min(topK, 10)</code> 钳制</td>
+<td>调整分层阈值</td>
+<td><code>application.yml</code> 的 <code>app.body.tier.*</code>（已配置化，无需改码）</td>
 </tr>
 <tr>
-<td>补齐链路追踪</td>
-<td><code>application.yml</code> 增加 <code>management.otlp.tracing.endpoint</code></td>
+<td>支持大文档暂存回读</td>
+<td><code>SenseCollectedConsumer</code>（当前跳过无正文事件，需接 MinIO 读 <code>staging_ref</code>）</td>
 </tr>
 <tr>
 <td>让租户头成为强制项</td>
-<td>去掉 <code>@RequestHeader</code> 的 <code>defaultValue = "default"</code>（<strong>需评估对现有调用的影响</strong>）</td>
+<td>去掉 <code>@RequestHeader</code> 的 <code>defaultValue</code>（<strong>需评估对现有调用影响</strong>）</td>
 </tr>
 </tbody>
-</table></main>
+</table>
+<h2 id="8">8. 接口调用示例<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 入库
+curl -X POST http://127.0.0.1:8083/api/body/knowledge \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: demo&quot; \
+  -d '{&quot;doc_id&quot;:&quot;doc-1&quot;,&quot;title&quot;:&quot;架构说明&quot;,&quot;content&quot;:&quot;# 躯体层\n热层用 Redis，温层用 Qdrant，冷层用 PostgreSQL。&quot;}'
+# → {&quot;doc_id&quot;:&quot;doc-1&quot;,&quot;chunk_count&quot;:1,&quot;status&quot;:&quot;INDEXED&quot;,&quot;vector_backend&quot;:&quot;hash-ngram-768&quot;,&quot;degraded&quot;:true,&quot;success&quot;:true}
+
+# 语义检索
+curl -X POST http://127.0.0.1:8083/api/body/retrieve \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: demo&quot; \
+  -d '{&quot;query&quot;:&quot;三级存储分别用什么？&quot;,&quot;top_k&quot;:5,&quot;use_cache&quot;:true}'
+
+# 躯体视图指标
+curl http://127.0.0.1:8083/api/body/knowledge/stats -H &quot;X-Tenant-Id: demo&quot;
+</code></pre>
+<p>经网关访问时把主机换成 <code>http://127.0.0.1:8080</code>（路由 <code>/api/body/**</code>），
+并且<strong>必须带 <code>Authorization: Bearer &lt;token&gt;</code></strong> —— 网关会校验令牌并覆写 <code>X-Tenant-Id</code>。</p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

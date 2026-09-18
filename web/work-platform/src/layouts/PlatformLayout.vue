@@ -189,7 +189,7 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   ArrowRight, Bell, ChatDotRound, Checked, Collection, Connection, Cpu, DataBoard, Expand, Fold,
-  Grid, Guide, List, Monitor, Moon, Odometer, Refresh, Search, Share, Sunny, Timer, UserFilled, View,
+  Files, Grid, Guide, List, Monitor, Moon, Odometer, Refresh, Search, Share, Sunny, Timer, UserFilled, View,
 } from '@element-plus/icons-vue'
 import { modules } from '../config/modules'
 import { onlineAgents } from '../api/mock'
@@ -205,7 +205,7 @@ const router = useRouter()
 const groups = ['生命体区', '工作台区', '治理区', '观测区'] as const
 const iconMap: Record<string, unknown> = {
   DataBoard, Odometer, Cpu, View, Refresh, Share, List, ChatDotRound,
-  UserFilled, Grid, Connection, Timer, Collection, Checked, Monitor, Guide,
+  UserFilled, Grid, Connection, Timer, Collection, Checked, Monitor, Guide, Files,
 }
 const modulesByGroup = (group: string) => modules.filter(item => item.group === group)
 

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-16 14:36 · 源文件 07-运行时配置与横切约定.md</span>
+  <span class="meta">生成于 2026-09-18 20:05 · 源文件 07-运行时配置与横切约定.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -388,7 +388,11 @@
 从仓库根启动时它们是 <code>&lt;repo&gt;/data/...</code>；从 <code>services/java</code> 启动时是 <code>&lt;repo&gt;/services/java/data/...</code>。
 <code>.gitignore</code> 中两个路径都有覆盖（<code>data/sense-*</code> 与 <code>services/java/data/</code>），因此不会误入库。</p>
 <h3 id="24-body-service">2.4 <code>body-service</code><a class="headerlink" href="#24-body-service" title="Permanent link">&para;</a></h3>
-<p>只有端口与 Nacos 地址。<strong>注意它缺少 OTLP 追踪配置</strong>（见 §5.2 的缺口清单）。</p>
+<p>端口、Nacos、<strong>三层存储</strong>（Redis 热 / Qdrant 温 / PostgreSQL 冷）、Kafka 与 OTLP 追踪全量配置。
+Phase 3 已补齐 OTLP（原为缺口）。</p>
+<p><strong>重要</strong>：本模块 PG 默认凭据已对齐 <code>docker-compose.yml</code>（<code>agent</code> / <code>agent123</code>）。
+另因本机环境会注入被 Spring 松散绑定误读为 <code>server.port</code> 的路由变量，
+<strong>启动时务必显式指定端口</strong>：<code>--server.port=8083</code>。</p>
 <h2 id="3">3. 环境变量总表<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -648,8 +652,8 @@
 <p><strong>注意</strong>：<code>gateway-service</code> <strong>不实现</strong> <code>GlobalExceptionHandler</code> ——
 它在 <code>JwtAuthFilter.reject()</code> 里手写同样格式的 JSON，以保持客户端只需一套解析逻辑。
 新增网关侧错误响应时请沿用 <code>{"code","message","details":{}}</code> 格式。</p>
-<p><strong><code>body-service</code> 未接入该体系</strong>：它没有 <code>common</code> 包，也没有全局异常处理。
-错误会以 Spring 默认的 500 响应返回 —— 这是 MVP 的实现缺口。</p>
+<p><strong><code>body-service</code> 已接入该体系</strong>（Phase 3）：新增 <code>common</code> 包三件套
+（<code>ErrorCode</code> / <code>BizException</code> / <code>GlobalExceptionHandler</code>），响应格式与其余服务一致。</p>
 <h2 id="6">6. 消息通道与主题命名<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
 <p>两条通道职责不同，<strong>不要混用</strong>：</p>
 <table>
@@ -713,8 +717,8 @@
 <td>Kafka</td>
 <td><code>lifeform.sense.collected</code></td>
 <td>sense</td>
-<td><strong>Phase 3 入库消费者</strong></td>
-<td>采集完成（仅 ACCEPTED）</td>
+<td><strong>body-service（<code>SenseCollectedConsumer</code>）</strong></td>
+<td>采集完成（仅 ACCEPTED）→ 知识入库</td>
 </tr>
 </tbody>
 </table>
@@ -723,8 +727,9 @@
 <ul>
 <li><strong>NATS 主题用具体名而非通配</strong>。<code>NatsBusServer</code> 的注释指出：Docker NATS 环境下通配订阅投递失效，
   因此显式订阅两个具体主题，新增 RPC 必须显式登记。相反，<code>session-manager</code> 用的是 jnats，不受此限制。</li>
-<li><strong><code>lifeform.sense.collected</code> 的负载不含正文</strong>，只有元数据与 <code>staging_ref</code>；
-  Phase 3 消费时需按引用回暂存区取内容。</li>
+<li><strong><code>lifeform.sense.collected</code> 的负载</strong>：Phase 2 时只有元数据与 <code>staging_ref</code>；
+  <strong>Phase 3 起扩展为携带 <code>title</code> / <code>content</code></strong>（使事件自洽，躯体层无需回读暂存即可入库）。
+  超长正文的暂存回读路径登记为后续优化（见 §10 缺口 11）。</li>
 </ul>
 <h2 id="7-grpc">7. gRPC 健康探针<a class="headerlink" href="#7-grpc" title="Permanent link">&para;</a></h2>
 <p>四个 Java 服务各有一个<strong>逻辑完全相同</strong>的 <code>grpc/GrpcHealthServer</code>（仅端口不同）：</p>
@@ -789,16 +794,13 @@
 </tr>
 <tr>
 <td><code>body-service</code></td>
-<td>—</td>
-<td><strong>无</strong></td>
-<td>⚠️ <strong>缺口</strong></td>
+<td>1.0</td>
+<td>有（Phase 3 补齐）</td>
+<td>✅</td>
 </tr>
 </tbody>
 </table>
 <p>采样率 1.0 意味着全量采集，适合开发环境；生产需下调。</p>
-<p><strong>已知缺口</strong>：<code>body-service</code> 缺 <code>management.otlp.tracing.endpoint</code> 配置，
-其内部调用不会出现在 Jaeger 链路中。补齐只需在它的 <code>application.yml</code> 加两行
-（照抄 <code>sense-service</code> 的 <code>management.tracing</code> 与 <code>management.otlp</code> 段）。</p>
 <h3 id="83">8.3 业务侧可观测<a class="headerlink" href="#83" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -886,22 +888,22 @@ Java 侧只看到"上游不可用"。</p>
 <td>网关加一条 <code>uri: http://&lt;wp-bff&gt;</code> 路由（wp-bff 未注册 Nacos，需用静态 URI）</td>
 </tr>
 <tr>
-<td style="text-align: right;">2</td>
-<td><strong><code>body-service</code> 无 OTLP 配置</strong></td>
-<td>检索调用不在链路追踪中</td>
-<td>补 <code>management.otlp.tracing.endpoint</code></td>
+<td style="text-align: right;">~~2~~</td>
+<td>~~<strong><code>body-service</code> 无 OTLP 配置</strong>~~</td>
+<td>✅ <strong>2026-09-17 Phase 3 已补齐</strong></td>
+<td>已加 <code>management.otlp.tracing.endpoint</code>，接入 Jaeger 链路</td>
 </tr>
 <tr>
-<td style="text-align: right;">3</td>
-<td><strong><code>body-service</code> 未接入统一错误码体系</strong></td>
-<td>异常返回 Spring 默认 500 结构，与其余服务不一致</td>
-<td>引入 <code>common</code> 包三件套</td>
+<td style="text-align: right;">~~3~~</td>
+<td>~~<strong><code>body-service</code> 未接入统一错误码体系</strong>~~</td>
+<td>✅ <strong>2026-09-17 Phase 3 已补齐</strong></td>
+<td>已引入 <code>common</code> 包三件套（<code>ErrorCode</code>/<code>BizException</code>/<code>GlobalExceptionHandler</code>）</td>
 </tr>
 <tr>
 <td style="text-align: right;">4</td>
 <td><code>ErrorCode</code> 在两模块重复定义</td>
 <td>新增错误码需人工同步，易漏</td>
-<td>考虑下沉到 <code>proto-contracts</code> 或新建 <code>common-java</code> 模块</td>
+<td>考虑下沉到 <code>proto-contracts</code> 或新建 <code>common-java</code> 模块（Phase 3 后 body-service 也有一份，共三份）</td>
 </tr>
 <tr>
 <td style="text-align: right;">5</td>
@@ -913,13 +915,13 @@ Java 侧只看到"上游不可用"。</p>
 <td style="text-align: right;">6</td>
 <td>HTTP 端口写死</td>
 <td>不便多实例部署</td>
-<td>改为 <code>${SERVER_PORT:8082}</code> 形式</td>
+<td>改为 <code>${SERVER_PORT:8082}</code> 形式（body-service 已用 <code>${SERVER_PORT:8083}</code>）</td>
 </tr>
 <tr>
-<td style="text-align: right;">7</td>
-<td><code>body-service</code> 的 <code>BodyStore</code> 用 <code>ArrayList</code> 存片段</td>
-<td>同一租户高并发写入可能丢数据</td>
-<td>Phase 3 换向量库时一并解决</td>
+<td style="text-align: right;">~~7~~</td>
+<td>~~<code>body-service</code> 的 <code>BodyStore</code> 用 <code>ArrayList</code> 存片段~~</td>
+<td>✅ <strong>2026-09-17 Phase 3 已解决</strong></td>
+<td><code>BodyStore</code> 已删除，改为 PostgreSQL 元数据 + Qdrant 向量 + Redis 缓存三层</td>
 </tr>
 <tr>
 <td style="text-align: right;">8</td>
@@ -928,16 +930,22 @@ Java 侧只看到"上游不可用"。</p>
 <td>需要时落 Redis 或持久化</td>
 </tr>
 <tr>
-<td style="text-align: right;">9</td>
-<td>Kafka / 死信消费者未实现</td>
-<td><code>lifeform.sense.collected</code> 无消费者（Phase 3 待做）</td>
-<td>Phase 3 躯体期实现</td>
+<td style="text-align: right;">~~9~~</td>
+<td>~~Kafka / 死信消费者未实现~~</td>
+<td>✅ <strong>2026-09-17 Phase 3 已实现</strong></td>
+<td><code>SenseCollectedConsumer</code> 消费 <code>lifeform.sense.collected</code>，形成感官→躯体闭环</td>
 </tr>
 <tr>
 <td style="text-align: right;">10</td>
 <td>TextExtractorTest 有用例名拼写错误</td>
 <td>仅可读性</td>
 <td>后续代码整理时改为 <code>decodesGbkWithoutHeader</code></td>
+</tr>
+<tr>
+<td style="text-align: right;">11</td>
+<td>body-service 大文档需回读暂存</td>
+<td>当前事件携带正文，超长正文需读 MinIO</td>
+<td>后续优化时补暂存回读路径</td>
 </tr>
 </tbody>
 </table>

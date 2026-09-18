@@ -1,7 +1,42 @@
 server:
   port: 8083
+
 grpc:
   port: ${GRPC_PORT:9094}
+
+# ── Phase 3 躯体期（R3-01~R3-09）：知识摄取 + 分层存储 + 语义检索 ──
+app:
+  body:
+    # NLP 能力复用（嵌入 / 重排 / 分块一致性校验）
+    nlp:
+      base-url: ${NLP_BASE_URL:http://127.0.0.1:8000}
+      embed-read-timeout-seconds: ${EMBED_READ_TIMEOUT_SECONDS:30}
+    qdrant:
+      base-url: ${QDRANT_URL:http://127.0.0.1:6333}
+      collection: ${QDRANT_COLLECTION:lifeform_knowledge}
+    chunk:
+      max-chars: 800
+      min-chars: 200
+      overlap: 50
+    # 分层规则（R3-01 验收：分层规则可配置）
+    tier:
+      half-life-seconds: ${TIER_HALF_LIFE_SECONDS:3600}
+      hot-threshold: ${TIER_HOT_THRESHOLD:2.0}
+      warm-threshold: ${TIER_WARM_THRESHOLD:1.0}
+    cache:
+      ttl-seconds: ${CACHE_TTL_SECONDS:3600}
+    retrieval:
+      candidate-top-k: ${RETRIEVAL_CANDIDATE_TOP_K:50}
+    ingest:
+      embed-batch-size: ${EMBED_BATCH_SIZE:16}
+    # 感官→躯体 采集事件消费（R3-09）
+    kafka:
+      bootstrap: ${KAFKA_BOOTSTRAP:127.0.0.1:9092}
+      topic: ${KAFKA_SENSE_TOPIC:lifeform.sense.collected}
+      group-id: ${KAFKA_BODY_GROUP:body-service}
+      consume-enabled: ${KAFKA_CONSUME_ENABLED:true}
+      poll-ms: 1000
+
 spring:
   application:
     name: body-service
@@ -9,6 +44,25 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        # 未启动 Nacos 时不影响单体运行
+        register-enabled: ${NACOS_ENABLED:false}
+  # 冷层：PostgreSQL 真相源（不可用时自动回落内存存储并告警）
+  # 默认值对齐 docker-compose.yml 的 postgres 服务（user/password=agent/agent123）
+  datasource:
+    url: ${PG_URL:jdbc:postgresql://127.0.0.1:5432/lifeform}
+    username: ${PG_USER:agent}
+    password: ${PG_PASSWORD:agent123}
+    hikari:
+      connection-timeout: 3000
+      initialization-fail-timeout: -1
+      maximum-pool-size: 8
+  # 热层：Redis 缓存（不可用时自动降级为直连向量库）
+  data:
+    redis:
+      host: ${REDIS_HOST:127.0.0.1}
+      port: ${REDIS_PORT:6379}
+      timeout: 2000ms
+
 management:
   endpoints:
     web:
@@ -17,6 +71,13 @@ management:
   endpoint:
     health:
       show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
 logging:
   level:
     com.agent: INFO

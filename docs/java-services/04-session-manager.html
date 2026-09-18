@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-16 14:36 · 源文件 04-session-manager.md</span>
+  <span class="meta">生成于 2026-09-18 20:05 · 源文件 04-session-manager.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -136,7 +136,7 @@
 <li><a href="#45-kafkakafkaeventpublisherjava-55">4.5 kafka/KafkaEventPublisher.java · 组件 · 55 行</a></li>
 <li><a href="#46-kafkakafkaeventconsumerjava-66">4.6 kafka/KafkaEventConsumer.java · 组件 · 66 行</a></li>
 <li><a href="#47-orchestrationnlpclientjava-56">4.7 orchestration/NlpClient.java · 客户端 · 56 行</a></li>
-<li><a href="#48-orchestrationbodyclientjava-44">4.8 orchestration/BodyClient.java · 客户端 · 44 行</a></li>
+<li><a href="#48-orchestrationbodyclientjava-52">4.8 orchestration/BodyClient.java · 客户端 · 52 行</a></li>
 <li><a href="#49-orchestrationoutboundhttpjava-46">4.9 orchestration/OutboundHttp.java · 工具类 · 46 行</a></li>
 <li><a href="#410-commonerrorcodejava-30">4.10 common/ErrorCode.java · 枚举 · 30 行</a></li>
 <li><a href="#411-commonbizexceptionjava-41">4.11 common/BizException.java · 异常 · 41 行</a></li>
@@ -514,11 +514,14 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
 <li><strong><code>fallback()</code> 的语义</strong>：<code>{"intent":"闲聊","confidence":0.5,"engine":"FALLBACK"}</code> ——
   特意带上 <code>engine</code> 字段，让调用方/前端能区分「真实识别」与「降级兜底」，避免把兜底结果当成识别结果展示。</li>
 </ul>
-<h3 id="48-orchestrationbodyclientjava-44">4.8 <code>orchestration/BodyClient.java</code> · 客户端 · 44 行<a class="headerlink" href="#48-orchestrationbodyclientjava-44" title="Permanent link">&para;</a></h3>
+<h3 id="48-orchestrationbodyclientjava-52">4.8 <code>orchestration/BodyClient.java</code> · 客户端 · 52 行<a class="headerlink" href="#48-orchestrationbodyclientjava-52" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>职责</strong>：调用 <code>body-service</code> 的 <code>POST /api/body/retrieve</code> 做知识检索。</li>
-<li><strong>请求</strong>：<code>{"query": question, "top_k": 3}</code> + <code>X-Tenant-Id</code> 头。<strong><code>top_k</code> 硬编码为 3</strong>，
-  目前不可配置 —— 若要调整召回数量需改代码。</li>
+<li><strong>职责</strong>：调用 <code>body-service</code> 的 <code>POST /api/body/retrieve</code> 做<strong>语义检索</strong>（Phase 3 起由
+  <code>RetrievalService</code> 承载：缓存优先 → 向量召回 → 重排）。</li>
+<li><strong>请求</strong>：<code>{"query": question, "top_k": 5, "use_cache": true}</code> + <code>X-Tenant-Id</code> 头。
+  显式声明 <code>top_k</code> 与缓存优先语义（对齐 R3-08 口径）；召回复核与重排由躯体层负责。</li>
+<li><strong>响应</strong>：原样透传作为 <code>citations</code>（引用可回溯）—— 在 Phase 2 的 <code>content/title/source</code> 之上
+  补充 <code>chunk_id / doc_id / heading / score / rerank_score / ingest_time_iso</code>，结构向后兼容。</li>
 <li><strong>配置</strong>：<code>app.body.base-url</code>（默认 <code>http://127.0.0.1:8083</code>）、<code>app.body.degrade-on-failure</code>（默认 <code>true</code>）。</li>
 <li><strong>降级</strong>：返回 <code>List.of()</code>（空结果），使 <code>buildAnswer</code> 走「未找到足够信息」话术。</li>
 </ul>
@@ -848,7 +851,7 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
 </tr>
 <tr>
 <td>调整召回数量</td>
-<td><code>BodyClient.retrieve</code> 里硬编码的 <code>top_k=3</code>（建议后续配置化）</td>
+<td><code>BodyClient.retrieve</code> 里的 <code>top_k</code>（当前 5，随请求显式声明；如需配置化可提为 <code>app.body.top-k</code>）</td>
 </tr>
 <tr>
 <td>新增跨服务调用</td>

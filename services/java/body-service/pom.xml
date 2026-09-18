@@ -2,17 +2,29 @@
 <project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
     <parent><groupId>com.agent</groupId><artifactId>agent-lifeform-parent</artifactId><version>0.1.0-SNAPSHOT</version></parent>
-    <artifactId>body-service</artifactId><name>body-service</name><description>Knowledge storage and VS1 local retrieval service</description>
+    <artifactId>body-service</artifactId><name>body-service</name><description>Knowledge storage and semantic retrieval service (Phase 3 body layer)</description>
     <dependencies>
         <dependency><groupId>com.agent</groupId><artifactId>proto-contracts</artifactId><version>0.1.0-SNAPSHOT</version></dependency>
         <dependency><groupId>io.grpc</groupId><artifactId>grpc-netty</artifactId></dependency>
         <dependency><groupId>io.grpc</groupId><artifactId>grpc-services</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
         <dependency><groupId>com.alibaba.cloud</groupId><artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId></dependency>
+        <!-- R3-01 三级存储：Redis 热层（缓存优先策略 R3-08） -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-data-redis</artifactId></dependency>
+        <!-- R3-01 三级存储：PG 冷层（元数据真相源，pgvector 亦由该连接承载） -->
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId></dependency>
+        <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><scope>runtime</scope></dependency>
+        <!-- R3-04/R3-07 感官采集事件消费（lifeform.sense.collected） -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>3.7.0</version>
+        </dependency>
+        <!-- 链路追踪（补齐 body-service 未接 OTLP 的配置缺口） -->
+        <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-tracing-bridge-otel</artifactId></dependency>
+        <dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-exporter-otlp</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
         <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
     </dependencies>
     <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>
 </project>
-
-

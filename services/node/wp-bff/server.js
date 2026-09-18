@@ -7,6 +7,8 @@
  *   POST /api/wp/middleware/:key/start   白名单内执行 docker compose up -d <key>
  *   POST /api/wp/middleware/:key/stop    白名单内执行 docker compose stop <key>
  *   GET  /api/wp/tracing                 Jaeger 服务注册与最近 trace 聚合
+ *   GET  /api/wp/knowledge               躯体层知识统计（知识量 / 检索 P99 / 命中率 / 三层存储）
+ *   POST /api/wp/knowledge/search        检索测试（返回命中片段与高亮词，供前端标注）
  *   GET  /api/wp/healthz                 进程存活 + 控制面配置自检（只读）
  *
  * 安全模型（2026-09-16 加固）：
@@ -44,6 +46,91 @@ function httpGetJson(url, timeoutMs = 2500) {
   })
 }
 
+/**
+ * 通用 JSON 出站请求（GET/POST）。失败一律 resolve(null)，
+ * 由调用方按「诚实地报告不可用」处理，绝不返回伪造数据。
+ */
+function httpRequestJson(url, { method = 'GET', headers = {}, body = null, timeoutMs = 5000 } = {}) {
+  return new Promise(resolve => {
+    const payload = body == null ? null : Buffer.from(JSON.stringify(body), 'utf8')
+    const request = http.request(url, {
+      method,
+      timeout: timeoutMs,
+      headers: {
+        ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : {}),
+        ...headers,
+      },
+    }, response => {
+      let raw = ''
+      response.on('data', chunk => { raw += chunk })
+      response.on('end', () => {
+        try { resolve(JSON.parse(raw)) } catch { resolve(null) }
+      })
+    })
+    request.on('timeout', () => { request.destroy(); resolve(null) })
+    request.on('error', () => resolve(null))
+    if (payload) request.write(payload)
+    request.end()
+  })
+}
+
+/** 读取请求体 JSON（带体积上限，避免超大请求拖垮 BFF） */
+function readJsonBody(req, limit = 64 * 1024) {
+  return new Promise((resolve, reject) => {
+    let size = 0
+    const chunks = []
+    req.on('data', chunk => {
+      size += chunk.length
+      if (size > limit) {
+        reject(new Error('请求体过大（上限 64KB）'))
+        req.destroy()
+        return
+      }
+      chunks.push(chunk)
+    })
+    req.on('end', () => {
+      const raw = Buffer.concat(chunks).toString('utf8')
+      if (!raw.trim()) return resolve({})
+      try { resolve(JSON.parse(raw)) } catch { reject(new Error('请求体不是合法 JSON')) }
+    })
+    req.on('error', reject)
+  })
+}
+
+/** 检索高亮词提取：整体查询 + 分词 + 中文 2-gram（无空格语言的高亮兜底） */
+function queryTerms(query) {
+  const raw = String(query || '').trim()
+  if (!raw) return []
+  const terms = new Set([raw])
+  raw.split(/[\s,，。、；;：:？！!?（）()\[\]{}"'“”]+/).filter(Boolean).forEach(token => {
+    terms.add(token)
+    if (/[\u4e00-\u9fa5]/.test(token)) {
+      for (let i = 0; i + 2 <= token.length; i++) terms.add(token.slice(i, i + 2))
+    }
+  })
+  return [...terms].filter(term => term.length >= 2).sort((a, b) => b.length - a.length).slice(0, 24)
+}
+
+/** 围绕首个命中词截窗，返回片段与命中词（BFF 计算，前端据此高亮） */
+function buildSnippet(content, terms, window = 120) {
+  const text = String(content || '').replace(/\s+/g, ' ').trim()
+  if (!text) return { snippet: '', matched_terms: [] }
+  const matched = terms.filter(term => text.includes(term))
+  if (text.length <= window * 2) return { snippet: text, matched_terms: matched }
+  let index = -1
+  for (const term of terms) {
+    const found = text.indexOf(term)
+    if (found >= 0 && (index < 0 || found < index)) index = found
+  }
+  if (index < 0) return { snippet: `${text.slice(0, window * 2)}…`, matched_terms: [] }
+  const start = Math.max(0, index - window)
+  const end = Math.min(text.length, start + window * 2)
+  return {
+    snippet: `${start > 0 ? '…' : ''}${text.slice(start, end)}${end < text.length ? '…' : ''}`,
+    matched_terms: matched,
+  }
+}
+
 const DEFAULT_PORT = Number(process.env.WP_BFF_PORT || 8090)
 
 // key 白名单：key 即 docker-compose.yml 服务名，禁止其余任何值
@@ -71,6 +158,8 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'POST', path: '/middleware/{key}/start' },
   { method: 'POST', path: '/middleware/{key}/stop' },
   { method: 'GET', path: '/tracing' },
+  { method: 'GET', path: '/knowledge' },
+  { method: 'POST', path: '/knowledge/search' },
 ]
 
 /** 总览页仍待 BFF 实现的聚合数据域，透传给前端用于降级展示 */
@@ -79,6 +168,9 @@ const OVERVIEW_GAPS = [
   'experts', 'skills', 'connectors', 'automations', 'cases', 'approvals',
   'models', 'remote_im', 'agents',
 ]
+
+/** 体层（body-service）地址；未启动时 /knowledge 端点如实返回 available=false */
+const DEFAULT_BODY_URL = String(process.env.WP_BFF_BODY_URL || 'http://127.0.0.1:8083').replace(/\/+$/, '')
 
 const START_TIMEOUT_MS = 180000
 const STOP_TIMEOUT_MS = 120000
@@ -139,6 +231,8 @@ function createServer(options = {}) {
   const spawnImpl = options.spawnImpl || realSpawn
   const probeImpl = options.probeImpl || probeTcp
   const fetchJson = options.fetchJson || httpGetJson
+  const jsonRequest = options.jsonRequest || httpRequestJson
+  const bodyUrl = String(options.bodyUrl || DEFAULT_BODY_URL).replace(/\/+$/, '')
   const repoRoot = options.repoRoot || path.resolve(__dirname, '..', '..', '..')
   const auditPath = options.auditPath || path.join(__dirname, 'logs', 'wp-bff-audit.log')
 
@@ -439,6 +533,114 @@ function createServer(options = {}) {
     })
   }
 
+  /**
+   * 躯体层知识统计（R-C03 躯体视图数据源）
+   *
+   * <p>透传体层 {@code GET /api/body/knowledge/stats}：知识量（文档/切片/向量点）、
+   * 检索指标（P99 / 检索命中率 / 缓存命中率）、三层存储可用性与嵌入/重排后端。
+   * body-service 未启动时返回 {@code available:false} 并列出未取到的数据域，
+   * 由前端标注降级——**不以 0 冒充"知识量为零"**。
+   */
+  async function handleKnowledge(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const stats = await jsonRequest(`${bodyUrl}/api/body/knowledge/stats`, {
+      headers: { 'X-Tenant-Id': tenantId },
+    })
+    if (!stats || typeof stats !== 'object') {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          tenant_id: tenantId,
+          checked_at: nowTime(),
+          body_url: bodyUrl,
+          reason: '体层不可用：body-service 未启动或接口异常（知识量/检索指标无法上报）',
+          gaps: ['knowledge', 'retrieval', 'storage', 'embedding', 'reranker', 'vector_store'],
+        },
+      })
+    }
+    send(req, res, 200, {
+      data: {
+        available: true,
+        checked_at: nowTime(),
+        body_url: bodyUrl,
+        ...stats,
+        note: '检索 P99/命中率口径为「最近 500 次采样」，非全量历史',
+      },
+    })
+  }
+
+  /**
+   * 检索测试（R-C03 检索测试面板 + 命中片段高亮）
+   *
+   * <p>请求：{@code { query, top_k?, use_cache? }}；改造前为 Phase 2 的本地全文匹配，
+   * 现直连体层语义检索（缓存优先 → 向量召回 → 重排），返回高亮词与截窗片段。
+   */
+  async function handleKnowledgeSearch(req, res) {
+    let payload
+    try {
+      payload = await readJsonBody(req)
+    } catch (error) {
+      return send(req, res, 400, { error: String(error.message || error) })
+    }
+    const query = String(payload.query || '').trim()
+    if (!query) return send(req, res, 400, { error: 'query 不能为空' })
+    const topK = Math.min(Math.max(Number(payload.top_k) || 5, 1), 20)
+    const tenantId = String(req.headers['x-tenant-id'] || payload.tenant_id || 'default')
+    const startedAt = Date.now()
+    const hits = await jsonRequest(`${bodyUrl}/api/body/retrieve`, {
+      method: 'POST',
+      headers: { 'X-Tenant-Id': tenantId },
+      body: { query, top_k: topK, use_cache: payload.use_cache !== false },
+    })
+    const latencyMs = Date.now() - startedAt
+    if (!Array.isArray(hits)) {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          tenant_id: tenantId,
+          query,
+          top_k: topK,
+          hits: [],
+          latency_ms: latencyMs,
+          checked_at: nowTime(),
+          reason: '体层检索不可用：body-service 未启动或接口异常',
+        },
+      })
+    }
+    const terms = queryTerms(query)
+    const items = hits.map((hit, index) => {
+      const { snippet, matched_terms } = buildSnippet(hit.content, terms)
+      return {
+        rank: index + 1,
+        chunk_id: hit.chunk_id,
+        doc_id: hit.doc_id,
+        title: hit.title,
+        heading: hit.heading,
+        chunk_index: hit.chunk_index,
+        score: hit.score,
+        rerank_score: hit.rerank_score,
+        source: hit.source,
+        ingest_time_iso: hit.ingest_time_iso,
+        snippet,
+        matched_terms,
+      }
+    })
+    send(req, res, 200, {
+      data: {
+        available: true,
+        tenant_id: tenantId,
+        query,
+        top_k: topK,
+        parsed_terms: terms,
+        hits: items,
+        hit_count: items.length,
+        latency_ms: latencyMs,
+        checked_at: nowTime(),
+        highlight_note: 'matched_terms 由 BFF 计算，前端据此高亮 snippet',
+      },
+    })
+  }
+
   function handleHealthz(req, res) {
     send(req, res, 200, {
       data: {
@@ -467,6 +669,8 @@ function createServer(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/tracing') return handleTracing(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/knowledge') return handleKnowledge(req, res)
+    if (req.method === 'POST' && url.pathname === '/api/wp/knowledge/search') return handleKnowledgeSearch(req, res)
     if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])
     return send(req, res, 404, { error: 'not found' })
   })
@@ -513,10 +717,15 @@ module.exports = {
   IMPLEMENTED_ENDPOINTS,
   OVERVIEW_GAPS,
   DEFAULT_ALLOWED_ORIGINS,
+  DEFAULT_BODY_URL,
   createServer,
   startServer,
   resolveControlToken,
   resolveAllowedOrigins,
   timingSafeEqual,
   originVerdict,
+  // 以下三个为纯函数，导出以便单测直接覆盖（无需起 HTTP 服务）
+  queryTerms,
+  buildSnippet,
+  readJsonBody,
 }

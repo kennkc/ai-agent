@@ -63,6 +63,10 @@ public class SenseEventPublisher {
         payload.put("staging_status", data.getStagingStatus() == null ? null : data.getStagingStatus().name());
         payload.put("staging_ref", data.getStagingRef());
         payload.put("mode", data.getMode());
+        // Phase 3 躯体期闭环：事件携带正文与标题，body-service 据此直接分块入库。
+        // DEBT-012 触发点：正文超过 Kafka 单消息上限（默认 1MB）时，应改为按 staging_ref 回读暂存对象。
+        payload.put("title", data.getTitle());
+        payload.put("content", data.getContent());
         try {
             String json = objectMapper.writeValueAsString(payload);
             producer.send(new ProducerRecord<>(TOPIC, data.getBatchId(), json), (meta, ex) -> {

@@ -18,6 +18,7 @@ export const modules: WorkModule[] = [
   { id: 'cases', path: '/cases', title: '灵感案例', group: '工作台区', phase: 'P8', status: 'prototype', description: '案例模板与“做同款”', icon: 'Collection' },
   { id: 'approvals', path: '/approvals', title: '免疫审批', group: '治理区', phase: 'P7', status: 'prototype', description: 'L1-L4 审批队列与双人复核', icon: 'Checked' },
   { id: 'middleware', path: '/middleware', title: '中间件监控', group: '观测区', phase: 'P1', status: 'prototype', description: '中间件真实启停状态（wp-bff TCP 探针）', icon: 'Monitor' },
+  { id: 'knowledge', path: '/knowledge', title: '躯体知识库', group: '观测区', phase: 'P3', status: 'ready', description: '知识量、检索 P99 与命中率、三层存储、检索测试', icon: 'Files' },
   { id: 'tracing', path: '/tracing', title: '链路追踪', group: '观测区', phase: 'P1', status: 'prototype', description: 'Jaeger 分布式链路、服务延迟与错误率', icon: 'Guide' },
 ]
 

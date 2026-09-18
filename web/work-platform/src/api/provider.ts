@@ -7,7 +7,10 @@ import {
   searchIndex, senses, serviceHealth, skills, startMiddlewareMock, stopMiddlewareMock, buildSuggestionExecution, tasks, teamWorkflow, todaySummary, tracingSeed, vitalSigns,
 } from './mock'
 import { reportApiOk, reportDegrade } from './status'
-import type { MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SuggestionExecution, TracingOverview } from '../types'
+import type {
+  KnowledgeHit, KnowledgeSearchResult, KnowledgeStats,
+  MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SuggestionExecution, TracingOverview,
+} from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE || '/api/wp',
@@ -87,6 +90,64 @@ const mockMiddlewareFallback = (): MiddlewareOverview => ({
   ...getMiddlewareOverview(),
   data_source: 'mock',
 })
+
+// —— 躯体视图不受全局 mock 开关限制：知识量/检索指标必须反映体层真实状态 ——
+// VITE_DATA_SOURCE=mock 或体层不可达时给出演示数据，但一律带 data_source='mock' 标注，
+// 且体层不可用（BFF 200 + available=false）时不伪造知识量，直接展示"不可用"。
+function mockKnowledgeStats(): KnowledgeStats {
+  return {
+    available: true,
+    tenant_id: 'default',
+    checked_at: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    body_url: 'http://127.0.0.1:8083',
+    note: '检索 P99/命中率口径为「最近 500 次采样」，非全量历史',
+    knowledge: { documents: 6, chunks: 24, metadata_backend: 'pg', vector_points: 24 },
+    retrieval: {
+      searches: 48, searches_with_result: 45, search_hit_rate: 0.9375,
+      cache_hits: 21, cache_hit_rate: 0.4375, rerank_calls: 27, rerank_degraded: 2,
+      latency_p50_ms: 38, latency_p95_ms: 126, latency_p99_ms: 208,
+      sample_size: 48, p99_basis: 'sampled_recent_searches',
+    },
+    storage: {
+      hot: { tier: 'HOT', store: 'redis', available: true, detail: '缓存优先策略（R3-08）', hit_rate: 0.4375, hits: 21, misses: 27 },
+      warm: { tier: 'WARM', store: 'qdrant', available: true, detail: '向量主库（R3-04/R3-05）', collection: 'lifeform_knowledge', vector_size: 768 },
+      cold: { tier: 'COLD', store: 'postgres', available: true, detail: '元数据真相源', backend: 'pg' },
+    },
+    embedding: { backend: 'bge-m3', dim: 1024, available: true, degraded: false },
+    reranker: { backend: 'bge-reranker', available: true, degraded: false },
+    vector_store: { provider: 'qdrant', collection: 'lifeform_knowledge', available: true, vector_size: 768 },
+    data_source: 'mock',
+  }
+}
+
+/** 演示检索：对 mock 检索索引做朴素匹配，并复刻 BFF 的高亮词计算口径 */
+function mockKnowledgeSearch(query: string, topK: number): KnowledgeSearchResult {
+  const keyword = query.trim()
+  const terms = keyword ? [keyword] : []
+  if (!keyword) {
+    return { available: true, query, top_k: topK, hits: [], hit_count: 0, latency_ms: 0, data_source: 'mock' }
+  }
+  const hits: KnowledgeHit[] = searchIndex
+    .filter(item => `${item.title}${item.text}`.includes(keyword.slice(0, Math.max(2, Math.ceil(keyword.length / 2)))))
+    .slice(0, topK)
+    .map((item, index) => ({
+      rank: index + 1,
+      chunk_id: `mock-${index}`,
+      doc_id: `mock-doc-${index}`,
+      title: item.title,
+      heading: item.type,
+      chunk_index: 0,
+      score: Math.max(0.5, 0.92 - index * 0.08),
+      rerank_score: Math.max(0.4, 0.95 - index * 0.1),
+      source: 'mock',
+      snippet: item.text,
+      matched_terms: terms.filter(term => `${item.title}${item.text}`.includes(term)),
+    }))
+  return {
+    available: true, query, top_k: topK, parsed_terms: terms, hits, hit_count: hits.length,
+    latency_ms: 12 * hits.length, data_source: 'mock',
+  }
+}
 
 export const dataProvider = {
   mode: source,
@@ -184,6 +245,54 @@ export const dataProvider = {
     } catch (error) {
       reportDegrade('tracing', (error as Error)?.message || 'BFF /tracing 不可达')
       return fallback
+    }
+  },
+
+  /**
+   * 躯体层知识统计（R-C03 躯体视图）。BFF 代理体层 stats：
+   * 知识量 / 检索 P99 / 检索命中率 / 缓存命中率 / 三层存储可用性。
+   *
+   * 约定：BFF 返回 200 且 available=false 时，说明**体层不可用**——
+   * 此时不回落到 Mock（没有 Mock 知识量可造），而是把 unavailable 状态如实交给界面。
+   */
+  async getKnowledge(): Promise<KnowledgeStats> {
+    if (source === 'mock') return mockKnowledgeStats()
+    try {
+      const payload = unwrapBody(await api.get('/knowledge'))
+      if (payload && typeof payload === 'object' && 'available' in payload) {
+        if (payload.available === false) {
+          reportDegrade('knowledge', payload.reason || '体层不可用（body-service 未启动）')
+        } else {
+          reportApiOk('knowledge')
+        }
+        return { data_source: 'live', ...(payload as KnowledgeStats) }
+      }
+      reportDegrade('knowledge', '响应缺少 available 字段')
+      return { ...mockKnowledgeStats(), available: false, reason: '响应结构不符合契约' }
+    } catch (error) {
+      reportDegrade('knowledge', (error as Error)?.message || 'BFF /knowledge 不可达')
+      return { ...mockKnowledgeStats(), available: false, reason: 'BFF /knowledge 不可达' }
+    }
+  },
+
+  /**
+   * 检索测试（R-C03）：语义检索 + 命中片段高亮。
+   * hits[].matched_terms 由 BFF 计算，前端据此高亮 snippet；体层不可用时返回空 hits 并标注原因。
+   */
+  async searchKnowledge(query: string, topK = 5): Promise<KnowledgeSearchResult> {
+    if (source === 'mock') return mockKnowledgeSearch(query, topK)
+    try {
+      const payload = unwrapBody(await api.post('/knowledge/search', { query, top_k: topK, use_cache: true }))
+      if (payload && typeof payload === 'object' && 'hits' in payload) {
+        if (payload.available === false) reportDegrade('knowledge_search', payload.reason || '体层检索不可用')
+        else reportApiOk('knowledge_search')
+        return { data_source: 'live', ...(payload as KnowledgeSearchResult) }
+      }
+      reportDegrade('knowledge_search', '响应缺少 hits 字段')
+      return { ...mockKnowledgeSearch(query, topK), available: false, reason: '响应结构不符合契约' }
+    } catch (error) {
+      reportDegrade('knowledge_search', (error as Error)?.message || 'BFF /knowledge/search 不可达')
+      return { ...mockKnowledgeSearch(query, topK), available: false, reason: 'BFF /knowledge/search 不可达' }
     }
   },
 

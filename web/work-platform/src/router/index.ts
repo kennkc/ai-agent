@@ -10,6 +10,7 @@ const ChatView = () => import('../views/ChatView.vue')
 const ModuleView = () => import('../views/ModuleView.vue')
 const MiddlewareView = () => import('../views/MiddlewareView.vue')
 const TracingView = () => import('../views/TracingView.vue')
+const KnowledgeView = () => import('../views/KnowledgeView.vue')
 
 const moduleRoutes = [
   'vitals', 'brain', 'senses', 'evolution', 'collab', 'experts', 'skills',
@@ -28,6 +29,7 @@ const router = createRouter({
         { path: 'tasks', name: 'tasks', component: TasksView },
         { path: 'chat', name: 'chat', component: ChatView },
         { path: 'middleware', name: 'middleware', component: MiddlewareView },
+        { path: 'knowledge', name: 'knowledge', component: KnowledgeView },
         { path: 'tracing', name: 'tracing', component: TracingView },
         ...moduleRoutes.map(id => ({
           path: id,

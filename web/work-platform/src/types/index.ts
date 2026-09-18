@@ -2,7 +2,7 @@ export type ModuleId =
   | 'overview' | 'vitals' | 'brain' | 'senses' | 'evolution' | 'collab'
   | 'tasks' | 'chat' | 'experts' | 'skills' | 'connectors' | 'automation' | 'models' | 'remote'
   | 'cases' | 'approvals'
-  | 'middleware' | 'tracing'
+  | 'middleware' | 'tracing' | 'knowledge'
 
 export type ModuleGroup = '生命体区' | '工作台区' | '治理区' | '观测区'
 export type ThemeMode = 'dark' | 'light' | 'system'
@@ -450,6 +450,92 @@ export interface TracingOverview {
   services: TracingServiceStat[]
   recent: TracingRecentTrace[]
   checked_at: string
+}
+
+/** 三层存储中的一层（R-C03 躯体视图；available 为真实探针结果） */
+export interface KnowledgeTier {
+  tier: 'HOT' | 'WARM' | 'COLD'
+  store: 'redis' | 'qdrant' | 'postgres'
+  available: boolean
+  detail?: string
+  collection?: string
+  vector_size?: number
+  backend?: string
+  hit_rate?: number
+  hits?: number
+  misses?: number
+}
+
+/**
+ * BFF /knowledge 躯体层知识统计。
+ * available=false 表示体层不可用：此时 knowledge/retrieval 等字段缺失，
+ * 界面必须展示"不可用"而不是把缺失渲染为 0。
+ */
+export interface KnowledgeStats {
+  available: boolean
+  tenant_id?: string
+  checked_at?: string
+  body_url?: string
+  reason?: string
+  gaps?: string[]
+  note?: string
+  knowledge?: {
+    documents: number
+    chunks: number
+    metadata_backend: 'pg' | 'memory'
+    vector_points: number
+  }
+  retrieval?: {
+    searches: number
+    searches_with_result: number
+    search_hit_rate: number
+    cache_hits: number
+    cache_hit_rate: number
+    rerank_calls: number
+    rerank_degraded: number
+    latency_p50_ms: number
+    latency_p95_ms: number
+    latency_p99_ms: number
+    sample_size: number
+    p99_basis: string
+  }
+  storage?: { hot?: KnowledgeTier; warm?: KnowledgeTier; cold?: KnowledgeTier; rules?: { hot_threshold: number; warm_threshold: number } }
+  embedding?: { backend: string; dim: number; available: boolean; degraded: boolean }
+  reranker?: { backend: string; available: boolean; degraded: boolean }
+  vector_store?: { provider: string; collection: string; available: boolean; vector_size: number }
+  /** 前端标注用：live=BFF 真实代理；mock=BFF 不可达时的演示回落（BFF 不返回该字段） */
+  data_source?: 'live' | 'mock'
+}
+
+/** 检索命中（含 BFF 计算的高亮词与截窗片段） */
+export interface KnowledgeHit {
+  rank: number
+  chunk_id: string
+  doc_id: string
+  title: string
+  heading?: string
+  chunk_index?: number
+  score?: number
+  rerank_score?: number
+  source?: string
+  ingest_time_iso?: string
+  snippet: string
+  matched_terms: string[]
+}
+
+export interface KnowledgeSearchResult {
+  available: boolean
+  tenant_id?: string
+  query: string
+  top_k: number
+  parsed_terms?: string[]
+  hits: KnowledgeHit[]
+  hit_count?: number
+  latency_ms?: number
+  checked_at?: string
+  reason?: string
+  highlight_note?: string
+  data_source?: 'live' | 'mock'
 }
 
 export interface TodaySummaryMetric {

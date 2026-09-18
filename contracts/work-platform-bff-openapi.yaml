@@ -421,6 +421,111 @@ components:
         task: { type: string }
         model: { type: string }
         latency_ms: { type: integer }
+    KnowledgeTier:
+      type: object
+      required: [tier, store, available]
+      properties:
+        tier: { type: string, enum: [HOT, WARM, COLD] }
+        store: { type: string, enum: [redis, qdrant, postgres] }
+        available: { type: boolean, description: 探针结果，不可用时必须为 false（不得虚构可用） }
+        detail: { type: string }
+        collection: { type: string }
+        vector_size: { type: integer }
+        backend: { type: string }
+        hit_rate: { type: number }
+        hits: { type: integer }
+        misses: { type: integer }
+    KnowledgeStats:
+      type: object
+      required: [available, checked_at]
+      properties:
+        available: { type: boolean }
+        tenant_id: { type: string }
+        checked_at: { type: string }
+        body_url: { type: string }
+        reason: { type: string, description: available=false 时的原因说明 }
+        gaps: { type: array, items: { type: string }, description: 未取到的数据域，供前端标注降级 }
+        note: { type: string }
+        knowledge:
+          type: object
+          properties:
+            documents: { type: integer }
+            chunks: { type: integer }
+            metadata_backend: { type: string, enum: [pg, memory] }
+            vector_points: { type: integer }
+        retrieval:
+          type: object
+          description: 检索指标，口径为「最近 500 次采样」，非全量历史
+          properties:
+            searches: { type: integer }
+            searches_with_result: { type: integer }
+            search_hit_rate: { type: number, description: 有结果的检索次数 / 检索总次数 }
+            cache_hits: { type: integer }
+            cache_hit_rate: { type: number, description: 缓存命中次数 / 检索总次数（R3-08 验收 ≥ 0.3） }
+            rerank_calls: { type: integer }
+            rerank_degraded: { type: integer }
+            latency_p50_ms: { type: integer }
+            latency_p95_ms: { type: integer }
+            latency_p99_ms: { type: integer }
+            sample_size: { type: integer }
+            p99_basis: { type: string, enum: [sampled_recent_searches] }
+        storage:
+          type: object
+          properties:
+            hot: { $ref: '#/components/schemas/KnowledgeTier' }
+            warm: { $ref: '#/components/schemas/KnowledgeTier' }
+            cold: { $ref: '#/components/schemas/KnowledgeTier' }
+        embedding:
+          type: object
+          properties:
+            backend: { type: string, description: 'bge-m3 或 hash-ngram-768（降级）' }
+            dim: { type: integer }
+            available: { type: boolean }
+            degraded: { type: boolean }
+        reranker:
+          type: object
+          properties:
+            backend: { type: string }
+            available: { type: boolean }
+            degraded: { type: boolean }
+        vector_store:
+          type: object
+          properties:
+            provider: { type: string, enum: [qdrant] }
+            collection: { type: string }
+            available: { type: boolean }
+            vector_size: { type: integer }
+    KnowledgeHit:
+      type: object
+      required: [rank, chunk_id, doc_id, title, snippet]
+      properties:
+        rank: { type: integer }
+        chunk_id: { type: string }
+        doc_id: { type: string }
+        title: { type: string }
+        heading: { type: string }
+        chunk_index: { type: integer }
+        score: { type: number, description: 向量召回分（保留供对照） }
+        rerank_score: { type: number, description: 重排分，重排降级时等于召回分 }
+        source: { type: string }
+        ingest_time_iso: { type: string }
+        snippet: { type: string, description: 围绕首个命中词截窗的片段 }
+        matched_terms: { type: array, items: { type: string }, description: 前端据此高亮 snippet }
+    KnowledgeSearchResult:
+      type: object
+      required: [available, query, top_k, hits]
+      properties:
+        available: { type: boolean }
+        tenant_id: { type: string }
+        query: { type: string }
+        top_k: { type: integer }
+        parsed_terms: { type: array, items: { type: string } }
+        hits: { type: array, items: { $ref: '#/components/schemas/KnowledgeHit' } }
+        hit_count: { type: integer }
+        latency_ms: { type: integer }
+        checked_at: { type: string }
+        reason: { type: string }
+        highlight_note: { type: string }
 paths:
   /overview:
     x-wp-status: implemented
@@ -442,6 +547,63 @@ paths:
                   - type: object
                     properties:
                       data: { $ref: '#/components/schemas/OverviewDashboard' }
+  /knowledge:
+    x-wp-status: implemented
+    get:
+      summary: 躯体层知识统计（知识量 / 检索 P99 / 命中率 / 三层存储）
+      description: |
+        代理体层 GET /api/body/knowledge/stats。body-service 未启动时返回 available=false
+        并列出 gaps，前端据此标注降级——不以 0 冒充"知识量为零"。
+      security: [{ bearerAuth: [] }]
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/KnowledgeStats' }
+  /knowledge/search:
+    x-wp-status: implemented
+    post:
+      summary: 检索测试（语义检索 + 命中片段高亮）
+      description: |
+        代理体层 POST /api/body/retrieve（缓存优先 → 向量召回 TOP-50 → 重排 TOP-K）。
+        matched_terms 与截窗 snippet 由 BFF 计算，供前端高亮命中片段；
+        体层不可用时返回 available=false，不返回伪造结果。
+      security: [{ bearerAuth: [] }]
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [query]
+              properties:
+                query: { type: string, minLength: 1 }
+                top_k: { type: integer, minimum: 1, maximum: 20, default: 5 }
+                use_cache: { type: boolean, default: true, description: 是否走缓存优先策略 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                allOf:
+                  - $ref: '#/components/schemas/ApiResponse'
+                  - type: object
+                    properties:
+                      data: { $ref: '#/components/schemas/KnowledgeSearchResult' }
+        '400':
+          description: query 为空或请求体非法
   /vitals:
     x-wp-status: planned
     get:
