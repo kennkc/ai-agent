@@ -10,7 +10,10 @@ const assert = require('node:assert/strict')
 const http = require('node:http')
 const { EventEmitter } = require('node:events')
 
-const { createServer, MIDDLEWARE, resolveAllowedOrigins, queryTerms, buildSnippet } = require('../server')
+const {
+  createServer, MIDDLEWARE, IMPLEMENTED_ENDPOINTS, ROUTE_GUARD,
+  resolveAllowedOrigins, queryTerms, buildSnippet,
+} = require('../server')
 
 const TOKEN = 'test-control-token-0123456789'
 const ALLOWED_ORIGIN = 'http://127.0.0.1:3001'
@@ -102,7 +105,8 @@ test('控制端点缺少令牌 -> 401，且不触发任何进程', async () => {
       method: 'POST', path: '/api/wp/middleware/redis/start', headers: { origin: ALLOWED_ORIGIN },
     })
     assert.equal(res.status, 401)
-    assert.match(res.json.error, /控制令牌/)
+    assert.equal(res.json.code, 'AGENT_UNAUTHORIZED')
+    assert.match(res.json.message, /控制令牌/)
     assert.equal(spawnCalls.length, 0)
   })
 })
@@ -127,7 +131,8 @@ test('控制端点来源不在白名单 -> 403（CSRF 防护）', async () => {
       headers: { origin: 'http://evil.example.com', 'x-wp-control-token': TOKEN },
     })
     assert.equal(res.status, 403)
-    assert.match(res.json.error, /来源/)
+    assert.equal(res.json.code, 'AGENT_FORBIDDEN')
+    assert.match(res.json.message, /来源/)
     assert.equal(spawnCalls.length, 0)
   })
 })
@@ -358,7 +363,8 @@ test('知识入库写路径：缺少控制令牌 -> 401，且不调用体层（�
       body: { title: '未授权写入', content: '试图直连 8090 写入知识库。' },
     })
     assert.equal(res.status, 401)
-    assert.match(res.json.error, /控制令牌/)
+    assert.equal(res.json.code, 'AGENT_UNAUTHORIZED')
+    assert.match(res.json.message, /控制令牌/)
   }, { jsonRequest: async () => { called = true; return null } })
   assert.equal(called, false, '鉴权失败时绝不能触达体层 — 否则即为无鉴权写入后门')
 })
@@ -373,7 +379,8 @@ test('知识入库写路径：来源不在白名单 -> 403（CSRF 防护），�
       body: { title: '跨站写入', content: 'CSRF 尝试。' },
     })
     assert.equal(res.status, 403)
-    assert.match(res.json.error, /来源/)
+    assert.equal(res.json.code, 'AGENT_FORBIDDEN')
+    assert.match(res.json.message, /来源/)
   }, { jsonRequest: async () => { called = true; return null } })
   assert.equal(called, false, '来源非法时不应调用体层')
 })
@@ -485,4 +492,72 @@ test('buildSnippet：无命中词时退化为头部片段且不虚报命中', ()
   const { snippet, matched_terms } = buildSnippet('无关内容'.repeat(50), ['不存在的词'])
   assert.equal(matched_terms.length, 0)
   assert.ok(snippet.length > 0)
+})
+
+// ---------------------------------------------------------------- 路由层错误语义
+// 2026-09-18：与 Java 三服务 GlobalExceptionHandler 对齐 —— 路径不存在 404、
+// 路径存在但方法不支持 405（附 Allow 头），且错误体统一为 {code,message,details}。
+
+test('未映射路由 -> 404 且错误体为 {code,message,details} 信封', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/not-exist' })
+    assert.equal(res.status, 404)
+    assert.equal(res.json.code, 'AGENT_NOT_FOUND')
+    assert.match(res.json.message, /接口不存在/)
+    assert.deepEqual(res.json.details, { path: '/api/wp/not-exist' })
+    assert.equal(res.json.error, undefined, '旧 error 字段不应再出现（全平台统一信封）')
+  })
+})
+
+test('路径存在但方法不支持 -> 405 且带 Allow 头（必须与 404 区分）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { method: 'GET', path: '/api/wp/knowledge/search' })
+    assert.equal(res.status, 405)
+    assert.equal(res.json.code, 'AGENT_METHOD_NOT_ALLOWED')
+    assert.equal(res.headers.allow, 'POST')
+    assert.deepEqual(res.json.details, { method: 'GET', supported: 'POST' })
+  })
+})
+
+test('参数化路径方法不支持 -> 405（同一分流逻辑覆盖 {key} 路由）', async () => {
+  await withServer(async ({ server, spawnCalls }) => {
+    const res = await request(server, {
+      method: 'GET', path: '/api/wp/middleware/redis/start', headers: { origin: ALLOWED_ORIGIN },
+    })
+    assert.equal(res.status, 405)
+    assert.equal(res.json.code, 'AGENT_METHOD_NOT_ALLOWED')
+    assert.equal(res.headers.allow, 'POST')
+    assert.equal(spawnCalls.length, 0)
+  })
+})
+
+test('ROUTE_GUARD 由 IMPLEMENTED_ENDPOINTS 派生（不立第三份端点真相）', () => {
+  for (const { method, path } of IMPLEMENTED_ENDPOINTS) {
+    const concrete = `/api/wp${path.replace('{key}', 'redis')}`
+    const allowed = ROUTE_GUARD.allowedMethods(concrete)
+    assert.ok(allowed, `已声明端点应可被路由守卫识别：${method} ${path}`)
+    assert.ok(allowed.includes(method), `${method} ${path} 的方法应被允许，实得 ${JSON.stringify(allowed)}`)
+  }
+  assert.equal(ROUTE_GUARD.allowedMethods('/api/wp/not-exist'), null, '未声明路径应返回 null（→ 404）')
+})
+
+test('鉴权失败不触达下游，且错误体带统一错误码', async () => {
+  let called = false
+  const cases = [
+    { headers: { 'Content-Type': 'application/json', origin: ALLOWED_ORIGIN }, status: 401, code: 'AGENT_UNAUTHORIZED' },
+    {
+      headers: { 'Content-Type': 'application/json', origin: 'http://evil.example.com', 'x-wp-control-token': TOKEN },
+      status: 403, code: 'AGENT_FORBIDDEN',
+    },
+  ]
+  for (const item of cases) {
+    await withServer(async ({ server }) => {
+      const res = await request(server, {
+        method: 'POST', path: '/api/wp/knowledge', headers: item.headers, body: { content: '探测写入' },
+      })
+      assert.equal(res.status, item.status)
+      assert.equal(res.json.code, item.code)
+    }, { jsonRequest: async () => { called = true; return null } })
+  }
+  assert.equal(called, false, '鉴权失败时绝不能触达体层 — 否则即为无鉴权写入后门')
 })

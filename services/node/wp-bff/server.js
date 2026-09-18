@@ -165,6 +165,47 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'POST', path: '/knowledge/search' },
 ]
 
+/**
+ * 路由守卫表：**由 `IMPLEMENTED_ENDPOINTS` 派生**，刻意不另立一份端点清单，
+ * 以免出现第三份「端点真相」（前端契约 / IMPLEMENTED_ENDPOINTS / 路由分派）。
+ *
+ * 作用是把两种语义分开：
+ *   - 路径不存在          → 404 AGENT_NOT_FOUND
+ *   - 路径存在但方法不对  → 405 AGENT_METHOD_NOT_ALLOWED（附 `Allow` 头）
+ * 与 Java 三服务 `GlobalExceptionHandler` 的路由层分流保持同一语义，
+ * 详见 `docs/异常流程归纳.md` §2。
+ */
+const ROUTE_GUARD = (() => {
+  const escapeSegment = seg => seg.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+  const toRegex = routePath => new RegExp(`^/api/wp${routePath
+    .split('/')
+    .map(seg => (/^\{.+\}$/.test(seg) ? '[a-z0-9-]+' : escapeSegment(seg)))
+    .join('/')}$`)
+  const exact = new Map()
+  const param = []
+  for (const { method, path: routePath } of IMPLEMENTED_ENDPOINTS) {
+    if (!routePath.includes('{')) {
+      const key = `/api/wp${routePath}`
+      exact.set(key, [...(exact.get(key) || []), method])
+      continue
+    }
+    let entry = param.find(item => item.routePath === routePath)
+    if (!entry) {
+      entry = { routePath, re: toRegex(routePath), methods: [] }
+      param.push(entry)
+    }
+    if (!entry.methods.includes(method)) entry.methods.push(method)
+  }
+  return {
+    /** @returns {string[]|null} 该路径允许的方法；路径本身不存在时返回 null */
+    allowedMethods(pathname) {
+      if (exact.has(pathname)) return exact.get(pathname)
+      const hit = param.find(item => item.re.test(pathname))
+      return hit ? hit.methods : null
+    },
+  }
+})()
+
 /** 总览页仍待 BFF 实现的聚合数据域，透传给前端用于降级展示 */
 const OVERVIEW_GAPS = [
   'vitals', 'organs', 'brain', 'senses', 'evolution', 'collaboration',
@@ -335,14 +376,34 @@ function createServer(options = {}) {
     res.end(body)
   }
 
+  /**
+   * 统一错误响应信封：`{code, message, details}`。
+   *
+   * 与 gateway-service 的 `JwtAuthFilter.reject()`、Java 三服务的
+   * `GlobalExceptionHandler` **同一格式** —— 客户端只需一套解析逻辑。
+   * 2026-09-18 之前本服务用 `{error}`，是全平台唯一的例外（见 `docs/异常流程归纳.md` §2.3）。
+   * 注意：这是**行为变更**，任何解析旧 `error` 字段的外部消费方需改读 `message`。
+   */
+  function fail(req, res, status, code, message, details = {}) {
+    return send(req, res, status, { code, message, details })
+  }
+
   function authorizeControl(req) {
     const verdict = originVerdict(req, allowedOrigins)
     if (verdict === false) {
-      return { ok: false, code: 403, error: '请求来源不在白名单内（Origin/Referer 校验失败）' }
+      return {
+        ok: false, status: 403, code: 'AGENT_FORBIDDEN',
+        message: '请求来源不在白名单内（Origin/Referer 校验失败）',
+        details: { guard: 'origin-whitelist' },
+      }
     }
     const presented = req.headers['x-wp-control-token']
     if (!presented || !timingSafeEqual(presented, tokenValue)) {
-      return { ok: false, code: 401, error: '控制令牌缺失或无效（X-WP-Control-Token）' }
+      return {
+        ok: false, status: 401, code: 'AGENT_UNAUTHORIZED',
+        message: '控制令牌缺失或无效（X-WP-Control-Token）',
+        details: { guard: 'control-token' },
+      }
     }
     return { ok: true }
   }
@@ -350,12 +411,12 @@ function createServer(options = {}) {
   async function handleControl(req, res, key, action) {
     const auth = authorizeControl(req)
     if (!auth.ok) {
-      audit('REJECT_AUTH', key, `${action} ${auth.error}`)
-      return send(req, res, auth.code, { error: auth.error })
+      audit('REJECT_AUTH', key, `${action} ${auth.message}`)
+      return fail(req, res, auth.status, auth.code, auth.message, auth.details)
     }
     if (!whitelist.has(key)) {
       audit('REJECT', key, `非白名单 key，action=${action}`)
-      return send(req, res, 403, { error: `key "${key}" 不在白名单内` })
+      return fail(req, res, 403, 'AGENT_FORBIDDEN', `key "${key}" 不在白名单内`, { key })
     }
     const probe = await probeState(key)
     if (ops.has(key)) {
@@ -583,10 +644,10 @@ function createServer(options = {}) {
     try {
       payload = await readJsonBody(req)
     } catch (error) {
-      return send(req, res, 400, { error: String(error.message || error) })
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', String(error.message || error))
     }
     const query = String(payload.query || '').trim()
-    if (!query) return send(req, res, 400, { error: 'query 不能为空' })
+    if (!query) return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'query 不能为空')
     const topK = Math.min(Math.max(Number(payload.top_k) || 5, 1), 20)
     const tenantId = String(req.headers['x-tenant-id'] || payload.tenant_id || 'default')
     const startedAt = Date.now()
@@ -663,22 +724,22 @@ function createServer(options = {}) {
     // 开发环境下 Vite 代理对 /api/wp/* 统一注入令牌，因此前端无需额外处理。
     const auth = authorizeControl(req)
     if (!auth.ok) {
-      audit('REJECT_AUTH', 'knowledge', `ingest ${auth.error}`)
-      return send(req, res, auth.code, { error: auth.error })
+      audit('REJECT_AUTH', 'knowledge', `ingest ${auth.message}`)
+      return fail(req, res, auth.status, auth.code, auth.message, auth.details)
     }
     let payload
     try {
       payload = await readJsonBody(req, 2 * 1024 * 1024)
     } catch (error) {
-      return send(req, res, 400, { error: String(error.message || error) })
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', String(error.message || error))
     }
     const tenantId = String(req.headers['x-tenant-id'] || payload.tenant_id || 'default')
     const isBatch = Array.isArray(payload.documents)
     if (isBatch && payload.documents.length === 0) {
-      return send(req, res, 400, { error: 'documents 不能为空数组' })
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'documents 不能为空数组', { field: 'documents' })
     }
     if (!isBatch && !String(payload.content ?? '').trim()) {
-      return send(req, res, 400, { error: 'content 不能为空' })
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'content 不能为空', { field: 'content' })
     }
     const target = isBatch ? '/api/body/knowledge/batch' : '/api/body/knowledge'
     const outbound = isBatch
@@ -760,7 +821,11 @@ function createServer(options = {}) {
     const match = url.pathname.match(/^\/api\/wp\/middleware\/([a-z0-9-]+)\/(start|stop)$/)
     if (req.method === 'OPTIONS') {
       const verdict = originVerdict(req, allowedOrigins)
-      return send(req, res, verdict === false ? 403 : 204, verdict === false ? { error: 'origin not allowed' } : {})
+      if (verdict === false) {
+        return fail(req, res, 403, 'AGENT_FORBIDDEN', '请求来源不在白名单内（Origin/Referer 校验失败）',
+          { guard: 'origin-whitelist' })
+      }
+      return send(req, res, 204, {})
     }
     if (req.method === 'GET' && url.pathname === '/api/wp/healthz') return handleHealthz(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)
@@ -770,7 +835,17 @@ function createServer(options = {}) {
     if (req.method === 'POST' && url.pathname === '/api/wp/knowledge') return handleKnowledgeIngest(req, res)
     if (req.method === 'POST' && url.pathname === '/api/wp/knowledge/search') return handleKnowledgeSearch(req, res)
     if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])
-    return send(req, res, 404, { error: 'not found' })
+    // 路由层分流：路径存在但方法不对 → 405（附 Allow 头）；路径不存在 → 404。
+    // 二者必须可区分 —— 前端据 404 判定「端点未实现（planned）」，据 5xx 判定「服务故障」。
+    const allowed = ROUTE_GUARD.allowedMethods(url.pathname)
+    if (allowed) {
+      res.setHeader('Allow', allowed.join(', '))
+      return fail(req, res, 405, 'AGENT_METHOD_NOT_ALLOWED',
+        `请求方法不被支持：${req.method}，允许 [${allowed.join(', ')}]`,
+        { method: req.method, supported: allowed.join(', ') })
+    }
+    return fail(req, res, 404, 'AGENT_NOT_FOUND', `接口不存在：${url.pathname}`,
+      { path: url.pathname })
   })
 }
 
@@ -813,6 +888,7 @@ module.exports = {
   MIDDLEWARE,
   WHITELIST,
   IMPLEMENTED_ENDPOINTS,
+  ROUTE_GUARD,
   OVERVIEW_GAPS,
   DEFAULT_ALLOWED_ORIGINS,
   DEFAULT_BODY_URL,

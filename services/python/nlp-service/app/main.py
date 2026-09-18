@@ -8,10 +8,14 @@ Phase 0: 最小骨架
 Phase 2: 感官期 —— 意图识别规则引擎 + L0 分类模型 + OCR 通道
 Phase 3: 躯体期 —— 嵌入（BGE-M3/降级哈希）+ 重排（bge-reranker/降级词法）
 """
+import logging
 import time
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from app.chunking import chunk_text
 from app.embedding import EMBEDDING_SERVICE
@@ -24,6 +28,71 @@ app = FastAPI(
     version="0.3.0",
     description="意图识别（规则+L0 双级级联） / 实体提取 / OCR / 嵌入 / 重排",
 )
+
+logger = logging.getLogger("nlp-service")
+
+# ─────────── 统一错误信封 ───────────
+# 与 gateway-service 的 JwtAuthFilter.reject()、Java 三服务的 GlobalExceptionHandler、
+# wp-bff 的 fail() **同一格式** `{code, message, details}`，客户端只需一套解析逻辑。
+# 2026-09-18 之前本服务用 FastAPI 默认的 `{"detail": ...}`，是全平台最
+# 后一处信封不一致点（见 docs/异常流程归纳.md §2.3）。
+_HTTP_CODE_TO_AGENT = {
+    400: "AGENT_BAD_REQUEST",
+    401: "AGENT_UNAUTHORIZED",
+    403: "AGENT_FORBIDDEN",
+    404: "AGENT_NOT_FOUND",
+    405: "AGENT_METHOD_NOT_ALLOWED",
+    409: "AGENT_CONFLICT",
+    415: "AGENT_BAD_REQUEST",
+    422: "AGENT_BAD_REQUEST",
+    502: "AGENT_UPSTREAM_UNAVAILABLE",
+    503: "AGENT_BUS_UNAVAILABLE",
+    504: "AGENT_TIMEOUT",
+}
+
+
+def _agent_code(status_code: int) -> str:
+    if status_code in _HTTP_CODE_TO_AGENT:
+        return _HTTP_CODE_TO_AGENT[status_code]
+    return "AGENT_INTERNAL_ERROR" if status_code >= 500 else "AGENT_BAD_REQUEST"
+
+
+def _envelope(code: str, message: str, details: dict | None = None) -> dict:
+    return {"code": code, "message": message, "details": details or {}}
+
+
+@app.exception_handler(StarletteHTTPException)
+async def unified_http_exception_handler(request: Request, exc: StarletteHTTPException):
+    """HTTP 层异常 → 统一信封。
+
+    - 保留框架给出的响应头（405 的 `Allow` 由此透传，与 Java 侧 405 语义对齐）
+    - 422 是「请求体不合法」而不是「资源不存在」，统一按 400 返回，
+      使状态码语义与 Java/BFF 三处一致（路径不存在才 404、方法不支持才 405）
+    """
+    status = 400 if exc.status_code == 422 else exc.status_code
+    headers = dict(getattr(exc, "headers", None) or {})
+    return JSONResponse(status_code=status, headers=headers,
+                        content=_envelope(_agent_code(status), str(exc.detail)))
+
+
+@app.exception_handler(RequestValidationError)
+async def unified_validation_exception_handler(request: Request, exc: RequestValidationError):
+    """请求体校验失败 → 400 AGENT_BAD_REQUEST，details 给字段级原因。"""
+    fields: dict[str, str] = {}
+    for err in exc.errors():
+        loc = ".".join(str(part) for part in err.get("loc", ())
+                       if part not in ("body", "query", "path")) or "body"
+        fields[loc] = str(err.get("msg", "invalid"))
+    return JSONResponse(status_code=400,
+                        content=_envelope("AGENT_BAD_REQUEST", "请求参数不合法", fields))
+
+
+@app.exception_handler(Exception)
+async def unified_unhandled_exception_handler(request: Request, exc: Exception):
+    """兜底：只记日志，不把内部异常消息返回给客户端（避免泄露实现细节）。"""
+    logger.exception("Unhandled exception on %s %s", request.method, request.url.path)
+    return JSONResponse(status_code=500,
+                        content=_envelope("AGENT_INTERNAL_ERROR", "服务内部错误"))
 
 
 @app.get("/healthz")

@@ -7,6 +7,14 @@ info:
     覆盖 14 模块：总览/生命体征/决策沙盘/五感/进化/协作总线/任务/对话/专家/技能/连接器/自动化/灵感/审批。
     Mock 数据必须与该契约结构完全一致 → 切换零 UI 改动（R-C09 延续）。
     设计依据：《工作平台功能设计文档》v1.0 §6。
+
+    **统一错误信封（2026-09-18 起全平台一致）**：所有错误响应均为
+    `{code, message, details}`，与 gateway-service、Java 三服务、nlp-service 完全同构；
+    BFF 路由层分流：路径不存在 → 404 `AGENT_NOT_FOUND`，路径存在但方法不支持 →
+    405 `AGENT_METHOD_NOT_ALLOWED`（附 `Allow` 头），请求体非法 → 400 `AGENT_BAD_REQUEST`，
+    鉴权失败 → 401 `AGENT_UNAUTHORIZED` / 403 `AGENT_FORBIDDEN`。
+    区分 404 与 5xx 是前端降级判定的前提（404 = 端点未实现 = planned）。
+    完整异常传播链见 `docs/异常流程归纳.md` §2。
 servers:
   - url: /api/wp
     description: Work Platform BFF 聚合层
@@ -22,6 +30,12 @@ components:
     X-Tenant-Id:
       schema: { type: string }
       description: 租户标识（P7 后强制）
+  responses:
+    ErrorEnvelope:
+      description: 统一错误响应（`{code, message, details}`）—— 见 info.description
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
   schemas:
     ApiResponse:
       type: object
@@ -30,6 +44,35 @@ components:
         code: { type: integer, example: 0 }
         data: { type: object }
         msg: { type: string, example: ok }
+    ErrorEnvelope:
+      type: object
+      description: |
+        全平台统一错误信封。2026-09-18 起 BFF（原 `{error}`）与 nlp-service
+        （原 FastAPI 默认 `{detail}`）已对齐到本结构，客户端只需一套解析逻辑。
+      required: [code, message, details]
+      properties:
+        code:
+          type: string
+          description: 统一错误码（R1-08）
+          enum:
+            - AGENT_BAD_REQUEST
+            - AGENT_UNAUTHORIZED
+            - AGENT_FORBIDDEN
+            - AGENT_NOT_FOUND
+            - AGENT_METHOD_NOT_ALLOWED
+            - AGENT_CONFLICT
+            - AGENT_DUPLICATE
+            - AGENT_TIMEOUT
+            - AGENT_BUS_UNAVAILABLE
+            - AGENT_UPSTREAM_UNAVAILABLE
+            - AGENT_INTERNAL_ERROR
+          example: AGENT_NOT_FOUND
+        message: { type: string, example: 接口不存在：/api/wp/not-exist }
+        details:
+          type: object
+          description: 上下文明细（字段级原因 / method+supported / path 等）
+          additionalProperties: true
+          example: { path: /api/wp/not-exist }
     TaskState:
       type: string
       enum: [pending, running, done, failed, archived]
@@ -569,6 +612,10 @@ paths:
                   - type: object
                     properties:
                       data: { $ref: '#/components/schemas/OverviewDashboard' }
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
   /knowledge:
     x-wp-status: implemented
     get:
@@ -595,6 +642,10 @@ paths:
                   - type: object
                     properties:
                       data: { $ref: '#/components/schemas/KnowledgeStats' }
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
     post:
       x-wp-security: origin-allowlist + control-token
       summary: 知识入库（单篇 / 批量导入）—— 工作平台侧唯一写路径
@@ -651,10 +702,23 @@ paths:
                       data: { $ref: '#/components/schemas/KnowledgeIngestResult' }
         '400':
           description: content 为空 / documents 为空数组 / 请求体非法或过大
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '401':
           description: 控制令牌缺失或无效（X-WP-Control-Token）—— 鉴权失败时不触达体层
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
         '403':
           description: 来源不在白名单（Origin/Referer 校验失败）—— CSRF 防护
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
   /knowledge/search:
     x-wp-status: implemented
     post:
@@ -692,6 +756,13 @@ paths:
                       data: { $ref: '#/components/schemas/KnowledgeSearchResult' }
         '400':
           description: query 为空或请求体非法
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
   /vitals:
     x-wp-status: planned
     get:
