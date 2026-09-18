@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:05 · 源文件 07-运行时配置与横切约定.md</span>
+  <span class="meta">生成于 2026-09-18 20:11 · 源文件 07-运行时配置与横切约定.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -890,13 +890,13 @@ Java 侧只看到"上游不可用"。</p>
 <tr>
 <td style="text-align: right;">~~2~~</td>
 <td>~~<strong><code>body-service</code> 无 OTLP 配置</strong>~~</td>
-<td>✅ <strong>2026-09-17 Phase 3 已补齐</strong></td>
+<td>✅ <strong>2026-09-18 Phase 3 已补齐</strong></td>
 <td>已加 <code>management.otlp.tracing.endpoint</code>，接入 Jaeger 链路</td>
 </tr>
 <tr>
 <td style="text-align: right;">~~3~~</td>
 <td>~~<strong><code>body-service</code> 未接入统一错误码体系</strong>~~</td>
-<td>✅ <strong>2026-09-17 Phase 3 已补齐</strong></td>
+<td>✅ <strong>2026-09-18 Phase 3 已补齐</strong></td>
 <td>已引入 <code>common</code> 包三件套（<code>ErrorCode</code>/<code>BizException</code>/<code>GlobalExceptionHandler</code>）</td>
 </tr>
 <tr>
@@ -920,7 +920,7 @@ Java 侧只看到"上游不可用"。</p>
 <tr>
 <td style="text-align: right;">~~7~~</td>
 <td>~~<code>body-service</code> 的 <code>BodyStore</code> 用 <code>ArrayList</code> 存片段~~</td>
-<td>✅ <strong>2026-09-17 Phase 3 已解决</strong></td>
+<td>✅ <strong>2026-09-18 Phase 3 已解决</strong></td>
 <td><code>BodyStore</code> 已删除，改为 PostgreSQL 元数据 + Qdrant 向量 + Redis 缓存三层</td>
 </tr>
 <tr>
@@ -932,7 +932,7 @@ Java 侧只看到"上游不可用"。</p>
 <tr>
 <td style="text-align: right;">~~9~~</td>
 <td>~~Kafka / 死信消费者未实现~~</td>
-<td>✅ <strong>2026-09-17 Phase 3 已实现</strong></td>
+<td>✅ <strong>2026-09-18 Phase 3 已实现</strong></td>
 <td><code>SenseCollectedConsumer</code> 消费 <code>lifeform.sense.collected</code>，形成感官→躯体闭环</td>
 </tr>
 <tr>

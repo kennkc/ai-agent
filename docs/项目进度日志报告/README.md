@@ -59,7 +59,7 @@
 
 **阶段数据速览**：代码基线 `850f49d`（147 文件）· 测试 **73/73 通过** · 意图识别准确率 **90.0%** / P99 **0.052ms** · 全量构建 5 模块 SUCCESS
 
-### Phase 3 · 躯体期（2026-09-17）
+### Phase 3 · 躯体期（2026-09-18）
 
 | 文件 | 说明 |
 |---|---|
@@ -108,7 +108,7 @@ Phase<N>-测试验收报告.md     + .html
 ```bash
 # 从项目根执行。两种可用环境，按本机情况选一种：
 
-# 【A】无 anaconda 的机器（**WorkBuddy 侧现状**，2026-09-17 实测）：托管 Python + PYTHONPATH 指向 markdown 包目录
+# 【A】无 anaconda 的机器（**WorkBuddy 侧现状**，2026-09-18 实测）：托管 Python + PYTHONPATH 指向 markdown 包目录
 PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
   C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
   scripts/md2html-report.py --all "docs/项目进度日志报告"
@@ -123,7 +123,7 @@ PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
 ```
 
 > **注意事项**（踩坑记录）：
-> - **本机 anaconda 已于 2026-09-17 卸载**（现只有 `E:/software/python/python312`，无 `markdown` 包），
+> - **本机 anaconda 已于 2026-09-18 卸载**（现只有 `E:/software/python/python312`，无 `markdown` 包），
 >   故本机统一用环境【A】。markdown 包获取方式：`pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown`。
 > - 中文字符路径需加引号。
 > - `--all` 批量模式**自动排除 `README.md`**（索引页保留纯 Markdown 即可），如需转换用单文件模式。

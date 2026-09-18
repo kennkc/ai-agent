@@ -16,7 +16,7 @@ cd services/java
 ../../scripts/mvn-dev.sh -pl body-service -am test
 ```
 
-预期（2026-09-17 实测）：
+预期（2026-09-18 实测）：
 
 | 模块 | 测试数 | 失败 | 错误 |
 |------|-------:|-----:|-----:|
@@ -37,7 +37,7 @@ cd services/python/nlp-service
 # 或 ../venv/bin/python -m pytest -q         # Linux/macOS
 ```
 
-预期（2026-09-17 实测）：
+预期（2026-09-18 实测）：
 
 ```
 52 passed in 0.41s

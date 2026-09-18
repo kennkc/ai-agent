@@ -58,7 +58,7 @@ PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
 ... scripts/md2html-report.py "docs/项目进度总览.md" -t "标题" -o "docs/out.html"
 ```
 
-> **本机环境变更（2026-09-17）**：原先用的 anaconda（`E:/software/anaconda3/python.exe`）**已卸载**，
+> **本机环境变更（2026-09-18）**：原先用的 anaconda（`E:/software/anaconda3/python.exe`）**已卸载**，
 > 本机现只有 `E:/software/python/python312`（无 `markdown` 包）。
 > 因此 HTML 生成统一走 **托管 Python + `PYTHONPATH` 指向 `pylibs`**（内含 markdown 3.10.3）：
 > `pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown`（不污染系统环境）。

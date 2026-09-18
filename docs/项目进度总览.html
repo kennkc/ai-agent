@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:08 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-18 20:11 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -150,7 +150,7 @@
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 项目进度总览<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-17（Phase 3 躯体期落地后） · <strong>代码基线</strong>：<code>a5e0cd5</code>（Phase 3 代码收口；<code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> 同提交）
+<p><strong>口径时间</strong>：2026-09-18（Phase 3 躯体期落地后） · <strong>代码基线</strong>：<code>a5e0cd5</code>（Phase 3 代码收口；<code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> 同提交）
 <strong>数据来源</strong>：仓库 <code>PROGRESS.md</code>、<code>docs/项目进度日志报告/</code>、<code>docs/优化日志/</code>、各服务源码实测统计
 <strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73/61 项测试）<strong>不回改</strong>，以本文件为准。</p>
 </blockquote>
@@ -475,7 +475,7 @@
 </table>
 <hr />
 <h2 id="_4">四、测试与验证基线<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
-<p><strong>口径：2026-09-17 Phase 3 落地后的实测值</strong>（历史归档中的 54 / 73 / 61 项是当时口径）</p>
+<p><strong>口径：2026-09-18 Phase 3 落地后的实测值</strong>（历史归档中的 54 / 73 / 61 项是当时口径）</p>
 <table>
 <thead>
 <tr>
@@ -540,7 +540,7 @@
 <blockquote>
 <p><strong>注意</strong>：<code>mvn</code> 直接调用在本机会卡死（<code>mvn.cmd</code> 损坏 + protobuf 插件清理目录阻塞），
 必须走 <code>scripts/mvn-dev.sh</code>。生成 HTML 镜像本机<strong>已改用托管 Python + <code>PYTHONPATH</code> 指向 <code>pylibs</code></strong>
-（anaconda 已于 2026-09-17 卸载，本机 <code>E:/software/python/python312</code> 无 <code>markdown</code> 包）。
+（anaconda 已于 2026-09-18 卸载，本机 <code>E:/software/python/python312</code> 无 <code>markdown</code> 包）。
 <strong>body-service 启动需显式 <code>--server.port=8083</code></strong>
 （本机环境注入了会被 Spring 松散绑定误读的路由变量）。</p>
 </blockquote>
@@ -671,7 +671,7 @@ git push origin codex/main:workbuddy/main
 <h3 id="62-docsjava-services07-md">6.2 已登记的工程缺口（源自 <code>docs/java-services/07-运行时配置与横切约定.md</code>）<a class="headerlink" href="#62-docsjava-services07-md" title="Permanent link">&para;</a></h3>
 <ul>
 <li>wp-bff <strong>无网关路由</strong>（<code>/api/wp/**</code> 生产路径缺失，前端仅靠 Vite 代理）</li>
-<li>~~body-service <strong>缺 OTLP 配置</strong>（不在 Jaeger 链路），也未接入统一错误码体系~~ ✅ <strong>2026-09-17 Phase 3 已补齐</strong>（加 OTLP endpoint + 建 <code>ErrorCode</code>/<code>BizException</code>/<code>GlobalExceptionHandler</code>）</li>
+<li>~~body-service <strong>缺 OTLP 配置</strong>（不在 Jaeger 链路），也未接入统一错误码体系~~ ✅ <strong>2026-09-18 Phase 3 已补齐</strong>（加 OTLP endpoint + 建 <code>ErrorCode</code>/<code>BizException</code>/<code>GlobalExceptionHandler</code>）</li>
 <li><code>ErrorCode</code> 在 session-manager 与 sense-service <strong>各有一份</strong>，需人工同步</li>
 <li>租户头 <code>defaultValue="default"</code> → 绕过网关直连时<strong>静默落入 default 租户</strong></li>
 <li>HTTP 端口<strong>写死</strong>，未做环境变量占位</li>

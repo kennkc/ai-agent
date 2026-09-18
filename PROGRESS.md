@@ -1,6 +1,6 @@
 # Agent-Lifeform Development Progress
 
-> Last updated: 2026-09-17
+> Last updated: 2026-09-18
 
 ## Archived stage reports
 
@@ -19,7 +19,7 @@ Java per-file documentation set `docs/java-services/` and the middleware real-st
 and CI additions — merged on a semantic basis, no side was overwritten).
 Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12; after the D-1 cross-service
 fix (2026-09-13) and the hardening pass below the suite stood at **61 Java tests green**.
-Phase 3 (躯体期 / body stage, R3-01~R3-09 + R-C03) landed on 2026-09-17 — body-service was
+Phase 3 (躯体期 / body stage, R3-01~R3-09 + R-C03) landed on 2026-09-18 — body-service was
 rewritten into a persisted knowledge pipeline (chunk -> embed -> three-tier store -> semantic
 retrieve -> rerank -> RAG) and **DEBT-001 closed**; the suite now stands at
 **100 Java + 52 Python + 22 wp-bff tests green** with an end-to-end acceptance of 35/35.
@@ -137,7 +137,7 @@ and `web/work-platform`. Closes **DEBT-001** (in-memory retrieval -> Qdrant vect
       (P99 / hit rate / cache hit rate), three-tier storage health, and a retrieval test panel with
       highlighted snippets and recall-vs-rerank scores
 
-### Verification (2026-09-17)
+### Verification (2026-09-18)
 
 - Java `-pl body-service -am test`: **100 passed / 0 failed** (gateway 2 · session 10 · sense 48 ·
   body 40; body-service grew from 1 test to 40 across 7 classes)
@@ -378,7 +378,7 @@ Goal: make the archived documentation answer two questions on its own — "where
 - OCR end-to-end acceptance requires installing PaddleOCR or Tesseract; until then the
   visual channel stays `DEGRADED` and the API truthfully reports `available=false`.
 - ~~Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration).~~
-  Done on 2026-09-17: Phase 3 (R3-01~R3-09 + R-C03) delivered the full knowledge pipeline,
+  Done on 2026-09-18: Phase 3 (R3-01~R3-09 + R-C03) delivered the full knowledge pipeline,
   three-tier storage, semantic retrieval, reranking, RAG and the sense->body closed loop;
   DEBT-001 closed. Phase 4 (大脑期 / brain stage, reasoning & generation) is next.
 - Real embedding (BGE-M3) and cross-encoder reranker weights are not installed on this host;
@@ -387,7 +387,7 @@ Goal: make the archived documentation answer two questions on its own — "where
 - Large-document ingest currently relies on the event payload carrying the body text; reading
   back from staging storage for oversized documents is a registered follow-up debt.
 - Work Platform BFF/API mode: **minimal Ops subset done** (2026-09-15) — middleware
-  observe/start/stop + tracing observe are real; 2026-09-17 added real knowledge stats/search.
+  observe/start/stop + tracing observe are real; 2026-09-18 added real knowledge stats/search.
   Remaining endpoints (tasks/approvals/models/vitals, WebSocket events) are still pending and fall
   back to Mock; since 2026-09-16 that fallback is no longer silent (header badge + banner +
   per-module alert).
