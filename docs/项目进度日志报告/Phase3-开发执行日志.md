@@ -220,3 +220,60 @@ python .workbuddy/tmp/phase3-e2e.py
 | 文件锁 | Windows 下运行中的 jar 会锁定 `target/`，打包前需停实例 |
 | MSYS 路径 | `curl --data-binary @/tmp/x.json` 会被路径转换破坏 → 用 `--data-binary @-` 走 stdin |
 | 端口占用 | 8090 已被既有 wp-bff 实例占用 → 验收改在 8095 进行，不影响用户运行中的服务 |
+
+---
+
+## 六、补记 · 2026-09-18 阶段收口后的四轮
+> **本节为补记。** 以上各节的原有结论与数字**保持不变**（历史留痕）；本节只记录
+> Phase 3 验收通过**之后**又跑过的轮次与由此产生的最新基线。
+
+### 阶段收口后的四轮（2026-09-18）
+
+1. **Mock / API 对齐轮**（`bce7921`）—— 路由语义修正：未映射路由由 500 改为 404，并新增
+   405 / 415 映射；前端 Mock 与真实响应做**双向**字段核对；代理目标与端口外置
+   （`WP_BFF_URL` / `WP_GATEWAY_URL` / `WP_DEV_PORT`）
+2. **文档口径同步轮**（`8ba5544`）—— 五类失效回填（存在性 / 准确性 / 内容 / 可用性 / 自洽），
+   Java 文档覆盖门禁由 103/103 复位为 **106/106**
+3. **异常流程归纳与全平台错误信封统一轮**（`6616616` + `d4a114b`）—— 修复三处失败路径缺口
+   （错误信封三种形状、BFF 方法不支持返回 404 而非 405、nlp-service HTTP 层零测试），
+   新增 **`docs/异常流程归纳.md`**
+4. **全局文档对齐与基线数字回填轮** —— 补本轮缺失的优化日志，并把根 `README.md`、
+   `PROGRESS.md`、`Phase3-DEMO.md` 对齐到最新阶段；新登记待办 21（前端未消费统一错误信封）
+
+详细记录见 `docs/优化日志/2026-09-18-异常流程归纳与全平台错误信封统一.md` 与
+`docs/优化日志/2026-09-18-全局文档对齐与基线数字回填.md`。
+
+### 补记提交台账
+
+| 提交 | 说明 |
+|---|---|
+| `bce7921` | fix(runtime) 路由语义 404 修正 + 前端 Mock/降级对齐 + 口径自述对齐 |
+| `8ba5544` | docs(consistency) 回填最新逻辑功能说明 + 复位文档覆盖率门禁 |
+| `6616616` | fix(runtime) 全平台统一错误信封 + BFF 路由层 405 分流 + nlp HTTP 层测试 |
+| `d4a114b` | docs(exception) 新增「异常流程归纳」+ 基线回填 + 台账 §4.13 |
+
+三分支 `dev` / `codex/main` / `workbuddy/main` 在每一轮后均推齐同一哈希。
+
+### 补记命令台账
+
+```bash
+# 路由语义反例探测（异常语义轮新增）
+curl -s -o /dev/null -w "%{http_code}" --noproxy '*' http://127.0.0.1:8095/api/wp/definitely-not-a-route   # 404
+curl -s -i --noproxy '*' -X DELETE http://127.0.0.1:8095/api/wp/knowledge                                  # 405 + Allow
+
+# 文档对齐轮的取数（注意：Java 以 Maven 日志为准，勿直接汇总 surefire 报告）
+cd services/java && ../../scripts/mvn-dev.sh test
+cd services/python/nlp-service && ../venv/Scripts/python.exe -m pytest -q
+cd services/node/wp-bff && node --test
+python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
+python scripts/java-doc-coverage.py
+```
+
+### 补记环境侧记录
+
+| 项 | 说明 |
+|---|---|
+| surefire 陈旧报告 | `target/surefire-reports/*.txt` 会残留已删除测试类的报告 → 汇总前须按时间戳过滤 |
+| Git Bash `PATH` | 每条命令前需 `export PATH="/usr/bin:/bin:$PATH"`，否则基础命令全部 `command not found` |
+| 远端跟踪引用 | `github` 的远端跟踪引用**写不进去**（`.git/refs/remotes/` 子目录被立即删除），远端哈希只认 `git ls-remote --heads github` |
+| Markdown 编辑 | 同一消息对同一文件发多个 Edit 会**静默丢写** → 改用一次性脚本 + 命中次数断言 + `grep` 落盘复验 |

@@ -1,6 +1,9 @@
 # Agent-Lifeform · AI Agent 生命体架构
 
-> 当前基线：Phase 0 / Phase 1 / Phase 2 开发完成，VS1 垂直切片已打通（61 Java tests + 19 Python tests green）。
+> 当前基线：Phase 0 / Phase 1 / Phase 2 / **Phase 3（躯体期）** 均已交付并通过验收；
+> VS1 垂直切片与 Phase 3 知识闭环均已打通
+> （**130 Java + 62 Python + 34 wp-bff tests green**，契约校验 0 FAIL，Java 文档覆盖 106/106）。
+> 下一阶段为 **Phase 4（大脑期 / LLM 网关与 M1 问答 MVP）**。
 > 技术栈：Java 21 + Spring Cloud Alibaba + Python 3.12 + FastAPI + Vue 3 + Vite + Element Plus。
 
 ---
@@ -20,6 +23,10 @@ Agent-Lifeform 采用“人体生命体”隐喻构建 AI Agent 系统，核心�
 Phase 2 感官回路（已落地）：
 
 `R0 定时 / R1 指令 → 五感渠道 → 标准化五字段 → 质检 → 隔离暂存(MinIO) → 事件(lifeform.sense.collected) → Console 感官视图`
+
+Phase 3 躯体回路（已落地，2026-09-18）：
+
+`感官事件 → 格式解析 → 分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷） → 语义检索（缓存优先 → 召回 → 重排） → RAG → 工作平台躯体视图`
 
 当前前台主入口为 Vue 3 工作平台：
 
@@ -41,7 +48,7 @@ Phase 2 感官回路（已落地）：
 | Java 服务 | Java 21 + Spring Boot 3 + Spring Cloud Alibaba |
 | Python AI 服务 | Python 3.12 + FastAPI |
 | 前端 | Vue 3 + Vite + TypeScript + Element Plus |
-| 前端状态 | Pinia（服务端 Query/缓存层待 Phase 3 引入 TanStack Query） |
+| 前端状态 | Pinia（服务端 Query/缓存层待后续阶段引入 TanStack Query） |
 | 前端路由 | Vue Router |
 | DAG 可视化 | 自研 SVG + CSS 拓扑（Vue Flow 待编排期引入） |
 | 实时通信 | 当前为 REST 轮询；WebSocket 推送为设计目标，代码尚未接入 |
@@ -58,7 +65,7 @@ Phase 2 感官回路（已落地）：
 ai-agent/
 ├── contracts/                     # BFF OpenAPI 契约可执行副本
 ├── docs/
-│   ├── demo/                      # 各阶段验收演示脚本（Phase0/1/2）
+│   ├── demo/                      # 各阶段验收演示脚本（Phase0/1/2/3）
 │   ├── java-services/             # Java 服务源码逐文件说明（模块总览/契约/各服务/配置约定，MD+HTML）
 │   ├── 项目进度日志报告/           # 阶段报告、执行日志、测试验收报告（MD+HTML）
 │   └── ...
@@ -71,11 +78,11 @@ ai-agent/
 │   │   ├── gateway-service/       # 网关、JWT、租户透传、gRPC 健康
 │   │   ├── session-manager/       # 会话、BusProxy、NATS/Kafka、VS1 编排
 │   │   ├── sense-service/         # 五感渠道、R0/R1 采集、质检、暂存、死信
-│   │   └── body-service/          # 本地知识检索 MVP
+│   │   └── body-service/          # 躯体：知识管道（解析 / 分块 / 嵌入 / 三层存储 / 语义检索 / 重排 / RAG）
 │   ├── python/
 │   │   └── nlp-service/           # 规则+L0 级联意图识别、OCR 代理
 │   └── node/
-│       └── wp-bff/                # work-platform BFF 最小 Ops（:8090 中间件探针/真实启停、链路追踪观测）
+│       └── wp-bff/                # work-platform BFF（:8090 中间件真实启停 + 链路追踪 + 知识统计/写入/检索代理）
 └── web/
     ├── work-platform/             # Vue 3 + Element Plus 主工作平台
     └── console/                   # 旧静态 Mock 运维参考（Phase 2 感官视图）
@@ -197,14 +204,16 @@ curl -X POST "http://127.0.0.1:8080/api/session/<session_id>/ask" \
 
 ```bash
 cd services/java
-../../scripts/mvn-dev.sh clean package     # 61 tests, 0 failures
+../../scripts/mvn-dev.sh clean package     # 130 tests, 0 failures
+                                           # gateway 2 · session-manager 15 · sense-service 53 · body-service 60
 
 cd services/node/wp-bff
-node --test                                # 14 passed（控制面安全回归）
+node --test                                # 34 passed（含控制面鉴权与路由层错误语义）
 
 cd services/python/nlp-service
-../venv/Scripts/python.exe tests/test_intent.py   # 15 passed, L0 holdout 90.0%, P99 0.052 ms
-../venv/Scripts/python.exe tests/test_ocr.py      # 4 passed
+../venv/Scripts/python.exe -m pytest -q    # 62 passed（意图 / OCR / 分块 / 嵌入 / 重排 + HTTP 错误层）
+
+python scripts/java-doc-coverage.py        # 106/106 业务源文件已登记
 ```
 
 > `scripts/mvn-dev.sh` 是 Maven 直调包装（通过 `plexus-classworlds` 启动），
@@ -429,7 +438,8 @@ git push origin codex/main:workbuddy/main
 - [x] Docker 运行时冒烟（2026-09-13：8 容器 + 4 Java + Python + 前端，healthcheck 16/16，问答链路 200）
 - [x] 观测区与最小 Ops BFF：中间件监控 / 链路追踪（2026-09-15）
 - [x] 工程加固（2026-09-16）：wp-bff 控制面鉴权 + CORS 收紧、数据源降级可见化、链路采样口径标注、CI 补 Python/wp-bff 测试、前端路由懒加载
-- [ ] Phase 3：Qdrant/pgvector 正式知识库
+- [x] Phase 3：躯体期知识管道 —— 入库 / 三层存储 / 语义检索 / 重排 / RAG，body-service 重写（2026-09-18）
+- [x] Phase 3 收口三轮加固：Mock/API 对齐、文档口径同步、全平台错误信封统一与异常流程归档（2026-09-18）
 - [ ] Phase 4：LLM Gateway 与 M1 问答 MVP
 - [ ] Phase 5-8：工具、编排、免疫、自进化
 

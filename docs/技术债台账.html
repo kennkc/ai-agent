@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:42 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-18 23:19 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -978,6 +978,12 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>17</td>
 <td><strong>文档「基线数字」无门禁</strong>（§4.12）：<code>java-doc-coverage.py</code> 只查文件是否登记，不查数字是否准确 → 用例数/行数/端点数过期可长期静默</td>
 <td>建议扩展该脚本（或新增 <code>doc-metrics-check.py</code>）：从 <code>target/surefire-reports</code> 提取各模块实测用例数，与 <code>docs/java-services/*.md</code> 与 <code>docs/项目进度总览.md</code> 中出现的对应数字断言比对；不一致则非零退出。<strong>这是把 §4.12 一次性修复变成结构性防线的唯一办法</strong></td>
+<td>下轮加固</td>
+</tr>
+<tr>
+<td>21</td>
+<td><strong>前端未消费统一错误信封</strong>（2026-09-18 质量复审发现）：后端五服务已统一 <code>{code,message,details}</code>，但 <code>web/work-platform/src/api/provider.ts</code> 的 <code>catch</code> 只取 axios 的 <code>error.message</code>（如 <code>Request failed with status code 404</code>），<strong>未解析 <code>error.response.data</code> 的 <code>code</code>/<code>message</code>/<code>details</code>，也未识别任何 <code>AGENT_*</code> 错误码</strong> → 统一信封对客户端尚无实际收益，<code>docs/异常流程归纳.md</code> §2.1 的「客户端只需一套解析逻辑」目前是<strong>设计目标而非现状</strong></td>
+<td>建议在 <code>provider.ts</code> 抽 <code>extractApiError(error)</code>：优先取响应体 <code>code</code>/<code>message</code>/<code>details</code>，回退到状态码文案；让 <code>reportDegrade</code> 与 <code>plannedEndpointError</code> 统一走它，并据此区分 <strong>404(planned) / 4xx(用错) / 5xx(故障)</strong> 三种降级文案</td>
 <td>下轮加固</td>
 </tr>
 </tbody>

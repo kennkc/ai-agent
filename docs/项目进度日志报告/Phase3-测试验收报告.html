@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:11 · 源文件 Phase3-测试验收报告.md</span>
+  <span class="meta">生成于 2026-09-18 23:19 · 源文件 Phase3-测试验收报告.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -135,6 +135,13 @@
 <li><a href="#112">11.2 发现的问题</a></li>
 <li><a href="#113-2026-09-18">11.3 补全后的验证基线（2026-09-18 实测）</a></li>
 <li><a href="#114">11.4 对原验收结论的影响</a></li>
+</ul>
+</li>
+<li><a href="#12-2026-09-18">12. 补记 · 2026-09-18 阶段收口后的四轮验证</a><ul>
+<li><a href="#2026-09-18">阶段收口后的四轮（2026-09-18）</a></li>
+<li><a href="#_1">对原验收结论的影响</a></li>
+<li><a href="#_2">测试基线变化</a></li>
+<li><a href="#_3">新增覆盖面</a></li>
 </ul>
 </li>
 </ul>
@@ -779,7 +786,103 @@ PASS/FAIL 数字均取自命令原始输出，非估算。</p>
 <td>HTML 入库、<code>/knowledge/reconcile</code>、<code>/retrieve/plan</code>、BFF 写路径 —— 端到端重跑时一并核对</td>
 </tr>
 </tbody>
-</table></main>
+</table>
+<hr />
+<h2 id="12-2026-09-18">12. 补记 · 2026-09-18 阶段收口后的四轮验证<a class="headerlink" href="#12-2026-09-18" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p><strong>本节为补记。</strong> 以上各节的原有结论与数字<strong>保持不变</strong>（历史留痕）；本节只记录
+Phase 3 验收通过<strong>之后</strong>又跑过的轮次与由此产生的最新基线。</p>
+</blockquote>
+<h3 id="2026-09-18">阶段收口后的四轮（2026-09-18）<a class="headerlink" href="#2026-09-18" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong>Mock / API 对齐轮</strong>（<code>bce7921</code>）—— 路由语义修正：未映射路由由 500 改为 404，并新增
+   405 / 415 映射；前端 Mock 与真实响应做<strong>双向</strong>字段核对；代理目标与端口外置
+   （<code>WP_BFF_URL</code> / <code>WP_GATEWAY_URL</code> / <code>WP_DEV_PORT</code>）</li>
+<li><strong>文档口径同步轮</strong>（<code>8ba5544</code>）—— 五类失效回填（存在性 / 准确性 / 内容 / 可用性 / 自洽），
+   Java 文档覆盖门禁由 103/103 复位为 <strong>106/106</strong></li>
+<li><strong>异常流程归纳与全平台错误信封统一轮</strong>（<code>6616616</code> + <code>d4a114b</code>）—— 修复三处失败路径缺口
+   （错误信封三种形状、BFF 方法不支持返回 404 而非 405、nlp-service HTTP 层零测试），
+   新增 <strong><code>docs/异常流程归纳.md</code></strong></li>
+<li><strong>全局文档对齐与基线数字回填轮</strong> —— 补本轮缺失的优化日志，并把根 <code>README.md</code>、
+   <code>PROGRESS.md</code>、<code>Phase3-DEMO.md</code> 对齐到最新阶段；新登记待办 21（前端未消费统一错误信封）</li>
+</ol>
+<p>详细记录见 <code>docs/优化日志/2026-09-18-异常流程归纳与全平台错误信封统一.md</code> 与
+<code>docs/优化日志/2026-09-18-全局文档对齐与基线数字回填.md</code>。</p>
+<h3 id="_1">对原验收结论的影响<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Phase 3 主体实现（R3-01~R3-09 + R-C03）</td>
+<td><strong>原验收结论成立</strong>，无伪实现、无静默填充</td>
+</tr>
+<tr>
+<td>§11 补记登记的范围口径问题</td>
+<td><strong>维持原判</strong>，未因后续轮次改变</td>
+</tr>
+<tr>
+<td>端到端脚本 35/35</td>
+<td><strong>仍未重跑</strong>（需 Docker）；新增项由单测 + 契约覆盖，此结论同 §11.4</td>
+</tr>
+</tbody>
+</table>
+<h3 id="_2">测试基线变化<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>命令</th>
+<th>阶段交付时</th>
+<th>收口四轮后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java</td>
+<td><code>scripts/mvn-dev.sh test</code></td>
+<td>114</td>
+<td><strong>130</strong>（gateway 2 · session 15 · sense 53 · body 60）</td>
+</tr>
+<tr>
+<td>Python</td>
+<td><code>pytest -q</code></td>
+<td>52</td>
+<td><strong>62</strong>（新增 <code>test_http_errors.py</code> 10 项）</td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><code>node --test</code></td>
+<td>27</td>
+<td><strong>34</strong>（新增路由层错误语义与鉴权反向用例）</td>
+</tr>
+<tr>
+<td>契约</td>
+<td><code>contract-check.py --work-platform</code></td>
+<td>0 FAIL</td>
+<td><strong>0 FAIL</strong></td>
+</tr>
+<tr>
+<td>文档覆盖</td>
+<td><code>java-doc-coverage.py</code></td>
+<td>103/103</td>
+<td><strong>106/106</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>取数注意：Java 用例数<strong>以 Maven 日志为准</strong>。直接汇总 <code>target/surefire-reports/*.txt</code> 会得到 131，
+因为 <code>body-service</code> 下残留一份 2026-09-13 的 <code>BodyStoreTest.txt</code>（测试类已移除，报告未清理）。</p>
+</blockquote>
+<h3 id="_3">新增覆盖面<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>HTTP 错误层</strong>（此前为零）：404 / 405 + <code>Allow</code> / 415 / <strong>422 归并为 400</strong> / 500 不泄露内部</li>
+<li><strong>鉴权反向用例</strong>：无令牌 401 / 伪造 Origin 403，且断言<strong>不触达下游</strong></li>
+</ul></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

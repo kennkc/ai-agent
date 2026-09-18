@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 21:25 · 源文件 Phase3-DEMO.md</span>
+  <span class="meta">生成于 2026-09-18 23:19 · 源文件 Phase3-DEMO.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -184,40 +184,40 @@
 </tr>
 <tr>
 <td>session-manager</td>
-<td style="text-align: right;">10</td>
+<td style="text-align: right;">15</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr>
 <td>sense-service</td>
-<td style="text-align: right;">48</td>
+<td style="text-align: right;">53</td>
 <td style="text-align: right;">0</td>
 <td style="text-align: right;">0</td>
 </tr>
 <tr>
 <td><strong>body-service</strong></td>
-<td style="text-align: right;"><strong>54</strong></td>
+<td style="text-align: right;"><strong>60</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 <tr>
 <td><strong>合计</strong></td>
-<td style="text-align: right;"><strong>114</strong></td>
+<td style="text-align: right;"><strong>130</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 <td style="text-align: right;"><strong>0</strong></td>
 </tr>
 </tbody>
 </table>
-<p>body-service 的 9 个测试类：<code>ChunkProcessorTest</code>(7)、<code>DocumentParserTest</code>(7)、<code>QdrantClientTest</code>(3)、
+<p>body-service 的 10 个测试类：<code>ChunkProcessorTest</code>(7)、<code>DocumentParserTest</code>(7)、<code>QdrantClientTest</code>(3)、
 <code>IngestServiceTest</code>(5)、<code>RetrievalServiceTest</code>(10)、<code>HotCacheStoreTest</code>(5)、<code>InMemoryMetadataStoreTest</code>(6)、
-<code>StorageFacadeTest</code>(5)、<code>TierRouterTest</code>(6)。</p>
+<code>StorageFacadeTest</code>(5)、<code>TierRouterTest</code>(6)、<strong><code>GlobalExceptionHandlerTest</code>(6)</strong>（路由层错误语义，2026-09-18 后补）。</p>
 <h3 id="12-python">1.2 Python 嵌入 / 重排 / 分块<a class="headerlink" href="#12-python" title="Permanent link">&para;</a></h3>
 <pre><code class="language-bash">cd services/python/nlp-service
 ../venv/Scripts/python.exe -m pytest -q      # Windows
 # 或 ../venv/bin/python -m pytest -q         # Linux/macOS
 </code></pre>
 <p>预期（2026-09-18 实测）：</p>
-<pre><code>52 passed in 0.41s
+<pre><code>62 passed, 2 warnings in 0.90s
 </code></pre>
 <table>
 <thead>
@@ -253,6 +253,11 @@
 <td style="text-align: right;"><strong>8</strong></td>
 <td>重排排序、TOP-K、降级不阻断、分数保留</td>
 </tr>
+<tr>
+<td><strong><code>test_http_errors.py</code></strong></td>
+<td style="text-align: right;"><strong>10</strong></td>
+<td>HTTP 错误层：404 / 405+<code>Allow</code> / <strong>422 归并为 400</strong> / 校验失败字段级 details / 500 不泄露内部（2026-09-18 后补）</td>
+</tr>
 </tbody>
 </table>
 <h3 id="13-wp-bff">1.3 wp-bff 回归<a class="headerlink" href="#13-wp-bff" title="Permanent link">&para;</a></h3>
@@ -260,16 +265,16 @@
 node --test
 </code></pre>
 <p>预期：</p>
-<pre><code># tests 27
-# pass 27
+<pre><code># tests 34
+# pass 34
 # fail 0
 </code></pre>
 <p>其中 13 例覆盖躯体端点：可用性、降级、<code>top_k</code> 参数裁剪、高亮窗口（<code>buildSnippet</code>）、租户透传，
 以及<strong>入库写路径</strong>（单篇透传 / 空 content 拦截 / 体层不可用不伪造成功 / 体层错误码上报 / 批量逐条结果）。</p>
 <h3 id="14">1.4 契约与文档覆盖<a class="headerlink" href="#14" title="Permanent link">&para;</a></h3>
 <pre><code class="language-bash">cd /e/AI/ai-agent
-python scripts/contract-check.py --work-platform    # 实现端点 9 ↔ BFF 9，0 FAIL
-python scripts/java-doc-coverage.py                 # body-service 36/36，全仓 103/103
+python scripts/contract-check.py --work-platform    # implemented 8 路径 ↔ BFF 8 路径（9 个方法），0 FAIL
+python scripts/java-doc-coverage.py                 # body-service 37/37，全仓 106/106
 </code></pre>
 <hr />
 <h2 id="docker_1">二、端到端演示（需 Docker 基础设施）<a class="headerlink" href="#docker_1" title="Permanent link">&para;</a></h2>
@@ -686,7 +691,7 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 <p><strong>端到端验收脚本：35 项 PASS / 0 FAIL</strong>（<code>PASS 35 / FAIL 0</code>，2026-09-18 端到端实测，脚本 <code>PASS 35 / FAIL 0</code>）。</p>
 <blockquote>
 <p>⚠️ <strong>口径说明</strong>：上表中带 <code>+</code> 或标注「本轮」的验收项，其<strong>端到端脚本尚未重跑</strong>（需 Docker 基础设施），
-当前结论由<strong>单元测试 + 契约校验</strong>支撑（Java 114 项 / wp-bff 29 项 / 契约 0 FAIL）。
+当前结论由<strong>单元测试 + 契约校验</strong>支撑（Java 130 项 / Python 62 项 / wp-bff 34 项 / 契约 0 FAIL）。
 重跑端到端时请一并核对：HTML 入库、<code>/knowledge/reconcile</code>、<code>/retrieve/plan</code>、BFF 写路径。</p>
 </blockquote>
 <hr />
@@ -740,8 +745,8 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 <hr />
 <h2 id="_2">五、演示完成标准<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
 <ul>
-<li>[x] Java 全量 <code>test</code> 通过，114 测试 0 失败</li>
-<li>[x] Python 52 项、wp-bff 29 项全通过</li>
+<li>[x] Java 全量 <code>test</code> 通过，130 测试 0 失败</li>
+<li>[x] Python 62 项、wp-bff 34 项全通过</li>
 <li>[x] 检索 P99 &lt; 500ms（实测 366ms）、缓存命中 ≥ 30%（实测 45%）达标</li>
 <li>[x] 文档入库 → 语义检索命中（语义相近可召回）</li>
 <li>[x] <strong>HTML 入库经格式解析（切片不含标签）；PDF 被显式拒绝并给出指引</strong></li>

@@ -34,9 +34,15 @@ section was absent. Four **out-of-scope** requirements from the Phase 3 requirem
 (IN-01 skill packages, WB-03 expert center, WB-05 skill marketplace, MC-01 collaboration-bus
 service) were never delivered and are now registered instead of silently dropped.
 
-The suite now stands at **114 Java + 52 Python + 27 wp-bff tests green**, contract check 0 FAIL,
-Java doc coverage 103/103; end-to-end acceptance remains 35/35 from the 2026-09-18 run
+Three further hardening passes then ran on 2026-09-18 without adding features — a Mock/API
+alignment pass, a doc-figure consistency pass, and an exception-flow consolidation pass
+(the last one is recorded in `docs/优化日志/2026-09-18-异常流程归纳与全平台错误信封统一.md`).
+All three are summarised in [Phase 3 post-closure hardening](#phase-3-post-closure-hardening-2026-09-18).
+
+The suite now stands at **130 Java + 62 Python + 34 wp-bff tests green**, contract check 0 FAIL,
+Java doc coverage 106/106; end-to-end acceptance remains 35/35 from the 2026-09-18 run
 (new items are covered by unit + contract tests and have not been re-run end-to-end).
+The Java split is gateway 2 · session-manager 15 · sense-service 53 · body-service 60.
 
 ## Phase 0
 
@@ -412,6 +418,72 @@ Goal: make the archived documentation answer two questions on its own — "where
 - Doc coverage self-check: `python scripts/java-doc-coverage.py`
 - No source code changed in this pass; Java/Python/contract/wp-bff baselines carry over from
   the 2026-09-16 figures above.
+
+## Phase 3 post-closure hardening (2026-09-18)
+
+After the requirement re-audit, three independent passes ran without adding new features.
+Each is recorded in detail under `docs/优化日志/`.
+
+### 1 · Runtime semantics & Mock/API alignment (`bce7921`)
+
+A front-to-back connectivity pass: making the running services, the contract and the front end
+tell the same story.
+
+- [x] **Route semantics corrected**: unmapped routes answered 500 instead of 404 across the three
+      Java services, because Spring route-layer exceptions fell through to the catch-all handler —
+      "endpoint missing" was indistinguishable from "service broken". Now mapped to
+      `AGENT_NOT_FOUND` / `AGENT_METHOD_NOT_ALLOWED` / `AGENT_UNSUPPORTED_MEDIA_TYPE`, each with a
+      test (see `docs/java-services/07 §5.1`)
+- [x] **Mock <-> real response reconciled in both directions** — the forward check alone had been
+      silently dropping fields the real API returns and Mock does not declare
+- [x] Proxy targets / ports externalised (`WP_BFF_URL` / `WP_GATEWAY_URL` / `WP_DEV_PORT`);
+      `.env.example` template aligned with the accepted state
+
+### 2 · Doc-figure consistency pass (`8ba5544`)
+
+Doc figures had drifted **while every gate was green** — the gates check existence, not accuracy.
+
+- [x] Test counts, source-line counts and endpoint counts re-checked against actual command output
+      across `docs/java-services/04~07`, `docs/项目进度总览`, `docs/功能开发流程` and both READMEs
+- [x] Latest cross-cutting behaviour written into the human-facing docs (§5.1 route-layer dispatch,
+      §5.2 unified exception egress)
+- [x] Corrected an interface example that 404s if copy-pasted (`POST /api/body/rag` -> `/rag/answer`)
+- [x] Doc coverage gate restored to green (**103/103 -> 106/106**)
+
+### 3 · Exception-flow consolidation & unified error envelope (`6616616` + `d4a114b`)
+
+Progress and quality were re-audited against the running code rather than against the phase
+reports' conclusions. Three real gaps surfaced — **all of them in failure paths that every green
+gate had missed**:
+
+- [x] Error responses came in **three different shapes** (Java `{code,message,details}` ·
+      wp-bff `{error}` · nlp-service leaking the FastAPI default body). One shape everywhere now,
+      with an `ErrorEnvelope` schema added to the contract
+- [x] wp-bff answered **404** for an unsupported method where the Java services answer **405** —
+      opposite semantics for the same situation, which disguises "wrong method" as "endpoint does
+      not exist". Now 405 + `Allow` header, driven by a `ROUTE_GUARD` derived from the single
+      `IMPLEMENTED_ENDPOINTS` registry so that no third source of truth is introduced
+- [x] nlp-service had **zero** HTTP-layer tests; `tests/test_http_errors.py` added (+10)
+- [x] Added **`docs/异常流程归纳.md`**: runtime dispatch, degradation visibility, the planned-endpoint
+      3-state rule (404 = not implemented · 4xx = misused · 5xx = broken) and a **D-01~D-30**
+      catalogue of development-process exceptions
+
+Three remainders are **registered rather than glossed over** (待办 18/19/20):
+gateway (8080) is still unverified at runtime because **Spring WebFlux does not use
+`@ControllerAdvice`**; the BFF body-layer unavailable case deliberately answers
+`200 + available=false`; and the unified error envelope still has **no gate guarding it**.
+
+### Verification (2026-09-18, post-closure)
+
+- Java `scripts/mvn-dev.sh test`: **130 passed / 0 failed** (gateway 2 · session 15 · sense 53 · body 60)
+- `nlp-service` pytest: **62 passed** · wp-bff `node --test`: **34 pass / 0 fail**
+- `contract-check.py --work-platform`: implemented 8 paths <-> BFF 8 paths (9 methods), **0 FAIL**
+- `java-doc-coverage.py`: **106/106** hand-written sources
+- HTML twins regenerated, `STALE` check empty; the three long-lived branches are all at `d4a114b`
+
+> Java counts are taken from the Maven log, **not** by summing surefire reports: a stale
+> `body-service/target/surefire-reports/com.agent.body.store.BodyStoreTest.txt` from 2026-09-13
+> (its test class was removed long ago) inflates the sum to 131.
 
 ## Remaining
 

@@ -24,14 +24,14 @@ cd services/java
 | 模块 | 测试数 | 失败 | 错误 |
 |------|-------:|-----:|-----:|
 | gateway-service | 2 | 0 | 0 |
-| session-manager | 10 | 0 | 0 |
-| sense-service | 48 | 0 | 0 |
-| **body-service** | **54** | **0** | **0** |
-| **合计** | **114** | **0** | **0** |
+| session-manager | 15 | 0 | 0 |
+| sense-service | 53 | 0 | 0 |
+| **body-service** | **60** | **0** | **0** |
+| **合计** | **130** | **0** | **0** |
 
-body-service 的 9 个测试类：`ChunkProcessorTest`(7)、`DocumentParserTest`(7)、`QdrantClientTest`(3)、
+body-service 的 10 个测试类：`ChunkProcessorTest`(7)、`DocumentParserTest`(7)、`QdrantClientTest`(3)、
 `IngestServiceTest`(5)、`RetrievalServiceTest`(10)、`HotCacheStoreTest`(5)、`InMemoryMetadataStoreTest`(6)、
-`StorageFacadeTest`(5)、`TierRouterTest`(6)。
+`StorageFacadeTest`(5)、`TierRouterTest`(6)、**`GlobalExceptionHandlerTest`(6)**（路由层错误语义，2026-09-18 后补）。
 
 ### 1.2 Python 嵌入 / 重排 / 分块
 
@@ -44,7 +44,7 @@ cd services/python/nlp-service
 预期（2026-09-18 实测）：
 
 ```
-52 passed in 0.41s
+62 passed, 2 warnings in 0.90s
 ```
 
 | 测试文件 | 用例数 | 覆盖 |
@@ -54,6 +54,7 @@ cd services/python/nlp-service
 | **`test_chunking.py`** | **12** | 分块边界、标题入块、同标题合并、重叠、跨语言一致性 |
 | **`test_embedding.py`** | **13** | 维度、归一化、确定性、延迟统计、引擎降级 |
 | **`test_rerank.py`** | **8** | 重排排序、TOP-K、降级不阻断、分数保留 |
+| **`test_http_errors.py`** | **10** | HTTP 错误层：404 / 405+`Allow` / **422 归并为 400** / 校验失败字段级 details / 500 不泄露内部（2026-09-18 后补） |
 
 ### 1.3 wp-bff 回归
 
@@ -65,8 +66,8 @@ node --test
 预期：
 
 ```
-# tests 27
-# pass 27
+# tests 34
+# pass 34
 # fail 0
 ```
 
@@ -77,8 +78,8 @@ node --test
 
 ```bash
 cd /e/AI/ai-agent
-python scripts/contract-check.py --work-platform    # 实现端点 9 ↔ BFF 9，0 FAIL
-python scripts/java-doc-coverage.py                 # body-service 36/36，全仓 103/103
+python scripts/contract-check.py --work-platform    # implemented 8 路径 ↔ BFF 8 路径（9 个方法），0 FAIL
+python scripts/java-doc-coverage.py                 # body-service 37/37，全仓 106/106
 ```
 
 ---
@@ -426,7 +427,7 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 **端到端验收脚本：35 项 PASS / 0 FAIL**（`PASS 35 / FAIL 0`，2026-09-18 端到端实测，脚本 `PASS 35 / FAIL 0`）。
 
 > ⚠️ **口径说明**：上表中带 `+` 或标注「本轮」的验收项，其**端到端脚本尚未重跑**（需 Docker 基础设施），
-> 当前结论由**单元测试 + 契约校验**支撑（Java 114 项 / wp-bff 29 项 / 契约 0 FAIL）。
+> 当前结论由**单元测试 + 契约校验**支撑（Java 130 项 / Python 62 项 / wp-bff 34 项 / 契约 0 FAIL）。
 > 重跑端到端时请一并核对：HTML 入库、`/knowledge/reconcile`、`/retrieve/plan`、BFF 写路径。
 
 ---
@@ -449,8 +450,8 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 
 ## 五、演示完成标准
 
-- [x] Java 全量 `test` 通过，114 测试 0 失败
-- [x] Python 52 项、wp-bff 29 项全通过
+- [x] Java 全量 `test` 通过，130 测试 0 失败
+- [x] Python 62 项、wp-bff 34 项全通过
 - [x] 检索 P99 < 500ms（实测 366ms）、缓存命中 ≥ 30%（实测 45%）达标
 - [x] 文档入库 → 语义检索命中（语义相近可召回）
 - [x] **HTML 入库经格式解析（切片不含标签）；PDF 被显式拒绝并给出指引**
