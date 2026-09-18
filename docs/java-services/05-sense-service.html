@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:11 · 源文件 05-sense-service.md</span>
+  <span class="meta">生成于 2026-09-18 22:23 · 源文件 05-sense-service.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -132,7 +132,7 @@
 </li>
 <li><a href="#4">4. 文件清单</a><ul>
 <li><a href="#41-35">4.1 主代码（35 个）</a></li>
-<li><a href="#42-8-48">4.2 测试（8 个类 · 48 个用例）</a></li>
+<li><a href="#42-9-53">4.2 测试（9 个类 · 53 个用例）</a></li>
 </ul>
 </li>
 <li><a href="#5">5. 逐文件说明</a><ul>
@@ -222,16 +222,16 @@
 </ul>
 </li>
 <li><a href="#519-common">5.19 common 包</a><ul>
-<li><a href="#errorcodejava-29">ErrorCode.java · 枚举 · 29 行</a></li>
+<li><a href="#errorcodejava-31">ErrorCode.java · 枚举 · 31 行</a></li>
 <li><a href="#bizexceptionjava-34">BizException.java · 异常 · 34 行</a></li>
-<li><a href="#globalexceptionhandlerjava-53">GlobalExceptionHandler.java · 切面 · 53 行</a></li>
+<li><a href="#globalexceptionhandlerjava-93">GlobalExceptionHandler.java · 切面 · 93 行</a></li>
 </ul>
 </li>
 </ul>
 </li>
 <li><a href="#6-http">6. HTTP 端点汇总</a></li>
 <li><a href="#7">7. 配置项</a></li>
-<li><a href="#8-48">8. 测试基线（48 个用例）</a><ul>
+<li><a href="#8-53">8. 测试基线（53 个用例）</a><ul>
 <li><a href="#touchchanneltest-12">TouchChannelTest · 12 个</a></li>
 <li><a href="#qualitygatetest-7">QualityGateTest · 7 个</a></li>
 <li><a href="#collectpipelinetest-6">CollectPipelineTest · 6 个</a></li>
@@ -240,6 +240,7 @@
 <li><a href="#channelhealthmonitortest-4">ChannelHealthMonitorTest · 4 个</a></li>
 <li><a href="#httpclientstest-1">HttpClientsTest · 1 个</a></li>
 <li><a href="#textextractortest-6">TextExtractorTest · 6 个</a></li>
+<li><a href="#globalexceptionhandlertest-5-2026-09-18">GlobalExceptionHandlerTest · 5 个（2026-09-18 新增）</a></li>
 </ul>
 </li>
 <li><a href="#9">9. 故障排查速查</a></li>
@@ -250,7 +251,7 @@
   <main class="doc"><h1 id="05-sense-service">05 · sense-service 感官服务<a class="headerlink" href="#05-sense-service" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>模块路径：<code>services/java/sense-service/</code>
-源文件：<strong>35 个主代码 + 8 个测试</strong>（主代码约 2,900 行；全项目最大模块）
+源文件：<strong>35 个主代码 + 9 个测试</strong>（主代码约 2,900 行；全项目最大模块）
 HTTP 端口：<strong>8082</strong> · gRPC 端口：<strong>9093</strong>
 主要依赖：Spring Web、jsoup（HTML 正文提取）、MinIO SDK、resilience4j-retry、Kafka clients、Lombok</p>
 </blockquote>
@@ -709,7 +710,7 @@ HTTP 端口：<strong>8082</strong> · gRPC 端口：<strong>9093</strong>
 <tr>
 <td><code>common/ErrorCode.java</code></td>
 <td>枚举</td>
-<td style="text-align: right;">29</td>
+<td style="text-align: right;">31</td>
 <td>统一错误码</td>
 </tr>
 <tr>
@@ -721,12 +722,12 @@ HTTP 端口：<strong>8082</strong> · gRPC 端口：<strong>9093</strong>
 <tr>
 <td><code>common/GlobalExceptionHandler.java</code></td>
 <td>切面</td>
-<td style="text-align: right;">53</td>
-<td>统一异常响应</td>
+<td style="text-align: right;">93</td>
+<td>统一异常响应 + <strong>路由层 404/405/415 分流</strong>（见 <a href="07-运行时配置与横切约定.md">07</a> §5）</td>
 </tr>
 </tbody>
 </table>
-<h3 id="42-8-48">4.2 测试（8 个类 · 48 个用例）<a class="headerlink" href="#42-8-48" title="Permanent link">&para;</a></h3>
+<h3 id="42-9-53">4.2 测试（9 个类 · 53 个用例）<a class="headerlink" href="#42-9-53" title="Permanent link">&para;</a></h3>
 <p>（路径前缀 <code>src/test/java/com/agent/sense/</code>）</p>
 <table>
 <thead>
@@ -766,6 +767,11 @@ HTTP 端口：<strong>8082</strong> · gRPC 端口：<strong>9093</strong>
 <td><code>util/TextExtractorTest.java</code></td>
 <td style="text-align: right;">6</td>
 <td>R2-02</td>
+</tr>
+<tr>
+<td><code>common/GlobalExceptionHandlerTest.java</code></td>
+<td style="text-align: right;">5</td>
+<td>路由层错误语义（2026-09-18 缺陷回归）</td>
 </tr>
 <tr>
 <td><code>health/ChannelHealthMonitorTest.java</code></td>
@@ -2270,24 +2276,31 @@ pipeline.collect(ChannelType.parse(rule.channel), request)
 <p><strong>已知的测试命名瑕疵</strong>：<code>TextExtractorTest</code> 中有一个用例名为 <code>decodesGbkWitoutHeader</code>
 （应为 <code>Without</code>）。仅影响可读性，功能无影响。可在后续代码整理时一并改名。</p>
 <h3 id="519-common">5.19 common 包<a class="headerlink" href="#519-common" title="Permanent link">&para;</a></h3>
-<h4 id="errorcodejava-29"><code>ErrorCode.java</code> · 枚举 · 29 行<a class="headerlink" href="#errorcodejava-29" title="Permanent link">&para;</a></h4>
+<h4 id="errorcodejava-31"><code>ErrorCode.java</code> · 枚举 · 31 行<a class="headerlink" href="#errorcodejava-31" title="Permanent link">&para;</a></h4>
 <p>统一错误码（R1-08），响应体格式 <code>{"code","message","details"}</code>。
-<strong>取值与 <code>session-manager</code> 的同名枚举完全一致</strong>（10 个：<code>AGENT_BAD_REQUEST</code>、<code>AGENT_NOT_FOUND</code>、
-<code>AGENT_UNAUTHORIZED</code>、<code>AGENT_FORBIDDEN</code>、<code>AGENT_CONFLICT</code>、<code>AGENT_DUPLICATE</code>、<code>AGENT_TIMEOUT</code>、
-<code>AGENT_BUS_UNAVAILABLE</code>、<code>AGENT_UPSTREAM_UNAVAILABLE</code>、<code>AGENT_INTERNAL_ERROR</code>）。</p>
-<p><strong>维护提示</strong>：这是<strong>跨模块的重复定义</strong>（两模块各一份），新增错误码需两边同步。
-一致性由 <code>contract-check.py</code> 之外的人工约定保障 —— 改动时请一并检查另一处。</p>
+<strong>取值与 <code>session-manager</code> 的同名枚举完全一致</strong>（11 个：<code>AGENT_BAD_REQUEST</code>、<code>AGENT_NOT_FOUND</code>、
+<code>AGENT_UNAUTHORIZED</code>、<code>AGENT_FORBIDDEN</code>、<code>AGENT_METHOD_NOT_ALLOWED</code>、<code>AGENT_CONFLICT</code>、<code>AGENT_DUPLICATE</code>、
+<code>AGENT_TIMEOUT</code>、<code>AGENT_BUS_UNAVAILABLE</code>、<code>AGENT_UPSTREAM_UNAVAILABLE</code>、<code>AGENT_INTERNAL_ERROR</code>）。</p>
+<p><strong>维护提示</strong>：这是<strong>跨模块的重复定义</strong>（<code>session-manager</code> / <code>sense-service</code> / <code>body-service</code> <strong>三份</strong>），
+新增错误码需三处同步。一致性由人工约定保障 —— 改动时请一并检查另外两处。</p>
 <h4 id="bizexceptionjava-34"><code>BizException.java</code> · 异常 · 34 行<a class="headerlink" href="#bizexceptionjava-34" title="Permanent link">&para;</a></h4>
 <p>携带 <code>ErrorCode</code> + <code>details</code> 的业务异常。与 <code>session-manager</code> 版本<strong>结构相同但少了「携带 cause」的构造器</strong> ——
 本模块没有跨服务调用的降级需求，因此未保留该构造器。</p>
 <p><strong>注意一个用法细节</strong>：<code>OutboundGuard</code> 抛 <code>BizException(ErrorCode.AGENT_BAD_REQUEST, "message")</code>
 （两参数构造），与该类的构造器签名匹配。</p>
-<h4 id="globalexceptionhandlerjava-53"><code>GlobalExceptionHandler.java</code> · 切面 · 53 行<a class="headerlink" href="#globalexceptionhandlerjava-53" title="Permanent link">&para;</a></h4>
+<h4 id="globalexceptionhandlerjava-93"><code>GlobalExceptionHandler.java</code> · 切面 · 93 行<a class="headerlink" href="#globalexceptionhandlerjava-93" title="Permanent link">&para;</a></h4>
 <p><code>@RestControllerAdvice</code>，把异常统一转为 <code>{"code","message","details"}</code>。
 <strong>错误码 → HTTP 状态码的映射与 <code>session-manager</code> 完全一致</strong>（见
 <a href="04-session-manager.md">04-session-manager</a> §4.12 的映射表），此处不重复。</p>
 <p>处理的异常类型：<code>BizException</code>、<code>MethodArgumentNotValidException</code>、<code>IllegalArgumentException</code>、
+<strong>路由层三类（<code>NoResourceFoundException</code> / <code>NoHandlerFoundException</code> → 404，
+<code>HttpRequestMethodNotSupportedException</code> → 405，<code>HttpMediaTypeNotSupportedException</code> → 415）</strong>、
 兜底 <code>Exception</code>（500 且只记日志，不泄露内部消息）。</p>
+<blockquote>
+<p><strong>为什么路由层要单独分流</strong>（2026-09-18 修）：此前路由层异常落进兜底分支返回 500，
+使「接口不存在」与「服务内部故障」在客户端不可区分。三服务同源缺陷，已同步修复，
+横切口径见 <a href="07-运行时配置与横切约定.md">07</a> §5.1。</p>
+</blockquote>
 <h2 id="6-http">6. HTTP 端点汇总<a class="headerlink" href="#6-http" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2449,7 +2462,7 @@ pipeline.collect(ChannelType.parse(rule.channel), request)
 </table>
 <p><strong>注意 <code>NACOS_IP</code> 显式设为 <code>127.0.0.1</code></strong>（其他模块不设）—— 原因是本机多网卡时，
 Nacos 可能注册错误的网卡 IP，导致 <code>session-manager</code> 通过 NATS 之外的方式访问不到。</p>
-<h2 id="8-48">8. 测试基线（48 个用例）<a class="headerlink" href="#8-48" title="Permanent link">&para;</a></h2>
+<h2 id="8-53">8. 测试基线（53 个用例）<a class="headerlink" href="#8-53" title="Permanent link">&para;</a></h2>
 <h3 id="touchchanneltest-12"><code>TouchChannelTest</code> · 12 个<a class="headerlink" href="#touchchanneltest-12" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -2559,6 +2572,12 @@ Nacos 可能注册错误的网卡 IP，导致 <code>session-manager</code> 通�
 <p><code>extractsTitleAndBodyFromHtml</code>、<code>keepsPlainTextUntouched</code>、<code>decodesUtf8ByContentTypeHeader</code>、
 <code>decodesGbkWitoutHeader</code>（<strong>用例名有拼写错误，应为 <code>Without</code></strong>）、<code>decodesCharsetFromHtmlMeta</code>、
 <code>handlesEmptyInput</code>。</p>
+<h3 id="globalexceptionhandlertest-5-2026-09-18"><code>GlobalExceptionHandlerTest</code> · 5 个（2026-09-18 新增）<a class="headerlink" href="#globalexceptionhandlertest-5-2026-09-18" title="Permanent link">&para;</a></h3>
+<p><code>unmappedRouteMapsTo404NotServerError</code>（未映射路由 → <strong>404 而非 500</strong>）、<code>noHandlerFoundAlsoMapsTo404</code>、
+<code>wrongMethodMapsTo405</code>（方法不支持必须与 404 区分）、<code>unsupportedMediaTypeMapsTo415</code>、
+<code>genuineServerFaultStillMapsTo500</code>（<strong>修复边界守门</strong>：真实内部故障仍须 500）。</p>
+<p>前四条是缺陷回归，最后一条防止「为修 404 而把兜底分支整体改掉」——三模块用同一套用例模板，
+差异只有示例路径与异常消息，便于对照维护。</p>
 <h2 id="9">9. 故障排查速查<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -2674,7 +2693,7 @@ Nacos 可能注册错误的网卡 IP，导致 <code>session-manager</code> 通�
 </tr>
 <tr>
 <td>新增错误码</td>
-<td><code>common/ErrorCode</code> + <code>GlobalExceptionHandler</code> switch（<strong>记得同步 <code>session-manager</code> 的同名文件</strong>）</td>
+<td><code>common/ErrorCode</code> + <code>GlobalExceptionHandler</code> switch（<strong>三份副本需同步</strong>：<code>sense-service</code> / <code>session-manager</code> / <code>body-service</code>）</td>
 </tr>
 </tbody>
 </table></main>

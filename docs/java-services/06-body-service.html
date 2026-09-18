@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:55 · 源文件 06-body-service.md</span>
+  <span class="meta">生成于 2026-09-18 22:23 · 源文件 06-body-service.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -124,20 +124,21 @@
 <li><a href="#2-phase-12">2. 与 Phase 1/2 的关系（替换点已生效）</a></li>
 <li><a href="#3">3. 文件清单</a><ul>
 <li><a href="#31">3.1 主代码</a></li>
-<li><a href="#32-54">3.2 测试（54 个用例，全绿）</a></li>
+<li><a href="#32-60">3.2 测试（60 个用例，全绿）</a></li>
 </ul>
 </li>
 <li><a href="#4">4. 逐文件说明（关键实现）</a><ul>
 <li><a href="#41-chunkchunkprocessorjava-200">4.1 chunk/ChunkProcessor.java · 分块器 · 200 行</a></li>
 <li><a href="#42-clientqdrantclientjava-229">4.2 client/QdrantClient.java · 向量库客户端 · 229 行</a></li>
-<li><a href="#43-serviceingestservicejava-152">4.3 service/IngestService.java · 入库管道 · 152 行</a></li>
-<li><a href="#44-serviceretrievalservicejava-154">4.4 service/RetrievalService.java · 检索链路 · 154 行</a></li>
+<li><a href="#43-serviceingestservicejava-172">4.3 service/IngestService.java · 入库管道 · 172 行</a></li>
+<li><a href="#44-serviceretrievalservicejava-183">4.4 service/RetrievalService.java · 检索链路 · 183 行</a></li>
 <li><a href="#45-storehotcachestorejava-158">4.5 store/HotCacheStore.java · 热层 · 158 行</a></li>
 <li><a href="#46-storepgmetadatastorejava-156">4.6 store/PgMetadataStore.java · 冷层 · 156 行</a></li>
 <li><a href="#47-eventsensecollectedconsumerjava-179">4.7 event/SenseCollectedConsumer.java · 感官事件消费 · 179 行</a></li>
 <li><a href="#48-controllerknowledgecontrollerjava-306">4.8 controller/KnowledgeController.java · 控制器 · 306 行</a></li>
 <li><a href="#49-serviceknowledgemetricsjava-104">4.9 service/KnowledgeMetrics.java · 指标 · 104 行</a></li>
 <li><a href="#410-chunkdocumentparserjava-146">4.10 chunk/DocumentParser.java · 格式解析 · 146 行</a></li>
+<li><a href="#411-commonglobalexceptionhandlerjava-90">4.11 common/GlobalExceptionHandler.java · 统一异常出口 · 90 行</a></li>
 </ul>
 </li>
 <li><a href="#5">5. 降级清单（诚实上报，不虚构）</a></li>
@@ -150,7 +151,7 @@
   <main class="doc"><h1 id="06-body-service-phase-3">06 · body-service 躯体服务（Phase 3 躯体期）<a class="headerlink" href="#06-body-service-phase-3" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>模块路径：<code>services/java/body-service/</code>
-源文件：<strong>27 个主代码（2721 行）+ 9 个测试（886 行）</strong>
+源文件：<strong>27 个主代码（2721 行）+ 10 个测试（975 行）</strong>
 HTTP 端口：<strong>8083</strong> · gRPC 端口：<strong>9094</strong>
 外部依赖：PostgreSQL（冷层真相源）· Redis（热层缓存）· Qdrant（温层向量库）· Kafka（感官事件消费）· nlp-service（嵌入/重排）</p>
 </blockquote>
@@ -267,8 +268,8 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <tr>
 <td><code>common/ErrorCode.java</code></td>
 <td>枚举</td>
-<td style="text-align: right;">30</td>
-<td>统一错误码（R1-08 对齐副本）</td>
+<td style="text-align: right;">32</td>
+<td>统一错误码（R1-08 对齐副本，与另两服务同步 11 个值）</td>
 </tr>
 <tr>
 <td><code>common/BizException.java</code></td>
@@ -279,8 +280,8 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <tr>
 <td><code>common/GlobalExceptionHandler.java</code></td>
 <td>切面</td>
-<td style="text-align: right;">48</td>
-<td>错误码 → HTTP 响应体</td>
+<td style="text-align: right;">90</td>
+<td>错误码 → HTTP 响应体 + <strong>路由层 404/405/415 分流</strong>（见 §4.11）</td>
 </tr>
 <tr>
 <td><code>config/BodyStorageConfig.java</code></td>
@@ -386,7 +387,7 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </tr>
 </tbody>
 </table>
-<h3 id="32-54">3.2 测试（54 个用例，全绿）<a class="headerlink" href="#32-54" title="Permanent link">&para;</a></h3>
+<h3 id="32-60">3.2 测试（60 个用例，全绿）<a class="headerlink" href="#32-60" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -410,6 +411,11 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <td><code>client/QdrantClientTest.java</code></td>
 <td style="text-align: right;">38</td>
 <td>R3-04 <strong>point id 必须是 UUID</strong>（E2E 缺陷回归）</td>
+</tr>
+<tr>
+<td><code>common/GlobalExceptionHandlerTest.java</code></td>
+<td style="text-align: right;">89</td>
+<td>路由层错误语义：未映射路由 404 而非 500 / 405 / 415 / <strong>真实故障仍 500</strong>（§4.11）</td>
 </tr>
 <tr>
 <td><code>service/IngestServiceTest.java</code></td>
@@ -470,7 +476,7 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </ol>
 <p>其余方法：<code>upsert</code>（<code>wait=true</code>，返回即可检索）、<code>search</code>（TOP-N + payload 还原）、
 <code>deleteByDocument</code>（重入库清理旧向量）、<code>count</code>（躯体视图"知识量"口径）、<code>available</code>（真实性探针）。</p>
-<h3 id="43-serviceingestservicejava-152">4.3 <code>service/IngestService.java</code> · 入库管道 · 152 行<a class="headerlink" href="#43-serviceingestservicejava-152" title="Permanent link">&para;</a></h3>
+<h3 id="43-serviceingestservicejava-172">4.3 <code>service/IngestService.java</code> · 入库管道 · 172 行<a class="headerlink" href="#43-serviceingestservicejava-172" title="Permanent link">&para;</a></h3>
 <p>状态机：写 <code>PENDING</code> → 分块 → 分批嵌入（<code>embed-batch-size</code>=16）→ <code>ensureCollection</code> →
 按 doc 清旧向量 → upsert → PG 覆盖式写切片 → 置 <code>INDEXED</code>；任一异常置 <code>FAILED</code> + 截断原因（≤900 字）后<strong>重抛</strong>。</p>
 <p>关键取舍：</p>
@@ -479,7 +485,7 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <li><strong>批量嵌入按 <code>embed-batch-size</code> 分片</strong>，避免一次请求过大把嵌入服务打挂。</li>
 <li>每次入库都 <code>deleteByDocument</code>，因此重入库不会残留旧切片（E2E 断言"同 doc 切片数受控"）。</li>
 </ul>
-<h3 id="44-serviceretrievalservicejava-154">4.4 <code>service/RetrievalService.java</code> · 检索链路 · 154 行<a class="headerlink" href="#44-serviceretrievalservicejava-154" title="Permanent link">&para;</a></h3>
+<h3 id="44-serviceretrievalservicejava-183">4.4 <code>service/RetrievalService.java</code> · 检索链路 · 183 行<a class="headerlink" href="#44-serviceretrievalservicejava-183" title="Permanent link">&para;</a></h3>
 <pre><code class="language-text">Query → recordAccess（热度输入）
       → 缓存查（Redis，命中即返回，cacheHit=true / tier=HOT）
       → 未命中：embedOne → Qdrant TOP-50（tenant 过滤）
@@ -651,6 +657,63 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </table>
 <p><strong>红线</strong>：绝不把 PDF 二进制当文本塞进分块器（会产出垃圾向量且无人察觉）——
 宁可报错，也不产出"看起来成功"的脏知识。</p>
+<h3 id="411-commonglobalexceptionhandlerjava-90">4.11 <code>common/GlobalExceptionHandler.java</code> · 统一异常出口 · 90 行<a class="headerlink" href="#411-commonglobalexceptionhandlerjava-90" title="Permanent link">&para;</a></h3>
+<p><code>@RestControllerAdvice</code>，响应体格式 <code>{"code","message","details"}</code>，与 <code>session-manager</code> /
+<code>sense-service</code> <strong>三份同源</strong>（新增错误码需三处同步）。</p>
+<p><strong>映射规则</strong>（改错误码时需同步）：</p>
+<table>
+<thead>
+<tr>
+<th>分类</th>
+<th>触发</th>
+<th>返回</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>业务</td>
+<td><code>BizException(ErrorCode)</code></td>
+<td>该错误码对应的 HTTP 状态</td>
+</tr>
+<tr>
+<td>校验</td>
+<td><code>MethodArgumentNotValidException</code></td>
+<td>400，<code>details</code> 为「字段 → 消息」</td>
+</tr>
+<tr>
+<td>参数</td>
+<td><code>IllegalArgumentException</code></td>
+<td>400（沿用异常消息）</td>
+</tr>
+<tr>
+<td><strong>路由层</strong></td>
+<td><code>NoResourceFoundException</code> / <code>NoHandlerFoundException</code></td>
+<td><strong>404 <code>AGENT_NOT_FOUND</code></strong>（消息带原始路径）</td>
+</tr>
+<tr>
+<td><strong>路由层</strong></td>
+<td><code>HttpRequestMethodNotSupportedException</code></td>
+<td><strong>405 <code>AGENT_METHOD_NOT_ALLOWED</code></strong>（details 带 <code>method</code> / <code>supported</code>）</td>
+</tr>
+<tr>
+<td><strong>路由层</strong></td>
+<td><code>HttpMediaTypeNotSupportedException</code></td>
+<td><strong>415 <code>AGENT_BAD_REQUEST</code></strong></td>
+</tr>
+<tr>
+<td>兜底</td>
+<td>其他 <code>Exception</code></td>
+<td>500 <code>AGENT_INTERNAL_ERROR</code>，<strong>只记日志、不回传内部消息</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>路由层分流是 2026-09-18 补的</strong>（缺陷回归，<code>common/GlobalExceptionHandlerTest</code> 10 项中的 6 项守它）：
+补之前上述三类<strong>一起落进兜底分支返回 500</strong>，后果是——
+① 排障时分不清「接口不存在」与「服务真的坏了」；
+② 前端在 <code>api</code> 数据源下无法据此走「端点 reserved（<code>x-wp-status: planned</code>）」的降级分支，
+   切换数据源时曾把旧进程上的 <code>GET /api/body/knowledge/reconcile</code> 404 误判为服务故障。</p>
+<p><strong>修复的边界</strong>：只把<strong>路由层</strong>异常分流，真实内部故障仍返回 500
+（<code>genuineServerFaultStillMapsTo500</code> 用例显式守住这条，防止"顺手把 500 也改成 4xx"）。</p>
 <h2 id="5">5. 降级清单（诚实上报，不虚构）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -811,6 +874,14 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <tr>
 <td>让租户头成为强制项</td>
 <td>去掉 <code>@RequestHeader</code> 的 <code>defaultValue</code>（<strong>需评估对现有调用影响</strong>）</td>
+</tr>
+<tr>
+<td>新增错误码</td>
+<td><code>common/ErrorCode</code> + <code>GlobalExceptionHandler</code> 的 switch（<strong>三份副本需同步</strong>：<code>body-service</code> / <code>session-manager</code> / <code>sense-service</code>）</td>
+</tr>
+<tr>
+<td>新增 HTTP 端点后 404 行为异常</td>
+<td>先确认 <code>GlobalExceptionHandler</code> 的路由层映射未被改动（§4.11），不要靠 <code>throw new BizException</code> 手工兜</td>
 </tr>
 </tbody>
 </table>

@@ -1,7 +1,7 @@
 # 05 · sense-service 感官服务
 
 > 模块路径：`services/java/sense-service/`
-> 源文件：**35 个主代码 + 8 个测试**（主代码约 2,900 行；全项目最大模块）
+> 源文件：**35 个主代码 + 9 个测试**（主代码约 2,900 行；全项目最大模块）
 > HTTP 端口：**8082** · gRPC 端口：**9093**
 > 主要依赖：Spring Web、jsoup（HTML 正文提取）、MinIO SDK、resilience4j-retry、Kafka clients、Lombok
 
@@ -162,11 +162,11 @@ public boolean pass(String content) { return rejectReason(content) == null; }  /
 | `util/HttpClients.java` | 工具类 | 24 | HTTP/1.1 客户端构建器（缺陷 D-1） |
 | `util/TextExtractor.java` | 工具类 | 117 | HTML 正文提取 + 编码嗅探解码 |
 | **common/** | | | |
-| `common/ErrorCode.java` | 枚举 | 29 | 统一错误码 |
+| `common/ErrorCode.java` | 枚举 | 31 | 统一错误码 |
 | `common/BizException.java` | 异常 | 34 | 业务异常 |
-| `common/GlobalExceptionHandler.java` | 切面 | 53 | 统一异常响应 |
+| `common/GlobalExceptionHandler.java` | 切面 | 93 | 统一异常响应 + **路由层 404/405/415 分流**（见 [07](07-运行时配置与横切约定.md) §5） |
 
-### 4.2 测试（8 个类 · 48 个用例）
+### 4.2 测试（9 个类 · 53 个用例）
 
 （路径前缀 `src/test/java/com/agent/sense/`）
 
@@ -178,6 +178,7 @@ public boolean pass(String content) { return rejectReason(content) == null; }  /
 | `normalize/DataNormalizerTest.java` | 6 | R2-04 |
 | `staging/StagingStoreTest.java` | 6 | R2-10 |
 | `util/TextExtractorTest.java` | 6 | R2-02 |
+| `common/GlobalExceptionHandlerTest.java` | 5 | 路由层错误语义（2026-09-18 缺陷回归） |
 | `health/ChannelHealthMonitorTest.java` | 4 | R2-09 |
 | `util/HttpClientsTest.java` | 1 | 缺陷 D-1 回归守卫 |
 
@@ -1139,15 +1140,15 @@ public static HttpClient.Builder builder(Duration connectTimeout) {
 
 ### 5.19 common 包
 
-#### `ErrorCode.java` · 枚举 · 29 行
+#### `ErrorCode.java` · 枚举 · 31 行
 
 统一错误码（R1-08），响应体格式 `{"code","message","details"}`。
-**取值与 `session-manager` 的同名枚举完全一致**（10 个：`AGENT_BAD_REQUEST`、`AGENT_NOT_FOUND`、
-`AGENT_UNAUTHORIZED`、`AGENT_FORBIDDEN`、`AGENT_CONFLICT`、`AGENT_DUPLICATE`、`AGENT_TIMEOUT`、
-`AGENT_BUS_UNAVAILABLE`、`AGENT_UPSTREAM_UNAVAILABLE`、`AGENT_INTERNAL_ERROR`）。
+**取值与 `session-manager` 的同名枚举完全一致**（11 个：`AGENT_BAD_REQUEST`、`AGENT_NOT_FOUND`、
+`AGENT_UNAUTHORIZED`、`AGENT_FORBIDDEN`、`AGENT_METHOD_NOT_ALLOWED`、`AGENT_CONFLICT`、`AGENT_DUPLICATE`、
+`AGENT_TIMEOUT`、`AGENT_BUS_UNAVAILABLE`、`AGENT_UPSTREAM_UNAVAILABLE`、`AGENT_INTERNAL_ERROR`）。
 
-**维护提示**：这是**跨模块的重复定义**（两模块各一份），新增错误码需两边同步。
-一致性由 `contract-check.py` 之外的人工约定保障 —— 改动时请一并检查另一处。
+**维护提示**：这是**跨模块的重复定义**（`session-manager` / `sense-service` / `body-service` **三份**），
+新增错误码需三处同步。一致性由人工约定保障 —— 改动时请一并检查另外两处。
 
 #### `BizException.java` · 异常 · 34 行
 
@@ -1157,14 +1158,20 @@ public static HttpClient.Builder builder(Duration connectTimeout) {
 **注意一个用法细节**：`OutboundGuard` 抛 `BizException(ErrorCode.AGENT_BAD_REQUEST, "message")`
 （两参数构造），与该类的构造器签名匹配。
 
-#### `GlobalExceptionHandler.java` · 切面 · 53 行
+#### `GlobalExceptionHandler.java` · 切面 · 93 行
 
 `@RestControllerAdvice`，把异常统一转为 `{"code","message","details"}`。
 **错误码 → HTTP 状态码的映射与 `session-manager` 完全一致**（见
 [04-session-manager](04-session-manager.md) §4.12 的映射表），此处不重复。
 
 处理的异常类型：`BizException`、`MethodArgumentNotValidException`、`IllegalArgumentException`、
+**路由层三类（`NoResourceFoundException` / `NoHandlerFoundException` → 404，
+`HttpRequestMethodNotSupportedException` → 405，`HttpMediaTypeNotSupportedException` → 415）**、
 兜底 `Exception`（500 且只记日志，不泄露内部消息）。
+
+> **为什么路由层要单独分流**（2026-09-18 修）：此前路由层异常落进兜底分支返回 500，
+> 使「接口不存在」与「服务内部故障」在客户端不可区分。三服务同源缺陷，已同步修复，
+> 横切口径见 [07](07-运行时配置与横切约定.md) §5.1。
 
 ## 6. HTTP 端点汇总
 
@@ -1207,7 +1214,7 @@ public static HttpClient.Builder builder(Duration connectTimeout) {
 **注意 `NACOS_IP` 显式设为 `127.0.0.1`**（其他模块不设）—— 原因是本机多网卡时，
 Nacos 可能注册错误的网卡 IP，导致 `session-manager` 通过 NATS 之外的方式访问不到。
 
-## 8. 测试基线（48 个用例）
+## 8. 测试基线（53 个用例）
 
 ### `TouchChannelTest` · 12 个
 
@@ -1276,6 +1283,15 @@ Nacos 可能注册错误的网卡 IP，导致 `session-manager` 通过 NATS 之�
 `decodesGbkWitoutHeader`（**用例名有拼写错误，应为 `Without`**）、`decodesCharsetFromHtmlMeta`、
 `handlesEmptyInput`。
 
+### `GlobalExceptionHandlerTest` · 5 个（2026-09-18 新增）
+
+`unmappedRouteMapsTo404NotServerError`（未映射路由 → **404 而非 500**）、`noHandlerFoundAlsoMapsTo404`、
+`wrongMethodMapsTo405`（方法不支持必须与 404 区分）、`unsupportedMediaTypeMapsTo415`、
+`genuineServerFaultStillMapsTo500`（**修复边界守门**：真实内部故障仍须 500）。
+
+前四条是缺陷回归，最后一条防止「为修 404 而把兜底分支整体改掉」——三模块用同一套用例模板，
+差异只有示例路径与异常消息，便于对照维护。
+
 ## 9. 故障排查速查
 
 | 现象 | 可能原因 | 排查位置 |
@@ -1306,4 +1322,4 @@ Nacos 可能注册错误的网卡 IP，导致 `session-manager` 通过 NATS 之�
 | 新增运营观测接口 | `SenseAdminController`（**字段用 snake_case，并同步前端 Console 契约**） |
 | 调整事件负载字段 | `SenseEventPublisher.publishCollected`（注意 Phase 3 消费者会依赖这些字段） |
 | 调整指标趋势窗口 | `SenseMetrics.rateTrend()`（当前 6 分钟，**需与前端图表同步**） |
-| 新增错误码 | `common/ErrorCode` + `GlobalExceptionHandler` switch（**记得同步 `session-manager` 的同名文件**） |
+| 新增错误码 | `common/ErrorCode` + `GlobalExceptionHandler` switch（**三份副本需同步**：`sense-service` / `session-manager` / `body-service`） |

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:55 · 源文件 功能开发流程.md</span>
+  <span class="meta">生成于 2026-09-18 22:23 · 源文件 功能开发流程.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -147,7 +147,7 @@
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 功能开发流程<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-18 · <strong>代码基线</strong>：<code>a5e0cd5</code>
+<p><strong>口径时间</strong>：2026-09-18 · <strong>代码基线</strong>：<code>998623a</code>（Phase 3 主体收口 <code>a5e0cd5</code> + 审核补全 / 口径对齐轮）
 本文件回答一个问题：<strong>这个项目里的每个功能，是怎么从需求走到可验收的？</strong>
 通用流水线各功能共用；逐功能一节说明各自的「需求源 → 设计 → 代码 → 契约 → 测试 → 验收」差异。</p>
 </blockquote>
@@ -318,7 +318,7 @@
   | R2-10 暂存 | <code>StagingStore</code>（MinIO/本地双后端、入库前质检闸门、批量回滚） |
   | R-C02 控制台 | <code>SenseAdminController</code>：<code>/channels</code>、<code>/channels/{type}</code>、<code>/channels-health</code>、<code>/stats</code>、<code>/batches</code>、<code>/batches/{id}/rollback</code>、<code>/rules</code>、<code>/deadletters</code> |</li>
 <li><strong>关键约定</strong>：<strong>渠道能力不可用时必须诚实上报</strong>（<code>available=false</code> / <code>DEGRADED</code>），<strong>绝不伪造结果</strong></li>
-<li><strong>测试</strong>：48 项（全项目最多）</li>
+<li><strong>测试</strong>：53 项（全项目第二多，含 <code>common/GlobalExceptionHandlerTest</code> 5 项路由层错误语义回归）</li>
 <li><strong>验收标准</strong>：R2-01~R2-10 逐条对照 DoD；健康监控能在渠道挂掉后隔离并进入死信</li>
 <li><strong>开发步骤</strong>：①先补需求设计文档的 R 条目与 DoD ②实现渠道/组件并注册 bean ③补单测
   ④<code>mvn-dev.sh -pl sense-service -am test</code> ⑤补 <code>docs/demo/Phase2-DEMO.md</code> 的演示步骤</li>
@@ -356,18 +356,20 @@
 <ul>
 <li><strong>需求源</strong>：<code>AGENT_CONTEXT/Phase3-躯体期/</code>（R3-01~R3-09 + 终端线 R-C03）</li>
 <li><strong>代码入口</strong>：</li>
-<li>入库链路：<code>IngestService</code> → <code>ChunkProcessor</code>（分块）→ <code>EmbeddingClient</code>（HTTP → nlp-service）→ <code>QdrantClient</code>（向量）+ <code>PgMetadataStore</code>（元数据）</li>
+<li>入库链路：<code>IngestService</code> → <code>DocumentParser</code>（<strong>格式解析：md/text/html 归一化，PDF/DOCX 显式拒绝</strong>）→ <code>ChunkProcessor</code>（分块）→ <code>EmbeddingClient</code>（HTTP → nlp-service）→ <code>QdrantClient</code>（向量）+ <code>PgMetadataStore</code>（元数据）</li>
 <li>检索链路：<code>RetrievalService</code>（<code>HotCacheStore</code> 缓存优先 → Qdrant 召回 → <code>RerankClient</code> 重排）</li>
 <li>生成链路：<code>RagPipeline</code>（回答 + 可回溯引用）</li>
 <li>存储门面：<code>StorageFacade</code> + <code>TierRouter</code>（分层阈值可配）· 装配：<code>BodyStorageConfig</code></li>
-<li>对外：<code>KnowledgeController</code>（<code>POST/GET /api/body/knowledge</code>、<code>POST /api/body/retrieve</code>、<code>POST /api/body/rag</code>、<code>GET /api/body/knowledge/stats</code>、<code>DELETE /api/body/knowledge/{docId}</code>、<code>GET /api/body/health</code>）</li>
+<li>对外：<code>KnowledgeController</code> —— <code>POST /api/body/knowledge</code>（单篇）、<strong><code>POST /api/body/knowledge/batch</code></strong>（批量，单篇失败不影响其余）、<code>GET /api/body/knowledge</code>（列表）、<code>DELETE /api/body/knowledge/{docId}</code>、<code>POST /api/body/retrieve</code>、<strong><code>POST /api/body/retrieve/plan</code></strong>（IN-05 预留）、<strong><code>POST /api/body/rag/answer</code></strong>（注意<strong>不是</strong> <code>/api/body/rag</code>，后者无映射会 404）、<code>GET /api/body/knowledge/stats</code>、<strong><code>GET /api/body/knowledge/reconcile</code></strong>（三层对账）、<code>GET /api/body/health</code></li>
 <li>事件闭环：<code>SenseCollectedConsumer</code> 订阅 <code>lifeform.sense.collected</code></li>
+<li>错误出口：<code>common/GlobalExceptionHandler</code>（业务 + <strong>路由层 404/405/415 分流</strong>，见 <code>07-运行时配置与横切约定.md</code> §5.1）</li>
 <li><strong>关键约定</strong>：</li>
 <li><strong>分块算法跨语言一致</strong>：Java <code>ChunkProcessor</code> 与 Python <code>app/chunking.py</code> 必须同规则（标题/段落边界、800/50、标题入块），否则跨语言校验失去意义</li>
 <li><strong>Qdrant point id 必须是整数或 UUID</strong>：本实现用 <code>UUID.nameUUIDFromBytes(docId#index)</code>（name-based UUID）保证<strong>重入库幂等</strong>；改这段务必同步 <code>QdrantClientTest</code></li>
 <li><strong>诚实降级</strong>：嵌入/重排引擎缺失时走确定性后端并上报 <code>backend</code>/<code>degraded</code>，<strong>不伪造</strong></li>
+<li><strong>不产脏知识</strong>：不支持的格式（PDF/DOCX）<strong>显式报错</strong>，绝不按纯文本静默分块</li>
 <li><strong>启动需显式端口</strong>：本机环境变量会污染 <code>server.port</code> → <code>--server.port=8083</code>；PG 凭据须与 <code>docker-compose.yml</code> 一致（<code>agent</code>/<code>agent123</code>）</li>
-<li><strong>测试</strong>：9 个测试类 54 项（格式解析 / 分块 / 分层 / 缓存 / 内存元数据 / 存储门面对账 / 入库 / 检索 / Qdrant id）</li>
+<li><strong>测试</strong>：10 个测试类 60 项（格式解析 / 分块 / 分层 / 缓存 / 内存元数据 / 存储门面对账 / 入库 / 检索 / Qdrant id / <strong>路由层错误语义</strong>）</li>
 <li><strong>验收标准</strong>：见 <code>docs/demo/Phase3-DEMO.md</code> 与《Phase3-测试验收报告》；端到端 35 项、P99 &lt; 500ms、缓存命中 ≥ 30%、租户隔离</li>
 <li><strong>开发步骤</strong>：①改代码 ②<code>mvn -pl body-service -am test</code> ③起中间件做端到端（<code>.workbuddy/tmp/phase3-e2e.py</code>）④更新 <code>docs/java-services/06-body-service.md</code> 与阶段文档</li>
 </ul>
@@ -386,6 +388,14 @@
 <li>数据源双轨：Mock / API，靠 <code>?ds=api</code> 切换<strong>零 UI 改动</strong></li>
 <li><strong>降级必须可见</strong>：<code>src/api/status.ts</code> 按数据域记录降级；失败→记录，成功→清除；
     UI 呈现 <code>API · 降级 N</code> 徽标 + 横幅 + 逐模块提示。<strong>不允许静默回落 Mock</strong></li>
+<li><strong>未实现端点（契约 <code>x-wp-status: planned</code>）的处置必须分读写</strong>：
+    读端点走 <code>safe()</code> 回落<strong>演示数据并登记降级</strong>（UI 能看见"这是演示数据"）；
+    写端点<strong>一律不伪造成功</strong>，用 <code>plannedEndpointError()</code> 登记降级 + 抛说明性错误。
+    判定依据是<strong>后端返回的状态码</strong>——<code>404</code> = 端点尚未实现（planned），<code>5xx</code> = 服务故障，
+    两者在前端应走不同提示路径（后端分流约定见 <code>docs/java-services/07-运行时配置与横切约定.md</code> §5.1）</li>
+<li><strong>Mock 与真实 API 必须逐字段对齐</strong>：<code>embedding.backend/degraded</code>、<code>retrieval.*</code>、
+    <code>middleware.*</code> 状态等都要按实测值写，不能凭设计文档填——本轮核对查出 4 类漂移，
+    其中中间件 up/down 被整片写反</li>
 <li><strong>中间件卡片不受全局 <code>VITE_DATA_SOURCE</code> 限制</strong>：始终优先真实探针，BFF 不可达才回落并标注 <code>data_source='mock'</code></li>
 <li><strong>验收标准</strong>：typecheck + build 通过；API 模式下断掉 BFF 能看见降级提示</li>
 </ul>
@@ -428,7 +438,8 @@
      <strong>默认生命周期不调 protoc</strong>（插件在本机清理目录时会原生阻塞、构建永久卡死）；
      契约变更时 Java 用 <code>-Pproto-gen</code>、Python 用 <code>scripts/proto-gen.sh</code> 重新生成
      → 逐条使用说明与变更流程见 <code>docs/proto契约使用说明.md</code>
-  2. <strong>工作平台 BFF OpenAPI</strong>：<code>contracts/work-platform-bff-openapi.yaml</code>（<strong>37 端点</strong>，implemented 6 / planned 31）</li>
+  2. <strong>工作平台 BFF OpenAPI</strong>：<code>contracts/work-platform-bff-openapi.yaml</code>（<strong>39 端点</strong>，
+     implemented <strong>8 路径 / 9 方法</strong> / planned 31；口径以 <code>contract-check.py --work-platform</code> 输出为准）</li>
 <li><strong>门禁规则（<code>contract-check.py</code> 三条）</strong>：
   1. 实现端点必须已登记且标记 <code>implemented</code>
   2. <code>provider.ts</code> 里调用的每个路径必须能匹配契约模板
@@ -444,7 +455,9 @@
 <h3 id="311-docs">3.11 文档与归档体系（<code>docs/</code> + 两个脚本）<a class="headerlink" href="#311-docs" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>产物与工具</strong>：</li>
-<li><code>scripts/md2html-report.py</code> —— Markdown → 自包含 HTML 镜像（<strong>必须 anaconda Python</strong>）</li>
+<li><code>scripts/md2html-report.py</code> —— Markdown → 自包含 HTML 镜像（需 <code>markdown</code> 包：
+    托管 Python + <code>PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs"</code>，或仓库 venv；
+    anaconda3 已于 2026-09-18 卸载）</li>
 <li><code>scripts/java-doc-coverage.py</code> —— Java 逐文件文档覆盖率自查（有缺口退 1，可用于 CI）</li>
 <li><strong>硬性约定</strong>：</li>
 <li>改 <code>.md</code> <strong>必须重新生成对应 <code>.html</code></strong>，两者一并提交（否则版本漂移）</li>
@@ -460,7 +473,7 @@
 [ ] 3. 实现：单模块最小改动，不夹带其他阶段内容
 [ ] 4. 测试：单测 + 覆盖本次修复的回归用例
 [ ] 5. 文档：PROGRESS.md / 阶段文档 / docs 索引 / java-services 登记
-[ ] 6. 验证：Java 61 + Python 19 + 契约 0 FAIL + wp-bff 14 + Vue typecheck/build
+[ ] 6. 验证：Java 130 + Python 52 + 契约 0 FAIL + wp-bff 29 + Vue typecheck/build + 文档覆盖率 106/106
 [ ] 7. 提交：一句话说清「改了什么、为什么」，中文
 [ ] 8. 对齐：三分支 ff-only，推送前先 fetch 并等用户授权
 </code></pre>

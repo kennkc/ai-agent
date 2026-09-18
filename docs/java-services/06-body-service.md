@@ -1,7 +1,7 @@
 # 06 · body-service 躯体服务（Phase 3 躯体期）
 
 > 模块路径：`services/java/body-service/`
-> 源文件：**27 个主代码（2721 行）+ 9 个测试（886 行）**
+> 源文件：**27 个主代码（2721 行）+ 10 个测试（975 行）**
 > HTTP 端口：**8083** · gRPC 端口：**9094**
 > 外部依赖：PostgreSQL（冷层真相源）· Redis（热层缓存）· Qdrant（温层向量库）· Kafka（感官事件消费）· nlp-service（嵌入/重排）
 
@@ -50,9 +50,9 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 | `client/EmbeddingClient.java` | 客户端 | 92 | R3-03 嵌入（调 nlp-service） |
 | `client/RerankClient.java` | 客户端 | 92 | R3-06 重排（调 nlp-service，可降级） |
 | `client/QdrantClient.java` | 客户端 | 229 | R3-04 向量库 REST 客户端 + point id 派生 |
-| `common/ErrorCode.java` | 枚举 | 30 | 统一错误码（R1-08 对齐副本） |
+| `common/ErrorCode.java` | 枚举 | 32 | 统一错误码（R1-08 对齐副本，与另两服务同步 11 个值） |
 | `common/BizException.java` | 异常 | 30 | 携带错误码与明细 |
-| `common/GlobalExceptionHandler.java` | 切面 | 48 | 错误码 → HTTP 响应体 |
+| `common/GlobalExceptionHandler.java` | 切面 | 90 | 错误码 → HTTP 响应体 + **路由层 404/405/415 分流**（见 §4.11） |
 | `config/BodyStorageConfig.java` | 配置 | 55 | 冷层选型（PG / 内存回落）+ 分层规则注入 |
 | `controller/KnowledgeController.java` | 控制器 | 306 | 入库 / 检索 / RAG / 状态 / 对账五组接口 |
 | `event/SenseCollectedConsumer.java` | 消费者 | 179 | R3-09 消费 `lifeform.sense.collected` |
@@ -71,13 +71,14 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 | `store/StoredChunk.java` | record | 17 | 切片元数据 |
 | `store/DocumentStatus.java` | 枚举 | 9 | `PENDING / INDEXED / FAILED / DELETED` |
 
-### 3.2 测试（54 个用例，全绿）
+### 3.2 测试（60 个用例，全绿）
 
 | 文件 | 行数 | 覆盖验收点 |
 |---|---:|---|
 | `chunk/ChunkProcessorTest.java` | 98 | R3-02 无遗漏 / 标题前置 / 大小受控 / 边界可配 |
 | `chunk/DocumentParserTest.java` | 91 | R3-02 格式解析：HTML 去标签不吞正文 / 实体解码 / **pdf 显式拒绝不静默分块** |
 | `client/QdrantClientTest.java` | 38 | R3-04 **point id 必须是 UUID**（E2E 缺陷回归） |
+| `common/GlobalExceptionHandlerTest.java` | 89 | 路由层错误语义：未映射路由 404 而非 500 / 405 / 415 / **真实故障仍 500**（§4.11） |
 | `service/IngestServiceTest.java` | 128 | R3-09 状态机 / 失败置 FAILED / 重入库清理 |
 | `service/RetrievalServiceTest.java` | 193 | R3-05/06/08 缓存优先 / 重排降级不阻断 / 上游不可用不返回假结果 / **IN-05 预留参数** |
 | `store/HotCacheStoreTest.java` | 84 | R3-08 指纹归一化 / Redis 不可用时不伪造命中 |
@@ -118,7 +119,7 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 其余方法：`upsert`（`wait=true`，返回即可检索）、`search`（TOP-N + payload 还原）、
 `deleteByDocument`（重入库清理旧向量）、`count`（躯体视图"知识量"口径）、`available`（真实性探针）。
 
-### 4.3 `service/IngestService.java` · 入库管道 · 152 行
+### 4.3 `service/IngestService.java` · 入库管道 · 172 行
 
 状态机：写 `PENDING` → 分块 → 分批嵌入（`embed-batch-size`=16）→ `ensureCollection` →
 按 doc 清旧向量 → upsert → PG 覆盖式写切片 → 置 `INDEXED`；任一异常置 `FAILED` + 截断原因（≤900 字）后**重抛**。
@@ -129,7 +130,7 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 - **批量嵌入按 `embed-batch-size` 分片**，避免一次请求过大把嵌入服务打挂。
 - 每次入库都 `deleteByDocument`，因此重入库不会残留旧切片（E2E 断言"同 doc 切片数受控"）。
 
-### 4.4 `service/RetrievalService.java` · 检索链路 · 154 行
+### 4.4 `service/RetrievalService.java` · 检索链路 · 183 行
 
 ```text
 Query → recordAccess（热度输入）
@@ -216,6 +217,32 @@ Query → recordAccess（热度输入）
 **红线**：绝不把 PDF 二进制当文本塞进分块器（会产出垃圾向量且无人察觉）——
 宁可报错，也不产出"看起来成功"的脏知识。
 
+### 4.11 `common/GlobalExceptionHandler.java` · 统一异常出口 · 90 行
+
+`@RestControllerAdvice`，响应体格式 `{"code","message","details"}`，与 `session-manager` /
+`sense-service` **三份同源**（新增错误码需三处同步）。
+
+**映射规则**（改错误码时需同步）：
+
+| 分类 | 触发 | 返回 |
+|---|---|---|
+| 业务 | `BizException(ErrorCode)` | 该错误码对应的 HTTP 状态 |
+| 校验 | `MethodArgumentNotValidException` | 400，`details` 为「字段 → 消息」 |
+| 参数 | `IllegalArgumentException` | 400（沿用异常消息） |
+| **路由层** | `NoResourceFoundException` / `NoHandlerFoundException` | **404 `AGENT_NOT_FOUND`**（消息带原始路径） |
+| **路由层** | `HttpRequestMethodNotSupportedException` | **405 `AGENT_METHOD_NOT_ALLOWED`**（details 带 `method` / `supported`） |
+| **路由层** | `HttpMediaTypeNotSupportedException` | **415 `AGENT_BAD_REQUEST`** |
+| 兜底 | 其他 `Exception` | 500 `AGENT_INTERNAL_ERROR`，**只记日志、不回传内部消息** |
+
+**路由层分流是 2026-09-18 补的**（缺陷回归，`common/GlobalExceptionHandlerTest` 10 项中的 6 项守它）：
+补之前上述三类**一起落进兜底分支返回 500**，后果是——
+① 排障时分不清「接口不存在」与「服务真的坏了」；
+② 前端在 `api` 数据源下无法据此走「端点 reserved（`x-wp-status: planned`）」的降级分支，
+   切换数据源时曾把旧进程上的 `GET /api/body/knowledge/reconcile` 404 误判为服务故障。
+
+**修复的边界**：只把**路由层**异常分流，真实内部故障仍返回 500
+（`genuineServerFaultStillMapsTo500` 用例显式守住这条，防止"顺手把 500 也改成 4xx"）。
+
 ## 5. 降级清单（诚实上报，不虚构）
 
 | 组件 | 不可用表现 | 上报方式 |
@@ -259,6 +286,8 @@ Query → recordAccess（热度输入）
 | 调整分层阈值 | `application.yml` 的 `app.body.tier.*`（已配置化，无需改码） |
 | 支持大文档暂存回读 | `SenseCollectedConsumer`（当前跳过无正文事件，需接 MinIO 读 `staging_ref`） |
 | 让租户头成为强制项 | 去掉 `@RequestHeader` 的 `defaultValue`（**需评估对现有调用影响**） |
+| 新增错误码 | `common/ErrorCode` + `GlobalExceptionHandler` 的 switch（**三份副本需同步**：`body-service` / `session-manager` / `sense-service`） |
+| 新增 HTTP 端点后 404 行为异常 | 先确认 `GlobalExceptionHandler` 的路由层映射未被改动（§4.11），不要靠 `throw new BizException` 手工兜 |
 
 ## 8. 接口调用示例
 

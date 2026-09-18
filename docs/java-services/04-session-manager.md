@@ -1,7 +1,7 @@
 # 04 · session-manager 会话服务
 
 > 模块路径：`services/java/session-manager/`
-> 源文件：**13 个主代码 + 4 个测试**（主代码 616 行）
+> 源文件：**13 个主代码 + 5 个测试**（主代码 616 行）
 > HTTP 端口：**8081** · gRPC 端口：**9092**
 > 主要依赖：Spring Web、Spring Data Redis、NATS（jnats）、Kafka clients
 
@@ -266,7 +266,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 
 - 最后一个是 `UpstreamDegradeTest` 显式断言的行为（`assertNotNull(error.getCause())`）。
 
-### 4.12 `common/GlobalExceptionHandler.java` · 切面 · 54 行
+### 4.12 `common/GlobalExceptionHandler.java` · 切面 · 94 行
 
 - **职责**：`@RestControllerAdvice`，把异常统一转成 `{"code","message","details"}` 响应体。
 - **错误码 → HTTP 状态码映射**（改错误码时需同步这里）：
@@ -276,12 +276,26 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | `AGENT_UNAUTHORIZED` | 401 |
 | `AGENT_FORBIDDEN` | 403 |
 | `AGENT_NOT_FOUND` | 404 |
+| `AGENT_METHOD_NOT_ALLOWED` | 405 |
 | `AGENT_CONFLICT` / `AGENT_DUPLICATE` | 409 |
 | `AGENT_TIMEOUT` | 504 |
 | `AGENT_BUS_UNAVAILABLE` | 503 |
 | `AGENT_UPSTREAM_UNAVAILABLE` | 502 |
 | 其他（含 `AGENT_BAD_REQUEST`） | 400（`default` 分支） |
 
+- **路由层异常映射（2026-09-18 补，缺陷回归）**：
+
+| 触发场景 | Spring 异常 | 返回 |
+|---|---|---|
+| 路径不存在（无任何控制器匹配） | `NoResourceFoundException`（Boot 3.2+）/ `NoHandlerFoundException` | 404 `AGENT_NOT_FOUND`，消息带原始路径 |
+| 路径存在但方法不对 | `HttpRequestMethodNotSupportedException` | 405 `AGENT_METHOD_NOT_ALLOWED`，details 带 `method` 与 `supported` |
+| `Content-Type` 不被支持 | `HttpMediaTypeNotSupportedException` | 415 `AGENT_BAD_REQUEST` |
+
+  **为什么必须补这一层**：兜底 `@ExceptionHandler(Exception.class)` 会把上述三类**一起吞成
+  500 `AGENT_INTERNAL_ERROR`**，于是「接口不存在 / 调用姿势不对」与「服务真的坏了」在客户端**不可区分**——
+  前端无法据此判断该走「端点是 reserved（planned）」还是「服务降级」分支；实测曾因此在旧进程上
+  把 `GET /api/body/knowledge/reconcile` 的 404 误判成服务故障。修复的边界是**只把路由层异常分流，
+  真实内部故障仍返回 500**（`genuineServerFaultStillMapsTo500` 用例守住这一点）。
 - **其他处理的异常**：`MethodArgumentNotValidException` → 400 且 details 为「字段 → 消息」映射；
   `IllegalArgumentException` → 400（沿用异常自带消息）；兜底 `Exception` → 500 且**只记日志、
   不把内部异常消息返回给客户端**（避免泄露实现细节）。
@@ -292,7 +306,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 与 `gateway-service` 的同名类**逐行相同**（仅端口配置不同）。职责与设计取舍见
 [03-gateway-service](03-gateway-service.md) §4.2，此处不重复。
 
-### 4.14 测试文件（4 个类 · 10 个用例）
+### 4.14 测试文件（5 个类 · 15 个用例）
 
 #### `bus/BusProxyTest.java` · 1 个用例
 
@@ -333,6 +347,19 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 制造故障的手法很干净：`closedPort()` 先 `new ServerSocket(0)` 拿到一个空闲端口再**立即释放**，
 从而得到一个当前无监听者的端口，稳定复现「连接被拒绝」。
 
+#### `common/GlobalExceptionHandlerTest.java` · 5 个用例（2026-09-18 新增）
+
+| 用例 | 验证内容 |
+|---|---|
+| `unmappedRouteMapsTo404NotServerError` | 未映射路由 → **404 而非 500**，且 code 为 `AGENT_NOT_FOUND` |
+| `noHandlerFoundAlsoMapsTo404` | `NoHandlerFoundException` 走同一分支，同样 404 |
+| `wrongMethodMapsTo405` | 方法不支持 → 405 `AGENT_METHOD_NOT_ALLOWED`（**必须与 404 区分**） |
+| `unsupportedMediaTypeMapsTo415` | `text/plain` 请求体 → 415 |
+| `genuineServerFaultStillMapsTo500` | **修复的边界守门**：真实内部故障仍须 500，不能把 500 一起改掉 |
+
+前四条是「缺陷回归」，最后一条是**防矫枉过正**——如果只写前四条，把兜底分支整体改成 404 也能过测，
+那就会把真实故障也伪装成"接口不存在"。这个用例的存在使那次修改成为**受约束的修复**。
+
 ## 5. 配置项
 
 本模块的配置分散在三处，**改配置时注意区分**：
@@ -354,6 +381,6 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | 调整会话 TTL | `SessionController.SESSION_TTL`（当前硬编码 2 小时，未配置化） |
 | 调整召回数量 | `BodyClient.retrieve` 里的 `top_k`（当前 5，随请求显式声明；如需配置化可提为 `app.body.top-k`） |
 | 新增跨服务调用 | 新建 Client 类，**必须用 `OutboundHttp.restClient`** |
-| 新增错误码 | `common/ErrorCode` + `GlobalExceptionHandler` 的 switch（注意与 `sense-service` 同名文件同步） |
+| 新增错误码 | `common/ErrorCode` + `GlobalExceptionHandler` 的 switch（**三份副本需同步**：`session-manager` / `sense-service` / `body-service` 各一份） |
 | 新增领域事件 | `KafkaEventPublisher.publish(domain, event, key, payload)`，主题自动拼为 `lifeform.{domain}.{event}` |
 | 实现会话状态机（Phase 4） | `SessionController` 目前只有 `ACTIVE`/`CLOSED` 两个字面值，状态机需新增校验层 |

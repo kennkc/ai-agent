@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:11 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-18 22:23 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -149,6 +149,7 @@
 <li><a href="#49-mock-api-2026-09-18">4.9 前端 Mock 与真实 API 的字段/文案漂移（2026-09-18 发现并已闭合 ✅）</a></li>
 <li><a href="#410-2026-09-18">4.10 前端对「未实现端点」的降级语义（2026-09-18 发现并已改造 ✅）</a></li>
 <li><a href="#411-2026-09-18">4.11 开发代理目标硬编码（2026-09-18 配置对齐发现并已修复 ✅）</a></li>
+<li><a href="#412-2026-09-18-docs">4.12 模块功能说明文档的「基线数字」无人守（2026-09-18 docs 核对发现并已修复 ✅）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -746,6 +747,46 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 对齐 <code>Phase3-需求设计文档</code> §8 R-C09「阶段完成时必须切换真实 API 数据」。
 本地 <code>.env</code>（不入库）本就为 <code>api</code>，故<strong>实际运行行为未变</strong>，仅影响新克隆者的默认值。</p>
 </blockquote>
+<h3 id="412-2026-09-18-docs">4.12 模块功能说明文档的「基线数字」无人守（2026-09-18 docs 核对<strong>发现并已修复</strong> ✅）<a class="headerlink" href="#412-2026-09-18-docs" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>现象</td>
+<td><code>java-services/04/05/06</code> 三份模块文档里登记<strong>测试文件数、用例总数、源码行数</strong>全部停留在旧口径；<code>功能开发流程.md</code> §3.6/§3.10 的端点清单与契约计数同样过期</td>
+</tr>
+<tr>
+<td>检测手段的盲区</td>
+<td><code>scripts/java-doc-coverage.py</code> 只校验「<strong>这个文件有没有被登记</strong>」（存在性），<strong>不校验「登记的数字对不对」</strong>（准确性）。因此本轮 3 个新测试文件把覆盖率打到 103/106 会<strong>立刻亮红灯</strong>，而同一个提交里 <code>48 个用例</code>（实为 53）、<code>54 个用例</code>（实为 60）、<code>4 个类 · 10 个用例</code>（实为 5 类 15 例）<strong>全部静默过期、零告警</strong></td>
+</tr>
+<tr>
+<td>具体失效点</td>
+<td>① 04：头部测试文件数 4→5、§4.12 切面 54 行→94 行、§4.14 用例数 10→15、错误码表缺 405；② 05：头部 8→9、§4.1 <code>ErrorCode</code> 29→31 行 / <code>GlobalExceptionHandler</code> 53→93 行、§4.2 与 §8 用例数 48→53、§5.19 取「两模块各一份」应为三份；③ 06：头部 9→10 个测试（886→975 行）、§3.1 <code>GlobalExceptionHandler</code> 48→90 行 / <code>ErrorCode</code> 30→32 行、§3.2 用例数 54→60 且缺新测试行、§4.3/§4.4 正文行数（152/154）与自身表格（172/183）<strong>互相矛盾</strong>；④ <code>功能开发流程</code>：§3.6 端点写成 <code>POST /api/body/rag</code>（<strong>该路径无映射，调用即 404</strong>，实为 <code>/rag/answer</code>）且漏登记 <code>/knowledge/batch</code>、<code>/retrieve/plan</code>、<code>/knowledge/reconcile</code>，入库链路漏 <code>DocumentParser</code>，§3.10 契约「37 端点 / implemented 6」应为「39 / 8 路径（9 方法）」；⑤ <code>项目进度总览</code>：源文件数、三服务用例数、Java 总基线、覆盖率、分支头全部过期</td>
+</tr>
+<tr>
+<td>修复</td>
+<td>逐处按实测值回填；04/05/06 各新增 <code>common/GlobalExceptionHandlerTest</code> 登记与说明；07 §5 补 <code>AGENT_METHOD_NOT_ALLOWED</code> 与新增 §5.1「路由层异常分流」、§5.2「重复定义的维护成本」；功能开发流程 §3.6/§3.7/§3.10/§四/§五 一并校正（含 anaconda 已卸载的 HTML 生成口径）</td>
+</tr>
+<tr>
+<td>现状</td>
+<td>✅ 已修（<code>java-doc-coverage.py</code> 106/106 · 契约 0 FAIL · HTML 孪生 STALE 为空）</td>
+</tr>
+<tr>
+<td>机制建议</td>
+<td>见 §6 待办 17</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>教训（同 §4.6 那条）</strong>：修完代码不会自动修文档。<strong>存在性门禁绿灯 ≠ 内容准确</strong>——
+数字类描述必须和 <code>mvn test</code> / <code>contract-check.py</code> 的<strong>实测输出</strong>逐项对齐，
+而不是沿用上一轮的字符串。下次回填时按「<strong>总览 ↔ 模块文档 ↔ 流程文档</strong>三处一起核」执行。</p>
+</blockquote>
 <hr />
 <h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>
 <ul>
@@ -861,6 +902,12 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>16</td>
 <td>Mock ↔ 真实响应字段一致性<strong>未做成自动校验</strong>（§4.9 的 4 类漂移靠人工逐字段核对才发现）</td>
 <td>建议加一条脚本：抓取真实 <code>api</code> 响应 JSON Schema，与 <code>mock.ts</code> 样例做<strong>双向</strong>字段比对，纳入 CI</td>
+<td>下轮加固</td>
+</tr>
+<tr>
+<td>17</td>
+<td><strong>文档「基线数字」无门禁</strong>（§4.12）：<code>java-doc-coverage.py</code> 只查文件是否登记，不查数字是否准确 → 用例数/行数/端点数过期可长期静默</td>
+<td>建议扩展该脚本（或新增 <code>doc-metrics-check.py</code>）：从 <code>target/surefire-reports</code> 提取各模块实测用例数，与 <code>docs/java-services/*.md</code> 与 <code>docs/项目进度总览.md</code> 中出现的对应数字断言比对；不一致则非零退出。<strong>这是把 §4.12 一次性修复变成结构性防线的唯一办法</strong></td>
 <td>下轮加固</td>
 </tr>
 </tbody>

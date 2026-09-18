@@ -31,7 +31,7 @@
 | `技术债台账.md` · `.html` | **技术债权威台账**：`DEBT-00X` 全量清单（简化实现 / 正式目标 / 触发点 / 当前状态 + 源码证据）、关联未实现项、一致性问题登记、代码标记索引 | 创建或关闭任何债务时 |
 | `proto契约使用说明.md` · `.html` | **proto 契约使用说明与现状**：6 份契约清单、gRPC 引用矩阵（实证）、Java/Python 双侧生成链路与本机坑、变更 6 步流程、`contract-check.py` 覆盖范围、**产物同步门禁 `proto-sync-check.sh`**、与 OpenAPI 分工、10 项缺口登记 | 契约增删改或接入方变化时 |
 | `项目进度日志报告/` | **分阶段过程留痕**：每阶段三件套（阶段性报告 / 开发执行日志 / 测试验收报告），各含 HTML；含目录索引 `README.md` | 每阶段收口 |
-| `java-services/` | **Java 逐文件说明**：7 篇文档覆盖 103 个手写源文件（81 主 + 22 测），90 个 proto 生成文件按契约维度说明 | 增删 Java 文件后（配 `scripts/java-doc-coverage.py` 自查） |
+| `java-services/` | **Java 逐文件说明**：7 篇文档覆盖 106 个手写源文件（81 主 + 25 测），90 个 proto 生成文件按契约维度说明 | 增删 Java 文件后（配 `scripts/java-doc-coverage.py` 自查） |
 | `demo/` | **端到端演示脚本**：`Phase0-DEMO.md` / `Phase1-DEMO.md` / `Phase2-DEMO.md` | 每阶段收口 |
 | `优化日志/` | **工程化加固日志**：按日期命名，记录 P0/P1/P2 项的处理与验证 | 每轮加固后 |
 

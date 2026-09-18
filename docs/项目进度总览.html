@@ -116,14 +116,14 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:11 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-18 22:23 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#_1">一、当前状态一句话</a></li>
 <li><a href="#_2">二、阶段进度</a></li>
 <li><a href="#_3">三、功能交付矩阵</a><ul>
-<li><a href="#31-java103-81-22-90-proto">3.1 后端 Java（103 个手写源文件 = 81 主 + 22 测；另有 90 个 proto 生成文件）</a></li>
+<li><a href="#31-java106-81-25-90-proto">3.1 后端 Java（106 个手写源文件 = 81 主 + 25 测；另有 90 个 proto 生成文件）</a></li>
 <li><a href="#32-pythonservicespythonnlp-service10-py-12-proto">3.2 Python（services/python/nlp-service，10 个业务 py + 12 个 proto 生成文件）</a></li>
 <li><a href="#33-webwork-platformvue-3-vite-ts-element-plus9-vue-8-ts">3.3 前端（web/work-platform，Vue 3 + Vite + TS + Element Plus，9 vue + 8 ts）</a></li>
 <li><a href="#34-ops-bffservicesnodewp-bff-node-8090">3.4 Ops BFF（services/node/wp-bff，零依赖 Node，端口 8090）</a></li>
@@ -238,7 +238,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 </table>
 <hr />
 <h2 id="_3">三、功能交付矩阵<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
-<h3 id="31-java103-81-22-90-proto">3.1 后端 Java（103 个手写源文件 = 81 主 + 22 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java103-81-22-90-proto" title="Permanent link">&para;</a></h3>
+<h3 id="31-java106-81-25-90-proto">3.1 后端 Java（106 个手写源文件 = 81 主 + 25 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java106-81-25-90-proto" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -262,25 +262,25 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td><code>session-manager</code></td>
 <td>8081</td>
-<td>会话 CRUD、<strong>VS1 追问闭环</strong>（session → intent → <strong>语义检索</strong> → 回答）、Redis 消息存储、Kafka 事件、<strong>HTTP/1.1 出站客户端 + 优雅降级</strong></td>
+<td>会话 CRUD、<strong>VS1 追问闭环</strong>（session → intent → <strong>语义检索</strong> → 回答）、Redis 消息存储、Kafka 事件、<strong>HTTP/1.1 出站客户端 + 优雅降级</strong>、<strong>路由层错误语义（404/405/415）</strong></td>
 <td><code>SessionController</code> · <code>OutboundHttp</code> · <code>BodyClient</code></td>
-<td>10</td>
+<td>15</td>
 <td>✅</td>
 </tr>
 <tr>
 <td><code>sense-service</code></td>
 <td>8082</td>
-<td>五感渠道（Touch 实装 + Visual/Nose/Audio/Taste 保留位）、R0 规则调度、R1 指令处理、渠道健康监控与自动隔离、指数退避重试 + 死信、质检暂存（MinIO/本地双后端）+ 批量回滚、<code>SenseAdminController</code> 管理端点、<strong>采集事件携带正文发布</strong></td>
+<td>五感渠道（Touch 实装 + Visual/Nose/Audio/Taste 保留位）、R0 规则调度、R1 指令处理、渠道健康监控与自动隔离、指数退避重试 + 死信、质检暂存（MinIO/本地双后端）+ 批量回滚、<code>SenseAdminController</code> 管理端点、<strong>采集事件携带正文发布</strong>、<strong>路由层错误语义（404/405/415）</strong></td>
 <td><code>SenseChannel</code> · <code>ChannelRegistry</code> · <code>R0Scheduler</code> · <code>R1DynamicHandler</code> · <code>ChannelHealthMonitor</code> · <code>StagingStore</code> · <code>SenseEventPublisher</code></td>
-<td>48</td>
+<td>53</td>
 <td>✅</td>
 </tr>
 <tr>
 <td><code>body-service</code></td>
 <td>8083</td>
-<td><strong>躯体期知识管道</strong>：<strong>格式解析（md/text/html）</strong> → 分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG；知识管理 REST API（含<strong>三层一致性对账</strong>与 <strong>IN-05 迭代检索预留接口</strong>）；<strong>消费 <code>lifeform.sense.collected</code> 形成感官→躯体闭环</strong>；统一错误码 + OTLP 链路</td>
+<td><strong>躯体期知识管道</strong>：<strong>格式解析（md/text/html）</strong> → 分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG；知识管理 REST API（含<strong>三层一致性对账</strong>与 <strong>IN-05 迭代检索预留接口</strong>）；<strong>消费 <code>lifeform.sense.collected</code> 形成感官→躯体闭环</strong>；统一错误码 + OTLP 链路 + <strong>路由层错误语义（404/405/415）</strong></td>
 <td><code>KnowledgeController</code> · <code>DocumentParser</code> · <code>ChunkProcessor</code> · <code>IngestService</code> · <code>RetrievalService</code> · <code>RagPipeline</code> · <code>StorageFacade</code> · <code>QdrantClient</code> · <code>SenseCollectedConsumer</code></td>
-<td>54</td>
+<td>60</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -393,7 +393,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <td>✅</td>
 </tr>
 <tr>
-<td><strong>数据源降级可见化</strong>：<code>API · 降级 N</code> 徽标 + 横幅 + 逐模块提示</td>
+<td><strong>数据源降级可见化</strong>：<code>API · 降级 N</code> 徽标 + 横幅 + 逐模块提示；读端点回落演示数据须标注，<strong>写端点一律不伪造成功</strong></td>
 <td>✅</td>
 </tr>
 <tr>
@@ -486,7 +486,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 </table>
 <hr />
 <h2 id="_4">四、测试与验证基线<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
-<p><strong>口径：2026-09-18 Phase 3 落地 + 审核补全轮后的实测值</strong>（历史归档中的 54 / 73 / 61 / 174 项是当时口径）</p>
+<p><strong>口径：2026-09-18 Phase 3 落地 + 审核补全轮 + 路由语义修正轮后的实测值</strong>（历史归档中的 54 / 73 / 61 / 114 / 174 项是当时口径）</p>
 <table>
 <thead>
 <tr>
@@ -499,7 +499,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td>Java</td>
 <td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh test</code></td>
-<td><strong>114 测试 / 0 失败</strong>（gateway 2 · session-manager 10 · sense-service 48 · <strong>body-service 54</strong>）</td>
+<td><strong>130 测试 / 0 失败</strong>（gateway 2 · session-manager 15 · sense-service 53 · <strong>body-service 60</strong>）</td>
 </tr>
 <tr>
 <td>Python</td>
@@ -544,7 +544,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td>文档覆盖率</td>
 <td><code>python scripts/java-doc-coverage.py</code></td>
-<td><strong>103/103</strong> 业务源文件已登记（body-service 36/36）</td>
+<td><strong>106/106</strong> 业务源文件已登记（body-service 37/37）</td>
 </tr>
 </tbody>
 </table>
@@ -570,17 +570,17 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td><code>codex/main</code></td>
 <td>本机（另一台开发机）主开发分支，2026-09-16 由 <code>codex/phase0-1-hardening</code> 更名</td>
-<td><code>a5e0cd5</code></td>
+<td><code>998623a</code></td>
 </tr>
 <tr>
 <td><code>dev</code></td>
 <td>另一台远端开发机的工作分支</td>
-<td><code>a5e0cd5</code></td>
+<td><code>998623a</code></td>
 </tr>
 <tr>
 <td><code>workbuddy/main</code></td>
 <td>WorkBuddy 侧主开发线（Phase 0/1/2/3 + 工作平台 + Java 服务文档集）</td>
-<td><code>a5e0cd5</code></td>
+<td><code>998623a</code></td>
 </tr>
 <tr>
 <td><code>main</code></td>
@@ -589,6 +589,9 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p>表内为<strong>代码基线</strong> <code>998623a</code>；其后为纯文档轮提交，不改动代码。</p>
+</blockquote>
 <p><strong>约定</strong>：三支保持内容一致 —— 任一分支的改动，收口时 <code>git merge --ff-only</code> 同步到另两支；</p>
 <pre><code>git push origin codex/main
 git push origin codex/main:dev
@@ -689,7 +692,8 @@ git push origin codex/main:workbuddy/main
 <ul>
 <li>wp-bff <strong>无网关路由</strong>（<code>/api/wp/**</code> 生产路径缺失，前端仅靠 Vite 代理）</li>
 <li>~~body-service <strong>缺 OTLP 配置</strong>（不在 Jaeger 链路），也未接入统一错误码体系~~ ✅ <strong>2026-09-18 Phase 3 已补齐</strong>（加 OTLP endpoint + 建 <code>ErrorCode</code>/<code>BizException</code>/<code>GlobalExceptionHandler</code>）</li>
-<li><code>ErrorCode</code> 在 session-manager 与 sense-service <strong>各有一份</strong>，需人工同步</li>
+<li><code>ErrorCode</code> 在 <code>session-manager</code> / <code>sense-service</code> / <code>body-service</code> <strong>各有一份</strong>（三份），需人工同步</li>
+<li>~~未映射路由返回 500 而非 404~~ ✅ <strong>2026-09-18 已修</strong>（三服务 <code>GlobalExceptionHandler</code> 补路由层 404/405/415 分流 + <code>AGENT_METHOD_NOT_ALLOWED</code>，各补回归用例）</li>
 <li>租户头 <code>defaultValue="default"</code> → 绕过网关直连时<strong>静默落入 default 租户</strong></li>
 <li>HTTP 端口<strong>写死</strong>，未做环境变量占位</li>
 <li><code>TextExtractorTest</code> 有用例名拼写错误 <code>decodesGbkWitoutHeader</code>（未擅改测试代码）</li>
@@ -891,7 +895,7 @@ DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<
 </tr>
 <tr>
 <td><code>docs/java-services/</code></td>
-<td>Java 逐文件说明（7 篇，覆盖 103 个手写源文件 + 90 个生成文件）</td>
+<td>Java 逐文件说明（7 篇，覆盖 106 个手写源文件 + 90 个生成文件）</td>
 <td>增删 Java 文件后</td>
 </tr>
 <tr>
