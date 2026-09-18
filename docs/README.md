@@ -31,7 +31,7 @@
 | `技术债台账.md` · `.html` | **技术债权威台账**：`DEBT-00X` 全量清单（简化实现 / 正式目标 / 触发点 / 当前状态 + 源码证据）、关联未实现项、一致性问题登记、代码标记索引 | 创建或关闭任何债务时 |
 | `proto契约使用说明.md` · `.html` | **proto 契约使用说明与现状**：6 份契约清单、gRPC 引用矩阵（实证）、Java/Python 双侧生成链路与本机坑、变更 6 步流程、`contract-check.py` 覆盖范围、**产物同步门禁 `proto-sync-check.sh`**、与 OpenAPI 分工、10 项缺口登记 | 契约增删改或接入方变化时 |
 | `项目进度日志报告/` | **分阶段过程留痕**：每阶段三件套（阶段性报告 / 开发执行日志 / 测试验收报告），各含 HTML；含目录索引 `README.md` | 每阶段收口 |
-| `java-services/` | **Java 逐文件说明**：7 篇文档覆盖 72 个手写源文件（58 主 + 14 测），90 个 proto 生成文件按契约维度说明 | 增删 Java 文件后（配 `scripts/java-doc-coverage.py` 自查） |
+| `java-services/` | **Java 逐文件说明**：7 篇文档覆盖 100 个手写源文件（80 主 + 20 测），90 个 proto 生成文件按契约维度说明 | 增删 Java 文件后（配 `scripts/java-doc-coverage.py` 自查） |
 | `demo/` | **端到端演示脚本**：`Phase0-DEMO.md` / `Phase1-DEMO.md` / `Phase2-DEMO.md` | 每阶段收口 |
 | `优化日志/` | **工程化加固日志**：按日期命名，记录 P0/P1/P2 项的处理与验证 | 每轮加固后 |
 
@@ -45,17 +45,24 @@
 
 ```bash
 # 批量（处理目标目录「当层」的 .md，自动排除 README.md；不递归子目录）
-E:/software/anaconda3/python.exe scripts/md2html-report.py --all "docs/项目进度日志报告"
+PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py --all "docs/项目进度日志报告"
 
 # 单文件
-E:/software/anaconda3/python.exe scripts/md2html-report.py "docs/项目进度总览.md"
+PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py "docs/项目进度总览.md"
 
 # 覆盖标题 / 指定输出路径（仅单文件模式）
-E:/software/anaconda3/python.exe scripts/md2html-report.py "docs/项目进度总览.md" -t "标题" -o "docs/out.html"
+... scripts/md2html-report.py "docs/项目进度总览.md" -t "标题" -o "docs/out.html"
 ```
 
-> **必须用 anaconda Python**（`E:/software/anaconda3/python.exe`，自带 markdown 3.4.1）；
-> 托管 Python 没有 `markdown` 包。中文路径需加引号。
+> **本机环境变更（2026-09-17）**：原先用的 anaconda（`E:/software/anaconda3/python.exe`）**已卸载**，
+> 本机现只有 `E:/software/python/python312`（无 `markdown` 包）。
+> 因此 HTML 生成统一走 **托管 Python + `PYTHONPATH` 指向 `pylibs`**（内含 markdown 3.10.3）：
+> `pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown`（不污染系统环境）。
+> 中文路径需加引号。
 >
 > **脚本没有 `--dry-run`**，重新生成是**幂等覆盖**（直接重写目标 `.html`）：
 > 改完 `.md` 就重跑一次，再用 `git status --short` 看哪些 `.html` 被改动即可确认同步范围。

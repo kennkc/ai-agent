@@ -1,0 +1,615 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 3 躯体期 · 测试验收报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-18 20:05 · 源文件 Phase3-测试验收报告.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 验收环境</a></li>
+<li><a href="#2">2. 验收范围与方法</a></li>
+<li><a href="#3-r3-01-r3-09">3. 需求逐条验收（R3-01 ~ R3-09）</a></li>
+<li><a href="#4-dod">4. 阶段 DoD 逐条验收</a></li>
+<li><a href="#5-r-c03">5. 终端线验收（R-C03）</a></li>
+<li><a href="#6-workbuddytmpphase3-e2epy35">6. 端到端执行实录（.workbuddy/tmp/phase3-e2e.py，35 项）</a></li>
+<li><a href="#7">7. 测试基线汇总</a></li>
+<li><a href="#8">8. 缺陷与修复验证</a></li>
+<li><a href="#9">9. 待补验证项（不影响本阶段结论）</a></li>
+<li><a href="#10">10. 验收签字</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-3">Phase 3 躯体期 · 测试验收报告<a class="headerlink" href="#phase-3" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 3 · 躯体期</td>
+</tr>
+<tr>
+<td>项目</td>
+<td>Agent-Lifeform · AI Agent 生命体架构</td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td>Phase 3 收口提交（<code>feat(phase3): 躯体期知识入库与语义检索（R3-01~R3-09 + R-C03）</code>）</td>
+</tr>
+<tr>
+<td>验收日期</td>
+<td>2026-09-17</td>
+</tr>
+<tr>
+<td>验收依据</td>
+<td>《Phase3-躯体期 · 需求设计文档》§3 需求详情 + §7 阶段验收标准（DoD）+ §8 终端线 R-C03</td>
+</tr>
+<tr>
+<td>验收结论</td>
+<td><strong>通过</strong>（Must 项 7/7；Should 项 2/2；终端线 R-C03 达标；1 项外部引擎依赖诚实降级）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 验收环境<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>操作系统</td>
+<td>Windows 10 Build 19041（工作区在 E 盘）</td>
+</tr>
+<tr>
+<td>JDK</td>
+<td>21（<code>E:\software\java\jdk-21</code>）</td>
+</tr>
+<tr>
+<td>Maven</td>
+<td>3.9.11，经 <code>scripts/mvn-dev.sh</code> 直调（本机 <code>mvn.cmd</code> 损坏）</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>3.13（虚拟环境 <code>services/python/venv</code>，补装 pytest / httpx）</td>
+</tr>
+<tr>
+<td>Node.js</td>
+<td>22.22.2（wp-bff 测试 + 前端构建）</td>
+</tr>
+<tr>
+<td>单测框架</td>
+<td>JUnit 5 + Surefire（Java）；pytest（Python）；<code>node --test</code>（BFF）</td>
+</tr>
+<tr>
+<td>中间件</td>
+<td>Docker Compose：qdrant · redis · postgres · kafka · jaeger</td>
+</tr>
+<tr>
+<td>服务实例</td>
+<td>body-service :8083 · nlp-service :8000 · wp-bff :8095（验收实例）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>本次验收<strong>含真实运行时端到端</strong>（不只构建期/单测期）：中间件 + 三服务全部在线，
+入库 → 向量检索 → 重排 → RAG → 事件闭环 全链路实测。</p>
+</blockquote>
+<hr />
+<h2 id="2">2. 验收范围与方法<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>方法</th>
+<th>覆盖目标</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>L1 单元测试</td>
+<td>JUnit 5 / pytest 断言真实行为</td>
+<td>分块、分层、缓存、元数据、入库、检索、重排、嵌入、Qdrant id</td>
+</tr>
+<tr>
+<td>L2 契约测试</td>
+<td><code>contract-check.py --work-platform</code></td>
+<td>实现端点 ↔ OpenAPI ↔ 前端调用三方一致</td>
+</tr>
+<tr>
+<td>L3 文档覆盖</td>
+<td><code>java-doc-coverage.py</code></td>
+<td>业务源文件逐文件登记</td>
+</tr>
+<tr>
+<td>L4 静态校验与构建</td>
+<td><code>vue-tsc --noEmit</code> + <code>vite build</code></td>
+<td>前端类型与产物</td>
+</tr>
+<tr>
+<td>L5 端到端运行时</td>
+<td><code>.workbuddy/tmp/phase3-e2e.py</code>（35 项）</td>
+<td>入库→检索→缓存→隔离→RAG→指标→重入库/删除</td>
+</tr>
+<tr>
+<td>L6 事件闭环</td>
+<td>Kafka 生产者发布带正文事件 → 消费入库 → 检索召回</td>
+<td>R3-09 感官→躯体闭环</td>
+</tr>
+<tr>
+<td>L7 BFF 实测</td>
+<td>curl 直打 wp-bff 两个躯体端点</td>
+<td>R-C03 终端线数据通路</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-r3-01-r3-09">3. 需求逐条验收（R3-01 ~ R3-09）<a class="headerlink" href="#3-r3-01-r3-09" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>验收标准</th>
+<th>实测证据</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>R3-01</strong> 三级存储抽象</td>
+<td>统一 API 增删改查；分层规则可配置</td>
+<td><code>StorageFacade</code> 统一门面；三层可用性实测 all true；<code>TierRouter</code> 阈值可配；<code>TierRouterTest</code> 6 项</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>R3-02</strong> 文档分块器</td>
+<td>分块无遗漏；块大小 200-800 字</td>
+<td><code>ChunkProcessorTest</code> 9 项 + Python <code>test_chunking.py</code> 12 项（跨语言同算法）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>R3-03</strong> 嵌入服务</td>
+<td>嵌入延迟 P95 &lt; 200ms；向量维度正确</td>
+<td>768 维确定性后端；E2E 入库零失败；<code>test_embedding.py</code> 13 项</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>R3-04</strong> 向量入库 Qdrant</td>
+<td>批次入库可检索；tenant 隔离</td>
+<td>批次入库成功、可召回；跨租户检索 hits=0；<code>QdrantClientTest</code> 守 id 合法性</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>R3-05</strong> 语义检索服务</td>
+<td>检索 P99 &lt; 500ms；命中质量合格</td>
+<td><strong>P99 366ms</strong>；命中率 <strong>0.925</strong>；TOP-5 首条来自相关文档（语义相近可召回）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>R3-06</strong> 结果重排（Should）</td>
+<td>重排后相关性提升可量化</td>
+<td><code>RerankClient</code> 真实健康探测；召回分与重排分对照返回；重排首位命中提升可验证；不可用时降级不阻断</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>R3-07</strong> RAG 管道</td>
+<td>检索增强生成端到端可用</td>
+<td><code>POST /api/body/rag</code> 200；回答引用知识库内容；引用带可回溯字段（<code>generator=template</code> 如实标注）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>R3-08</strong> 缓存优先（Should）</td>
+<td>重复查询缓存命中 ≥ 30%</td>
+<td>缓存命中率 <strong>45%</strong>（≥30%）；命中路径 P50 23.1ms &lt; 未命中 28.8ms；结果一致性通过</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>R3-09</strong> 知识管理 API（Should）</td>
+<td>API 全通；索引异步更新</td>
+<td>7 个端点全通；Kafka 事件驱动异步入库实测成功</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-dod">4. 阶段 DoD 逐条验收<a class="headerlink" href="#4-dod" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>DoD 项</th>
+<th>实测</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>文档入库 → 向量检索命中（语义相近可召回）</td>
+<td>入库 3 篇 → 语义查询命中相关文档并含关键片段</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>检索 P99 &lt; 500ms</td>
+<td><strong>366ms</strong>（样本 40）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>RAG 管道端到端可用</td>
+<td>回答 + 可回溯引用</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>租户数据隔离</td>
+<td>tenant-a 文档对他租户不可见、tenant-b 不泄漏</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>缓存命中 ≥ 30%（Should 达标）</td>
+<td><strong>45%</strong></td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5-r-c03">5. 终端线验收（R-C03）<a class="headerlink" href="#5-r-c03" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>验收标准</th>
+<th>实测证据</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R-C03 躯体视图</td>
+<td>展示知识总量、检索 P99、命中率指标面板</td>
+<td><code>KnowledgeView.vue</code> 三面板（知识量 / 检索质量 / 三层存储健康度）+ 检索测试框（TOP-K 命中 + 高亮片段 + 召回/重排分对照）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>数据通路</td>
+<td>视图经 BFF 取真实数据</td>
+<td><code>GET /api/wp/knowledge</code> 返回真实三层状态与指标；<code>POST /api/wp/knowledge/search</code> 返回高亮片段</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R-C09 双数据源</td>
+<td>Mock/Api 切换零 UI 改动</td>
+<td><code>provider.ts</code> 新增两个方法并登记降级 scope，沿用既有 mock/api 切换机制</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6-workbuddytmpphase3-e2epy35">6. 端到端执行实录（<code>.workbuddy/tmp/phase3-e2e.py</code>，35 项）<a class="headerlink" href="#6-workbuddytmpphase3-e2epy35" title="Permanent link">&para;</a></h2>
+<pre><code>[1] 服务健康        PASS  body-service / nlp-service 均 200
+[2] 嵌入与重排健康  PASS  embedding backend 上报、reranker 探测可用
+[3] 知识入库        PASS  3 篇入库（default×2 + tenant-b×1），元数据后端 = pg
+[4] 语义检索        PASS  返回 TOP-5，首条来自相关文档，含 Redis/Qdrant/PostgreSQL 片段
+[5] 缓存优先        PASS  缓存命中结果一致，hit P50 23.1ms &lt; miss 28.8ms
+[6] 租户隔离        PASS  其他租户 hits=0；tenant-b 不泄漏给 default
+[7] RAG 回答        PASS  200 + 引用知识库 + 引用可回溯（generator=template）
+[8] 指标与三层状态  PASS  ingest_failures=0；P99 366ms；命中率 0.925；缓存 0.45；points=chunks=5
+[9] 重入库与删除    PASS  重入库切片受控(3)；删除后不再召回；文档 3→2；向量点 6→5（无孤儿）
+==============================================================
+结果：PASS 35 / FAIL 0
+==============================================================
+</code></pre>
+<p><strong>事件闭环（R3-09）单独实录</strong>：向 Kafka <code>lifeform.sense.collected</code> 发布带正文事件 →
+body-service 消费 → 入库 → 语义检索召回该事件文档 →「感官→躯体」闭环成立。</p>
+<hr />
+<h2 id="7">7. 测试基线汇总<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th style="text-align: right;">用例数</th>
+<th style="text-align: right;">通过</th>
+<th style="text-align: right;">失败</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java · gateway-service</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>Java · session-manager</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">10</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>Java · sense-service</td>
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">48</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>Java · <strong>body-service</strong></td>
+<td style="text-align: right;"><strong>40</strong></td>
+<td style="text-align: right;"><strong>40</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+<tr>
+<td><strong>Java 小计</strong></td>
+<td style="text-align: right;"><strong>100</strong></td>
+<td style="text-align: right;"><strong>100</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+<tr>
+<td>Python · nlp-service</td>
+<td style="text-align: right;">52</td>
+<td style="text-align: right;">52</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>Node · wp-bff</td>
+<td style="text-align: right;">22</td>
+<td style="text-align: right;">22</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>174</strong></td>
+<td style="text-align: right;"><strong>174</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<p>其它校验：契约 <code>0 FAIL</code>（实现端点 8 ↔ BFF 8）· Java 文档覆盖 <code>100/100</code> · 前端 typecheck + build 通过。</p>
+<p>body-service 的 7 个测试类：<code>ChunkProcessorTest</code>(9) · <code>TierRouterTest</code>(6) · <code>HotCacheStoreTest</code>(4) ·
+<code>InMemoryMetadataStoreTest</code>(4) · <code>IngestServiceTest</code>(6) · <code>RetrievalServiceTest</code>(8) · <code>QdrantClientTest</code>(3)。</p>
+<hr />
+<h2 id="8">8. 缺陷与修复验证<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>缺陷</th>
+<th>级别</th>
+<th>修复</th>
+<th>回归验证</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td>Qdrant 拒收非 UUID point id，批次入库失败</td>
+<td>阻断</td>
+<td>改 name-based UUID（重入库幂等）</td>
+<td><code>QdrantClientTest</code> 3 项 + E2E 入库 PASS</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>body-service 起在错误端口（环境变量污染）</td>
+<td>阻断</td>
+<td>启动显式 <code>--server.port</code></td>
+<td>E2E 健康 PASS</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>PG 冷层凭据与 compose 不符，回落内存</td>
+<td>阻断</td>
+<td>默认凭据对齐 compose</td>
+<td>E2E <code>metadata_backend=pg</code> PASS</td>
+</tr>
+<tr>
+<td>D4</td>
+<td>分块器内容覆盖不全 / 跨标题合并</td>
+<td>中</td>
+<td>标题入块 + 同标题合并（两语言同步）</td>
+<td>分块测试 21 项 PASS</td>
+</tr>
+<tr>
+<td>D5</td>
+<td><code>HotCacheStore</code> 重复方法（编译错误）</td>
+<td>中</td>
+<td>删除重复定义</td>
+<td>编译 + 缓存测试 PASS</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>诚实登记</strong>：D1 是<strong>端到端验收才暴露</strong>的真实缺陷（单测无法覆盖 Qdrant 服务端约束），
+已补单测守住该不变量——这正是「构建期单测 + 运行时 E2E 双层验收」的价值所在。</p>
+</blockquote>
+<hr />
+<h2 id="9">9. 待补验证项（不影响本阶段结论）<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原因</th>
+<th>影响</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>真实 BGE-M3 嵌入 / 交叉编码器重排</td>
+<td>本机未安装模型权重</td>
+<td>当前走确定性后端并上报 <code>degraded=true</code>，<strong>诚实降级不伪造</strong>；装模型后自动切换</td>
+</tr>
+<tr>
+<td>大文档（&gt;事件体积上限）暂存回读</td>
+<td>当前事件携带正文</td>
+<td>已登记为后续债，不影响本阶段范围内文档规模</td>
+</tr>
+<tr>
+<td>DEBT-002 LLM 生成</td>
+<td>属 Phase 4 大脑期</td>
+<td>RAG 端到端已可用，生成器如实标注 <code>template</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="10">10. 验收签字<a class="headerlink" href="#10" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Must 需求（R3-01~R3-05、R3-07）</td>
+<td><strong>7/7 通过</strong></td>
+</tr>
+<tr>
+<td>Should 需求（R3-06、R3-08、R3-09）</td>
+<td><strong>3/3 通过</strong></td>
+</tr>
+<tr>
+<td>阶段 DoD（5 项）</td>
+<td><strong>5/5 通过</strong></td>
+</tr>
+<tr>
+<td>终端线 R-C03 / R-C09</td>
+<td><strong>达标</strong></td>
+</tr>
+<tr>
+<td>测试总基线</td>
+<td><strong>174 / 174 通过</strong></td>
+</tr>
+<tr>
+<td>端到端验收</td>
+<td><strong>35 / 35 通过</strong></td>
+</tr>
+<tr>
+<td><strong>阶段总结论</strong></td>
+<td><strong>通过</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Phase 3 验收通过，DEBT-001 正式销项（内存检索 → Qdrant 向量检索），进入 Phase 4（大脑期）。</p>
+</blockquote></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

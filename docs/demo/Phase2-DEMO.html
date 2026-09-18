@@ -1,0 +1,587 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 2 演示脚本：感官期——五感采集与数据质检 👁️✋</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-18 20:05 · 源文件 Phase2-DEMO.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#docker">一、自动化验证（无需 Docker，先跑这一层）</a><ul>
+<li><a href="#11-java">1.1 Java 全量构建与单测</a></li>
+<li><a href="#12-python-ocr">1.2 Python 意图识别与 OCR</a></li>
+<li><a href="#13-console">1.3 Console 前端语法校验</a></li>
+<li><a href="#14-phase2">1.4 Phase2 审核修复</a></li>
+</ul>
+</li>
+<li><a href="#docker_1">二、端到端演示（需 Docker 基础设施）</a><ul>
+<li><a href="#20">2.0 启动</a></li>
+<li><a href="#21-r2-02">2.1 R2-02 触觉渠道：三类数据源采集</a></li>
+<li><a href="#22-r2-10">2.2 R2-10 质检拦截与批次回滚</a></li>
+<li><a href="#23-r2-05-r0-r2-06-r1">2.3 R2-05 R0 定时调度 / R2-06 R1 动态采集</a></li>
+<li><a href="#24-r2-09">2.4 R2-09 渠道健康与隔离</a></li>
+<li><a href="#25-r2-07-r2-08">2.5 R2-07 / R2-08 意图识别双级级联</a></li>
+<li><a href="#26-console-r-c02-r-c09">2.6 Console 感官视图（R-C02 / R-C09）</a></li>
+</ul>
+</li>
+<li><a href="#dod">三、量化验收（DoD 对齐）</a></li>
+<li><a href="#_1">四、故障排查</a></li>
+<li><a href="#_2">五、演示完成标准</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-2">Phase 2 演示脚本：感官期——五感采集与数据质检 👁️✋<a class="headerlink" href="#phase-2" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>演示目标</strong>：证明生命体"五感"已接通——渠道可插拔、R0/R1 双模式采集、五字段标准化、质检拦截、隔离暂存与回滚、意图识别双级级联全部可用，并可在 Console 感官视图实时观测。
+<strong>前置条件</strong>：Docker、JDK 21、Maven 3.9+、Python 3.12+、Node（仅前端语法校验用）
+<strong>对应需求</strong>：R2-01 ~ R2-10（Phase2-感官期/需求设计文档.md）</p>
+</blockquote>
+<hr />
+<h2 id="docker">一、自动化验证（无需 Docker，先跑这一层）<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h2>
+<h3 id="11-java">1.1 Java 全量构建与单测<a class="headerlink" href="#11-java" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/java
+../../scripts/mvn-dev.sh clean package
+</code></pre>
+<p>预期（2026-09-12 实测）：</p>
+<pre><code>[INFO] proto-contracts .................................... SUCCESS
+[INFO] gateway-service .................................... SUCCESS
+[INFO] session-manager .................................... SUCCESS
+[INFO] sense-service ...................................... SUCCESS
+[INFO] body-service ....................................... SUCCESS
+[INFO] BUILD SUCCESS
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th style="text-align: right;">测试数</th>
+<th style="text-align: right;">失败</th>
+<th style="text-align: right;">错误</th>
+<th style="text-align: right;">测试类</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>gateway-service</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+</tr>
+<tr>
+<td>session-manager</td>
+<td style="text-align: right;">4</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">2</td>
+</tr>
+<tr>
+<td><strong>sense-service</strong></td>
+<td style="text-align: right;"><strong>47</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>7</strong></td>
+</tr>
+<tr>
+<td>body-service</td>
+<td style="text-align: right;">1</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">1</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>54</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>11</strong></td>
+</tr>
+</tbody>
+</table>
+<p>sense-service 的 7 个测试类覆盖（含新增 IPv6 unique-local / CGNAT SSRF 回归）：<code>TouchChannelTest</code>、<code>CollectPipelineTest</code>、<code>ChannelHealthMonitorTest</code>、<code>DataNormalizerTest</code>、<code>QualityGateTest</code>、<code>StagingStoreTest</code>、<code>TextExtractorTest</code>。</p>
+<h3 id="12-python-ocr">1.2 Python 意图识别与 OCR<a class="headerlink" href="#12-python-ocr" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/python/nlp-service
+../venv/Scripts/python.exe tests/test_intent.py     # Windows
+# 或 ../venv/bin/python tests/test_intent.py        # Linux/macOS
+../venv/Scripts/python.exe tests/test_ocr.py
+</code></pre>
+<p>预期（2026-09-12 实测，19 项全通过）：</p>
+<pre><code>  PASS test_rule_engine_covers_at_least_ten_scenarios
+  PASS test_rule_engine_hits_high_confidence
+  PASS test_cascade_routes_to_rule_first
+  PASS test_cascade_falls_back_to_l0_model
+  PASS test_l0_accuracy_on_holdout_corpus
+  PASS test_l0_latency_below_50ms
+  ...（共 15 项）
+
+L0 留出集准确率: 90.0% (样本 60) | P99 延迟 0.052ms
+  知识问答 80% · 计算器 100% · 天气查询 80% · 汇总报告 100% · 任务创建 100%
+  日程提醒  60% · 数据查询  80% · 情感闲聊 100% · 故障排查 100% · 文档写作 80%
+  情报采集 100% · 代码助手 100%
+
+OCR 引擎状态: {'available': False, 'engine': 'unavailable',
+              'candidates': [{'engine':'paddleocr','available':False},
+                             {'engine':'tesseract','available':False}]}
+</code></pre>
+<blockquote>
+<p><strong>R2-08 达标判定</strong>：准确率 90.0% ≥ 85% ✅；P99 延迟 0.052ms &lt; 50ms ✅。
+<strong>R2-03 说明</strong>：本机未安装 PaddleOCR/Tesseract 时，OCR 接口诚实上报 <code>available=false</code>，不伪造识别结果；视觉渠道在 Console 显示为 <code>DEGRADED</code>。安装引擎后自动转为可用。</p>
+</blockquote>
+<h3 id="13-console">1.3 Console 前端语法校验<a class="headerlink" href="#13-console" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">node --check web/console/js/provider.js
+# 预期: 无输出（语法通过）
+</code></pre>
+<hr />
+<h3 id="14-phase2">1.4 Phase2 审核修复<a class="headerlink" href="#14-phase2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>OCR 引擎改为惰性初始化，避免 <code>app.ocr</code> 导入时加载 PaddleOCR 导致测试/服务启动阻塞。</li>
+<li>URL 采集关闭 HttpClient 自动重定向，逐跳重新执行 SSRF 校验，并禁止 HTTPS → HTTP 降级。</li>
+<li>SSRF 防护新增 IPv6 unique-local（fc00::/7）和 IPv4 CGNAT（100.64.0.0/10）拦截。</li>
+<li>MinIO 默认凭据移除；Docker Compose 和 sense-service 改为从环境变量读取，缺少凭据时自动降级到本地暂存。</li>
+<li>新增 2 项安全回归测试后，Java 测试总数由 52 增至 54，全部通过。</li>
+</ul>
+<h2 id="docker_1">二、端到端演示（需 Docker 基础设施）<a class="headerlink" href="#docker_1" title="Permanent link">&para;</a></h2>
+<h3 id="20">2.0 启动<a class="headerlink" href="#20" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">./scripts/start.sh all
+./scripts/healthcheck.sh          # 期望 7/7 通过，gRPC 端口 9091-9094 开放
+</code></pre>
+<p>sense-service 关键配置（<code>services/java/sense-service/src/main/resources/application.yml</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>配置项</th>
+<th>默认值</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>SENSE_FILE_ROOT</code> / <code>sense.file-root</code></td>
+<td><code>data/sense-inbox</code></td>
+<td>触觉渠道本地文件根目录（沙箱边界）</td>
+</tr>
+<tr>
+<td><code>SENSE_ALLOWED_HOSTS</code></td>
+<td>空</td>
+<td>URL 采集白名单（空=仅公网，禁内网）</td>
+</tr>
+<tr>
+<td><code>sense.retry.max-attempts</code></td>
+<td>3</td>
+<td>指数退避重试上限</td>
+</tr>
+<tr>
+<td><code>sense.quality.threshold</code></td>
+<td>0.6</td>
+<td>质检门槛</td>
+</tr>
+<tr>
+<td><code>STAGING_BACKEND</code></td>
+<td><code>auto</code></td>
+<td>auto→MinIO 优先，不可用回落本地</td>
+</tr>
+<tr>
+<td><code>R0_ENABLED</code> / <code>R0_TICK_MS</code></td>
+<td>true / 60000</td>
+<td>R0 定时调度开关与轮询周期</td>
+</tr>
+</tbody>
+</table>
+<h3 id="21-r2-02">2.1 R2-02 触觉渠道：三类数据源采集<a class="headerlink" href="#21-r2-02" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">TOKEN=$(curl -s -X POST &quot;http://127.0.0.1:8080/api/auth/token?tenantId=default&quot; | python -c &quot;import sys,json;print(json.load(sys.stdin)['token'])&quot;)
+
+# ① URL 采集（HTML 自动清洗取正文）
+curl -s -X POST &quot;http://127.0.0.1:8080/api/sense/collect&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;X-Tenant-Id: default&quot; \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;channel&quot;:&quot;TOUCH&quot;,&quot;data_source&quot;:&quot;https://example.com&quot;,&quot;query&quot;:&quot;示例页面&quot;}'
+
+# ② 本地文件采集（相对 sense.file-root）
+echo &quot;这是一段用于触觉渠道文件采集验收的测试正文内容。&quot; &gt; data/sense-inbox/page.txt
+curl -s -X POST &quot;http://127.0.0.1:8080/api/sense/collect&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;X-Tenant-Id: default&quot; \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;channel&quot;:&quot;TOUCH&quot;,&quot;data_source&quot;:&quot;file://page.txt&quot;}'
+
+# ③ 纯文本直采
+curl -s -X POST &quot;http://127.0.0.1:8080/api/sense/collect&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;X-Tenant-Id: default&quot; \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;channel&quot;:&quot;TOUCH&quot;,&quot;data_source&quot;:&quot;Agent-Lifeform 感官期纯文本采集验收样例内容。&quot;}'
+</code></pre>
+<p>预期响应关键字段：</p>
+<pre><code class="language-json">{
+  &quot;batch_id&quot;: &quot;b-xxxx&quot;,
+  &quot;source_channel&quot;: &quot;TOUCH&quot;,
+  &quot;tenant_id&quot;: &quot;default&quot;,
+  &quot;staging_status&quot;: &quot;ACCEPTED&quot;,
+  &quot;quality_score&quot;: 0.98,
+  &quot;item_count&quot;: 1,
+  &quot;attempts&quot;: 1,
+  &quot;degraded&quot;: false,
+  &quot;five_fields_complete&quot;: true
+}
+</code></pre>
+<blockquote>
+<p><strong>R2-01 / R2-02 / R2-04 达标</strong>：<code>five_fields_complete=true</code> 即证明 <code>source_channel / tenant_id / timestamp / freshness / confidence</code> 五字段打标完整。</p>
+</blockquote>
+<h3 id="22-r2-10">2.2 R2-10 质检拦截与批次回滚<a class="headerlink" href="#22-r2-10" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 低质数据（过短 + 重复乱码）应被拦截
+curl -s -X POST &quot;http://127.0.0.1:8080/api/sense/collect&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;X-Tenant-Id: default&quot; \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;channel&quot;:&quot;TOUCH&quot;,&quot;data_source&quot;:&quot;aaaa&quot;}'
+# 预期: &quot;staging_status&quot;:&quot;REJECTED&quot;,&quot;reject_reason&quot;:&quot;BELOW_QUALITY_THRESHOLD&quot;
+
+# 查看暂存批次
+curl -s &quot;http://127.0.0.1:8080/api/sense/batches?status=REJECTED&amp;limit=5&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;X-Tenant-Id: default&quot;
+# 预期: {&quot;tenant_id&quot;:&quot;default&quot;,&quot;backend&quot;:&quot;minio&quot;,&quot;count&quot;:N,&quot;batches&quot;:[...]}
+
+# 批次回滚
+curl -s -X POST &quot;http://127.0.0.1:8080/api/sense/batches/&lt;BATCH_ID&gt;/rollback&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;X-Tenant-Id: default&quot;
+# 预期: {&quot;batch_id&quot;:&quot;&lt;BATCH_ID&gt;&quot;,&quot;rolled_back&quot;:true,&quot;backend&quot;:&quot;minio&quot;}
+</code></pre>
+<p>拒绝原因枚举（<code>QualityGate.rejectReason</code>，单一事实来源）：</p>
+<table>
+<thead>
+<tr>
+<th>reject_reason</th>
+<th>触发条件</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>EMPTY_CONTENT</code></td>
+<td>内容为空或全空白</td>
+</tr>
+<tr>
+<td><code>ENCODING_GARBLED</code></td>
+<td>可打印字符占比 &lt; 0.8</td>
+</tr>
+<tr>
+<td><code>REPETITIVE_GARBAGE</code></td>
+<td>重复乱码特征（如 <code>aaaa</code>、周期性片段）</td>
+</tr>
+<tr>
+<td><code>BELOW_QUALITY_THRESHOLD</code></td>
+<td>长度 &lt; 20 或加权质量分 &lt; 0.6</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>加权公式：<code>score = 0.45·内容分 + 0.20·长度分 + 0.20·可打印分 + 0.15·信息密度分</code></p>
+</blockquote>
+<h3 id="23-r2-05-r0-r2-06-r1">2.3 R2-05 R0 定时调度 / R2-06 R1 动态采集<a class="headerlink" href="#23-r2-05-r0-r2-06-r1" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># R0：查看规则与调度日志
+curl -s &quot;http://127.0.0.1:8080/api/sense/rules&quot; -H &quot;Authorization: Bearer $TOKEN&quot;
+# 预期: {&quot;stats&quot;:{&quot;enabled&quot;:true,&quot;tick_ms&quot;:60000,&quot;rules&quot;:2,&quot;triggered&quot;:N},&quot;rules&quot;:[...],&quot;log&quot;:[...]}
+
+# R0：手动触发某条规则（演示用，不必等 60s）
+curl -s -X POST &quot;http://127.0.0.1:8080/api/sense/rules/r0-touch-knowledge/run&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot;
+
+# R1：多渠道路由指令（单轮渠道上限 3）
+curl -s -X POST &quot;http://127.0.0.1:8080/api/sense/command&quot; \
+  -H &quot;Authorization: Bearer $TOKEN&quot; -H &quot;X-Tenant-Id: default&quot; \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;command_id&quot;:&quot;cmd-demo-1&quot;,&quot;channels&quot;:[&quot;TOUCH&quot;,&quot;VISUAL&quot;,&quot;NOSE&quot;],&quot;data_source&quot;:&quot;感官期 R1 动态采集验收文本内容样例。&quot;,&quot;query&quot;:&quot;动态采集&quot;}'
+# 预期: 返回各渠道逐项结果 + 汇总（命中渠道数 ≤ 3；DOWN 渠道被跳过并计入 skipped）
+</code></pre>
+<p>默认 R0 规则（<code>r0-touch-knowledge</code> 每 300s、<code>r0-taste-quality</code> 每 600s）见 <code>application.yml</code>。</p>
+<h3 id="24-r2-09">2.4 R2-09 渠道健康与隔离<a class="headerlink" href="#24-r2-09" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 五渠道健康总览
+curl -s &quot;http://127.0.0.1:8080/api/sense/health&quot; -H &quot;Authorization: Bearer $TOKEN&quot;
+# 预期: {&quot;service&quot;:&quot;sense-service&quot;,&quot;status&quot;:&quot;UP|DEGRADED&quot;,&quot;channels&quot;:[{&quot;channel&quot;:&quot;AUDIO&quot;,&quot;status&quot;:&quot;DOWN&quot;},...]}
+
+# 隔离与恢复快照
+curl -s &quot;http://127.0.0.1:8080/api/sense/channels-health&quot; -H &quot;Authorization: Bearer $TOKEN&quot;
+# 预期: {&quot;channels&quot;:{...},&quot;recoveries&quot;:[...]}
+</code></pre>
+<p>降级判定阈值：连续失败 <code>degrade-after: 1</code> 次 → <code>DEGRADED</code>；<code>down-after: 3</code> 次 → <code>DOWN</code> 并自动隔离，采集请求降级到可用渠道；恢复后自动重连并记录到 <code>recoveries</code>。</p>
+<h3 id="25-r2-07-r2-08">2.5 R2-07 / R2-08 意图识别双级级联<a class="headerlink" href="#25-r2-07-r2-08" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">curl -s -X POST &quot;http://127.0.0.1:8000/api/nlp/intent&quot; \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;text&quot;:&quot;帮我汇总本周科创板 50 的行情数据&quot;}'
+# 预期: {&quot;intent&quot;:&quot;汇总报告&quot;,&quot;confidence&quot;:0.9,&quot;engine&quot;:&quot;rule&quot;}
+
+curl -s -X POST &quot;http://127.0.0.1:8000/api/nlp/intent&quot; \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;text&quot;:&quot;嗯那个啥来着&quot;}'
+# 预期: {&quot;intent&quot;:&quot;情感闲聊&quot;,&quot;confidence&quot;:&lt;低&gt;,&quot;engine&quot;:&quot;l0&quot;}  ← 规则未命中，L0 模型兜底
+
+curl -s &quot;http://127.0.0.1:8000/api/nlp/intent/stats&quot;
+# 预期: 引擎画像 + 各引擎命中计数
+</code></pre>
+<p>级联顺序：<strong>规则引擎优先（高置信直出）→ 未命中转 L0 模型兜底 → 仍不可判则归 <code>情感闲聊</code></strong>。</p>
+<h3 id="26-console-r-c02-r-c09">2.6 Console 感官视图（R-C02 / R-C09）<a class="headerlink" href="#26-console-r-c02-r-c09" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># Mock 模式（默认，无需后端）
+start web/console/index.html
+
+# API 模式（接真实 sense-service，需网关已启动）
+start &quot;web/console/index.html?ds=api&amp;tenant=default&quot;
+</code></pre>
+<p>预期：五感矩阵 5 张卡片（视/听/触/嗅/味）显示状态徽标、采集批次、质检通过率、速率、最近记录；点击卡片下钻渠道详情（最近批次表含质量分/尝试次数/降级/拒绝原因）；切换 <code>?ds=api</code> 与 <code>?ds=mock</code> <strong>零 UI 改动</strong>，仅数据源注脚变化。</p>
+<table>
+<thead>
+<tr>
+<th>数据源</th>
+<th>行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>?ds=mock</code></td>
+<td>使用 <code>provider.js</code> 内置静态测试数据</td>
+</tr>
+<tr>
+<td><code>?ds=api</code></td>
+<td>经网关 <code>http://127.0.0.1:8080</code> 访问 <code>/api/sense/channels</code>、<code>/api/sense/stats</code>、<code>/api/sense/channels/{type}</code>；携带 <code>Authorization</code> + <code>X-Tenant-Id</code></td>
+</tr>
+<tr>
+<td>API 失败</td>
+<td>视图显示可操作排查提示（网关未启 / <code>DEV_TOKEN_ENDPOINT_ENABLED</code> / 回退 mock），不静默失败</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="dod">三、量化验收（DoD 对齐）<a class="headerlink" href="#dod" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>验收标准</th>
+<th>实测</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R2-01</td>
+<td>渠道可插拔，新增渠道不改核心代码</td>
+<td><code>ChannelRegistry</code> 动态发现 <code>SenseChannel</code> Bean，五渠道零改核心</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-02</td>
+<td>URL/文件/文本三类源可采集并标准化</td>
+<td><code>TouchChannelTest</code> + 端到端三命令</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-03</td>
+<td>基础 OCR 返回文本</td>
+<td>引擎缺失时诚实上报 <code>available=false</code>；安装后可识别</td>
+<td>⚠️ 待装引擎</td>
+</tr>
+<tr>
+<td>R2-04</td>
+<td>采集数据五字段完整</td>
+<td><code>five_fields_complete=true</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-05</td>
+<td>定时任务按规则触发；调度日志完整</td>
+<td><code>/api/sense/rules</code> 返回 <code>stats/rules/log</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-06</td>
+<td>指令→渠道选择→采集→回传</td>
+<td><code>/api/sense/command</code> 多渠道路由 + 单轮上限</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-07</td>
+<td>10 个预置场景识别准确</td>
+<td>12 场景规则库（测试断言 ≥ 10）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-08</td>
+<td>延迟 &lt; 50ms；准确率 ≥ 85%</td>
+<td>P99 <strong>0.052ms</strong>；留出集 <strong>90.0%</strong></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-09</td>
+<td>渠道宕机自动隔离；恢复自动重连</td>
+<td><code>ChannelHealthMonitorTest</code> + <code>channels-health</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R2-10</td>
+<td>低质数据被拦截；批次可回滚</td>
+<td><code>QualityGateTest</code> / <code>StagingStoreTest</code> + rollback 接口</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_1">四、故障排查<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>排查</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>五感卡片全 <code>DOWN</code></td>
+<td>检查渠道探针依赖：NATS 是否可用、<code>SENSE_FILE_ROOT</code> 是否存在</td>
+</tr>
+<tr>
+<td>视觉渠道恒 <code>DEGRADED</code></td>
+<td>本机未装 OCR 引擎（PaddleOCR/Tesseract）→ 安装后自动转 UP</td>
+</tr>
+<tr>
+<td>暂存 <code>backend=local</code> 而非 <code>minio</code></td>
+<td>MinIO 未启动或密钥不符 → <code>docker compose logs minio</code>；<code>STAGING_BACKEND</code> 可强制</td>
+</tr>
+<tr>
+<td>采集全部 <code>REJECTED</code></td>
+<td>内容过短（&lt; 20 字符）或门槛过高 → 调 <code>sense.quality.threshold</code> / <code>min-length</code></td>
+</tr>
+<tr>
+<td>Console API 模式报 token 失败</td>
+<td>网关需 <code>DEV_TOKEN_ENDPOINT_ENABLED=true</code>，且仅允许 loopback 调用</td>
+</tr>
+<tr>
+<td>构建卡在 protobuf 插件</td>
+<td>已修复：生成源码入库 + 默认生命周期不再调 protoc；契约变更时用 <code>-Pproto-gen</code> 重新生成</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_2">五、演示完成标准<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[x] Java 全量 <code>clean package</code> 通过，54 测试 0 失败</li>
+<li>[x] Python 意图识别 15 项 + OCR 4 项全通过</li>
+<li>[x] 意图识别准确率 ≥ 85%、P99 &lt; 50ms（R2-08 硬指标）</li>
+<li>[x] 五渠道抽象落地，低质数据被质检拦截，批次可回滚</li>
+<li>[x] Console 感官视图 mock/api 双数据源零 UI 改动切换</li>
+<li>[ ] 端到端 Docker 运行时冒烟（需 Docker daemon 与 OCR 引擎就绪）</li>
+</ul>
+<blockquote>
+<p>达标 → Phase 2 验收通过 → 进入 Phase 3（躯体期·知识入库与语义检索）</p>
+</blockquote></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

@@ -59,9 +59,19 @@
 
 **阶段数据速览**：代码基线 `850f49d`（147 文件）· 测试 **73/73 通过** · 意图识别准确率 **90.0%** / P99 **0.052ms** · 全量构建 5 模块 SUCCESS
 
-### 加固期 · Phase 2 之后（2026-09-15 ~ 2026-09-16，非独立阶段）
+### Phase 3 · 躯体期（2026-09-17）
 
-Phase 3 冻结期间做工程化：把已有能力做真、做稳、做可交付。本段**不按三件套归档**，
+| 文件 | 说明 |
+|---|---|
+| `Phase3-阶段性报告.md` · `.html` | 阶段目标、交付物清单（body-service 重写 + nlp 嵌入/重排/分块 + 会话/终端线）、**6 条关键设计决策**、端到端验证结果、测试基线、**6 项问题与解决**、遗留与技术债（**DEBT-001 销项**）、阶段结论 |
+| `Phase3-开发执行日志.md` · `.html` | 七阶段执行流程时间线（前置同步→Python 先行→Java 主体→会话与终端线→构建收敛→端到端验收→文档归档）、提交台账、命令台账、环境侧记录 |
+| `Phase3-测试验收报告.md` · `.html` | R3-01~R3-09 逐项验收判定、DoD 逐条对照、终端线 R-C03 验收、35 项端到端实录、174/174 测试基线、5 个缺陷的修复与回归、待补验证项、验收签字 |
+
+**阶段数据速览**：测试 **174/174 通过**（Java 100 · Python 52 · wp-bff 22）· 端到端 **35/35 通过** · 检索 P99 **366ms** / 命中率 **0.925** / 缓存命中率 **0.45** · **DEBT-001 闭合**（内存检索 → Qdrant 向量检索）
+
+### 加固期 · Phase 2 之后、Phase 3 之前（2026-09-15 ~ 2026-09-16，非独立阶段）
+
+把已有能力做真、做稳、做可交付。本段**不按三件套归档**，
 过程与结论落在 `docs/优化日志/`，进度与功能矩阵统一收敛到 `docs/项目进度总览.md`。
 
 | 文件 | 说明 |
@@ -98,21 +108,23 @@ Phase<N>-测试验收报告.md     + .html
 ```bash
 # 从项目根执行。两种可用环境，按本机情况选一种：
 
-# 【A】有 anaconda 的机器（WorkBuddy 侧，2026-09-17 实测）
-E:/software/anaconda3/python.exe scripts/md2html-report.py --all "docs/项目进度日志报告"
-
-# 【B】无 anaconda 的机器：托管 Python + PYTHONPATH 指向 markdown 包目录
+# 【A】无 anaconda 的机器（**WorkBuddy 侧现状**，2026-09-17 实测）：托管 Python + PYTHONPATH 指向 markdown 包目录
 PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
   C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
   scripts/md2html-report.py --all "docs/项目进度日志报告"
 
+# 【B】有 anaconda 的机器（另一台开发机）
+E:/software/anaconda3/python.exe scripts/md2html-report.py --all "docs/项目进度日志报告"
+
 # 单文件模式
-E:/software/anaconda3/python.exe scripts/md2html-report.py "docs/项目进度日志报告/Phase2-阶段性报告.md"
+PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py "docs/项目进度日志报告/Phase3-阶段性报告.md"
 ```
 
 > **注意事项**（踩坑记录）：
-> - markdown 包两种获取方式：anaconda 自带；（无 anaconda 时）用
->   `pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown` 装到独立目录，不污染系统环境。
+> - **本机 anaconda 已于 2026-09-17 卸载**（现只有 `E:/software/python/python312`，无 `markdown` 包），
+>   故本机统一用环境【A】。markdown 包获取方式：`pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown`。
 > - 中文字符路径需加引号。
 > - `--all` 批量模式**自动排除 `README.md`**（索引页保留纯 Markdown 即可），如需转换用单文件模式。
 > - 修改 `.md` 后**需重新生成对应 `.html`**，两者一并提交，避免版本漂移。

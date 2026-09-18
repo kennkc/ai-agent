@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Phase 0 胚胎期 · 开发执行日志</title>
+<title>Phase 1 / VS1 Demo: Gateway -&gt; Session -&gt; Intent -&gt; Local Retrieval</title>
 <style>
   :root {
     --brand: #185fa5;
@@ -116,152 +116,63 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:05 · 源文件 Phase0-开发执行日志.md</span>
+  <span class="meta">生成于 2026-09-18 20:05 · 源文件 Phase1-DEMO.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
-<li><a href="#1">1. 执行时间线</a></li>
-<li><a href="#2-adr">2. 关键决策记录（ADR 摘录）</a></li>
-<li><a href="#3">3. 命令台账（可复现）</a></li>
-<li><a href="#4">4. 环境侧记录</a></li>
+<li><a href="#prerequisites">Prerequisites</a></li>
+<li><a href="#demo">Demo</a></li>
+<li><a href="#negative-checks">Negative checks</a></li>
 </ul>
 </div>
 </nav>
-  <main class="doc"><h1 id="phase-0">Phase 0 胚胎期 · 开发执行日志<a class="headerlink" href="#phase-0" title="Permanent link">&para;</a></h1>
-<table>
-<thead>
-<tr>
-<th>项</th>
-<th>内容</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>阶段</td>
-<td>Phase 0 · 胚胎期</td>
-</tr>
-<tr>
-<td>日志性质</td>
-<td><strong>追溯性补档</strong>（编制于 2026-09-15，依据 git 提交历史、PROGRESS.md 与 dev 分支分析文档还原）</td>
-</tr>
-<tr>
-<td>覆盖区间</td>
-<td>2026-08-12（设计基线/仓库初始化）→ 2026-08-30（阶段验收）→ 2026-09-03（构建修复）</td>
-</tr>
-</tbody>
-</table>
-<hr />
-<h2 id="1">1. 执行时间线<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>日期</th>
-<th>提交</th>
-<th>事件</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>2026-08-12</td>
-<td><code>7ceb5d9</code> <code>370b67f</code> <code>611b7c3</code></td>
-<td>仓库初始化：第一期项目骨架、设计文档基线入库（架构 v3.2 于同月定稿）</td>
-</tr>
-<tr>
-<td>2026-08-30</td>
-<td><code>c4a842f</code></td>
-<td><strong>Phase 0 全量验收通过</strong>：骨架运行验证与修复（docker-compose 精简、infra/README、healthcheck 修正、gateway pom 修正、清理误提交的 .pyc）</td>
-</tr>
-<tr>
-<td>2026-08-30</td>
-<td><code>075f8cb</code></td>
-<td>Phase 1 神经期主干首批落地（网关鉴权 / NATS / Kafka / 链路追踪 / 统一错误码）——同日完成 P0→P1 切换</td>
-</tr>
-<tr>
-<td>2026-09-03</td>
-<td><code>78aba15</code></td>
-<td>构建修复：os-maven-plugin 激活为 Maven 扩展，解决 <code>os.detected.classifier</code> 未解析</td>
-</tr>
-<tr>
-<td>2026-09-11</td>
-<td><code>db0cc27</code></td>
-<td><code>feat: complete phase0 and phase1 development</code>——P0/P1 收尾（body-service MVP、gRPC health 四服务齐备、JWT 体系重构、VS1 垂直切片、测试补齐，56 文件 +2013/-562）</td>
-</tr>
-</tbody>
-</table>
-<h2 id="2-adr">2. 关键决策记录（ADR 摘录）<a class="headerlink" href="#2-adr" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>#</th>
-<th>决策</th>
-<th>依据</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>1</td>
-<td>基础设施 8 件套一次配齐（redis/postgres-pgvector/qdrant/nats/nacos/minio/jaeger/kafka）</td>
-<td>规划 §1.7 复杂度分期要求 P0 只引必需组件；实际按"一次配齐、按需使用"执行，避免 Phase 3 再扩 compose 的回归风险</td>
-</tr>
-<tr>
-<td>2</td>
-<td>gRPC 健康服务用各服务内嵌 <code>GrpcHealthServer</code>，而非统一 sidecar</td>
-<td>保持服务自包含，healthcheck.sh 可独立探测</td>
-</tr>
-<tr>
-<td>3</td>
-<td>proto 生成物双侧入库（Java 90 文件 + Python 12 文件）</td>
-<td>Windows 下 protobuf-maven-plugin 存在删除目录阻塞风险（后续 Phase 2 A-1 证实），CI 不依赖网络下载 protoc</td>
-</tr>
-<tr>
-<td>4</td>
-<td>启动脚本内清理 <code>SERVER__*</code> 环境变量、gRPC 端口走 <code>${GRPC_PORT:9092}</code></td>
-<td>规避 Spring 宽松绑定污染与 Kafka 端口冲突（P0-3/P0-4）</td>
-</tr>
-</tbody>
-</table>
-<h2 id="3">3. 命令台账（可复现）<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
-<pre><code class="language-bash"># 一键启动 + 健康检查
-./scripts/start.sh all
-./scripts/healthcheck.sh
+  <main class="doc"><h1 id="phase-1-vs1-demo-gateway-session-intent-local-retrieval">Phase 1 / VS1 Demo: Gateway -&gt; Session -&gt; Intent -&gt; Local Retrieval<a class="headerlink" href="#phase-1-vs1-demo-gateway-session-intent-local-retrieval" title="Permanent link">&para;</a></h1>
+<h2 id="prerequisites">Prerequisites<a class="headerlink" href="#prerequisites" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Start infrastructure and services: <code>./scripts/start.sh all</code></li>
+<li>Ensure <code>JWT_SECRET</code> is set by the start script and <code>DEV_TOKEN_ENDPOINT_ENABLED=true</code>.</li>
+<li>Run <code>./scripts/healthcheck.sh</code> and confirm HTTP health plus gRPC ports 9091-9094.</li>
+</ol>
+<h2 id="demo">Demo<a class="headerlink" href="#demo" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 1. get a dev token (loopback only)
+curl -s -X POST &quot;http://127.0.0.1:8080/api/auth/token?tenantId=default&quot;
 
-# Phase 0 演示三条冒烟
-curl -X POST http://127.0.0.1:8081/api/session
-curl -X POST http://127.0.0.1:8082/api/sense/collect -H 'Content-Type: application/json' -d '{&quot;data_source&quot;:&quot;https://example.com&quot;}'
-curl -X POST http://127.0.0.1:8000/api/nlp/intent -H 'Content-Type: application/json' -d '{&quot;text&quot;:&quot;今天天气怎么样&quot;}'
+# 2. create a session
+curl -s -X POST &quot;http://127.0.0.1:8080/api/session&quot; \
+  -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot;
 
-# Nacos 服务列表（浏览器）
-# http://127.0.0.1:8848/nacos （nacos/nacos）
+# 3. ingest one local knowledge document
+curl -s -X POST &quot;http://127.0.0.1:8080/api/body/ingest&quot; \
+  -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;doc_id&quot;:&quot;doc-1&quot;,&quot;title&quot;:&quot;架构说明&quot;,&quot;content&quot;:&quot;Agent-Lifeform uses gateway session nlp body services&quot;,&quot;source&quot;:&quot;demo&quot;}'
+
+# 4. ask through the vertical slice
+curl -s -X POST &quot;http://127.0.0.1:8080/api/session/&lt;SESSION_ID&gt;/ask&quot; \
+  -H &quot;Authorization: Bearer &lt;TOKEN&gt;&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;question&quot;:&quot;Agent-Lifeform 的架构是什么&quot;}'
 </code></pre>
-<h2 id="4">4. 环境侧记录<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
-<table>
-<thead>
-<tr>
-<th>项</th>
-<th>记录</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>Docker Compose</td>
-<td>缺 <code>.env</code> 会直接失败；已从 <code>.env.example</code> 生成（<code>MINIO_ROOT_USER</code> 等 4 变量）</td>
-</tr>
-<tr>
-<td>端口</td>
-<td>Kafka 占宿主 9092 → session gRPC 需 <code>GRPC_PORT=19092</code></td>
-</tr>
-<tr>
-<td>宿主污染</td>
-<td><code>SERVER__PORT=51007</code> 残留会让 4 个 Java 服务抢同一端口，脚本已固化清除逻辑</td>
-</tr>
-<tr>
-<td>Maven</td>
-<td>部分宿主 <code>mvn.cmd</code> 损坏 → 后续以 <code>scripts/mvn-dev.sh</code> 直调包装（Phase 2 沉淀）</td>
-</tr>
-</tbody>
-</table>
-<hr />
-<p><em>追溯性补档编制：WorkBuddy · 2026-09-15 · 依据提交 <code>7ceb5d9…db0cc27</code> 与 dev 分支分析文档</em></p></main>
+<p>Expected:</p>
+<ul>
+<li>Session API returns <code>session_id</code>.</li>
+<li>Intent API returns a rule-based intent.</li>
+<li>Body API returns at least one chunk for the ingested document.</li>
+<li>Ask API returns <code>intent</code>, <code>answer</code>, and <code>citations</code>.</li>
+</ul>
+<h2 id="negative-checks">Negative checks<a class="headerlink" href="#negative-checks" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># missing token =&gt; 401
+curl -i -X POST &quot;http://127.0.0.1:8080/api/session&quot;
+
+# cross-tenant session read =&gt; 403
+curl -i &quot;http://127.0.0.1:8080/api/session/&lt;SESSION_ID&gt;&quot; \
+  -H &quot;Authorization: Bearer &lt;TOKEN_FOR_OTHER_TENANT&gt;&quot;
+
+# loopback SSRF =&gt; rejected
+curl -s -X POST &quot;http://127.0.0.1:8082/api/sense/collect&quot; \
+  -H &quot;X-Tenant-Id: default&quot; -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;data_source&quot;:&quot;http://127.0.0.1:8080/actuator/health&quot;}'
+</code></pre></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

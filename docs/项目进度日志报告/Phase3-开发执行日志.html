@@ -1,0 +1,672 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 3 开发执行日志（归档）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-18 20:05 · 源文件 Phase3-开发执行日志.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">一、执行流程总览</a></li>
+<li><a href="#_2">二、分阶段执行记录</a><ul>
+<li><a href="#phase-a">Phase A｜前置同步与需求对账</a></li>
+<li><a href="#phase-bpython">Phase B｜Python 侧先行（复用成本低，先落）</a></li>
+<li><a href="#phase-cjava">Phase C｜Java 侧主体</a></li>
+<li><a href="#phase-d">Phase D｜会话与终端线</a></li>
+<li><a href="#phase-e">Phase E｜构建与测试收敛</a></li>
+<li><a href="#phase-f">Phase F｜端到端验收与缺陷修复</a></li>
+<li><a href="#phase-g">Phase G｜文档归档</a></li>
+</ul>
+</li>
+<li><a href="#_3">三、提交台账</a></li>
+<li><a href="#_4">四、命令台账（关键命令）</a></li>
+<li><a href="#_5">五、环境侧记录</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-3">Phase 3 开发执行日志（归档）<a class="headerlink" href="#phase-3" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 3 · 躯体期</td>
+</tr>
+<tr>
+<td>记录区间</td>
+<td>2026-09-17（承接 <code>c3c7aac</code> 流程文档批次后开始）</td>
+</tr>
+<tr>
+<td>仓库 / 分支</td>
+<td><code>E:\AI\ai-agent</code> · <code>dev</code>（跟踪 <code>codex/main</code>；三分支同内容对齐）</td>
+</tr>
+<tr>
+<td>起点提交</td>
+<td><code>c3c7aac</code>（流程文档建设批次，远端 <code>codex/main</code>）</td>
+</tr>
+<tr>
+<td>终点提交</td>
+<td>Phase 3 收口提交 <code>feat(phase3): 躯体期知识入库与语义检索（R3-01~R3-09 + R-C03）</code></td>
+</tr>
+<tr>
+<td>前置动作</td>
+<td>按 <code>git-prepull-sync</code> 技能流程先 <code>fetch</code> 并 fast-forward 到 <code>c3c7aac</code>，解读流程文档改动后再开工</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>时间标注说明</strong>：本机未开启逐条命令时间戳记录；文中带「T」的时间戳来自命令/系统输出，为<strong>精确锚点</strong>。</p>
+</blockquote>
+<hr />
+<h2 id="_1">一、执行流程总览<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<pre><code>[Phase A] 前置同步与需求对账      fetch → fast-forward `c3c7aac` → 读《功能开发流程》→ 读 Phase3 四件套
+        ↓
+[Phase B] Python 侧先行           嵌入服务 → 重排服务 → 分块器 → 端点接线 → pytest
+        ↓
+[Phase C] Java 侧主体             依赖引入 → 出站/嵌入/重排/Qdrant 客户端 → 分块器 → 三层存储
+                                 → 入库/检索/RAG 服务 → 控制器 → Kafka 消费 → 配置
+        ↓
+[Phase D] 会话与终端线            BodyClient 切语义检索 → wp-bff 躯体端点 → 契约登记
+                                 → work-platform 躯体视图 + 模块登记
+        ↓
+[Phase E] 构建与测试收敛          Maven 编译 → 40 项 JUnit → 52 项 pytest → 22 项 node --test
+                                 → 契约校验 → 文档覆盖 → 前端 typecheck + build
+        ↓
+[Phase F] 端到端验收              启动中间件 + 三服务 → E2E 脚本 35 项 → 感官事件闭环
+                                 → BFF 端点实测 → 缺陷修复（Qdrant point id / PG 凭据）
+        ↓
+[Phase G] 文档归档                模块文档 → 阶段三件套 → DEMO → PROGRESS / 总览 / 台账
+</code></pre>
+<hr />
+<h2 id="_2">二、分阶段执行记录<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<h3 id="phase-a">Phase A｜前置同步与需求对账<a class="headerlink" href="#phase-a" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>动作</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td><code>git fetch github --prune</code> + 对比</td>
+<td>远端 <code>c3c7aac</code>（流程文档批次），可 fast-forward</td>
+</tr>
+<tr>
+<td>A2</td>
+<td><code>git merge --ff-only c3c7aac</code></td>
+<td>本地 <code>dev</code> 更新到 <code>c3c7aac</code>，工作区干净</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>解读新提交（<code>docs/功能开发流程.md</code> 等）</td>
+<td>确认 8 步开发管线与三分支治理约定</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>读 <code>AGENT_CONTEXT/Phase3-躯体期/</code> 四件套</td>
+<td>确认 R3-01~R3-09 + R-C03 范围与 DoD</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>读现有 <code>body-service</code> / <code>session-manager</code> / <code>wp-bff</code> 结构</td>
+<td>定位改造点：body-service 几乎从零重写</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-bpython">Phase B｜Python 侧先行（复用成本低，先落）<a class="headerlink" href="#phase-bpython" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>动作</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>B1</td>
+<td>写嵌入服务</td>
+<td><code>app/embedding.py</code>：引擎链（BGE-M3 → hash n-gram 768 维确定性降级）+ 延迟统计</td>
+</tr>
+<tr>
+<td>B2</td>
+<td>写重排服务</td>
+<td><code>app/reranker.py</code>：交叉编码器 → 词项重合度降级，可量化提升</td>
+</tr>
+<tr>
+<td>B3</td>
+<td>写分块器</td>
+<td><code>app/chunking.py</code>：标题/段落边界 + 800/50 + 标题入块 + 重叠尾巴</td>
+</tr>
+<tr>
+<td>B4</td>
+<td>接线端点</td>
+<td><code>app/main.py</code> 新增 embed / rerank / chunk 端点与健康探测</td>
+</tr>
+<tr>
+<td>B5</td>
+<td>写测试</td>
+<td><code>test_embedding.py</code>（13）· <code>test_rerank.py</code>（8）· <code>test_chunking.py</code>（12）</td>
+</tr>
+<tr>
+<td>B6</td>
+<td>修正</td>
+<td>分块器两处：标题被剥离、跨标题合并破坏小节归属 → 改为标题入块 + 同标题合并</td>
+</tr>
+<tr>
+<td>B7</td>
+<td>跑测试</td>
+<td><code>pytest -q</code> → <strong>52 passed</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-cjava">Phase C｜Java 侧主体<a class="headerlink" href="#phase-cjava" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>动作</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>C1</td>
+<td><code>pom.xml</code> 引入依赖</td>
+<td>Redis / JDBC / PostgreSQL 驱动 / Kafka 客户端 / OTLP</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>出站与客户端</td>
+<td><code>OutboundHttp</code>（HTTP/1.1）、<code>EmbeddingClient</code>、<code>RerankClient</code>（含真实健康探测）、<code>QdrantClient</code></td>
+</tr>
+<tr>
+<td>C3</td>
+<td>统一错误体系</td>
+<td><code>ErrorCode</code> / <code>BizException</code> / <code>GlobalExceptionHandler</code></td>
+</tr>
+<tr>
+<td>C4</td>
+<td>分块器</td>
+<td><code>ChunkProcessor</code>（与 Python 同算法）</td>
+</tr>
+<tr>
+<td>C5</td>
+<td>存储模型</td>
+<td><code>DocumentStatus</code> / <code>StoredDocument</code> / <code>StoredChunk</code> / <code>MetadataStore</code></td>
+</tr>
+<tr>
+<td>C6</td>
+<td>三层存储</td>
+<td><code>PgMetadataStore</code>（冷）+ <code>InMemoryMetadataStore</code>（降级）+ <code>HotCacheStore</code>（热，租户前缀指纹）+ <code>TierRouter</code>（热度分层）+ <code>StorageFacade</code></td>
+</tr>
+<tr>
+<td>C7</td>
+<td>装配</td>
+<td><code>BodyStorageConfig</code>（DataSource 缺失时稳健降级，不硬依赖）</td>
+</tr>
+<tr>
+<td>C8</td>
+<td>服务层</td>
+<td><code>IngestService</code>（分块→嵌入→入库）、<code>KnowledgeMetrics</code>、<code>RetrievalService</code>（缓存→召回→重排）、<code>RagPipeline</code></td>
+</tr>
+<tr>
+<td>C9</td>
+<td>控制器</td>
+<td><code>KnowledgeController</code>：<code>POST /api/body/knowledge</code>、<code>GET /api/body/knowledge</code>、<code>POST /api/body/retrieve</code>、<code>POST /api/body/rag</code>、<code>GET /api/body/knowledge/stats</code>、<code>DELETE /api/body/knowledge/{docId}</code>、<code>GET /api/body/health</code></td>
+</tr>
+<tr>
+<td>C10</td>
+<td>事件闭环</td>
+<td><code>SenseCollectedConsumer</code> 消费 <code>lifeform.sense.collected</code></td>
+</tr>
+<tr>
+<td>C11</td>
+<td>扩展事件源</td>
+<td><code>SenseEventPublisher</code> payload 增加 <code>title</code>/<code>content</code>（D6）</td>
+</tr>
+<tr>
+<td>C12</td>
+<td>配置</td>
+<td><code>application.yml</code> 全量配置（Redis/PG/Qdrant/Kafka/OTLP），PG 凭据对齐 compose</td>
+</tr>
+<tr>
+<td>C13</td>
+<td>销债</td>
+<td>删除 <code>BodyController</code> / <code>BodyStore</code> / <code>BodyStoreTest</code>（DEBT-001 销项）</td>
+</tr>
+<tr>
+<td>C14</td>
+<td>写测试</td>
+<td>7 个测试类：分块、分层、缓存、内存元数据、入库、检索、Qdrant id</td>
+</tr>
+<tr>
+<td>C15</td>
+<td>修正</td>
+<td>分块器标题前置；检索测试断言类型与期望值 4 处；<code>HotCacheStore</code> 重复方法</td>
+</tr>
+<tr>
+<td>C16</td>
+<td>编译</td>
+<td><code>mvn -pl body-service -am compile</code> → BUILD SUCCESS</td>
+</tr>
+<tr>
+<td>C17</td>
+<td>跑测试</td>
+<td><code>mvn -pl body-service -am test</code> → body-service <strong>40 通过</strong></td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-d">Phase D｜会话与终端线<a class="headerlink" href="#phase-d" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>动作</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D1</td>
+<td>会话切换语义检索</td>
+<td><code>BodyClient.retrieve()</code> 显式 <code>top_k</code> + 缓存优先，不可用时降级空结果</td>
+</tr>
+<tr>
+<td>D2</td>
+<td>BFF 端点</td>
+<td><code>server.js</code> 新增 <code>/api/wp/knowledge</code>（GET）与 <code>/api/wp/knowledge/search</code>（POST，含 <code>buildSnippet</code> 高亮）</td>
+</tr>
+<tr>
+<td>D3</td>
+<td>BFF 测试</td>
+<td><code>server.test.js</code> 新增 8 例（端点可用/降级/参数裁剪/高亮窗口/租户透传），共 <strong>22 passed</strong></td>
+</tr>
+<tr>
+<td>D4</td>
+<td>契约登记</td>
+<td><code>work-platform-bff-openapi.yaml</code> + 两个 schema，<code>x-wp-status: implemented</code></td>
+</tr>
+<tr>
+<td>D5</td>
+<td>前端类型</td>
+<td><code>types/index.ts</code> 追加 <code>KnowledgeStats</code> / <code>KnowledgeSearchResult</code> 等</td>
+</tr>
+<tr>
+<td>D6</td>
+<td>前端数据层</td>
+<td><code>provider.ts</code> 新增 <code>getKnowledgeStats</code> / <code>searchKnowledge</code>（含降级 scope 登记）</td>
+</tr>
+<tr>
+<td>D7</td>
+<td>前端视图</td>
+<td>新建 <code>KnowledgeView.vue</code>（知识量 / 检索质量 / 三层存储 / 检索测试高亮）</td>
+</tr>
+<tr>
+<td>D8</td>
+<td>模块登记</td>
+<td><code>modules.ts</code> 登记 <code>knowledge</code> 模块 + <code>router/index.ts</code> 路由 + <code>Files</code> 图标映射</td>
+</tr>
+<tr>
+<td>D9</td>
+<td>校验</td>
+<td><code>vue-tsc --noEmit</code> 通过；<code>vite build</code> 通过</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-e">Phase E｜构建与测试收敛<a class="headerlink" href="#phase-e" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E1</td>
+<td><code>mvn -pl body-service -am test</code></td>
+<td>100 / 0（gateway 2 · session 10 · sense 48 · body 40）</td>
+</tr>
+<tr>
+<td>E2</td>
+<td><code>pytest -q</code></td>
+<td>52 passed</td>
+</tr>
+<tr>
+<td>E3</td>
+<td><code>node --test</code></td>
+<td>22 passed</td>
+</tr>
+<tr>
+<td>E4</td>
+<td><code>contract-check.py --work-platform</code></td>
+<td>实现端点 8 ↔ BFF 8，0 FAIL</td>
+</tr>
+<tr>
+<td>E5</td>
+<td><code>java-doc-coverage.py</code></td>
+<td>body-service 33/33，全仓 100/100</td>
+</tr>
+<tr>
+<td>E6</td>
+<td><code>vue-tsc --noEmit</code> + <code>vite build</code></td>
+<td>通过</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-f">Phase F｜端到端验收与缺陷修复<a class="headerlink" href="#phase-f" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>动作</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>F1</td>
+<td><code>docker compose up -d qdrant redis postgres kafka jaeger</code></td>
+<td>5 个中间件容器在线</td>
+</tr>
+<tr>
+<td>F2</td>
+<td>启动 nlp-service（uvicorn 127.0.0.1:8000）</td>
+<td>嵌入/重排健康端点可用</td>
+</tr>
+<tr>
+<td>F3</td>
+<td>打包并启动 body-service</td>
+<td>⚠️ <strong>起在 53568</strong>（环境变量污染，P2）→ 显式端口重启 8083</td>
+</tr>
+<tr>
+<td>F4</td>
+<td>探测统计接口</td>
+<td>⚠️ <strong>PG 冷层不可用</strong>（凭据不符，P3）→ 对齐 compose 凭据重启</td>
+</tr>
+<tr>
+<td>F5</td>
+<td>运行 E2E 脚本</td>
+<td>⚠️ <strong>Qdrant 拒收 point id</strong>（P1）→ 改 name-based UUID</td>
+</tr>
+<tr>
+<td>F6</td>
+<td>修复后重跑（清 PG/Qdrant/Redis 残留）</td>
+<td><strong>35 项 PASS / 0 FAIL</strong>（P99 366ms · 命中率 0.925 · 缓存 45%）</td>
+</tr>
+<tr>
+<td>F7</td>
+<td>感官闭环验证：向 Kafka 发布带正文事件</td>
+<td>消费入库成功，且<strong>可被语义检索召回</strong></td>
+</tr>
+<tr>
+<td>F8</td>
+<td>BFF 端点实测（:8095）</td>
+<td><code>GET /api/wp/knowledge</code> 返回真实三层状态；<code>POST /search</code> 返回高亮片段与召回/重排分对照</td>
+</tr>
+<tr>
+<td>F9</td>
+<td>补回归用例</td>
+<td><code>QdrantClientTest</code>（point id 合法性）；<code>IngestServiceTest</code> 断言 payload 可读 chunk_id</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-g">Phase G｜文档归档<a class="headerlink" href="#phase-g" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>动作</th>
+<th>产物</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>G1</td>
+<td>重写模块文档</td>
+<td><code>docs/java-services/06-body-service.md</code>（Phase 3 版，覆盖 33 源文件）</td>
+</tr>
+<tr>
+<td>G2</td>
+<td>阶段三件套</td>
+<td>本文件 + <code>Phase3-阶段性报告.md</code> + <code>Phase3-测试验收报告.md</code></td>
+</tr>
+<tr>
+<td>G3</td>
+<td>演示脚本</td>
+<td><code>docs/demo/Phase3-DEMO.md</code></td>
+</tr>
+<tr>
+<td>G4</td>
+<td>全局进度</td>
+<td><code>PROGRESS.md</code> / <code>docs/项目进度总览.md</code> 更新</td>
+</tr>
+<tr>
+<td>G5</td>
+<td>技术债</td>
+<td><code>docs/技术债台账.md</code> 更新 DEBT-001 → ✅ 已闭合</td>
+</tr>
+<tr>
+<td>G6</td>
+<td>索引与 HTML</td>
+<td><code>docs/项目进度日志报告/README.md</code> 登记；<code>md2html-report.py</code> 生成 HTML 孪生</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_3">三、提交台账<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>提交</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>feat(phase3): 躯体期知识入库与语义检索（R3-01~R3-09 + R-C03）</code></td>
+<td>body-service 重写 + nlp-service 嵌入/重排/分块 + 会话切语义检索 + wp-bff 端点 + 契约 + 前端躯体视图 + 测试</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>docs(phase3): 躯体期阶段报告、演示脚本与进度归档</code></td>
+<td>阶段三件套 + DEMO + PROGRESS/总览/台账更新 + README 登记</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>分支治理：提交后推 <code>dev</code>，并同步快进 <code>codex/main</code> 与 <code>workbuddy/main</code>，保持三分支内容对齐。</p>
+</blockquote>
+<hr />
+<h2 id="_4">四、命令台账（关键命令）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 前置同步
+cd /e/AI/ai-agent &amp;&amp; git fetch github --prune &amp;&amp; git merge --ff-only &lt;远端&gt;
+
+# Java 编译与测试
+cd services/java &amp;&amp; ../../scripts/mvn-dev.sh -pl body-service -am test
+
+# Python 测试
+cd services/python/nlp-service &amp;&amp; ../venv/Scripts/python.exe -m pytest -q
+
+# wp-bff 测试
+cd services/node/wp-bff &amp;&amp; node --test
+
+# 契约与文档覆盖
+python scripts/contract-check.py --work-platform
+python scripts/java-doc-coverage.py
+
+# 前端
+cd web/work-platform &amp;&amp; node node_modules/vue-tsc/bin/vue-tsc.js --noEmit
+cd web/work-platform &amp;&amp; node node_modules/vite/bin/vite.js build
+
+# 中间件与端到端
+docker compose up -d qdrant redis postgres kafka jaeger
+java -jar body-service/target/body-service-0.1.0-SNAPSHOT.jar \
+  --server.port=8083 --spring.datasource.username=agent --spring.datasource.password=agent123
+python .workbuddy/tmp/phase3-e2e.py
+</code></pre>
+<hr />
+<h2 id="_5">五、环境侧记录<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>环境变量污染</td>
+<td>WorkBuddy 注入的路由变量被 Spring 松散绑定误读为端口 → 启动显式 <code>--server.port</code></td>
+</tr>
+<tr>
+<td>Maven 仓库</td>
+<td><code>E:\software\maven-repo</code>（阿里云镜像），<code>mvn.cmd</code> 损坏用 <code>scripts/mvn-dev.sh</code> 直调</td>
+</tr>
+<tr>
+<td>Python 环境</td>
+<td><code>services/python/venv</code>（补装 <code>pytest</code> / <code>httpx</code>）</td>
+</tr>
+<tr>
+<td>文件锁</td>
+<td>Windows 下运行中的 jar 会锁定 <code>target/</code>，打包前需停实例</td>
+</tr>
+<tr>
+<td>MSYS 路径</td>
+<td><code>curl --data-binary @/tmp/x.json</code> 会被路径转换破坏 → 用 <code>--data-binary @-</code> 走 stdin</td>
+</tr>
+<tr>
+<td>端口占用</td>
+<td>8090 已被既有 wp-bff 实例占用 → 验收改在 8095 进行，不影响用户运行中的服务</td>
+</tr>
+</tbody>
+</table></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

@@ -116,14 +116,14 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 15:27 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-18 20:06 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#_1">为什么把台账搬进仓库</a></li>
 <li><a href="#_2">一、台账总表</a></li>
 <li><a href="#_3">二、逐条详情</a><ul>
-<li><a href="#debt-001-body-service">DEBT-001 · body-service 检索为内存实现</a></li>
+<li><a href="#debt-001-body-service">DEBT-001 · body-service 检索为内存实现 —— 已闭合 ✅</a></li>
 <li><a href="#debt-002">DEBT-002 · 回答生成为模板拼接</a></li>
 <li><a href="#debt-003">DEBT-003 · 会话存储 —— 已闭合 ✅</a></li>
 <li><a href="#debt-005-jwt">DEBT-005 · 网关为最小 JWT</a></li>
@@ -149,7 +149,7 @@
 </nav>
   <main class="doc"><h1 id="debt-registry">技术债台账（DEBT Registry）<a class="headerlink" href="#debt-registry" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-17 · <strong>代码基线</strong>：<code>91d2643</code>
+<p><strong>口径时间</strong>：2026-09-17（Phase 3 躯体期落地后复核） · <strong>代码基线</strong>：Phase 3 收口提交
 <strong>来源</strong>：设计文档《D5-冻结前收尾/D5-1-简化版演进规范》§5.1 清单 —— 本文件是<strong>仓库内的权威副本</strong></p>
 </blockquote>
 <h2 id="_1">为什么把台账搬进仓库<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
@@ -179,10 +179,10 @@
 <tr>
 <td><strong>DEBT-001</strong></td>
 <td>body-service</td>
-<td><code>BodyStore</code> 内存 Map + 字符命中率打分</td>
+<td>~~内存 Map + 字符命中率打分~~ → <strong>已换真三层存储</strong>（PG 元数据 + Qdrant 向量 + Redis 热缓存）</td>
 <td>Qdrant 向量检索</td>
-<td>VS3</td>
-<td>🔴</td>
+<td>VS3（Phase 3）</td>
+<td>✅ <strong>已闭合</strong></td>
 </tr>
 <tr>
 <td><strong>DEBT-002</strong></td>
@@ -239,17 +239,26 @@
 </blockquote>
 <hr />
 <h2 id="_3">二、逐条详情<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
-<h3 id="debt-001-body-service">DEBT-001 · body-service 检索为内存实现<a class="headerlink" href="#debt-001-body-service" title="Permanent link">&para;</a></h3>
+<h3 id="debt-001-body-service">DEBT-001 · body-service 检索为内存实现 —— 已闭合 ✅<a class="headerlink" href="#debt-001-body-service" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>简化实现</strong>：<code>BodyStore</code> 用 <code>ConcurrentHashMap&lt;String, List&lt;StoredChunk&gt;&gt;</code> 按租户存切片；
+<li><strong>原简化实现</strong>：<code>BodyStore</code> 用 <code>ConcurrentHashMap&lt;String, List&lt;StoredChunk&gt;&gt;</code> 按租户存切片；
   检索打分是「整串包含 = 1.0，否则按查询字符在正文中的命中率」——<strong>纯内存、无持久化、无语义相似度</strong>。</li>
 <li><strong>正式目标</strong>：Qdrant 向量检索。<code>docker-compose.yml</code> 已定义 qdrant 服务（端口 6333/6334），
-  但<strong>当前没有任何服务调用它</strong>。</li>
-<li><strong>触发点</strong>：VS3 完成（Phase 3，<strong>当前冻结</strong>）</li>
-<li><strong>状态</strong>：🔴 未闭合</li>
-<li><strong>证据</strong>：<code>services/java/body-service/src/main/java/com/agent/body/store/BodyStore.java:9,22-48</code>；
-  全仓无 qdrant 客户端依赖。</li>
-<li>⚠️ 台账原文描述为「本地文件检索」，<strong>与实际不符</strong> —— 实际连文件都没落盘（见 §4.2）。</li>
+  但<strong>当时没有任何服务调用它</strong>。</li>
+<li><strong>当前实况（Phase 3，2026-09-17）</strong>：body-service <strong>整体重写</strong>为持久化知识管道：</li>
+<li>冷层真相源 <code>PgMetadataStore</code>（PostgreSQL）· 温层向量 <code>QdrantClient</code>（集合 <code>lifeform_knowledge</code>）·
+    热层缓存 <code>HotCacheStore</code>（Redis，租户前缀指纹）；</li>
+<li>统一门面 <code>StorageFacade</code> + 热度分层 <code>TierRouter</code>（阈值可配）；</li>
+<li>入库 <code>IngestService</code>（分块 → 嵌入 → 向量入库）、检索 <code>RetrievalService</code>（缓存优先 → 向量召回 → 重排）、
+    <code>RagPipeline</code>（检索增强生成）；</li>
+<li><strong>旧的 <code>BodyStore</code> / <code>BodyController</code> / <code>BodyStoreTest</code> 已删除</strong>（被取代即销项）。</li>
+<li><strong>关闭依据</strong>：端到端实测——文档入库后可被语义检索命中（语义相近可召回，非字符匹配），
+  检索 P99 <strong>366ms</strong>（&lt; 500ms 验收）、命中率 0.925、缓存命中率 0.45；租户隔离生效；
+  重入库幂等、删除无孤儿向量。验收脚本 35 项 PASS / 0 FAIL。</li>
+<li><strong>状态</strong>：✅ <strong>已闭合</strong>（2026-09-17，Phase 3 躯体期）</li>
+<li><strong>证据</strong>：<code>services/java/body-service/src/main/java/com/agent/body/{store,service,client,controller}/</code>；
+  <code>pom.xml</code> 已引入 <code>spring-boot-starter-data-redis</code> / <code>postgresql</code> 驱动，<code>QdrantClient</code> 直连 Qdrant REST API。</li>
+<li>备注：原台账描述为「本地文件检索」，与当时实现（纯内存）不符（见 §4.2）；现已由真实三层存储取代。</li>
 </ul>
 <h3 id="debt-002">DEBT-002 · 回答生成为模板拼接<a class="headerlink" href="#debt-002" title="Permanent link">&para;</a></h3>
 <ul>
@@ -340,9 +349,9 @@
 <td>契约标 <code>x-wp-status: planned</code>；<code>/overview</code> 用 <code>gaps</code> 列出 15 个未覆盖域，前端标注 Mock</td>
 </tr>
 <tr>
-<td>body-service 缺 OTLP 配置</td>
-<td>配置缺口</td>
-<td>不在 Jaeger 链路，也未接入统一错误码体系</td>
+<td>~~body-service 缺 OTLP 配置、未接入统一错误码~~</td>
+<td>✅ <strong>2026-09-17 Phase 3 已补齐</strong></td>
+<td>已加 <code>management.otlp.tracing.endpoint</code>（接入 Jaeger 链路）；已建 <code>ErrorCode</code> / <code>BizException</code> / <code>GlobalExceptionHandler</code> 统一错误响应</td>
 </tr>
 </tbody>
 </table>
@@ -372,7 +381,9 @@
 <h3 id="42">4.2 台账描述与代码实况不符<a class="headerlink" href="#42" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>DEBT-001</strong> 台账写「本地文件检索」，实际是<strong>纯内存 Map</strong>，连文件持久化都没有；
-  且 <code>docker-compose.yml</code> 里的 qdrant 容器<strong>无人调用</strong> —— 容易被误读为"已经在用 Qdrant 了"。</li>
+  且 <code>docker-compose.yml</code> 里的 qdrant 容器<strong>无人调用</strong> —— 容易被误读为"已经在用 Qdrant 了"。
+  ✅ <strong>2026-09-17 已消解</strong>：Phase 3 已用真实三层存储取代（PG 元数据 + Qdrant 向量 + Redis 热缓存），
+  描述与实况一致（见 §二 DEBT-001）。</li>
 <li><strong>DEBT-002</strong> 台账把模块记为「大脑」，实际落在 <strong>session-manager</strong>。</li>
 </ul>
 <h3 id="43">4.3 生成物注释滞后（已闭合债务仍写着旧实现）<a class="headerlink" href="#43" title="Permanent link">&para;</a></h3>
@@ -498,7 +509,7 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <tbody>
 <tr>
 <td><code>proto/body/v1/body.proto:1</code></td>
-<td>DEBT-001</td>
+<td>DEBT-001（✅ 已闭合，注释待随契约重生成刷新）</td>
 </tr>
 <tr>
 <td><code>proto/brain/v1/brain.proto:1</code></td>

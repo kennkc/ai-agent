@@ -116,16 +116,16 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 15:27 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-18 20:06 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#_1">一、当前状态一句话</a></li>
 <li><a href="#_2">二、阶段进度</a></li>
 <li><a href="#_3">三、功能交付矩阵</a><ul>
-<li><a href="#31-java72-58-14-90-proto">3.1 后端 Java（72 个手写源文件 = 58 主 + 14 测；另有 90 个 proto 生成文件）</a></li>
-<li><a href="#32-pythonservicespythonnlp-service7-py-12-proto">3.2 Python（services/python/nlp-service，7 个业务 py + 12 个 proto 生成文件）</a></li>
-<li><a href="#33-webwork-platformvue-3-vite-ts-element-plus8-vue-8-ts">3.3 前端（web/work-platform，Vue 3 + Vite + TS + Element Plus，8 vue + 8 ts）</a></li>
+<li><a href="#31-java100-80-20-90-proto">3.1 后端 Java（100 个手写源文件 = 80 主 + 20 测；另有 90 个 proto 生成文件）</a></li>
+<li><a href="#32-pythonservicespythonnlp-service10-py-12-proto">3.2 Python（services/python/nlp-service，10 个业务 py + 12 个 proto 生成文件）</a></li>
+<li><a href="#33-webwork-platformvue-3-vite-ts-element-plus9-vue-8-ts">3.3 前端（web/work-platform，Vue 3 + Vite + TS + Element Plus，9 vue + 8 ts）</a></li>
 <li><a href="#34-ops-bffservicesnodewp-bff-node-8090">3.4 Ops BFF（services/node/wp-bff，零依赖 Node，端口 8090）</a></li>
 <li><a href="#35">3.5 基础设施与工具链</a></li>
 </ul>
@@ -150,17 +150,21 @@
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 项目进度总览<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-17 · <strong>代码基线</strong>：<code>ab2ad29</code>（<code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> 同提交）
+<p><strong>口径时间</strong>：2026-09-17（Phase 3 躯体期落地后） · <strong>代码基线</strong>：Phase 3 收口提交（<code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> 同提交）
 <strong>数据来源</strong>：仓库 <code>PROGRESS.md</code>、<code>docs/项目进度日志报告/</code>、<code>docs/优化日志/</code>、各服务源码实测统计
-<strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73 项测试）<strong>不回改</strong>，以本文件为准。</p>
+<strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73/61 项测试）<strong>不回改</strong>，以本文件为准。</p>
 </blockquote>
 <hr />
 <h2 id="_1">一、当前状态一句话<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
-<p><strong>Phase 0 / 1 / 2 已全部交付并验收</strong>，项目当前停在 <strong>Phase 2 之后的「工程化加固期」</strong>：
-不新增阶段能力，而是把已有能力做<strong>真实、可验证、可交付</strong>（观测区接真数据、契约与实现对齐、
-控制面加鉴权、数据源降级可见）。<strong>Phase 3+ 处于冻结状态</strong>（团队在固化 Phase 0-2 资产）。</p>
+<p><strong>Phase 0 / 1 / 2 / 3 已交付并验收</strong>，项目当前进入 <strong>Phase 3 之后的收口期</strong>（可在 Phase 4 大脑期开工）。
+<strong>Phase 3 躯体期</strong>把 body-service 从"内存检索"重写为<strong>持久化知识管道</strong>：分块 → 嵌入 → 三层存储
+（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG，并打通<strong>感官→躯体闭环</strong>，
+<strong>DEBT-001 正式销项</strong>。</p>
+<p>阶段间还经历过一段 <strong>2026-09-15 ~ 09-16 的工程化加固期</strong>（观测区接真数据、契约与实现对齐、
+控制面加鉴权、数据源降级可见），那段不新增阶段能力。<strong>Phase 4+ 处于冻结状态</strong>。</p>
 <p>唯一未闭合的验收项是 <strong>OCR 端到端</strong>，阻塞原因是需要外部引擎（PaddleOCR / Tesseract）尚未安装 ——
-系统对此<strong>诚实上报</strong> <code>available=false</code>，不伪造结果。</p>
+系统对此<strong>诚实上报</strong> <code>available=false</code>，不伪造结果。同理，真实 BGE-M3 嵌入与交叉编码器重排权重
+未安装时走<strong>确定性降级后端</strong>并上报 <code>degraded=true</code>，同样不伪造。</p>
 <hr />
 <h2 id="_2">二、阶段进度<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
 <table>
@@ -198,16 +202,16 @@
 <tr>
 <td>加固期</td>
 <td>工程化（非独立阶段）</td>
-<td>🔄 <strong>进行中</strong></td>
+<td>✅ 已收口（09-15 ~ 09-16）</td>
 <td>观测区 + 最小 Ops BFF、控制面鉴权与 CORS 收紧、<strong>契约↔实现双向对齐（37 端点）</strong>、总览聚合端点、数据源降级可见化、CI 补 Python/wp-bff 测试、<strong>契约↔生成物同步门禁（2026-09-17）</strong>、前端路由懒加载</td>
 <td><code>docs/优化日志/</code></td>
 </tr>
 <tr>
 <td>Phase 3</td>
 <td>躯体期</td>
-<td>⏸ 冻结</td>
-<td>Qdrant / pgvector 正式知识库；body-service 知识入库与语义检索打通</td>
-<td>设计文档已备：<code>AGENT_CONTEXT/Phase3-躯体期/</code></td>
+<td>✅ <strong>已验收（09-17）</strong></td>
+<td><strong>R3-01~R3-09 + R-C03</strong> 全覆盖：三级存储抽象、文档分块、嵌入服务、Qdrant 向量入库、语义检索、结果重排、RAG 管道、缓存优先、知识管理 API；感官→躯体闭环；<strong>DEBT-001 销项</strong></td>
+<td><code>docs/demo/Phase3-DEMO.md</code> + 三份阶段报告</td>
 </tr>
 <tr>
 <td>Phase 4-8</td>
@@ -227,7 +231,7 @@
 </table>
 <hr />
 <h2 id="_3">三、功能交付矩阵<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
-<h3 id="31-java72-58-14-90-proto">3.1 后端 Java（72 个手写源文件 = 58 主 + 14 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java72-58-14-90-proto" title="Permanent link">&para;</a></h3>
+<h3 id="31-java100-80-20-90-proto">3.1 后端 Java（100 个手写源文件 = 80 主 + 20 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java100-80-20-90-proto" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -251,26 +255,26 @@
 <tr>
 <td><code>session-manager</code></td>
 <td>8081</td>
-<td>会话 CRUD、<strong>VS1 追问闭环</strong>（session → intent → 本地检索 → 模板回答）、Redis 消息存储、Kafka 事件、<strong>HTTP/1.1 出站客户端 + 优雅降级</strong></td>
-<td><code>SessionController</code> · <code>OutboundHttp</code></td>
+<td>会话 CRUD、<strong>VS1 追问闭环</strong>（session → intent → <strong>语义检索</strong> → 回答）、Redis 消息存储、Kafka 事件、<strong>HTTP/1.1 出站客户端 + 优雅降级</strong></td>
+<td><code>SessionController</code> · <code>OutboundHttp</code> · <code>BodyClient</code></td>
 <td>10</td>
 <td>✅</td>
 </tr>
 <tr>
 <td><code>sense-service</code></td>
 <td>8082</td>
-<td>五感渠道（Touch 实装 + Visual/Nose/Audio/Taste 保留位）、R0 规则调度、R1 指令处理、渠道健康监控与自动隔离、指数退避重试 + 死信、质检暂存（MinIO/本地双后端）+ 批量回滚、<code>SenseAdminController</code> 管理端点</td>
-<td><code>SenseChannel</code> · <code>ChannelRegistry</code> · <code>R0Scheduler</code> · <code>R1DynamicHandler</code> · <code>ChannelHealthMonitor</code> · <code>StagingStore</code></td>
+<td>五感渠道（Touch 实装 + Visual/Nose/Audio/Taste 保留位）、R0 规则调度、R1 指令处理、渠道健康监控与自动隔离、指数退避重试 + 死信、质检暂存（MinIO/本地双后端）+ 批量回滚、<code>SenseAdminController</code> 管理端点、<strong>采集事件携带正文发布</strong></td>
+<td><code>SenseChannel</code> · <code>ChannelRegistry</code> · <code>R0Scheduler</code> · <code>R1DynamicHandler</code> · <code>ChannelHealthMonitor</code> · <code>StagingStore</code> · <code>SenseEventPublisher</code></td>
 <td>48</td>
 <td>✅</td>
 </tr>
 <tr>
 <td><code>body-service</code></td>
 <td>8083</td>
-<td>躯体侧基础服务（知识侧为 Phase 3 预留）</td>
-<td>—</td>
-<td>1</td>
-<td>✅ 基础</td>
+<td><strong>躯体期知识管道</strong>：分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG；知识管理 REST API；<strong>消费 <code>lifeform.sense.collected</code> 形成感官→躯体闭环</strong>；统一错误码 + OTLP 链路</td>
+<td><code>KnowledgeController</code> · <code>IngestService</code> · <code>RetrievalService</code> · <code>RagPipeline</code> · <code>StorageFacade</code> · <code>QdrantClient</code> · <code>SenseCollectedConsumer</code></td>
+<td>40</td>
+<td>✅</td>
 </tr>
 <tr>
 <td><code>proto-contracts</code></td>
@@ -282,7 +286,7 @@
 </tr>
 </tbody>
 </table>
-<h3 id="32-pythonservicespythonnlp-service7-py-12-proto">3.2 Python（<code>services/python/nlp-service</code>，7 个业务 py + 12 个 proto 生成文件）<a class="headerlink" href="#32-pythonservicespythonnlp-service7-py-12-proto" title="Permanent link">&para;</a></h3>
+<h3 id="32-pythonservicespythonnlp-service10-py-12-proto">3.2 Python（<code>services/python/nlp-service</code>，10 个业务 py + 12 个 proto 生成文件）<a class="headerlink" href="#32-pythonservicespythonnlp-service10-py-12-proto" title="Permanent link">&para;</a></h3>
 <blockquote>
 <p>12 个生成文件位于 <code>generated/</code>，<strong>已 gitignore、不入库</strong>（详见 <code>docs/proto契约使用说明.md</code>）。</p>
 </blockquote>
@@ -320,9 +324,27 @@
 <td>引擎懒初始化；无引擎时 <code>available=false</code></td>
 <td>⚠️ 待装引擎</td>
 </tr>
+<tr>
+<td><strong>嵌入服务（R3-03）</strong></td>
+<td><code>app/embedding.py</code></td>
+<td>BGE-M3 可用则用，否则确定性 hash n-gram <strong>768 维</strong>后端；<code>backend</code>/<code>degraded</code> 如实上报</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>重排服务（R3-06）</strong></td>
+<td><code>app/reranker.py</code></td>
+<td>交叉编码器可用则用，否则词项重合度重排；不可用降级不阻断</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>分块器（R3-02）</strong></td>
+<td><code>app/chunking.py</code></td>
+<td>与 Java <code>ChunkProcessor</code> <strong>同算法</strong>（供跨语言一致性校验）</td>
+<td>✅</td>
+</tr>
 </tbody>
 </table>
-<h3 id="33-webwork-platformvue-3-vite-ts-element-plus8-vue-8-ts">3.3 前端（<code>web/work-platform</code>，Vue 3 + Vite + TS + Element Plus，8 vue + 8 ts）<a class="headerlink" href="#33-webwork-platformvue-3-vite-ts-element-plus8-vue-8-ts" title="Permanent link">&para;</a></h3>
+<h3 id="33-webwork-platformvue-3-vite-ts-element-plus9-vue-8-ts">3.3 前端（<code>web/work-platform</code>，Vue 3 + Vite + TS + Element Plus，9 vue + 8 ts）<a class="headerlink" href="#33-webwork-platformvue-3-vite-ts-element-plus9-vue-8-ts" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -357,6 +379,10 @@
 </tr>
 <tr>
 <td><strong>观测区</strong>：中间件监控（真实 TCP 探针 + 单卡/一键串行启停）、链路追踪（真实 Jaeger）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong>躯体视图（R-C03）</strong>：知识总量 / 检索质量（P99·命中率·缓存命中率）/ 三层存储健康度 / 检索测试（高亮片段 + 召回·重排分对照）</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -403,12 +429,20 @@
 <td>✅</td>
 </tr>
 <tr>
+<td><strong><code>GET /api/wp/knowledge</code></strong> —— 躯体视图数据（知识统计 + 检索质量 + 三层存储状态）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong><code>POST /api/wp/knowledge/search</code></strong> —— 检索测试（查询词解析 + 命中片段高亮 + 召回/重排分对照）</td>
+<td>✅</td>
+</tr>
+<tr>
 <td><strong>控制面鉴权</strong>：来源检查 + <code>X-WP-Control-Token</code>（<code>timingSafeEqual</code>）；无鉴权后门</td>
 <td>✅</td>
 </tr>
 <tr>
 <td>回归测试 <code>node --test</code></td>
-<td>✅ 14 项</td>
+<td>✅ 22 项</td>
 </tr>
 </tbody>
 </table>
@@ -441,7 +475,7 @@
 </table>
 <hr />
 <h2 id="_4">四、测试与验证基线<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
-<p><strong>口径：2026-09-16 合并三分支后的实测值</strong>（历史归档中的 54 / 73 项是当时口径）</p>
+<p><strong>口径：2026-09-17 Phase 3 落地后的实测值</strong>（历史归档中的 54 / 73 / 61 项是当时口径）</p>
 <table>
 <thead>
 <tr>
@@ -453,13 +487,13 @@
 <tbody>
 <tr>
 <td>Java</td>
-<td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh clean package</code></td>
-<td><strong>61 测试 / 0 失败</strong>（gateway 2 · session-manager 10 · sense-service 48 · body-service 1）</td>
+<td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh -pl body-service -am test</code></td>
+<td><strong>100 测试 / 0 失败</strong>（gateway 2 · session-manager 10 · sense-service 48 · <strong>body-service 40</strong>）</td>
 </tr>
 <tr>
 <td>Python</td>
 <td><code>../venv/Scripts/python.exe -m pytest</code>（nlp-service 下）</td>
-<td><strong>19 通过</strong>（意图 15 + OCR 4）</td>
+<td><strong>52 通过</strong>（意图 15 + OCR 4 + 分块 12 + 嵌入 13 + 重排 8）</td>
 </tr>
 <tr>
 <td>契约（跨服务）</td>
@@ -469,17 +503,27 @@
 <tr>
 <td>契约（工作平台）</td>
 <td><code>python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml</code></td>
-<td>37 端点，implemented 6 / planned 31，<strong>0 FAIL</strong></td>
+<td>39 端点，implemented <strong>8</strong> / planned 31，<strong>0 FAIL</strong></td>
 </tr>
 <tr>
 <td>wp-bff</td>
 <td><code>cd services/node/wp-bff &amp;&amp; node --test</code></td>
-<td><strong>14 通过</strong></td>
+<td><strong>22 通过</strong></td>
 </tr>
 <tr>
 <td>前端</td>
-<td><code>cd web/work-platform &amp;&amp; npm run typecheck &amp;&amp; npm run build</code></td>
+<td><code>cd web/work-platform &amp;&amp; npx vue-tsc --noEmit &amp;&amp; npx vite build</code></td>
 <td>通过</td>
+</tr>
+<tr>
+<td>端到端（Docker）</td>
+<td><code>.workbuddy/tmp/phase3-e2e.py</code>（入库→检索→缓存→隔离→RAG→指标→重入库/删除）</td>
+<td><strong>35 PASS / 0 FAIL</strong> · P99 <strong>366ms</strong> · 命中率 <strong>0.925</strong> · 缓存命中率 <strong>0.45</strong></td>
+</tr>
+<tr>
+<td>感官→躯体闭环</td>
+<td>Kafka 发布带正文事件 → 消费入库 → 语义召回</td>
+<td>✅ 通过</td>
 </tr>
 <tr>
 <td>中间件/链路</td>
@@ -489,14 +533,16 @@
 <tr>
 <td>文档覆盖率</td>
 <td><code>python scripts/java-doc-coverage.py</code></td>
-<td>72/72 业务源文件已登记</td>
+<td><strong>100/100</strong> 业务源文件已登记（body-service 33/33）</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
 <p><strong>注意</strong>：<code>mvn</code> 直接调用在本机会卡死（<code>mvn.cmd</code> 损坏 + protobuf 插件清理目录阻塞），
-必须走 <code>scripts/mvn-dev.sh</code>。生成 HTML 镜像必须用 <strong>anaconda Python</strong>（<code>E:/software/anaconda3/python.exe</code>），
-托管 Python 没有 <code>markdown</code> 包。</p>
+必须走 <code>scripts/mvn-dev.sh</code>。生成 HTML 镜像本机<strong>已改用托管 Python + <code>PYTHONPATH</code> 指向 <code>pylibs</code></strong>
+（anaconda 已于 2026-09-17 卸载，本机 <code>E:/software/python/python312</code> 无 <code>markdown</code> 包）。
+<strong>body-service 启动需显式 <code>--server.port=8083</code></strong>
+（本机环境注入了会被 Spring 松散绑定误读的路由变量）。</p>
 </blockquote>
 <hr />
 <h2 id="_5">五、分支与远端拓扑<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
@@ -592,24 +638,30 @@ git push origin codex/main:workbuddy/main
 </tr>
 <tr>
 <td>2</td>
-<td><strong>BFF 契约 31 个 planned 端点</strong></td>
-<td>仅实现最小 Ops 子集</td>
-<td>未实现域回落 Mock（<strong>已非静默</strong>，有降级提示）</td>
+<td><strong>真实嵌入（BGE-M3）/ 交叉编码器重排权重未装</strong></td>
+<td>需下载模型权重</td>
+<td>走确定性降级后端并上报 <code>degraded=true</code>（<strong>不伪造</strong>），装模型后自动切换</td>
 </tr>
 <tr>
 <td>3</td>
+<td><strong>BFF 契约 31 个 planned 端点</strong></td>
+<td>仅实现最小 Ops 子集 + 躯体视图</td>
+<td>未实现域回落 Mock（<strong>已非静默</strong>，有降级提示）</td>
+</tr>
+<tr>
+<td>4</td>
 <td><code>ModuleView.vue</code> 拆分 / Element Plus 按需引入</td>
 <td>需先建视觉回归基线</td>
 <td>首屏包体偏大（element chunk 952 kB）</td>
 </tr>
 <tr>
-<td>4</td>
-<td>Phase 3+</td>
-<td>团队冻结，固化 Phase 0-2</td>
-<td>知识库与语义检索未打通</td>
+<td>5</td>
+<td>Phase 4+</td>
+<td>团队节奏控制</td>
+<td>大脑期（LLM 生成）未开工；RAG 已可用但生成器为 <code>template</code>（DEBT-002）</td>
 </tr>
 <tr>
-<td>5</td>
+<td>6</td>
 <td><strong>Phase 2 两项验证方法仍"待验"</strong></td>
 <td>《G1-验证追踪视图》中 C09 数据总线代理、C16 感官渠道管理器标 🟡 待验</td>
 <td>即 <a href="./技术债台账.md">DEBT-009 / DEBT-006</a>，详见 §6.3 —— <strong>"阶段已验收"不等于"所有验证方法都已跑过"</strong></td>
@@ -619,7 +671,7 @@ git push origin codex/main:workbuddy/main
 <h3 id="62-docsjava-services07-md">6.2 已登记的工程缺口（源自 <code>docs/java-services/07-运行时配置与横切约定.md</code>）<a class="headerlink" href="#62-docsjava-services07-md" title="Permanent link">&para;</a></h3>
 <ul>
 <li>wp-bff <strong>无网关路由</strong>（<code>/api/wp/**</code> 生产路径缺失，前端仅靠 Vite 代理）</li>
-<li>body-service <strong>缺 OTLP 配置</strong>（不在 Jaeger 链路），也未接入统一错误码体系</li>
+<li>~~body-service <strong>缺 OTLP 配置</strong>（不在 Jaeger 链路），也未接入统一错误码体系~~ ✅ <strong>2026-09-17 Phase 3 已补齐</strong>（加 OTLP endpoint + 建 <code>ErrorCode</code>/<code>BizException</code>/<code>GlobalExceptionHandler</code>）</li>
 <li><code>ErrorCode</code> 在 session-manager 与 sense-service <strong>各有一份</strong>，需人工同步</li>
 <li>租户头 <code>defaultValue="default"</code> → 绕过网关直连时<strong>静默落入 default 租户</strong></li>
 <li>HTTP 端口<strong>写死</strong>，未做环境变量占位</li>
@@ -645,10 +697,10 @@ git push origin codex/main:workbuddy/main
 <tr>
 <td>DEBT-001</td>
 <td>body-service</td>
-<td>内存 Map + 字符命中打分</td>
+<td>~~内存 Map + 字符命中打分~~ → <strong>已换真三层存储</strong>（PG 元数据 + Qdrant 向量 + Redis 热缓存）</td>
 <td>Qdrant 向量检索</td>
-<td>VS3</td>
-<td>🔴 未闭合</td>
+<td>VS3（Phase 3）</td>
+<td>✅ <strong>已闭合</strong></td>
 </tr>
 <tr>
 <td>DEBT-002</td>

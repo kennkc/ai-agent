@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-17 15:27 · 源文件 功能开发流程.md</span>
+  <span class="meta">生成于 2026-09-18 20:06 · 源文件 功能开发流程.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -131,7 +131,8 @@
 <li><a href="#33-sense-service8082">3.3 感官采集链路（sense-service，8082）</a></li>
 <li><a href="#34-nlp-service8000">3.4 意图识别（nlp-service，8000）</a></li>
 <li><a href="#35-ocrnlp-service-appocrpy">3.5 OCR（nlp-service / app/ocr.py）</a></li>
-<li><a href="#36-body-service8083">3.6 躯体服务（body-service，8083）</a></li>
+<li><a href="#35b-nlp-service-phase-3">3.5b 嵌入 / 重排 / 分块（nlp-service）—— Phase 3 已交付</a></li>
+<li><a href="#36-body-service8083-phase-3">3.6 躯体服务（body-service，8083）—— Phase 3 已交付</a></li>
 <li><a href="#37-webwork-platform">3.7 工作平台前端（web/work-platform）</a></li>
 <li><a href="#38-ops-bff-servicesnodewp-bff8090">3.8 Ops BFF 与观测区（services/node/wp-bff，8090）</a></li>
 <li><a href="#39-docker-composeyml-scripts">3.9 基础设施编排（docker-compose.yml + scripts/）</a></li>
@@ -340,10 +341,35 @@
 <li><strong>当前状态</strong>：⚠️ 端到端未闭合 —— 需安装 PaddleOCR 或 Tesseract；在此之前视觉渠道维持 <code>DEGRADED</code></li>
 <li><strong>开发步骤</strong>：①装引擎 ②按 <code>docs/demo/Phase2-DEMO.md</code> 走图片采集链路 ③登记验收结论（诚实留痕）</li>
 </ul>
-<h3 id="36-body-service8083">3.6 躯体服务（<code>body-service</code>，8083）<a class="headerlink" href="#36-body-service8083" title="Permanent link">&para;</a></h3>
+<h3 id="35b-nlp-service-phase-3">3.5b 嵌入 / 重排 / 分块（<code>nlp-service</code>）—— Phase 3 已交付<a class="headerlink" href="#35b-nlp-service-phase-3" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>现状</strong>：基础服务已就位（1 项测试），知识入库/语义检索是 <strong>Phase 3</strong> 内容，<strong>当前冻结</strong></li>
-<li><strong>已知缺口</strong>：未配 OTLP（不在 Jaeger 链路）、未接入统一错误码体系 → 开工前需先补</li>
+<li><strong>需求源</strong>：<code>Phase3-躯体期/需求设计文档.md</code>（R3-02 分块、R3-03 嵌入、R3-06 重排）</li>
+<li><strong>代码入口</strong>：<code>app/embedding.py</code>（<code>POST /api/nlp/embed</code> + <code>/embed/health</code>）、
+  <code>app/reranker.py</code>（<code>POST /api/nlp/rerank</code> + <code>/rerank/health</code>）、<code>app/chunking.py</code>（<code>POST /api/nlp/chunk</code>）</li>
+<li><strong>关键约定</strong>：</li>
+<li><strong>诚实降级</strong>：引擎链逐个探测（BGE-M3 → 确定性 hash n-gram 768 维），上报 <code>backend</code> 与 <code>degraded</code>；不可用时<strong>不伪造</strong>结果</li>
+<li><strong>分块与 Java 同算法</strong>：改 <code>chunking.py</code> 必须同步 <code>services/java/body-service/.../chunk/ChunkProcessor.java</code>，否则跨语言校验失效</li>
+<li><strong>测试</strong>：<code>tests/test_embedding.py</code> 13 项 · <code>tests/test_rerank.py</code> 8 项 · <code>tests/test_chunking.py</code> 12 项</li>
+<li><strong>开发步骤</strong>：①改模块 ②<code>pytest -q</code> ③若动分块规则，两语言都要改并各自跑测试</li>
+</ul>
+<h3 id="36-body-service8083-phase-3">3.6 躯体服务（<code>body-service</code>，8083）—— Phase 3 已交付<a class="headerlink" href="#36-body-service8083-phase-3" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>AGENT_CONTEXT/Phase3-躯体期/</code>（R3-01~R3-09 + 终端线 R-C03）</li>
+<li><strong>代码入口</strong>：</li>
+<li>入库链路：<code>IngestService</code> → <code>ChunkProcessor</code>（分块）→ <code>EmbeddingClient</code>（HTTP → nlp-service）→ <code>QdrantClient</code>（向量）+ <code>PgMetadataStore</code>（元数据）</li>
+<li>检索链路：<code>RetrievalService</code>（<code>HotCacheStore</code> 缓存优先 → Qdrant 召回 → <code>RerankClient</code> 重排）</li>
+<li>生成链路：<code>RagPipeline</code>（回答 + 可回溯引用）</li>
+<li>存储门面：<code>StorageFacade</code> + <code>TierRouter</code>（分层阈值可配）· 装配：<code>BodyStorageConfig</code></li>
+<li>对外：<code>KnowledgeController</code>（<code>POST/GET /api/body/knowledge</code>、<code>POST /api/body/retrieve</code>、<code>POST /api/body/rag</code>、<code>GET /api/body/knowledge/stats</code>、<code>DELETE /api/body/knowledge/{docId}</code>、<code>GET /api/body/health</code>）</li>
+<li>事件闭环：<code>SenseCollectedConsumer</code> 订阅 <code>lifeform.sense.collected</code></li>
+<li><strong>关键约定</strong>：</li>
+<li><strong>分块算法跨语言一致</strong>：Java <code>ChunkProcessor</code> 与 Python <code>app/chunking.py</code> 必须同规则（标题/段落边界、800/50、标题入块），否则跨语言校验失去意义</li>
+<li><strong>Qdrant point id 必须是整数或 UUID</strong>：本实现用 <code>UUID.nameUUIDFromBytes(docId#index)</code>（name-based UUID）保证<strong>重入库幂等</strong>；改这段务必同步 <code>QdrantClientTest</code></li>
+<li><strong>诚实降级</strong>：嵌入/重排引擎缺失时走确定性后端并上报 <code>backend</code>/<code>degraded</code>，<strong>不伪造</strong></li>
+<li><strong>启动需显式端口</strong>：本机环境变量会污染 <code>server.port</code> → <code>--server.port=8083</code>；PG 凭据须与 <code>docker-compose.yml</code> 一致（<code>agent</code>/<code>agent123</code>）</li>
+<li><strong>测试</strong>：7 个测试类 40 项（分块 / 分层 / 缓存 / 内存元数据 / 入库 / 检索 / Qdrant id）</li>
+<li><strong>验收标准</strong>：见 <code>docs/demo/Phase3-DEMO.md</code> 与《Phase3-测试验收报告》；端到端 35 项、P99 &lt; 500ms、缓存命中 ≥ 30%、租户隔离</li>
+<li><strong>开发步骤</strong>：①改代码 ②<code>mvn -pl body-service -am test</code> ③起中间件做端到端（<code>.workbuddy/tmp/phase3-e2e.py</code>）④更新 <code>docs/java-services/06-body-service.md</code> 与阶段文档</li>
 </ul>
 <h3 id="37-webwork-platform">3.7 工作平台前端（<code>web/work-platform</code>）<a class="headerlink" href="#37-webwork-platform" title="Permanent link">&para;</a></h3>
 <ul>
@@ -365,8 +391,10 @@
 </ul>
 <h3 id="38-ops-bff-servicesnodewp-bff8090">3.8 Ops BFF 与观测区（<code>services/node/wp-bff</code>，8090）<a class="headerlink" href="#38-ops-bff-servicesnodewp-bff8090" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>需求源</strong>：<code>WP-工作平台</code> + 「观测区」需求（中间件监控 / 链路追踪）</li>
+<li><strong>需求源</strong>：<code>WP-工作平台</code> + 「观测区」需求（中间件监控 / 链路追踪）+ 躯体视图（<code>/knowledge</code>）</li>
 <li><strong>代码入口</strong>：<code>server.js</code>（<code>createServer(options)</code>，spawn/probe/fetch <strong>可注入</strong>以便测试）、<code>test/server.test.js</code></li>
+<li><strong>端点清单</strong>：<code>GET /healthz</code> · <code>GET /overview</code> · <code>GET /middleware</code> · <code>POST /middleware/:key/start|stop</code> ·
+  <code>GET /tracing</code> · <strong><code>GET /knowledge</code></strong> · <strong><code>POST /knowledge/search</code></strong>（均登记进 <code>IMPLEMENTED_ENDPOINTS</code>）</li>
 <li><strong>关键约定</strong>：</li>
 <li>控制端点（<code>start</code>/<code>stop</code>）<strong>必须同时</strong>过来源检查（<code>WP_BFF_ALLOWED_ORIGINS</code>）与
     控制令牌（<code>X-WP-Control-Token</code>，<code>timingSafeEqual</code> 比较）；缺失/错误 → 401，外来来源 → 403，
@@ -376,7 +404,8 @@
 <li>CORS：<strong>不要</strong>回 <code>Access-Control-Allow-Origin: *</code>，只对白名单来源回显并始终带 <code>Vary: Origin</code></li>
 <li>命令形状固定 + <strong>8 键白名单</strong>；未登记的 key → 403</li>
 <li>Vite 代理<strong>在服务端读令牌文件</strong>再注入请求头 → 令牌不进浏览器包；且<strong>不重写 <code>Origin</code></strong>（保持 CSRF 检查有效）</li>
-<li><strong>测试</strong>：<code>node --test</code> 14 项（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据）</li>
+<li><strong>只读端点（含 <code>/knowledge</code>、<code>/knowledge/search</code>）不需控制令牌</strong>，但需透传 <code>X-Tenant-Id</code>（租户隔离）</li>
+<li><strong>测试</strong>：<code>node --test</code> 22 项（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据、躯体端点与降级）</li>
 <li><strong>开发步骤</strong>：①改契约（<code>x-wp-status</code>）②改 <code>server.js</code> ③补回归用例 ④<code>node --test</code> ⑤实测 <code>curl</code> 一次真实端点</li>
 </ul>
 <h3 id="39-docker-composeyml-scripts">3.9 基础设施编排（<code>docker-compose.yml</code> + <code>scripts/</code>）<a class="headerlink" href="#39-docker-composeyml-scripts" title="Permanent link">&para;</a></h3>

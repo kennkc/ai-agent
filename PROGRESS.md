@@ -4,21 +4,25 @@
 
 ## Archived stage reports
 
-Phase 0 / Phase 1 / Phase 2 stage reports (stage report + execution log + test &
+Phase 0 / Phase 1 / Phase 2 / Phase 3 stage reports (stage report + execution log + test &
 acceptance report, each with an HTML twin) are archived in
 `docs/项目进度日志报告/`. Phase 0/1 reports were added retroactively on
 2026-09-15 (the three-doc convention was established at Phase 2).
 
 ## Current milestone
 
-Phase 0, Phase 1 and Phase 2 development scope is implemented on the long-lived branches
+Phase 0, Phase 1, Phase 2 and Phase 3 development scope is implemented on the long-lived branches
 `workbuddy/main`, `codex/main` and `dev`, which since 2026-09-16 point at the
 same commit (all three kept in sync via fast-forward; the `workbuddy/main` line brought in the
 Java per-file documentation set `docs/java-services/` and the middleware real-state fixes, the
 `codex` line brought in the wp-bff control-plane hardening, data-source degradation surfacing
 and CI additions — merged on a semantic basis, no side was overwritten).
 Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12; after the D-1 cross-service
-fix (2026-09-13) and the hardening pass below the suite stands at **61 Java tests green**.
+fix (2026-09-13) and the hardening pass below the suite stood at **61 Java tests green**.
+Phase 3 (躯体期 / body stage, R3-01~R3-09 + R-C03) landed on 2026-09-17 — body-service was
+rewritten into a persisted knowledge pipeline (chunk -> embed -> three-tier store -> semantic
+retrieve -> rerank -> RAG) and **DEBT-001 closed**; the suite now stands at
+**100 Java + 52 Python + 22 wp-bff tests green** with an end-to-end acceptance of 35/35.
 
 ## Phase 0
 
@@ -85,6 +89,67 @@ Requirement coverage R2-01 ~ R2-10. All source under `services/java/sense-servic
 - [x] protobuf plugin deadlock fixed: generated Java sources (90 files, 6 proto) committed into `proto-contracts/src/main/java`; `protobuf-maven-plugin` removed from default lifecycle, kept behind the `proto-gen` profile
 - [x] Audit hardening: lazy OCR engine initialization, redirect-safe SSRF validation, MinIO credentials required from environment
 - [x] `scripts/mvn-dev.sh` wrapper (direct Maven launcher) works around broken `mvn.cmd` on this host
+
+## Phase 3 (躯体期 / Body Stage)
+
+Requirement coverage R3-01 ~ R3-09 plus terminal-line R-C03. Source under
+`services/java/body-service` (rewritten), `services/python/nlp-service`, `services/node/wp-bff`
+and `web/work-platform`. Closes **DEBT-001** (in-memory retrieval -> Qdrant vector search).
+
+### Storage & pipeline
+
+- [x] R3-01 three-tier storage facade: `StorageFacade` + `MetadataStore` (`PgMetadataStore` cold /
+      `InMemoryMetadataStore` graceful fallback) + `HotCacheStore` (Redis hot, tenant-prefixed
+      fingerprints) + `TierRouter` (configurable heat-based tiering)
+- [x] R3-02 `ChunkProcessor`: heading/paragraph boundaries, 800-char blocks, 50-char overlap,
+      heading kept inside the block, merge only within the same heading; Python `chunking.py`
+      mirrors the same algorithm for cross-language consistency checks
+- [x] R3-03 embedding via nlp-service `/api/nlp/embed` (BGE-M3 when available, otherwise a
+      deterministic hash n-gram 768-dim backend that reports `degraded=true` — honest degradation,
+      never faked); `EmbeddingClient` over HTTP/1.1
+- [x] R3-04 `QdrantClient`: collection bootstrap, vector-size reconciliation, batch upsert,
+      tenant-filtered search; point ids are name-based UUIDs (`docId#index`) so re-ingest is
+      idempotent
+- [x] R3-05 `RetrievalService`: cache-first -> vector recall -> rerank, with per-stage latency
+      sampling
+- [x] R3-06 `RerankClient` + nlp-service `/api/nlp/rerank` (cross-encoder when available, otherwise
+      lexical-overlap rerank); real health probe; degrades to recall order without blocking
+- [x] R3-07 `RagPipeline`: retrieve -> compose answer + traceable citations; reports
+      `generator=template` truthfully (DEBT-002 still open, Phase 4)
+- [x] R3-08 cache-first strategy: normalized query fingerprint, documented hit rate
+- [x] R3-09 `KnowledgeController`: `POST/GET /api/body/knowledge`, `POST /api/body/retrieve`,
+      `POST /api/body/rag`, `GET /api/body/knowledge/stats`, `DELETE /api/body/knowledge/{docId}`,
+      `GET /api/body/health`
+- [x] Sense -> body closed loop: `SenseCollectedConsumer` subscribes `lifeform.sense.collected`;
+      `SenseEventPublisher` payload extended with `title`/`content` so events are self-contained
+- [x] Removed the superseded in-memory implementation (`BodyStore`, `BodyController`,
+      `BodyStoreTest`) - the DEBT-001 write-off
+
+### Session & work platform
+
+- [x] session-manager `BodyClient.retrieve()` declares explicit `top_k` + cache-first semantics and
+      degrades to an empty result set when body-service is unavailable
+- [x] wp-bff new proxy endpoints `GET /api/wp/knowledge` and `POST /api/wp/knowledge/search`
+      (query-term parsing + `buildSnippet` hit highlighting); implemented-endpoint registry 6 -> 8
+- [x] Contract: both endpoints + `KnowledgeStats` / `KnowledgeSearchResult` schemas registered with
+      `x-wp-status: implemented`
+- [x] R-C03 work-platform body view (`KnowledgeView.vue`): knowledge totals, retrieval quality
+      (P99 / hit rate / cache hit rate), three-tier storage health, and a retrieval test panel with
+      highlighted snippets and recall-vs-rerank scores
+
+### Verification (2026-09-17)
+
+- Java `-pl body-service -am test`: **100 passed / 0 failed** (gateway 2 · session 10 · sense 48 ·
+  body 40; body-service grew from 1 test to 40 across 7 classes)
+- `nlp-service` pytest: **52 passed** (intent 15 + OCR 4 + chunking 12 + embedding 13 + rerank 8)
+- wp-bff `node --test`: **22 passed**
+- `contract-check.py --work-platform`: implemented 8 <-> BFF 8, **0 FAIL**
+- `java-doc-coverage.py`: body-service 33/33, repo-wide **100/100**
+- Frontend `vue-tsc --noEmit` + `vite build`: passed
+- End-to-end (Docker: qdrant/redis/postgres/kafka/jaeger + 3 services):
+  **35 PASS / 0 FAIL** — retrieval P99 **366 ms**, hit rate **0.925**, cache hit rate **0.45**,
+  ingest failures 0, tenant isolation enforced, re-ingest idempotent, delete purges vectors
+  (no orphans), Kafka sense event ingested and recalled
 
 ## Frontend
 
@@ -312,11 +377,20 @@ Goal: make the archived documentation answer two questions on its own — "where
   `healthcheck.sh` 16/16 OK, business chain (token -> session -> ask -> Redis/Kafka) green.
 - OCR end-to-end acceptance requires installing PaddleOCR or Tesseract; until then the
   visual channel stays `DEGRADED` and the API truthfully reports `available=false`.
-- Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration).
+- ~~Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration).~~
+  Done on 2026-09-17: Phase 3 (R3-01~R3-09 + R-C03) delivered the full knowledge pipeline,
+  three-tier storage, semantic retrieval, reranking, RAG and the sense->body closed loop;
+  DEBT-001 closed. Phase 4 (大脑期 / brain stage, reasoning & generation) is next.
+- Real embedding (BGE-M3) and cross-encoder reranker weights are not installed on this host;
+  the services fall back to deterministic backends and report `degraded=true` (honest degradation,
+  never faked). Installing the models switches them automatically.
+- Large-document ingest currently relies on the event payload carrying the body text; reading
+  back from staging storage for oversized documents is a registered follow-up debt.
 - Work Platform BFF/API mode: **minimal Ops subset done** (2026-09-15) — middleware
-  observe/start/stop + tracing observe are real. Remaining endpoints (tasks/approvals/models/
-  vitals/overview aggregation, WebSocket events) are still pending and fall back to Mock; since
-  2026-09-16 that fallback is no longer silent (header badge + banner + per-module alert).
+  observe/start/stop + tracing observe are real; 2026-09-17 added real knowledge stats/search.
+  Remaining endpoints (tasks/approvals/models/vitals, WebSocket events) are still pending and fall
+  back to Mock; since 2026-09-16 that fallback is no longer silent (header badge + banner +
+  per-module alert).
 - `ModuleView.vue` split and Element Plus on-demand import: assessed, but both need a visual
   regression baseline before execution (see 2026-09-16 section).
 
