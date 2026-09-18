@@ -79,7 +79,7 @@
 | C6 | 三层存储 | `PgMetadataStore`（冷）+ `InMemoryMetadataStore`（降级）+ `HotCacheStore`（热，租户前缀指纹）+ `TierRouter`（热度分层）+ `StorageFacade` |
 | C7 | 装配 | `BodyStorageConfig`（DataSource 缺失时稳健降级，不硬依赖） |
 | C8 | 服务层 | `IngestService`（分块→嵌入→入库）、`KnowledgeMetrics`、`RetrievalService`（缓存→召回→重排）、`RagPipeline` |
-| C9 | 控制器 | `KnowledgeController`：`POST /api/body/knowledge`、`GET /api/body/knowledge`、`POST /api/body/retrieve`、`POST /api/body/rag`、`GET /api/body/knowledge/stats`、`DELETE /api/body/knowledge/{docId}`、`GET /api/body/health` |
+| C9 | 控制器 | `KnowledgeController`（本轮 8 个端点）：`POST /api/body/knowledge`、`POST /api/body/knowledge/batch`、`GET /api/body/knowledge`、`DELETE /api/body/knowledge/{docId}`、`POST /api/body/retrieve`、`POST /api/body/rag/answer`、`GET /api/body/knowledge/stats`、`GET /api/body/health` |
 | C10 | 事件闭环 | `SenseCollectedConsumer` 消费 `lifeform.sense.collected` |
 | C11 | 扩展事件源 | `SenseEventPublisher` payload 增加 `title`/`content`（D6） |
 | C12 | 配置 | `application.yml` 全量配置（Redis/PG/Qdrant/Kafka/OTLP），PG 凭据对齐 compose |
@@ -156,8 +156,11 @@
 | H8 | 补测试 | `DocumentParserTest`(7) · `StorageFacadeTest`(5) · `RetrievalServiceTest` 净增 2；wp-bff 新增入库用例 7 项（功能 5 + 鉴权反向 2） |
 | H9 | 修正文档失真 | ① `DEMO` 里 `status:READY`（实际无此值）② `storage: "warm+cold"` 等**照抄会报错**的示例 ③ `06-body-service.md` 的源文件/测试计数（26/6 → 28/9） |
 | H10 | 登记悬空编号 | 代码引用了 `DEBT-010/011/012` 但台账无登记 → 补齐并逐条给证据 |
-| H11 | 全量回归 | Java **114** / Python **52** / wp-bff **27** / 契约 0 FAIL / 文档覆盖 103/103 / 前端 build 通过 |
-| H12 | 工具口径修正 | `contract-check.py` 的 BFF 端点计数改为**按路径去重**，并单独输出方法数——消除 "implemented 8 vs 实现 9" 的伪矛盾 |
+| H11 | 全量回归 | Java **114** / Python **52** / wp-bff **29** / 契约 0 FAIL / 文档覆盖 103/103 / 前端 build 通过 |
+| H12 | 工具口径修正 | `contract-check.py` 的 BFF 端点计数改为**按路径去重**，并单独输出方法数——消除 "implemented 8 vs 实现 9" 的伪矛盾（同一路径的 GET/POST 曾被算成两条） |
+| H13 | 补 **IN-05 预留参数** | `RetrievalService#retrievePlan` + `POST /api/body/retrieve/plan`：参数就绪、单轮执行，多轮如实回标 `iteration_loop=not_enabled` / `agentic_rag_status=reserved`，**不伪造多轮结果** |
+| H14 | 补 **三层对账能力**（设计 §6 风险应对要求"定期对账任务"） | `StorageFacade#reconcile` + `GET /api/body/knowledge/reconcile`：可报缺向量 / 孤儿向量 / 一致；向量库不可用时返回 `-1` 而非 `0`（不虚报一致） |
+| H15 | 补 **写路径鉴权**（自审自纠的安全缺口） | `POST /knowledge` 此前沿用 `/knowledge` 的只读免令牌豁免 → 直连 8090 可无鉴权写入。现前置 `authorizeControl()`（来源白名单 + `X-WP-Control-Token`，与 `/middleware/{key}/*` 同级）；判定口径由"按路径"改为"按方法"；wp-bff 补 2 条反向用例断言"鉴权失败不触达体层" |
 
 > **本轮定性结论**：未发现"用降级替身冒充真实能力"的伪实现。
 > 唯一的实体缺口是 **BFF 入库链路断链**（已补），其余为文档口径失真（已改）。

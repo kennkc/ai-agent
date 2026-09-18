@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:55 · 源文件 Phase3-测试验收报告.md</span>
+  <span class="meta">生成于 2026-09-18 21:25 · 源文件 Phase3-测试验收报告.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -159,7 +159,7 @@
 </tr>
 <tr>
 <td>代码基线</td>
-<td><code>a5e0cd5</code> <code>feat(phase3): 躯体期知识入库与语义检索（R3-01~R3-09 + R-C03）</code></td>
+<td><code>a5e0cd5</code> <code>feat(phase3): 躯体期知识入库与语义检索（R3-01~R3-09 + R-C03）</code>；审核补全轮后为 <code>7372246</code>（代码）/ <code>3200d93</code>（文档）</td>
 </tr>
 <tr>
 <td>验收日期</td>
@@ -171,7 +171,11 @@
 </tr>
 <tr>
 <td>验收结论</td>
-<td><strong>通过</strong>（Must 项 7/7；Should 项 2/2；终端线 R-C03 达标；1 项外部引擎依赖诚实降级）</td>
+<td><strong>通过</strong>（Must 项 7/7；Should 项 3/3；终端线 R-C03/R-C09 达标；1 项外部引擎依赖诚实降级）</td>
+</tr>
+<tr>
+<td>最终基线</td>
+<td>代码 <code>7372246</code>（审核补全轮）/ 文档 <code>3200d93</code> —— 见 §11 补记</td>
 </tr>
 </tbody>
 </table>
@@ -322,7 +326,7 @@
 <tr>
 <td><strong>R3-07</strong> RAG 管道</td>
 <td>检索增强生成端到端可用</td>
-<td><code>POST /api/body/rag</code> 200；回答引用知识库内容；引用带可回溯字段（<code>generator=template</code> 如实标注）</td>
+<td><code>POST /api/body/rag/answer</code> 200（<strong>注意：不是 <code>/api/body/rag</code>，后者会 404</strong>）；回答引用知识库内容；引用带可回溯字段（<code>generator=template</code> 如实标注）</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -590,7 +594,7 @@ PASS/FAIL 数字均取自命令原始输出，非估算。</p>
 </thead>
 <tbody>
 <tr>
-<td>Must 需求（R3-01~R3-05、R3-07）</td>
+<td>Must 需求（R3-01~R3-05、R3-07 + 终端线 R-C09）</td>
 <td><strong>7/7 通过</strong></td>
 </tr>
 <tr>

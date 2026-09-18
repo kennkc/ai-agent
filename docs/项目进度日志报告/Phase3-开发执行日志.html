@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:55 · 源文件 Phase3-开发执行日志.md</span>
+  <span class="meta">生成于 2026-09-18 21:25 · 源文件 Phase3-开发执行日志.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -342,7 +342,7 @@ Phase H 之后的<strong>当前基线</strong>为 <strong>Java 114 · Python 52 
 <tr>
 <td>C9</td>
 <td>控制器</td>
-<td><code>KnowledgeController</code>：<code>POST /api/body/knowledge</code>、<code>GET /api/body/knowledge</code>、<code>POST /api/body/retrieve</code>、<code>POST /api/body/rag</code>、<code>GET /api/body/knowledge/stats</code>、<code>DELETE /api/body/knowledge/{docId}</code>、<code>GET /api/body/health</code></td>
+<td><code>KnowledgeController</code>（本轮 8 个端点）：<code>POST /api/body/knowledge</code>、<code>POST /api/body/knowledge/batch</code>、<code>GET /api/body/knowledge</code>、<code>DELETE /api/body/knowledge/{docId}</code>、<code>POST /api/body/retrieve</code>、<code>POST /api/body/rag/answer</code>、<code>GET /api/body/knowledge/stats</code>、<code>GET /api/body/health</code></td>
 </tr>
 <tr>
 <td>C10</td>
@@ -649,12 +649,27 @@ Phase H 之后的<strong>当前基线</strong>为 <strong>Java 114 · Python 52 
 <tr>
 <td>H11</td>
 <td>全量回归</td>
-<td>Java <strong>114</strong> / Python <strong>52</strong> / wp-bff <strong>27</strong> / 契约 0 FAIL / 文档覆盖 103/103 / 前端 build 通过</td>
+<td>Java <strong>114</strong> / Python <strong>52</strong> / wp-bff <strong>29</strong> / 契约 0 FAIL / 文档覆盖 103/103 / 前端 build 通过</td>
 </tr>
 <tr>
 <td>H12</td>
 <td>工具口径修正</td>
-<td><code>contract-check.py</code> 的 BFF 端点计数改为<strong>按路径去重</strong>，并单独输出方法数——消除 "implemented 8 vs 实现 9" 的伪矛盾</td>
+<td><code>contract-check.py</code> 的 BFF 端点计数改为<strong>按路径去重</strong>，并单独输出方法数——消除 "implemented 8 vs 实现 9" 的伪矛盾（同一路径的 GET/POST 曾被算成两条）</td>
+</tr>
+<tr>
+<td>H13</td>
+<td>补 <strong>IN-05 预留参数</strong></td>
+<td><code>RetrievalService#retrievePlan</code> + <code>POST /api/body/retrieve/plan</code>：参数就绪、单轮执行，多轮如实回标 <code>iteration_loop=not_enabled</code> / <code>agentic_rag_status=reserved</code>，<strong>不伪造多轮结果</strong></td>
+</tr>
+<tr>
+<td>H14</td>
+<td>补 <strong>三层对账能力</strong>（设计 §6 风险应对要求"定期对账任务"）</td>
+<td><code>StorageFacade#reconcile</code> + <code>GET /api/body/knowledge/reconcile</code>：可报缺向量 / 孤儿向量 / 一致；向量库不可用时返回 <code>-1</code> 而非 <code>0</code>（不虚报一致）</td>
+</tr>
+<tr>
+<td>H15</td>
+<td>补 <strong>写路径鉴权</strong>（自审自纠的安全缺口）</td>
+<td><code>POST /knowledge</code> 此前沿用 <code>/knowledge</code> 的只读免令牌豁免 → 直连 8090 可无鉴权写入。现前置 <code>authorizeControl()</code>（来源白名单 + <code>X-WP-Control-Token</code>，与 <code>/middleware/{key}/*</code> 同级）；判定口径由"按路径"改为"按方法"；wp-bff 补 2 条反向用例断言"鉴权失败不触达体层"</td>
 </tr>
 </tbody>
 </table>

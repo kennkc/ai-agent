@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:55 · 源文件 2026-09-18-Phase3需求审核与补全.md</span>
+  <span class="meta">生成于 2026-09-18 21:25 · 源文件 2026-09-18-Phase3需求审核与补全.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -145,6 +145,7 @@
 <li><a href="#5-2026-09-18">5. 验证结果（2026-09-18 实测）</a></li>
 <li><a href="#6">6. 未补项与后续建议</a></li>
 <li><a href="#7">7. 结论</a></li>
+<li><a href="#8">8. 补记 · 归档文档口径二次校验（同轮追加）</a></li>
 </ul>
 </div>
 </nav>
@@ -412,7 +413,8 @@
 </tr>
 </tbody>
 </table>
-<p><strong>处置</strong>：✅ 已按真实返回值逐条修正（见 §4.4）。</p>
+<p><strong>处置</strong>：✅ 已按真实返回值逐条修正（见 §4.4）。
+归档三件套（阶段性报告 / 开发执行日志 / 测试验收报告）存在<strong>同源失真 8 处</strong>，见 <strong>§8 补记</strong>。</p>
 <h3 id="34-debt">3.4 DEBT 记账缺口：代码引用了、台账没登记<a class="headerlink" href="#34-debt" title="Permanent link">&para;</a></h3>
 <p>代码中出现的 <code>DEBT-010</code>（嵌入降级）、<code>DEBT-011</code>（重排降级）、<code>DEBT-012</code>（事件正文超限）
 <strong>均未登记进 <code>docs/技术债台账.md</code></strong> —— 而台账 §4.4 白纸黑字写着「后续新债从 <code>DEBT-010</code> 起编」。</p>
@@ -673,13 +675,88 @@
 <li><strong>发现并修复 5 处真实缺失</strong>：知识入库端到端不可达（A1）、格式解析步缺失（A2）、IN-05 参数未预留（A3）、
   <strong>写路径无鉴权（A4 —— 补 A1 时引入的安全缺口，属本轮自审自纠）</strong>、对账能力缺失（B1）。</li>
 <li><strong>发现并登记 4 项阶段范围缺口</strong>（IN-01/WB-03/WB-05/MC-01），不再静默缩小范围。</li>
-<li><strong>修正 1 类文档失真</strong>：DEMO 文档中 6 处虚假接口示例已按真实代码修正。</li>
+<li><strong>修正 2 类文档失真</strong>：DEMO 文档中 6 处虚假接口示例 + 归档三件套 8 处口径矛盾（后者见 §8 补记），均已按真实代码修正。</li>
 <li><strong>DEBT 记账达成双向 100% 覆盖</strong>：代码里每个 <code>DEBT-0xx</code> 都能在台账查到。</li>
 </ul>
 <blockquote>
 <p>结论：Phase 3 <strong>主体实现真实可用</strong>，此前的"验收通过"结论<strong>成立但范围口径偏窄</strong>——
 需求文档 §8/§9 的 IN/WB/MC 系列从未进入交付范围，本轮已如实登记，等待规划侧决策归属。</p>
-</blockquote></main>
+</blockquote>
+<hr />
+<h2 id="8">8. 补记 · 归档文档口径二次校验（同轮追加）<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<p>§3.3 修正的是 <strong>DEMO</strong> 的接口示例；归档三件套（阶段性报告 / 开发执行日志 / 测试验收报告）
+上一轮只按实测回填了<strong>总数</strong>，未做<strong>逐字比对</strong>。复查发现归档报告自身仍有 8 处口径矛盾，
+性质同 §3.3（照抄会误导，且报告内部自相矛盾），已全部修正：</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>位置</th>
+<th>原文（失真）</th>
+<th>实况（已改）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>测试验收报告 §1</td>
+<td>Should 项 <strong>2/2</strong></td>
+<td><strong>3/3</strong>（R3-06/08/09；与其 §10 自相矛盾）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>测试验收报告 §3 R3-02</td>
+<td><code>ChunkProcessorTest</code> <strong>9 项</strong></td>
+<td><strong>7 项</strong>（+<code>DocumentParserTest</code> 7 项）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>测试验收报告 §3 R3-07</td>
+<td><code>POST /api/body/rag</code> 200</td>
+<td><strong><code>/api/body/rag/answer</code></strong>（<code>/rag</code> 会 404）</td>
+</tr>
+<tr>
+<td>4</td>
+<td>测试验收报告 §3 R3-09</td>
+<td><strong>7 个端点</strong>全通</td>
+<td><strong>10 个端点</strong>（含本轮新增 <code>/retrieve/plan</code>、<code>/knowledge/reconcile</code>）</td>
+</tr>
+<tr>
+<td>5</td>
+<td>开发执行日志 C9</td>
+<td>控制器端点清单含 <code>/api/body/rag</code>、漏 <code>/knowledge/batch</code></td>
+<td>修正为<strong>本轮 8 个端点</strong>的准确清单</td>
+</tr>
+<tr>
+<td>6</td>
+<td>开发执行日志 H4</td>
+<td>BFF 新增 <code>POST /api/wp/knowledge/ingest</code></td>
+<td><strong><code>POST /api/wp/knowledge</code></strong>（与 GET 同路径、不同方法）</td>
+</tr>
+<tr>
+<td>7</td>
+<td>开发执行日志 H9</td>
+<td>06 文档计数 <code>26/6 → **28/9**</code></td>
+<td><code>26/6 → **27/9**</code>（实测 27 主源 + 9 测试）</td>
+</tr>
+<tr>
+<td>8</td>
+<td>阶段性报告 §9.2/§9.3</td>
+<td>补全后基线 <strong>193/193</strong>（wp-bff 27）；Java 新增测试 <strong>15 项</strong></td>
+<td><strong>195/195</strong>（wp-bff <strong>29</strong>）；Java <strong>净增 14 项</strong>（7+5+净增 2）</td>
+</tr>
+</tbody>
+</table>
+<p>同时补齐 3 处<strong>记录遗漏</strong>（工作已做但 Phase H 表没写）：</p>
+<ul>
+<li><strong>H13</strong> IN-05 预留参数（<code>/retrieve/plan</code>）</li>
+<li><strong>H14</strong> 三层对账能力（<code>/knowledge/reconcile</code>）</li>
+<li><strong>H15</strong> 写路径鉴权修复（§3.2 A4 那处安全缺口的实施记录）</li>
+</ul>
+<p><strong>方法论教训</strong>：本轮修正的 8 处里，<strong>6 处属于"改了总数、没改分项"</strong>——
+上一轮回填时只把合计数字改成实测值，分项数字、端点清单、路径写法仍是旧稿。
+<strong>回填实测数字必须"合计 + 分项 + 交叉引用"三处一起核</strong>，否则报告会自相矛盾。
+（此条已沉淀进 <code>agent-lifeform-phase-delivery</code> skill 的收尾自检清单。）</p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

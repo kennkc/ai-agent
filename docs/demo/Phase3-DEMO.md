@@ -426,7 +426,7 @@ cat /tmp/q.json | curl -s --noproxy '*' -X POST http://127.0.0.1:8090/api/wp/kno
 **端到端验收脚本：35 项 PASS / 0 FAIL**（`PASS 35 / FAIL 0`，2026-09-18 端到端实测，脚本 `PASS 35 / FAIL 0`）。
 
 > ⚠️ **口径说明**：上表中带 `+` 或标注「本轮」的验收项，其**端到端脚本尚未重跑**（需 Docker 基础设施），
-> 当前结论由**单元测试 + 契约校验**支撑（Java 114 项 / wp-bff 27 项 / 契约 0 FAIL）。
+> 当前结论由**单元测试 + 契约校验**支撑（Java 114 项 / wp-bff 29 项 / 契约 0 FAIL）。
 > 重跑端到端时请一并核对：HTML 入库、`/knowledge/reconcile`、`/retrieve/plan`、BFF 写路径。
 
 ---
