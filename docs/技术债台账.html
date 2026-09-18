@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 21:55 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-18 22:11 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -534,10 +534,10 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 </tr>
 <tr>
 <td>2</td>
-<td><code>Phase3-需求设计文档</code> §2 技术选型：Redis <strong>语义缓存（向量相似 0.95）</strong></td>
+<td><code>Phase3-开发设计文档</code> §1/§2 技术选型/§3.1：Redis <strong>语义缓存（向量相似 0.95）</strong></td>
 <td>热层是<strong>精确指纹缓存</strong>：问题归一化（去空白/小写/去尾标点）后 SHA-256 → key。<strong>不做向量相似匹配</strong></td>
 <td>设计选型未落地（非债务：R3-08 验收为"重复查询缓存命中 ≥ 30%"，实测 45%，达标）</td>
-<td>若要语义缓存，需在 <code>HotCacheStore</code> 增加「query 向量 → 近邻查缓存」路径；当前口径更省资源且可解释，建议改设计文档</td>
+<td>① 改设计文档对齐实况（已采纳，见下）；② 若要语义缓存，需在 <code>HotCacheStore</code> 增加「query 向量 → 近邻查缓存」路径</td>
 </tr>
 </tbody>
 </table>
@@ -545,13 +545,28 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <p><strong>共同点</strong>：两处都是"设计写得比实现更先进"。本仓库的红线是<strong>不伪造能力</strong>——
 实现没做就写清楚没做，而不是把设计文档的选型当成已交付结果写进报告。</p>
 </blockquote>
-<p><strong>2026-09-18 补充（实现侧自述已对齐，设计文档原文仍待确认）</strong>：为免「读代码的人被注释误导」，
-以下<strong>实现侧自述</strong>已统一改为与实况一致 —— <code>TierRouter</code> 冷层注释、<code>wp-bff</code> 中间件 <code>role</code> 文案、
-<code>README.md</code> 数据层与路线图、<code>infra/README.md</code> 组件表，均写明
-「PostgreSQL 关系元数据真相源 / 镜像为 pgvector 变体但<strong>未启用向量列</strong> / 向量由 Qdrant 独占」。
-<code>docker-compose.yml</code> 保留 <code>pgvector/pgvector:pg16</code> 镜像（不影响运行，为 Phase 4+ 留选择余地）。
-<strong>设计文档原文（<code>Phase3-需求设计文档</code> §R3-01、<code>Phase3-开发设计文档</code> §2/§3.1、§3.1 缓存一行）尚未改动</strong>——
-属需求/设计口径变更，需用户确认后落笔（见 §6 待办 14）。</p>
+<p><strong>2026-09-18 已闭合 ✅（用户确认采纳方案①「改设计文档对齐实况」）</strong>。分两步收口：</p>
+<ol>
+<li><strong>实现侧自述</strong>（当日先行改准）：<code>TierRouter</code> 冷层注释、<code>wp-bff</code> 中间件 <code>role</code> 文案、
+   <code>README.md</code> 数据层与路线图、<code>infra/README.md</code> 组件表 —— 均写明
+   「PostgreSQL 关系元数据真相源 / 镜像为 pgvector 变体但<strong>未启用向量列</strong> / 向量由 Qdrant 独占」。
+   <code>docker-compose.yml</code> 保留 <code>pgvector/pgvector:pg16</code> 镜像（不影响运行，为 Phase 4+ 留选择余地）。</li>
+<li><strong>设计文档原文</strong>（<code>E:\AI\核心知识\AGENT_CONTEXT\Phase3-躯体期\</code>，当日按实况修订 + HTML 孪生同步）：
+   - <code>需求设计文档.md</code> §3 R3-01：<code>Redis(热)/Qdrant(温)/PG+pgvector(冷)</code> → <strong><code>PostgreSQL(冷)</code></strong>，
+     并注明「冷层为关系元数据真相源，不存向量；向量主库由 Qdrant 独占（对齐实现，2026-09-18 修订）」。
+   - <code>开发设计文档.md</code> §1 架构图：冷层一行 → <code>PostgreSQL (冷: 元数据真相源) ← pg16</code>；
+     <code>CacheFirstStrategy (Redis 语义缓存)</code> → <strong><code>(Redis 指纹缓存)</code></strong>（框图宽度与相邻行保持一致）。
+   - <code>开发设计文档.md</code> §2 技术选型表：<code>冷存储 PostgreSQL + pgvector / 16-0.7 / 向量+SQL 混合</code>
+     → <strong><code>PostgreSQL（关系元数据真相源）/ 16 / 冷层不存向量，向量由 Qdrant 独占</code></strong>；
+     <code>缓存 Redis 语义缓存（向量相似 0.95）</code> → <strong><code>Redis 精确指纹缓存（归一化 query → SHA-256）/ 实测命中 45%</code></strong>。
+     表下新增「<strong>与实现的对齐说明</strong>」引用块，写明修订原因、实测数据与"不违反 R3-01/R3-08"的结论。
+   - <code>开发设计文档.md</code> §3.1：<code>冷数据 → PG+pgvector（全量归档）</code>
+     → <strong><code>冷数据 → PostgreSQL（关系元数据全量归档 · 真相源，不存向量）</code></strong>。</li>
+</ol>
+<blockquote>
+<p>沉淀：<strong>设计文档与实现出现选型差异时，"改代码"与"改设计"都要有明确授权</strong>；
+只有一方获准时，另一方至少要在<strong>实现侧自述</strong>里消歧，别让注释继续误导读者。</p>
+</blockquote>
 <h3 id="47-wp-bff-2026-09-18">4.7 wp-bff 写路径一度缺失鉴权（2026-09-18 审核<strong>发现并已闭合</strong> ✅）<a class="headerlink" href="#47-wp-bff-2026-09-18" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -832,9 +847,9 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 </tr>
 <tr>
 <td>14</td>
-<td><strong>设计文档 pgvector / 语义缓存口径待落笔</strong>（§4.6）：实现侧自述已对齐，但 <code>Phase3-需求设计文档</code> §R3-01 与 <code>Phase3-开发设计文档</code> §2/§3.1 的原文仍写「PG+pgvector」「Redis 语义缓存（向量相似 0.95）」</td>
-<td>二选一：① 改设计文档对齐实况（<strong>推荐</strong>，Qdrant 已承担向量主库，PG 再存向量属冗余；精确指纹缓存实测命中 45% &gt; 30% 验收）；② Phase 4+ 补 pgvector 列 / 语义缓存路径。<strong>需用户确认后执行</strong></td>
-<td>用户确认</td>
+<td>~~<strong>设计文档 pgvector / 语义缓存口径待落笔</strong>（§4.6）~~</td>
+<td>✅ <strong>2026-09-18 已落笔（用户确认方案①）</strong>：改 <code>Phase3-需求设计文档</code> §3 R3-01 + <code>Phase3-开发设计文档</code> §1/§2/§3.1，新增「与实现的对齐说明」引用块，两份 HTML 孪生同步重生成</td>
+<td>已完成</td>
 </tr>
 <tr>
 <td>15</td>
