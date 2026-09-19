@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 23:41 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-19 09:01 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -156,7 +156,7 @@
 </blockquote>
 <hr />
 <h2 id="_1">一、当前状态一句话<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
-<p><strong>Phase 0 / 1 / 2 / 3 已交付并验收</strong>，项目当前进入 <strong>Phase 3 之后的收口期</strong>（可在 Phase 4 大脑期开工）。
+<p><strong>Phase 0 / 1 / 2 / 3 / 4 已交付并验收</strong>，项目当前处于 <strong>Phase 4 大脑期收口后</strong>（下一步 Phase 5 四肢期）。
 <strong>Phase 3 躯体期</strong>把 body-service 从"内存检索"重写为<strong>持久化知识管道</strong>：格式解析 → 分块 → 嵌入 → 三层存储
 （Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG，并打通<strong>感官→躯体闭环</strong>，
 <strong>DEBT-001 正式销项</strong>。</p>
@@ -168,7 +168,16 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 记录见 <a href="./优化日志/2026-09-18-Phase3需求审核与补全.md"><code>docs/优化日志/2026-09-18-Phase3需求审核与补全.md</code></a>。</p>
 </blockquote>
 <p>阶段间还经历过一段 <strong>2026-09-15 ~ 09-16 的工程化加固期</strong>（观测区接真数据、契约与实现对齐、
-控制面加鉴权、数据源降级可见），那段不新增阶段能力。<strong>Phase 4+ 处于冻结状态</strong>。</p>
+控制面加鉴权、数据源降级可见），那段不新增阶段能力。</p>
+<blockquote>
+<p><strong>2026-09-19 Phase 4 大脑期已交付并验收</strong>：nlp-service 新增 <code>app/brain/</code>（LLM Gateway / 规划器 /
+语义缓存 / RAG 决策链 / 缺口检测 / 来源标注）、session-manager 新增会话 FSM 与 Redis 持久化并接线大脑层、
+wp-bff 新增 <code>/api/wp/brain*</code> 三个端点、work-platform 对话界面与 Console 大脑视图/交互终端均切真实数据。
+测试 <strong>Java 155 · Python 97 · wp-bff 43</strong>（共 295），契约 0 FAIL，文档覆盖 113/113。
+三件套见 <code>docs/项目进度日志报告/Phase4-*</code>。<strong>Phase 5+ 处于冻结状态</strong>。</p>
+</blockquote>
+<p>唯一未闭合的验收项（Phase 4 遗留）：<strong>真实 LLM 引擎未接入</strong>，生成器走模板后端并<strong>如实标</strong>
+<code>generator=template</code> + <code>degraded=true</code>（DEBT-015/016）；同理嵌入/重排权重未安装时走确定性降级后端。</p>
 <p>唯一未闭合的验收项是 <strong>OCR 端到端</strong>，阻塞原因是需要外部引擎（PaddleOCR / Tesseract）尚未安装 ——
 系统对此<strong>诚实上报</strong> <code>available=false</code>，不伪造结果。同理，真实 BGE-M3 嵌入与交叉编码器重排权重
 未安装时走<strong>确定性降级后端</strong>并上报 <code>degraded=true</code>，同样不伪造。</p>
@@ -221,10 +230,17 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <td><code>docs/demo/Phase3-DEMO.md</code> + 三份阶段报告 + <code>docs/优化日志/2026-09-18-*</code></td>
 </tr>
 <tr>
-<td>Phase 4-8</td>
-<td>大脑 / 四肢 / 小脑 / 免疫 / 生命期</td>
+<td>Phase 4</td>
+<td>大脑期</td>
+<td>✅ <strong>已验收（09-19）</strong></td>
+<td><strong>R4-01~R4-09 + R-C04</strong> 全覆盖：会话 FSM 与 Redis 持久化（重启可恢复）、LLM Gateway（L1/L2/L3 路由+超时重试）、语义缓存（实测命中率 57%~67%）、任务规划器、LangGraph RAG 决策链（plan→retrieve→gap→generate）、覆盖度缺口检测、来源标注；wp-bff 大脑端点 + 契约落标；work-platform 对话界面与 Console 大脑视图/交互终端切真实数据</td>
+<td><code>docs/项目进度日志报告/Phase4-*</code></td>
+</tr>
+<tr>
+<td>Phase 5-8</td>
+<td>四肢 / 小脑 / 免疫 / 生命期</td>
 <td>⏸ 冻结</td>
-<td>LLM Gateway 与问答 MVP、工具调用、编排、免疫、自进化</td>
+<td>工具调用、编排、免疫、自进化</td>
 <td><code>AGENT_CONTEXT/Phase4~8-*/</code></td>
 </tr>
 <tr>
@@ -503,12 +519,12 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td>Java</td>
 <td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh test</code></td>
-<td><strong>130 测试 / 0 失败</strong>（gateway 2 · session-manager 15 · sense-service 53 · <strong>body-service 60</strong>）</td>
+<td><strong>155 测试 / 0 失败</strong>（gateway 2 · session-manager <strong>40</strong> · sense-service 53 · body-service 60）</td>
 </tr>
 <tr>
 <td>Python</td>
 <td><code>../venv/Scripts/python.exe -m pytest</code>（nlp-service 下）</td>
-<td><strong>62 通过</strong>（意图 15 + <strong>HTTP 层错误语义 10</strong> + OCR 4 + 分块 12 + 嵌入 13 + 重排 8）</td>
+<td><strong>97 通过</strong>（意图 15 + HTTP 层错误语义 10 + OCR 4 + 分块 12 + 嵌入 13 + 重排 8 + <strong>大脑层 35</strong>）</td>
 </tr>
 <tr>
 <td>契约（跨服务）</td>
@@ -518,12 +534,12 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td>契约（工作平台）</td>
 <td><code>python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml</code></td>
-<td>39 端点，implemented <strong>8 路径 / 9 方法</strong> / planned 31，<strong>0 FAIL</strong></td>
+<td>41 端点，implemented <strong>11 路径 / 12 方法</strong> / planned 30，<strong>0 FAIL</strong></td>
 </tr>
 <tr>
 <td>wp-bff</td>
 <td><code>cd services/node/wp-bff &amp;&amp; node --test</code></td>
-<td><strong>34 通过</strong>（含 2 条写路径鉴权反向用例 + 3 条路由层错误语义用例）</td>
+<td><strong>43 通过</strong>（含 2 条写路径鉴权反向用例 + 3 条路由层错误语义用例 + <strong>7 条大脑端点</strong> + 2 条知识量口径）</td>
 </tr>
 <tr>
 <td>前端</td>
@@ -548,7 +564,7 @@ WB-05 / MC-01 四项服务级需求从未进入本阶段交付范围</strong>，
 <tr>
 <td>文档覆盖率</td>
 <td><code>python scripts/java-doc-coverage.py</code></td>
-<td><strong>106/106</strong> 业务源文件已登记（body-service 37/37）</td>
+<td><strong>113/113</strong> 业务源文件已登记（body-service 37/37）</td>
 </tr>
 </tbody>
 </table>
@@ -674,9 +690,9 @@ git push origin codex/main:workbuddy/main
 </tr>
 <tr>
 <td>5</td>
-<td>Phase 4+</td>
+<td>Phase 5+</td>
 <td>团队节奏控制</td>
-<td>大脑期（LLM 生成）未开工；RAG 已可用但生成器为 <code>template</code>（DEBT-002）</td>
+<td>四肢期（工具调用）未开工；大脑期已验收但生成器仍为 <code>template</code>（DEBT-015/016）</td>
 </tr>
 <tr>
 <td>6</td>

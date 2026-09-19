@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 4 开发执行日志（归档）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 09:00 · 源文件 Phase4-开发执行日志.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">一、执行流程总览</a></li>
+<li><a href="#_2">二、分阶段执行记录</a><ul>
+<li><a href="#phase-a">Phase A｜前置同步与需求对账</a></li>
+<li><a href="#phase-bpython-r4-03-r4-08">Phase B｜Python 大脑层（R4-03 ~ R4-08）</a></li>
+<li><a href="#phase-cjava-r4-01-r4-02">Phase C｜Java 会话层（R4-01 / R4-02）</a></li>
+<li><a href="#phase-djava-r4-06">Phase D｜Java 接线大脑层（R4-06 端到端）</a></li>
+<li><a href="#phase-ebff">Phase E｜BFF 大脑端点 + 契约</a></li>
+<li><a href="#phase-f">Phase F｜终端线</a></li>
+<li><a href="#phase-g">Phase G｜运行态验证与缺陷修复</a></li>
+<li><a href="#phase-h">Phase H｜阶段收口</a></li>
+</ul>
+</li>
+<li><a href="#_3">三、提交台账</a></li>
+<li><a href="#_4">四、命令台账（关键命令）</a></li>
+<li><a href="#_5">五、环境侧记录</a></li>
+<li><a href="#_6">六、经验沉淀</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-4">Phase 4 开发执行日志（归档）<a class="headerlink" href="#phase-4" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 4 · 大脑期（Brain Stage）</td>
+</tr>
+<tr>
+<td>项目</td>
+<td>Agent-Lifeform · AI Agent 生命体架构</td>
+</tr>
+<tr>
+<td>仓库</td>
+<td><code>E:\AI\ai-agent</code>（开发分支 <code>dev</code>，跟踪 <code>origin/workbuddy/main</code>）</td>
+</tr>
+<tr>
+<td>分支</td>
+<td><code>dev</code> / <code>codex/main</code> / <code>workbuddy/main</code>（三分支同内容对齐）</td>
+</tr>
+<tr>
+<td>执行日期</td>
+<td>2026-09-19</td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td><code>1581ddd</code>（开工第一批）→ <code>19c5347</code>（运行态缺陷修复后基线）</td>
+</tr>
+<tr>
+<td>需求范围</td>
+<td>R4-01 ~ R4-09（依据《阶段性需求拆解分析》Phase 4 表）+ 终端线 <strong>R-C04</strong>（Console 大脑视图 + 交互终端）</td>
+</tr>
+<tr>
+<td>执行结论</td>
+<td><strong>完成</strong>：Must 项 7/7、Should 项 2/2、终端线 R-C04 达标；1 项（真实 LLM 生成）按设计文档诚实降级并登记为技术债</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_1">一、执行流程总览<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<pre><code>Phase A 前置同步与需求对账
+   └─ 拉远端 → 解读提交链 → 确认 Phase 3 收口状态（Phase 4 需求表从未开工）
+Phase B Python 大脑层（R4-03 ~ R4-08）
+   └─ LLM Gateway → 规划器 → 语义缓存 → 检索客户端 → RAG 管线 → 缺口检测/来源标注 → HTTP 端点
+Phase C Java 会话层（R4-01 / R4-02）
+   └─ SessionFsm（状态机）+ SessionStore（Redis 持久化 + TTL + 上下文窗口）→ 接入控制器
+Phase D Java 接线大脑层（R4-06 端到端）
+   └─ BrainClient → /ask 改走大脑层（带降级与可见标注）→ 配置开关
+Phase E BFF 大脑端点（R-C04 / D5 / R4-06 代理）+ 契约落标
+Phase F 终端线：work-platform 对话界面（R4-09）+ Console 大脑视图/交互终端（R-C04）
+Phase G 运行态验证与缺陷修复（真起进程 + 打真实数据）
+Phase H 阶段收口：三件套文档 + HTML 孪生 + 进度文档对齐
+</code></pre>
+<p>设计文档中 Phase 4 的活动流程（<code>AI-Agent生命体架构-阶段性需求拆解分析.md</code>）：</p>
+<pre><code>问答：问题 → 意图识别 → 任务规划 → 检索（体层） → 覆盖度评估 → 生成 → 来源标注 → 回答
+会话：NEW → ACTIVE ⇄ IDLE → TIMEOUT/CLOSED（Redis 持久化，TTL 2h，最近 K 轮进 Prompt）
+</code></pre>
+<hr />
+<h2 id="_2">二、分阶段执行记录<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<h3 id="phase-a">Phase A｜前置同步与需求对账<a class="headerlink" href="#phase-a" title="Permanent link">&para;</a></h3>
+<ul>
+<li>拉取远端并解读提交链，确认 Phase 3 已收口、Phase 4 需求表<strong>处于冻结/未开工</strong>状态（进度文档口径一致）。</li>
+<li>逐条抄录 R4-01 ~ R4-09 的 DoD 作为验收基线；额外确认终端线 R-C04（Console 大脑视图 + 交互终端，Must，P4）属于本阶段。</li>
+<li>确认依赖：<code>langgraph</code> 未安装 → 装 <code>langgraph&gt;=0.2</code>（实装 <strong>1.2.11</strong>），先跑 62 项回归确认未破坏既有测试。</li>
+</ul>
+<h3 id="phase-bpython-r4-03-r4-08">Phase B｜Python 大脑层（R4-03 ~ R4-08）<a class="headerlink" href="#phase-bpython-r4-03-r4-08" title="Permanent link">&para;</a></h3>
+<p>新增 <code>services/python/nlp-service/app/brain/</code>（7 文件 / 1374 行）与 <code>tests/test_brain.py</code>（399 行）：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>行数</th>
+<th>对应需求</th>
+<th>关键决策</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>llm_gateway.py</code></td>
+<td>330</td>
+<td>R4-03</td>
+<td>L1/L2/L3 三级路由 + 超时重试 + Token 统计；<strong>未接入引擎时走模板后端并如实标 <code>degraded=True</code> + <code>generator=template</code></strong>（DEBT-015/016）</td>
+</tr>
+<tr>
+<td><code>planner.py</code></td>
+<td>142</td>
+<td>R4-05</td>
+<td>意图 → 任务模板（qa / summarize / retrieve / chat）+ 槽位提取；如实返回 <code>planner=rule</code>（DEBT-017）</td>
+</tr>
+<tr>
+<td><code>semantic_cache.py</code></td>
+<td>207</td>
+<td>R4-04</td>
+<td>Redis 向量相似 0.95；不可用时进程内兜底并标 <code>degraded</code>；复用 Phase 3 嵌入</td>
+</tr>
+<tr>
+<td><code>retrieval.py</code></td>
+<td>95</td>
+<td>R4-06</td>
+<td>复用体层 <code>POST /api/body/retrieve</code>，契约字段实测对齐</td>
+</tr>
+<tr>
+<td><code>gap.py</code></td>
+<td>174</td>
+<td>R4-07</td>
+<td>覆盖度评估 + 来源标注（R4-08 与缺口检测同模块）</td>
+</tr>
+<tr>
+<td><code>pipeline.py</code></td>
+<td>416</td>
+<td>R4-06</td>
+<td>LangGraph <code>StateGraph</code> 串 <code>plan→retrieve→gap→generate</code>，产出决策链 <code>chain[]</code>（供 D5 回放）</td>
+</tr>
+<tr>
+<td><code>__init__.py</code></td>
+<td>10</td>
+<td>—</td>
+<td>包导出</td>
+</tr>
+</tbody>
+</table>
+<p>端点：<code>POST /api/nlp/brain/ask</code>、<code>POST /api/nlp/brain/plan</code>、<code>GET /api/nlp/brain/health</code>、<code>GET /api/nlp/brain/cache/stats</code>。</p>
+<p><strong>关键技术坑（记录备查）</strong>：<code>StateGraph(dict)</code> 下各节点返回值会<strong>整体覆盖</strong>状态，导致字段丢失；改为 <code>TypedDict</code> 显式声明 <code>RagState</code> 通道后正常。</p>
+<h3 id="phase-cjava-r4-01-r4-02">Phase C｜Java 会话层（R4-01 / R4-02）<a class="headerlink" href="#phase-cjava-r4-01-r4-02" title="Permanent link">&para;</a></h3>
+<p>新增 <code>fsm/SessionFsm.java</code>（94 行）与 <code>fsm/SessionStore.java</code>（188 行）：</p>
+<ul>
+<li>状态机：<code>NEW → ACTIVE ⇄ IDLE → TIMEOUT/CLOSED</code>，终态拒绝迁移、<code>TIMEOUT</code> 可由 <code>MESSAGE</code> 事件恢复。</li>
+<li>持久化：Redis Hash（<code>session:{id}</code>）+ 消息列表 + TTL 2h；上下文取<strong>最近 K 轮</strong>（默认 10）。</li>
+<li>兼容性真实问题：Redis 里可能存在 R4-01 之前写入的<strong>无 <code>status</code> 字段</strong>的旧 Hash → 按 <code>ACTIVE</code> 兼容并补测试固化该语义。</li>
+<li>控制器接入 FSM/Store，新增 <code>GET /api/session/{id}/context</code>。</li>
+</ul>
+<h3 id="phase-djava-r4-06">Phase D｜Java 接线大脑层（R4-06 端到端）<a class="headerlink" href="#phase-djava-r4-06" title="Permanent link">&para;</a></h3>
+<ul>
+<li>新增 <code>orchestration/BrainClient.java</code>（143 行）：调 nlp <code>/api/nlp/brain/ask</code>，透传多轮上下文；回传 <code>sources/gap/chain/generator/decision_id/degraded_reasons</code>。</li>
+<li><code>/ask</code> 优先走大脑层；大脑层不可用时降级本地检索直出并标 <code>generator=local-retrieval</code> + <code>brain_client_not_configured</code>（<strong>不伪造回答</strong>）。</li>
+<li>配置：<code>app.brain.degrade-on-failure</code>（默认 true）。</li>
+</ul>
+<h3 id="phase-ebff">Phase E｜BFF 大脑端点 + 契约<a class="headerlink" href="#phase-ebff" title="Permanent link">&para;</a></h3>
+<p><code>wp-bff/server.js</code> 新增三个端点并登记 <code>IMPLEMENTED_ENDPOINTS</code>（ROUTE_GUARD 自动派生 405/Allow）：</p>
+<ul>
+<li><code>GET /api/wp/brain</code>：LLM 路由 / 语义缓存 / 检索的模型指标 + 降级状态（任一上游不可用即 <code>available=false</code> + <code>degraded_reasons</code>，<strong>不静默填 0</strong>）。</li>
+<li><code>POST /api/wp/brain/ask</code>：问答代理；空问题 400 统一信封。</li>
+<li><code>GET /api/wp/brain/{decision_id}</code>：D5 决策链回放（未命中按 <code>available=false</code> 说明，不冒充成功）。</li>
+</ul>
+<p>契约 <code>contracts/work-platform-bff-openapi.yaml</code>：三条路径 <code>planned → implemented</code>，补 400/404/405 的 <code>ErrorEnvelope</code>。</p>
+<p>自身缺陷（执行中发现并修）：聚合处 3 个请求却解构 4 个绑定 → <code>cache/knowledge</code> 恒为 <code>undefined</code>；ROUTE_GUARD 派生测试只替换 <code>{key}</code> 占位符 → 新增 <code>{decision_id}</code> 误判未声明。</p>
+<h3 id="phase-f">Phase F｜终端线<a class="headerlink" href="#phase-f" title="Permanent link">&para;</a></h3>
+<p><strong>work-platform（R4-09 对话界面）</strong></p>
+<ul>
+<li><code>provider.ts</code> 新增 <code>askBrain()</code>（透传最近 6 轮上下文；<code>available=false</code> 时不伪造回答），移除指向 planned 端点的旧 <code>ask()</code>。</li>
+<li><code>types</code> 新增 <code>BrainAnswer / BrainSource / BrainGap / BrainChainStep</code>。</li>
+<li><code>ChatView.vue</code>：来源标签展示相似度百分比 + 片段浮层、知识缺口提示、降级徽标（generator + reasons）、语义缓存命中标注、决策链折叠面板；失败展示真实原因。</li>
+</ul>
+<p><strong>Console（R-C04 大脑视图 + 交互终端）</strong></p>
+<ul>
+<li><code>provider.js</code> 新增 <code>BFF_BASE</code>（<code>?bff=</code> / <code>localStorage</code>）与 <code>requestBff()</code>（大脑端点不需网关令牌）；Mock 与 Api 两个数据源各实现 <code>getBrainOverview()</code> / <code>askBrain()</code>，返回同构 <code>snake_case</code>（R-C09 零 UI 改动）。</li>
+<li><code>index.html</code>：大脑视图改异步渲染真实指标（LLM 路由/调用数、语义缓存命中率、知识片段数、模型运行时表、degraded_reasons、会话真相来源）；后端暂无统计接口的意图分布/会话趋势两图保留但<strong>显式标注「演示图表」</strong>；交互终端接真实链路（多轮上下文、来源含相似度、缺口提示、降级徽标、决策链），失败渲染失败提示；移除原型 <code>mockReply()</code>，用户输入统一 <code>escapeHtml</code>。</li>
+</ul>
+<h3 id="phase-g">Phase G｜运行态验证与缺陷修复<a class="headerlink" href="#phase-g" title="Permanent link">&para;</a></h3>
+<p>坚持"真起进程 + 打真实数据"，结果抓到<strong>三个单测抓不到的缺陷</strong>（详见《测试验收报告》§8 与《技术债台账》§4.15）：</p>
+<ol>
+<li>Spring 构造注入歧义 → <code>session-manager</code> <strong>启动失败</strong>（<code>No default constructor found</code>）。</li>
+<li>BFF 知识量取错层级 → <code>GET /api/wp/brain</code> 的 <code>chunks</code> 恒为 0（静默把未知写成 0）。</li>
+<li>缺口提示阈值兜底写死 0.85 → 与校准后的实际阈值 0.35 不一致。</li>
+</ol>
+<h3 id="phase-h">Phase H｜阶段收口<a class="headerlink" href="#phase-h" title="Permanent link">&para;</a></h3>
+<p>三件套文档 + HTML 孪生 + 进度文档对齐 + 三分支推送。</p>
+<hr />
+<h2 id="_3">三、提交台账<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Commit</th>
+<th>说明</th>
+<th>测试基线变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>1581ddd</code></td>
+<td>大脑层 Python 侧（R4-03~R4-08）+ 会话 FSM/持久化（R4-01/R4-02）</td>
+<td>Java 130→149 · Python 62→95</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>d9a042c</code></td>
+<td><code>/ask</code> 接入大脑层（BrainClient）+ 缺口阈值按实测校准</td>
+<td>Java 149→153 · Python 95→97</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>b7c02c1</code></td>
+<td>BFF 大脑端点（R-C04/D5/R4-06 代理）+ 契约落标</td>
+<td>wp-bff 34→41</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>31d2dc1</code></td>
+<td>R4-09 对话界面接大脑层真实链路（来源/缺口/决策链/降级标注）</td>
+<td>—</td>
+</tr>
+<tr>
+<td>5</td>
+<td><code>3124572</code></td>
+<td>R-C04 Console 大脑视图 + 交互终端接真实大脑层</td>
+<td>wp-bff 41→43</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>19c5347</code></td>
+<td>修运行态发现的三个缺陷（Spring 装配 / 知识量层级 / 阈值兜底）</td>
+<td>Java 153→155</td>
+</tr>
+</tbody>
+</table>
+<p>累计：<strong>39 个文件变更，+3839 / −83</strong>。</p>
+<hr />
+<h2 id="_4">四、命令台账（关键命令）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 依赖与回归
+../venv/Scripts/python.exe -m pip install &quot;langgraph&gt;=0.2&quot;
+cd services/python/nlp-service &amp;&amp; ../venv/Scripts/python.exe -m pytest -q
+
+# Java 全模块测试
+cd services/java &amp;&amp; bash ../../scripts/mvn-dev.sh test
+
+# wp-bff 测试
+cd services/node/wp-bff &amp;&amp; node --test
+
+# 契约与文档覆盖门禁
+python scripts/contract-check.py --work-platform
+python scripts/java-doc-coverage.py
+
+# 前端
+cd web/work-platform &amp;&amp; npm run typecheck &amp;&amp; npm run build
+
+# Console 冒烟（无浏览器环境的最小 DOM 替身，直连真实 BFF）
+node .workbuddy/tmp/console-smoke.js &lt;console目录&gt; api http://127.0.0.1:8090
+
+# 起服务（注意本机环境变量 SERVER__PORT 会顶掉 server.port，需显式指定）
+cd services/java &amp;&amp; bash ../../scripts/mvn-dev.sh -pl session-manager spring-boot:run \
+  -Dspring-boot.run.jvmArguments=&quot;-Dspring.cloud.nacos.discovery.enabled=false -Dserver.port=8081 -DGRPC_PORT=9192&quot;
+cd services/python/nlp-service &amp;&amp; ../venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+</code></pre>
+<hr />
+<h2 id="_5">五、环境侧记录<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>根因</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>8000 端口上是<strong>旧版</strong> nlp-service（v0.3.0，无大脑层端点）</td>
+<td>上一轮遗留进程未停</td>
+<td>先确认进程身份再 <code>taskkill</code>，用当前代码重启；<strong>改代码后必须重启才生效</strong></td>
+</tr>
+<tr>
+<td><code>curl</code> 发中文 → body-service 500</td>
+<td>Git Bash 下 curl 未正确编码 UTF-8（项目 D-15 坑）</td>
+<td>改用 Python <code>urllib</code> 发请求，伪故障消失</td>
+</tr>
+<tr>
+<td><code>spring-boot:run</code> 报 <code>proto-contracts</code> 无法解析</td>
+<td>本地仓库未安装该模块与父 POM</td>
+<td><code>mvn -pl proto-contracts install -DskipTests</code> + <code>mvn -N install -DskipTests</code></td>
+</tr>
+<tr>
+<td>服务端口被顶成 53568</td>
+<td>环境里存在 <code>SERVER__PORT</code> 变量并被 Spring relaxed binding 吃进去</td>
+<td>启动时显式 <code>-Dserver.port=8081</code></td>
+</tr>
+<tr>
+<td>后台进程随 shell 退出被回收</td>
+<td>启动方式问题</td>
+<td>改用托管后台方式启动（<code>run_in_background</code>）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_6">六、经验沉淀<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>运行态验证不可替代</strong>：本阶段三个真实缺陷全部来自"把服务真跑起来 + 打真实数据"，单测全绿时它们一个都暴露不了。</li>
+<li><strong>阈值与打分口径必须随后端校准并留痕</strong>：设计文档的 0.85 建立在「语义嵌入 + 交叉编码重排」假设上，当前后端实测只有 0.10~0.28；直接套用会让每个问题都判「信息不足」。校准过程与口径差异已登记《技术债台账》§4.14。</li>
+<li><strong>降级可见是硬约束</strong>：模板生成、本地检索直出、大脑层不可用三条分支都必须在响应里显式标注 <code>generator</code> / <code>degraded_reasons</code>，前端据此打标，绝不静默伪造。</li>
+<li><strong>双数据源要同构</strong>：Console 与 work-platform 都坚持 Mock/Api 返回同构字段，切换零 UI 改动（R-C09）。</li>
+</ol></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

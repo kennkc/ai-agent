@@ -1,9 +1,9 @@
 # Agent-Lifeform · AI Agent 生命体架构
 
-> 当前基线：Phase 0 / Phase 1 / Phase 2 / **Phase 3（躯体期）** 均已交付并通过验收；
-> VS1 垂直切片与 Phase 3 知识闭环均已打通
-> （**130 Java + 62 Python + 34 wp-bff tests green**，契约校验 0 FAIL，Java 文档覆盖 106/106）。
-> 下一阶段为 **Phase 4（大脑期 / LLM 网关与 M1 问答 MVP）**。
+> 当前基线：Phase 0 / Phase 1 / Phase 2 / Phase 3 / **Phase 4（大脑期）** 均已交付并通过验收；
+> VS1 垂直切片、Phase 3 知识闭环与 Phase 4 大脑问答链路均已打通
+> （**155 Java + 97 Python + 43 wp-bff tests green**，契约校验 0 FAIL，Java 文档覆盖 113/113）。
+> 下一阶段为 **Phase 5（四肢期 / 工具调用与执行视图）**。
 > 技术栈：Java 21 + Spring Cloud Alibaba + Python 3.12 + FastAPI + Vue 3 + Vite + Element Plus。
 
 ---
@@ -440,7 +440,8 @@ git push origin codex/main:workbuddy/main
 - [x] 工程加固（2026-09-16）：wp-bff 控制面鉴权 + CORS 收紧、数据源降级可见化、链路采样口径标注、CI 补 Python/wp-bff 测试、前端路由懒加载
 - [x] Phase 3：躯体期知识管道 —— 入库 / 三层存储 / 语义检索 / 重排 / RAG，body-service 重写（2026-09-18）
 - [x] Phase 3 收口三轮加固：Mock/API 对齐、文档口径同步、全平台错误信封统一与异常流程归档（2026-09-18）
-- [ ] Phase 4：LLM Gateway 与 M1 问答 MVP
+- [x] Phase 4：大脑期 —— 会话 FSM/持久化、LLM Gateway、语义缓存、任务规划、RAG 决策链、
+      缺口检测与来源标注、wp-bff 大脑端点、工作平台对话界面与 Console 大脑视图（2026-09-19）
 - [ ] Phase 5-8：工具、编排、免疫、自进化
 
 详细进度见：`PROGRESS.md` · 当前状态总览与功能矩阵见 `docs/项目进度总览.md` ·

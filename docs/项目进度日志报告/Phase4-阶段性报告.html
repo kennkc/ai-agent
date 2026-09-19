@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 4 大脑期 · 阶段性报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 09:00 · 源文件 Phase4-阶段性报告.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 阶段目标回顾</a></li>
+<li><a href="#2">2. 交付物清单</a><ul>
+<li><a href="#21-python-nlp-service-appbrain7-1374-399">2.1 Python nlp-service · 大脑层（新增 app/brain/，7 文件 / 1374 行 + 测试 399 行）</a></li>
+<li><a href="#22-java-session-managerr4-01-r4-02-r4-06">2.2 Java session-manager（R4-01 / R4-02 / R4-06 接线）</a></li>
+<li><a href="#23-wp-bffr-c04-d5-r4-06">2.3 wp-bff（R-C04 / D5 / R4-06 代理）</a></li>
+<li><a href="#24">2.4 终端线</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 需求达成情况</a></li>
+<li><a href="#4">4. 架构演进</a></li>
+<li><a href="#5">5. 技术债与口径差异（均已在《技术债台账》留痕）</a></li>
+<li><a href="#6">6. 经验与下一步</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-4">Phase 4 大脑期 · 阶段性报告<a class="headerlink" href="#phase-4" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 4 · 大脑期（Brain Stage）</td>
+</tr>
+<tr>
+<td>项目</td>
+<td>Agent-Lifeform · AI Agent 生命体架构</td>
+</tr>
+<tr>
+<td>仓库</td>
+<td><code>E:\AI\ai-agent</code>（开发分支 <code>dev</code>，跟踪 <code>origin/workbuddy/main</code>）</td>
+</tr>
+<tr>
+<td>分支</td>
+<td><code>dev</code> / <code>codex/main</code> / <code>workbuddy/main</code>（三分支同内容对齐）</td>
+</tr>
+<tr>
+<td>报告日期</td>
+<td>2026-09-19</td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td><code>19c5347</code></td>
+</tr>
+<tr>
+<td>需求范围</td>
+<td>R4-01 ~ R4-09 + 终端线 R-C04</td>
+</tr>
+<tr>
+<td>阶段结论</td>
+<td><strong>通过</strong>（Must 7/7 · Should 2/2 · 终端线 R-C04 达标；1 项外部引擎依赖诚实降级）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 阶段目标回顾<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>Phase 3（躯体期）让生命体<strong>有了知识</strong>：文档能入库、能向量化、能语义检索，但<strong>不会思考</strong>——
+问答仍由 <code>RagPipeline</code> 的模板拼接完成，没有会话状态，没有来源标注，也没有"知识不够就说不知道"的能力。</p>
+<p>Phase 4 的目标是<strong>长出大脑</strong>：把「意图 → 规划 → 检索 → 覆盖度评估 → 生成 → 来源标注」串成一条
+可回放的决策链，并让会话有状态、可持久化、可恢复。</p>
+<p>设计文档定义的链路（<code>AI-Agent生命体架构-阶段性需求拆解分析.md</code> Phase 4 表）：</p>
+<pre><code>问答：问题 → 意图识别 → 任务规划 → 检索（体层） → 覆盖度评估 → 生成 → 来源标注 → 回答
+会话：NEW → ACTIVE ⇄ IDLE → TIMEOUT/CLOSED（Redis 持久化，TTL 2h，最近 K 轮进 Prompt）
+缓存：相似问题命中语义缓存，命中率 ≥ 20%
+</code></pre>
+<hr />
+<h2 id="2">2. 交付物清单<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-python-nlp-service-appbrain7-1374-399">2.1 Python nlp-service · 大脑层（新增 <code>app/brain/</code>，7 文件 / 1374 行 + 测试 399 行）<a class="headerlink" href="#21-python-nlp-service-appbrain7-1374-399" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>行数</th>
+<th>对应需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>llm_gateway.py</code></td>
+<td>330</td>
+<td>R4-03 LLM Gateway（L1/L2/L3 路由 + 超时重试 + Token 统计）</td>
+</tr>
+<tr>
+<td><code>pipeline.py</code></td>
+<td>416</td>
+<td>R4-06 LangGraph 决策链 <code>plan→retrieve→gap→generate</code></td>
+</tr>
+<tr>
+<td><code>semantic_cache.py</code></td>
+<td>207</td>
+<td>R4-04 语义缓存（Redis 向量相似 0.95，进程内兜底并标 degraded）</td>
+</tr>
+<tr>
+<td><code>planner.py</code></td>
+<td>142</td>
+<td>R4-05 任务规划器（qa/summarize/retrieve/chat）</td>
+</tr>
+<tr>
+<td><code>gap.py</code></td>
+<td>174</td>
+<td>R4-07 缺口检测 + R4-08 来源标注</td>
+</tr>
+<tr>
+<td><code>retrieval.py</code></td>
+<td>95</td>
+<td>R4-06 复用体层检索</td>
+</tr>
+<tr>
+<td><code>__init__.py</code></td>
+<td>10</td>
+<td>包导出</td>
+</tr>
+</tbody>
+</table>
+<p>端点：<code>/api/nlp/brain/{ask,plan,health,cache/stats}</code>。</p>
+<h3 id="22-java-session-managerr4-01-r4-02-r4-06">2.2 Java session-manager（R4-01 / R4-02 / R4-06 接线）<a class="headerlink" href="#22-java-session-managerr4-01-r4-02-r4-06" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>交付物</th>
+<th>行数</th>
+<th>对应需求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>fsm/SessionFsm.java</code></td>
+<td>94</td>
+<td>R4-01 会话状态机</td>
+</tr>
+<tr>
+<td><code>fsm/SessionStore.java</code></td>
+<td>188</td>
+<td>R4-02 Redis Hash + TTL + 最近 K 轮上下文</td>
+</tr>
+<tr>
+<td><code>orchestration/BrainClient.java</code></td>
+<td>143</td>
+<td>R4-06 大脑层调用（含降级，不伪造回答）</td>
+</tr>
+<tr>
+<td><code>controller/SessionController.java</code>（改）</td>
+<td>244</td>
+<td><code>/ask</code> 走大脑层 + <code>/context</code> 端点</td>
+</tr>
+<tr>
+<td>测试（4 个）</td>
+<td>483</td>
+<td>FSM 迁移 / 持久化 / 大脑层接线 / Spring 装配约束</td>
+</tr>
+</tbody>
+</table>
+<h3 id="23-wp-bffr-c04-d5-r4-06">2.3 wp-bff（R-C04 / D5 / R4-06 代理）<a class="headerlink" href="#23-wp-bffr-c04-d5-r4-06" title="Permanent link">&para;</a></h3>
+<p><code>GET /api/wp/brain</code>、<code>POST /api/wp/brain/ask</code>、<code>GET /api/wp/brain/{decision_id}</code>；
+契约三条路径由 <code>planned</code> 改为 <code>implemented</code>（implemented 8 → 11 路径）。</p>
+<h3 id="24">2.4 终端线<a class="headerlink" href="#24" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>端</th>
+<th>交付</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>work-platform（R4-09）</td>
+<td><code>askBrain()</code> + 来源（含相似度与片段）/ 缺口提示 / 降级徽标 / 决策链回放</td>
+</tr>
+<tr>
+<td>Console（R-C04）</td>
+<td>大脑视图真实指标 + 交互终端多轮对话；Mock/Api 双数据源同构</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3">3. 需求达成情况<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>需求</th>
+<th style="text-align: center;">结论</th>
+<th>关键实测</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R4-01</td>
+<td>会话状态机 FSM</td>
+<td style="text-align: center;">✅</td>
+<td>终态拒绝 → 409 AGENT_CONFLICT</td>
+</tr>
+<tr>
+<td>R4-02</td>
+<td>会话持久化</td>
+<td style="text-align: center;">✅</td>
+<td><strong>杀进程重启后会话仍 ACTIVE、消息 2 条</strong></td>
+</tr>
+<tr>
+<td>R4-03</td>
+<td>LLM Gateway</td>
+<td style="text-align: center;">✅（降级）</td>
+<td>模板后端如实标 <code>generator=template</code></td>
+</tr>
+<tr>
+<td>R4-04</td>
+<td>语义缓存</td>
+<td style="text-align: center;">✅</td>
+<td>命中率 <strong>57.1%~66.7%</strong>（DoD ≥20%）</td>
+</tr>
+<tr>
+<td>R4-05</td>
+<td>任务规划器</td>
+<td style="text-align: center;">✅</td>
+<td>四类模板映射，如实返回 <code>planner=rule</code></td>
+</tr>
+<tr>
+<td>R4-06</td>
+<td>RAG 全链路</td>
+<td style="text-align: center;">✅</td>
+<td>104~186ms，5 条来源 + 决策链</td>
+</tr>
+<tr>
+<td>R4-07</td>
+<td>缺口检测</td>
+<td style="text-align: center;">✅</td>
+<td>覆盖度 0.2877 → 「部分信息可能不完整」</td>
+</tr>
+<tr>
+<td>R4-08</td>
+<td>来源标注</td>
+<td style="text-align: center;">✅</td>
+<td>来源含相似度，界面可展开片段</td>
+</tr>
+<tr>
+<td>R4-09</td>
+<td>前端对话界面</td>
+<td style="text-align: center;">✅</td>
+<td>Vite 代理实测 200，多轮可用</td>
+</tr>
+<tr>
+<td>R-C04</td>
+<td>Console 大脑视图 + 交互终端</td>
+<td style="text-align: center;">✅</td>
+<td>2 轮真实问答，指标真实</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4">4. 架构演进<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<pre><code>Phase 3：文档 → 分块 → 嵌入 → 三级存储 → 检索（无会话、无规划、无生成）
+Phase 4：问题 → 意图 → 规划 → 检索 → 覆盖度 → 生成 → 来源标注 → 回答
+                ↑会话 FSM（Redis）   ↑语义缓存（Redis 向量）   ↑决策链（D5 可回放）
+</code></pre>
+<p>新增的两个"大脑组件"落点：</p>
+<ul>
+<li><strong>组件 2 任务规划器</strong>：<code>planner.py</code>（规则模板映射，P5/P6 升级为模型规划）。</li>
+<li><strong>C21 Memory Graph 之外的最近会话</strong>：<code>SessionStore</code> 的"最近 K 轮"窗口（本阶段以 Redis List + 截断实现，记忆图谱留待后续阶段）。</li>
+</ul>
+<hr />
+<h2 id="5">5. 技术债与口径差异（均已在《技术债台账》留痕）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>设计口径</th>
+<th>实现口径</th>
+<th>性质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>编排框架</td>
+<td>LangGraph 0.2+</td>
+<td>实装 1.2.11（API 一致）</td>
+<td>版本差异，非选型变更</td>
+</tr>
+<tr>
+<td>LLM 接入</td>
+<td>LiteLLM / 自研 Gateway</td>
+<td>自研 <code>LlmGateway</code>，默认模板降级</td>
+<td>DEBT-015/016</td>
+</tr>
+<tr>
+<td>缺口阈值</td>
+<td>覆盖度 ≥0.85</td>
+<td>默认 0.35（环境变量可调）</td>
+<td>实测校准，见 §4.14</td>
+</tr>
+<tr>
+<td>可用性打分</td>
+<td>未规定</td>
+<td>以 <code>score</code>（向量召回）判可用</td>
+<td>重排分量纲随后端而变</td>
+</tr>
+<tr>
+<td>Console 图表</td>
+<td>含意图分布/会话趋势</td>
+<td>两图为演示值并显式标注</td>
+<td>后端暂无该统计接口</td>
+</tr>
+</tbody>
+</table>
+<p>新登记：<strong>DEBT-014</strong>（会话消息全量保留）、<strong>DEBT-015/016</strong>（LLM 引擎未接）、<strong>DEBT-017</strong>（规则规划器）。</p>
+<hr />
+<h2 id="6">6. 经验与下一步<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>运行态验证是最有价值的投入</strong>：本阶段 3 个真实缺陷全部由"真起进程 + 真数据"抓到，单测全绿时它们一个都不暴露。</li>
+<li><strong>降级可见要贯穿到界面</strong>：模板生成、本地检索直出、大脑层不可用三条分支都在响应里标了 <code>generator</code> / <code>degraded_reasons</code>，前端据此打标——不做"看起来成功"的假动作。</li>
+<li><strong>下一步（Phase 5 四肢期）</strong>：工具调用与执行视图（R-C05）；在此之前建议先闭合 DEBT-015/016（接入真实 LLM），让 R4-03/R4-06 的"模型 vs 模板"对比验收有真实对照。</li>
+</ol></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

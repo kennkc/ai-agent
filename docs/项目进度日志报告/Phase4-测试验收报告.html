@@ -1,0 +1,586 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 4 大脑期 · 测试验收报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 09:00 · 源文件 Phase4-测试验收报告.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 验收环境</a></li>
+<li><a href="#2">2. 验收范围与方法</a></li>
+<li><a href="#3-r4-01-r4-09">3. 需求逐条验收（R4-01 ~ R4-09）</a></li>
+<li><a href="#4-dod">4. 阶段 DoD 逐条验收</a></li>
+<li><a href="#5">5. 端到端执行实录</a><ul>
+<li><a href="#51-session-manager-redisqdrantpg">5.1 session-manager 全链路（真实 Redis/Qdrant/PG）</a></li>
+<li><a href="#52-bff-work-platform-console">5.2 BFF / work-platform / Console</a></li>
+</ul>
+</li>
+<li><a href="#6">6. 测试基线汇总</a></li>
+<li><a href="#7">7. 缺陷与修复验证</a></li>
+<li><a href="#8">8. 待补验证项（不影响本阶段结论）</a></li>
+<li><a href="#9">9. 验收签字</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-4">Phase 4 大脑期 · 测试验收报告<a class="headerlink" href="#phase-4" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 4 · 大脑期（Brain Stage）</td>
+</tr>
+<tr>
+<td>仓库</td>
+<td><code>E:\AI\ai-agent</code>（分支 <code>dev</code> / <code>codex/main</code> / <code>workbuddy/main</code>）</td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td><code>19c5347</code></td>
+</tr>
+<tr>
+<td>验收日期</td>
+<td>2026-09-19</td>
+</tr>
+<tr>
+<td>需求范围</td>
+<td>R4-01 ~ R4-09 + 终端线 R-C04</td>
+</tr>
+<tr>
+<td><strong>验收结论</strong></td>
+<td><strong>通过</strong>（Must 项 7/7、Should 项 2/2、终端线 R-C04 达标；1 项外部引擎依赖诚实降级——真实 LLM 未接入，见 §7/§9）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="1">1. 验收环境<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>状态</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Redis</td>
+<td>✅ 运行中</td>
+<td>语义缓存（真实后端 <code>redis</code>，非内存兜底）、会话持久化</td>
+</tr>
+<tr>
+<td>Qdrant</td>
+<td>✅ 运行中</td>
+<td><code>lifeform_knowledge</code>（768 维）</td>
+</tr>
+<tr>
+<td>PostgreSQL</td>
+<td>✅ 运行中</td>
+<td>元数据真相源</td>
+</tr>
+<tr>
+<td>nlp-service (8000)</td>
+<td>✅ 运行中</td>
+<td>v0.4.0，含 <code>/api/nlp/brain/*</code></td>
+</tr>
+<tr>
+<td>body-service (8083)</td>
+<td>✅ 运行中</td>
+<td>检索链路</td>
+</tr>
+<tr>
+<td>session-manager (8081)</td>
+<td>✅ 运行中</td>
+<td>含 FSM/Store/BrainClient</td>
+</tr>
+<tr>
+<td>wp-bff (8090)</td>
+<td>✅ 运行中</td>
+<td>含 <code>/api/wp/brain*</code></td>
+</tr>
+<tr>
+<td>work-platform (3001)</td>
+<td>✅ 运行中</td>
+<td>Vite 代理 <code>/api/wp</code> → 8090</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2">2. 验收范围与方法<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>方法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单元/集成</td>
+<td>Java <code>mvn test</code>、Python <code>pytest</code>、wp-bff <code>node --test</code></td>
+</tr>
+<tr>
+<td>契约</td>
+<td><code>scripts/contract-check.py --work-platform</code></td>
+</tr>
+<tr>
+<td>文档覆盖</td>
+<td><code>scripts/java-doc-coverage.py</code></td>
+</tr>
+<tr>
+<td>前端</td>
+<td><code>npm run typecheck</code> + <code>npm run build</code></td>
+</tr>
+<tr>
+<td>端到端</td>
+<td>真起 4 个服务 + 真实中间件，发真实 HTTP 请求（Python 客户端，避开 curl 中文编码问题）</td>
+</tr>
+<tr>
+<td>Console</td>
+<td>无浏览器环境下的最小 DOM 替身（<code>vm</code> + 真实 fetch），直连 BFF</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3-r4-01-r4-09">3. 需求逐条验收（R4-01 ~ R4-09）<a class="headerlink" href="#3-r4-01-r4-09" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>需求</th>
+<th style="text-align: center;">优先级</th>
+<th>DoD</th>
+<th>验收证据</th>
+<th style="text-align: center;">结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R4-01</td>
+<td>会话状态机 FSM</td>
+<td style="text-align: center;">Must</td>
+<td>状态流转正确，异常可恢复</td>
+<td><code>SessionFsmTest</code>（9 项：全量迁移、终态拒绝、超时可恢复）；E2E：<code>create→ACTIVE</code>、<code>close→CLOSED</code>、已关闭再提问 → <strong>409 AGENT_CONFLICT</strong></td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>R4-02</td>
+<td>会话持久化（Redis + TTL）</td>
+<td style="text-align: center;">Must</td>
+<td>重启后会话可恢复</td>
+<td><strong>实测</strong>：建会话 + 提问后杀进程重启，<code>GET</code> 仍返回 <code>ACTIVE</code> / <code>message_count=2</code> / 上下文 2 轮；TTL 2h</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>R4-03</td>
+<td>LLM Gateway 封装</td>
+<td style="text-align: center;">Must</td>
+<td>多模型切换可用，超时降级</td>
+<td>L1/L2/L3 路由 + 超时重试 + Token 统计；未接引擎时走模板后端并标 <code>degraded=True</code> + <code>generator=template</code></td>
+<td style="text-align: center;">✅（降级项见 §9）</td>
+</tr>
+<tr>
+<td>R4-04</td>
+<td>语义缓存</td>
+<td style="text-align: center;">Must</td>
+<td>缓存命中率 ≥ 20%</td>
+<td>真实 Redis 后端，<strong>实测命中率 57.1%~66.7%</strong>（6/9、4/7），二次同问题 23ms 命中（相似度 1.00）</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>R4-05</td>
+<td>任务规划器（简单）</td>
+<td style="text-align: center;">Must</td>
+<td>意图→任务模板映射正确</td>
+<td><code>planner</code> 覆盖 qa / summarize / retrieve / chat 四类并如实返回 <code>planner=rule</code></td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>R4-06</td>
+<td>RAG 全链路</td>
+<td style="text-align: center;">Must</td>
+<td>问答携带检索上下文 + 来源</td>
+<td>LangGraph <code>plan→retrieve→gap→generate</code>；E2E 每次回答携带 5 条来源（含相似度）与决策链</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>R4-07</td>
+<td>信息缺口检测</td>
+<td style="text-align: center;">Should</td>
+<td>知识不足时明确提示</td>
+<td>覆盖度 0.2877 时给出「⚠️ 部分信息可能不完整」前缀；关键缺口走 <code>_node_insufficient</code> 明确不作答</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>R4-08</td>
+<td>来源标注</td>
+<td style="text-align: center;">Must</td>
+<td>回答显示来源与置信度</td>
+<td>回答附 <code>sources[]</code>（title/score/rerank_score/snippet）；前端展示相似度百分比 + 片段浮层</td>
+<td style="text-align: center;">✅</td>
+</tr>
+<tr>
+<td>R4-09</td>
+<td>前端对话界面</td>
+<td style="text-align: center;">Should</td>
+<td>浏览器可完成问答交互</td>
+<td>work-platform <code>ChatView</code> 走 <code>POST /api/wp/brain/ask</code>（Vite 代理实测 200，5 来源）；Console 交互终端多轮对话实测通过</td>
+<td style="text-align: center;">✅</td>
+</tr>
+</tbody>
+</table>
+<p><strong>终端线</strong></p>
+<table>
+<thead>
+<tr>
+<th>ID</th>
+<th>需求</th>
+<th style="text-align: center;">优先级</th>
+<th>DoD</th>
+<th>验收证据</th>
+<th style="text-align: center;">结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R-C04</td>
+<td>Console 大脑视图 + 交互终端</td>
+<td style="text-align: center;">Must</td>
+<td>Console 内完成多轮对话</td>
+<td>大脑视图渲染真实指标（LLM 可用/3 次调用、语义缓存 66.7%、知识片段 11、模型运行时三节点 healthy）；交互终端 2 轮真实问答，来源/缺口/降级徽标齐备</td>
+<td style="text-align: center;">✅</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="4-dod">4. 阶段 DoD 逐条验收<a class="headerlink" href="#4-dod" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>DoD</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>知识问答 Agent 可用（文档知识库 + 多轮对话 + 来源标注）</td>
+<td>✅ 实测链路跑通，多轮上下文经 session-manager → 大脑层透传</td>
+</tr>
+<tr>
+<td>简单问答 P99 &lt; 3s</td>
+<td>✅ 非缓存 104~186ms；缓存命中 23ms</td>
+</tr>
+<tr>
+<td>降级必须可见，不得静默伪造</td>
+<td>✅ 模板生成 / 本地检索直出 / 大脑层不可用三条分支均带 <code>generator</code> 与 <code>degraded_reasons</code>；控制台与界面均打标</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5">5. 端到端执行实录<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<h3 id="51-session-manager-redisqdrantpg">5.1 session-manager 全链路（真实 Redis/Qdrant/PG）<a class="headerlink" href="#51-session-manager-redisqdrantpg" title="Permanent link">&para;</a></h3>
+<pre><code>[create]            200  session_id=15e57b7e… status=ACTIVE
+[ask#1]             200  186ms  generator=template degraded=True reasons=[llm_template_backend]
+                          gap={coverage:0.5094, has_gap:False, usable_chunks:5}
+                          sources=[存储分层 0.263, 分层 0.275, audit-r3-001 0.247, …]
+                          chain=[cache] decision_id=3fc2d3a114e9
+[get]               200  status=ACTIVE message_count=2
+[ask#2]             200  104ms  generator=template sources=5（多轮上下文命中）
+[context?turns=4]   200  messages=4
+[close]             200  CLOSED
+[ask after close]   409  AGENT_CONFLICT  &quot;session is closed: …&quot;
+[重启后 GET]        200  status=ACTIVE message_count=2（Redis 恢复，R4-02 DoD）
+</code></pre>
+<h3 id="52-bff-work-platform-console">5.2 BFF / work-platform / Console<a class="headerlink" href="#52-bff-work-platform-console" title="Permanent link">&para;</a></h3>
+<pre><code>Vite 3001 → BFF 8090 → nlp 8000 → body 8083
+  POST /api/wp/brain/ask  200  generator=template  sources=5  gap.coverage=0.4551
+  GET  /api/wp/brain      200  llm/cache/retrieval 三节点 healthy · Redis backend · 无降级
+  POST /api/wp/brain/ask（空问题） 400 AGENT_BAD_REQUEST
+
+Console（vm 冒烟，ds=api）
+  大脑视图：LLM 可用/3 次调用 · 语义缓存 66.7%（redis 6/9）· 知识片段 11 · degraded_reasons=无
+  交互终端：2 轮真实问答（来源含相似度、template 降级徽标、缓存命中标注）
+  ds=mock：演示值且带 degraded 标注       BFF 不可用：渲染失败提示 + 排查项（不伪造回复）
+</code></pre>
+<hr />
+<h2 id="6">6. 测试基线汇总<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>套件</th>
+<th>基线（Phase 3 收口）</th>
+<th>现在</th>
+<th>变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java（4 模块）</td>
+<td>130</td>
+<td><strong>155</strong></td>
+<td>gateway 2 · session-manager 40 · sense-service 53 · body-service 60</td>
+</tr>
+<tr>
+<td>Python（nlp-service）</td>
+<td>62</td>
+<td><strong>97</strong></td>
+<td><code>test_brain.py</code> 399 行</td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td>34</td>
+<td><strong>43</strong></td>
+<td>大脑端点 7 项 + 知识量口径 2 项</td>
+</tr>
+<tr>
+<td>前端</td>
+<td>—</td>
+<td>typecheck ✅ / build ✅</td>
+<td>Console 为静态页，用 vm 冒烟替代</td>
+</tr>
+<tr>
+<td>契约门禁</td>
+<td>0 FAIL</td>
+<td><strong>0 FAIL</strong></td>
+<td>implemented 8 → 11 路径</td>
+</tr>
+<tr>
+<td>文档覆盖</td>
+<td>110/110</td>
+<td><strong>113/113</strong></td>
+<td>新增 5 个文件已登记</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7. 缺陷与修复验证<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>缺陷</th>
+<th>发现方式</th>
+<th>修复</th>
+<th>防复发</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Spring 构造注入歧义，<code>session-manager</code> <strong>启动失败</strong>（<code>No default constructor found</code>）</td>
+<td>运行态：真起进程</td>
+<td>控制器主构造 <code>@Autowired</code>；<code>SessionStore</code> 注册 <code>@Component</code> 并标注注入构造</td>
+<td><code>SessionWiringTest</code>（反射断言唯一 <code>@Autowired</code> 构造 + 是 Bean）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>BFF 知识量取错层级，<code>GET /api/wp/brain</code> 的 <code>chunks</code> 恒为 0（体层 stats 嵌在 <code>knowledge.knowledge</code> 下）</td>
+<td>运行态：Console 视图显示 0</td>
+<td>按嵌套口径取 + 新增顶层 <code>retrieval{chunks,documents}</code></td>
+<td>2 条用真实嵌套结构的 BFF 用例</td>
+</tr>
+<tr>
+<td>3</td>
+<td>缺口提示阈值兜底写死 <code>0.85</code>，与校准后的 <code>0.35</code> 不一致</td>
+<td>运行态：触发缺口分支</td>
+<td>兜底取当前生效的 <code>COVERAGE_THRESHOLD</code></td>
+<td>阈值相关用例已显式指定口径</td>
+</tr>
+<tr>
+<td>4</td>
+<td>阈值口径与设计文档不符（实测得分 0.10~0.28 vs 设计 0.85）</td>
+<td>端到端实测</td>
+<td>阈值改环境变量可配，默认按当前后端校准；<strong>留痕不静默放水</strong></td>
+<td>《技术债台账》§4.14</td>
+</tr>
+<tr>
+<td>5</td>
+<td>打分口径误用 <code>rerank_score</code>（词法重排压缩在 0.10~0.12）</td>
+<td>端到端实测</td>
+<td>统一以 <code>score</code>（向量召回）判可用，重排分仅排序展示</td>
+<td><code>test_gap_uses_vector_score_not_compressed_rerank</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td>旧实例占端口 / curl 中文乱码 / 环境 <code>SERVER__PORT</code> 顶端口</td>
+<td>环境侧</td>
+<td>分别按进程确认、Python 发请求、显式 <code>-Dserver.port</code> 处置</td>
+<td>已记入执行日志 §五</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="8">8. 待补验证项（不影响本阶段结论）<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>真实 LLM 引擎</td>
+<td>当前为模板后端（<code>generator=template</code>），DEBT-015/016；接入后需重跑 R4-03 与 R4-06 的降级对比</td>
+</tr>
+<tr>
+<td>模型规划器</td>
+<td>当前为规则映射（<code>planner=rule</code>），DEBT-017；P5/P6 升级后需补映射准确率验证</td>
+</tr>
+<tr>
+<td>Console 演示图表</td>
+<td>意图分布 / 会话趋势两图后端暂无统计接口，界面已标注「演示图表」，补接口后切换</td>
+</tr>
+<tr>
+<td>D5 决策链独立索引</td>
+<td>当前决策链随问答响应与语义缓存返回，未提供按 <code>decision_id</code> 的独立回放索引（端点已按 <code>available=false</code> 诚实说明）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="9">9. 验收签字<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>角色</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>开发执行</td>
+<td>完成 R4-01~R4-09 + R-C04，测试全绿</td>
+</tr>
+<tr>
+<td>自测验收</td>
+<td><strong>通过</strong>；Must 7/7、Should 2/2、终端线 R-C04 达标</td>
+</tr>
+<tr>
+<td>遗留</td>
+<td>真实 LLM 未接入（诚实降级并登记 DEBT-015/016），Console 两个演示图表待补接口</td>
+</tr>
+</tbody>
+</table></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

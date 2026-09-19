@@ -39,10 +39,13 @@ alignment pass, a doc-figure consistency pass, and an exception-flow consolidati
 (the last one is recorded in `docs/优化日志/2026-09-18-异常流程归纳与全平台错误信封统一.md`).
 All three are summarised in [Phase 3 post-closure hardening](#phase-3-post-closure-hardening-2026-09-18).
 
-The suite now stands at **130 Java + 62 Python + 34 wp-bff tests green**, contract check 0 FAIL,
-Java doc coverage 106/106; end-to-end acceptance remains 35/35 from the 2026-09-18 run
-(new items are covered by unit + contract tests and have not been re-run end-to-end).
-The Java split is gateway 2 · session-manager 15 · sense-service 53 · body-service 60.
+**Phase 4 (大脑期 / brain stage, R4-01~R4-09 + R-C04) landed on 2026-09-19** — see
+[Phase 4](#phase-4-大脑期--brain-stage-2026-09-19) below for the full record.
+
+The suite now stands at **155 Java + 97 Python + 43 wp-bff tests green** (295 total), contract
+check 0 FAIL (implemented 11 paths / 12 methods), Java doc coverage 113/113; the work platform
+and the Console both run against the real brain chain.
+The Java split is gateway 2 · session-manager 40 · sense-service 53 · body-service 60.
 
 ## Phase 0
 
@@ -200,6 +203,75 @@ stale doc figures were fixed:
 - [x] Registered dangling `DEBT-010/011/012` that code referenced but the registry did not list
 
 
+## Phase 4 (大脑期 / Brain Stage, 2026-09-19)
+
+Scope: R4-01~R4-09 plus the terminal line R-C04 (Console brain view + interaction terminal).
+Baseline `19c5347` — 39 files changed, +3839/-83.
+
+### Brain layer (Python nlp-service, new `app/brain/`, 1374 lines + 399 lines of tests)
+
+- [x] **R4-03** `llm_gateway.py` — L1/L2/L3 routing, timeout + retry, token accounting; with no
+  engine configured it uses the deterministic template backend and **truthfully reports**
+  `degraded=true` / `generator=template` (DEBT-015/016)
+- [x] **R4-04** `semantic_cache.py` — Redis vector similarity @0.95 with in-process fallback
+  (marked `degraded`); **measured hit rate 57.1%~66.7%** against DoD >= 20%
+- [x] **R4-05** `planner.py` — intent -> task template (qa / summarize / retrieve / chat);
+  reports `planner=rule` honestly (DEBT-017)
+- [x] **R4-06** `pipeline.py` — LangGraph `StateGraph` chain `plan -> retrieve -> gap -> generate`
+  emitting the `chain[]` decision trace used by the D5 replay view
+- [x] **R4-07 / R4-08** `gap.py` — coverage-based gap detection + source annotation
+  (title / score / rerank_score / snippet)
+- [x] Endpoints `/api/nlp/brain/{ask,plan,health,cache/stats}`
+
+### Session layer (Java session-manager)
+
+- [x] **R4-01** `fsm/SessionFsm` — `NEW -> ACTIVE <-> IDLE -> TIMEOUT/CLOSED`, terminal-state
+  rejection, timeout recoverable
+- [x] **R4-02** `fsm/SessionStore` — Redis Hash + TTL 2h + last-K-turn context;
+  **verified live**: kill + restart the process, the session comes back `ACTIVE` with its messages
+- [x] **R4-06** `orchestration/BrainClient` — `/ask` goes through the brain layer and falls back to
+  local retrieval with `generator=local-retrieval` (never a fabricated answer)
+
+### BFF + terminal line
+
+- [x] wp-bff `GET /api/wp/brain`, `POST /api/wp/brain/ask`, `GET /api/wp/brain/{decision_id}`;
+  contract flipped `planned -> implemented`, errors carry the unified envelope
+- [x] **R4-09** work-platform chat view sources, gap hint, degradation badge, cache-hit marker and
+  decision-chain replay panel, all from the real brain response
+- [x] **R-C04** Console brain view renders real model/cache/retrieval metrics and the interaction
+  terminal completes multi-turn dialogue (Mock/Api parity preserved, R-C09)
+
+### Two calibrated-after-measurement decisions (registered, not silent)
+
+- Coverage threshold: the design's 0.85 assumes semantic embeddings + cross-encoder reranking;
+  the current backends score 0.10~0.28, so the default is **0.35** (`GAP_COVERAGE_THRESHOLD`,
+  tunable) with a usable-score floor of 0.15 — documented in `docs/技术债台账.md` §4.14
+- Usability scoring keys on `score` (vector recall); `rerank_score` is display/ordering only
+  because the lexical reranker compresses it into 0.10~0.12
+
+### Runtime-only defects found and fixed (see 技术债台账 §4.15)
+
+1. Spring constructor-injection ambiguity — session-manager **failed to boot**
+   (`No default constructor found`); fixed with `@Autowired` on the primary constructor plus
+   `@Component` on `SessionStore`, guarded by the new `SessionWiringTest`
+2. BFF read the knowledge counts from the wrong nesting level (`knowledge.knowledge.chunks`) so
+   `GET /api/wp/brain` always reported `chunks: 0`
+3. The "information gap" notice hard-coded `threshold 0.85` while the effective value is 0.35
+
+### Verification (2026-09-19, real Redis / Qdrant / PostgreSQL)
+
+- session-manager 8081 -> nlp 8000 -> body 8083: create (ACTIVE), ask#1 186ms (5 sources,
+  coverage 0.509, `template` degradation marker), ask#2 104ms (multi-turn), context 4 turns,
+  close (CLOSED), asking on a closed session -> **409 AGENT_CONFLICT**, restart -> session restored
+- Vite 3001 -> BFF 8090: `POST /api/wp/brain/ask` 200 with 5 sources; `GET /api/wp/brain` 200 with
+  three healthy model-runtime nodes; blank question -> 400 `AGENT_BAD_REQUEST`
+- Console (vm smoke harness): metrics render from the live BFF; two real dialogue turns; `ds=mock`
+  falls back to labelled demo data; BFF down renders a failure notice instead of a fake reply
+
+Known gap carried forward: **no real LLM engine is attached**, so generation stays on the template
+backend and is labelled as such (DEBT-015/016). The Console's intent-distribution and
+session-trend charts have no backend statistics endpoint yet and are explicitly labelled demo.
+
 ## Frontend
 
 - [x] Vue 3 + Vite + TypeScript + Element Plus work-platform scaffold
@@ -211,6 +283,9 @@ stale doc figures were fixed:
 - [x] Vitals realtime status, organ report, brain trace, senses drill-down and evolution trend
 - [x] Multi-agent bus topology with mode cards, agent message rails, non-flickering MC-P stream, stacked artifacts and gates
 - [x] Automation cron validation, case assembly and L3/L4 approval workflow displays
+- [x] Chat view against the real brain chain: sources with similarity, gap hint, degradation
+  badge, cache-hit marker and decision-chain replay (R4-09)
+- [x] Console brain view + interaction terminal on real data with Mock/Api parity (R-C04)
 - [x] npm run typecheck passed
 - [x] npm run build passed
 
@@ -495,7 +570,8 @@ gateway (8080) is still unverified at runtime because **Spring WebFlux does not 
 - ~~Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration).~~
   Done on 2026-09-18: Phase 3 (R3-01~R3-09 + R-C03) delivered the full knowledge pipeline,
   three-tier storage, semantic retrieval, reranking, RAG and the sense->body closed loop;
-  DEBT-001 closed. Phase 4 (大脑期 / brain stage, reasoning & generation) is next.
+  DEBT-001 closed. **Phase 4 (大脑期 / brain stage, R4-01~R4-09 + R-C04) landed on 2026-09-19**;
+  Phase 5 (四肢期 / limb stage, tool execution) is next.
 - Real embedding (BGE-M3) and cross-encoder reranker weights are not installed on this host;
   the services fall back to deterministic backends and report `degraded=true` (honest degradation,
   never faked). Installing the models switches them automatically.

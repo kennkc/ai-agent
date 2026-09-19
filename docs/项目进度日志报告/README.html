@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>项目进度日志报告 · 目录索引</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 09:03 · 源文件 README.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_2">目录定位与约定</a></li>
+<li><a href="#_3">文件清单</a><ul>
+<li><a href="#phase-0-2026-08-30-2026-09-15">Phase 0 · 胚胎期（2026-08-30 验收 · 2026-09-15 追溯补档）</a></li>
+<li><a href="#phase-1-2026-09-11-2026-09-13-2026-09-15">Phase 1 · 神经期（2026-09-11 收尾 · 2026-09-13 动态验证 · 2026-09-15 追溯补档）</a></li>
+<li><a href="#phase-2-2026-09-12">Phase 2 · 感官期（2026-09-12）</a></li>
+<li><a href="#phase-3-2026-09-18">Phase 3 · 躯体期（2026-09-18）</a></li>
+<li><a href="#phase-4-2026-09-19">Phase 4 · 大脑期（2026-09-19）</a></li>
+<li><a href="#phase-2-phase-3-2026-09-15-2026-09-16">加固期 · Phase 2 之后、Phase 3 之前（2026-09-15 ~ 2026-09-16，非独立阶段）</a></li>
+</ul>
+</li>
+<li><a href="#_4">命名规范</a></li>
+<li><a href="#html">生成 HTML 版本</a></li>
+<li><a href="#_5">复现本阶段验证</a></li>
+<li><a href="#_6">归档维护要求</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="_1">项目进度日志报告 · 目录索引<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>Agent-Lifeform · AI Agent 生命体架构 · 分阶段开发的过程归档与验收留痕</p>
+</blockquote>
+<p>本目录用于<strong>阶段性开发的过程留痕</strong>：每完成一个开发阶段，在此归档该阶段的
+<strong>执行日志（过程）</strong>、<strong>阶段性报告（结论与问题复盘）</strong>、<strong>测试验收报告（证据）</strong> 三类文档，
+并提供 HTML 版本便于直接阅读与汇报。</p>
+<hr />
+<h2 id="_2">目录定位与约定<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>目录</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs/项目进度日志报告/</code></td>
+<td><strong>本目录</strong> — 分阶段开发的过程日志与验收报告（按阶段归档）</td>
+</tr>
+<tr>
+<td><code>docs/项目进度总览.md</code></td>
+<td>跨阶段的<strong>当前状态总览</strong>（功能矩阵 / 测试基线 / 分支拓扑 / 剩余项）</td>
+</tr>
+<tr>
+<td><code>docs/功能开发流程.md</code></td>
+<td>每个功能的<strong>开发流程与验收标准</strong>（从需求到收口的完整链路）</td>
+</tr>
+<tr>
+<td><code>docs/demo/</code></td>
+<td>各阶段的端到端演示脚本（怎么跑起来看到效果）</td>
+</tr>
+<tr>
+<td><code>docs/优化日志/</code></td>
+<td>每轮工程化加固的过程与结论（按日期归档）</td>
+</tr>
+<tr>
+<td>项目根 <code>PROGRESS.md</code></td>
+<td>全局进度总览（跨阶段的 checklist 视图）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>三类文档的分工</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>文档类型</th>
+<th>回答的问题</th>
+<th>面向读者</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>开发执行日志</td>
+<td>这段时间<strong>做了什么、怎么做的</strong></td>
+<td>接手开发者、复盘者</td>
+</tr>
+<tr>
+<td>阶段性报告</td>
+<td>阶段<strong>达成了什么</strong>、遇到<strong>什么问题、怎么解决</strong></td>
+<td>技术负责人、决策者</td>
+</tr>
+<tr>
+<td>测试验收报告</td>
+<td><strong>凭什么判定通过</strong>（可复现证据）</td>
+<td>验收方、质量把关者</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_3">文件清单<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<h3 id="phase-0-2026-08-30-2026-09-15">Phase 0 · 胚胎期（2026-08-30 验收 · 2026-09-15 追溯补档）<a class="headerlink" href="#phase-0-2026-08-30-2026-09-15" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Phase0-阶段性报告.md</code> · <code>.html</code></td>
+<td>骨架目标、交付物清单、DoD 对照、5 项问题记录（os-maven 扩展 / .env / 端口冲突 / 环境变量污染 / 产物入库）、遗留项</td>
+</tr>
+<tr>
+<td><code>Phase0-开发执行日志.md</code> · <code>.html</code></td>
+<td><code>7ceb5d9→db0cc27</code> 提交时间线、4 条 ADR、命令台账、环境侧记录</td>
+</tr>
+<tr>
+<td><code>Phase0-测试验收报告.md</code> · <code>.html</code></td>
+<td>16/16 健康检查、3 条冒烟命令、CI/契约证据、2 项诚实登记的瑕疵（探针名不符实 / 健康检查不含业务链路）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="phase-1-2026-09-11-2026-09-13-2026-09-15">Phase 1 · 神经期（2026-09-11 收尾 · 2026-09-13 动态验证 · 2026-09-15 追溯补档）<a class="headerlink" href="#phase-1-2026-09-11-2026-09-13-2026-09-15" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Phase1-阶段性报告.md</code> · <code>.html</code></td>
+<td>脊柱总线交付物（网关 JWT/BusProxy/NATS/Kafka/Trace）、10/10 需求覆盖、VS1 设计、<strong>D-1 缺陷完整复盘</strong>（h2c 升级打挂 Python 调用）</td>
+</tr>
+<tr>
+<td><code>Phase1-开发执行日志.md</code> · <code>.html</code></td>
+<td><code>075f8cb→30644bc</code> 提交时间线（含 codex 前端线合并）、6 条 ADR、命令台账</td>
+</tr>
+<tr>
+<td><code>Phase1-测试验收报告.md</code> · <code>.html</code></td>
+<td>13 项单测、10 步业务链路冒烟实录（8 链路全通过）、3 项负向安全用例、D-1 修复前后对照、P99 待补实测诚实登记</td>
+</tr>
+</tbody>
+</table>
+<p><strong>阶段数据速览</strong>：Phase 1 代码基线 <code>db0cc27</code>（56 文件 +2013/-562）· 加固 <code>701aa3f</code> · 相关模块测试 <strong>13/13 通过</strong> · 业务链路冒烟 <strong>8/8 通过</strong> · 健康检查 <strong>16/16 OK</strong></p>
+<h3 id="phase-2-2026-09-12">Phase 2 · 感官期（2026-09-12）<a class="headerlink" href="#phase-2-2026-09-12" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Phase2-阶段性报告.md</code> · <code>.html</code></td>
+<td>阶段目标、交付物清单、R2-01~R2-10 需求覆盖矩阵、关键设计落地说明、<strong>13 项问题与解决思路</strong>、风险与遗留、阶段结论</td>
+</tr>
+<tr>
+<td><code>Phase2-开发执行日志.md</code> · <code>.html</code></td>
+<td>六阶段执行流程时间线（对账→实现→构建攻坚→缺陷修复→集成核验→全量验收）、6 条 ADR 决策记录、命令执行台账、环境侧记录</td>
+</tr>
+<tr>
+<td><code>Phase2-测试验收报告.md</code> · <code>.html</code></td>
+<td>73 项测试逐项结果（Java 逐类逐用例 + Python）、R2-01~R2-10 逐项验收判定、DoD 对照、关键指标实测、4 个缺陷的修复与回归、待补验证项、验收结论</td>
+</tr>
+</tbody>
+</table>
+<p><strong>阶段数据速览</strong>：代码基线 <code>850f49d</code>（147 文件）· 测试 <strong>73/73 通过</strong> · 意图识别准确率 <strong>90.0%</strong> / P99 <strong>0.052ms</strong> · 全量构建 5 模块 SUCCESS</p>
+<h3 id="phase-3-2026-09-18">Phase 3 · 躯体期（2026-09-18）<a class="headerlink" href="#phase-3-2026-09-18" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Phase3-阶段性报告.md</code> · <code>.html</code></td>
+<td>阶段目标、交付物清单（body-service 重写 + nlp 嵌入/重排/分块 + 会话/终端线）、<strong>6 条关键设计决策</strong>、端到端验证结果、测试基线、<strong>6 项问题与解决</strong>、遗留与技术债（<strong>DEBT-001 销项</strong>）、阶段结论</td>
+</tr>
+<tr>
+<td><code>Phase3-开发执行日志.md</code> · <code>.html</code></td>
+<td>八阶段执行流程时间线（前置同步→Python 先行→Java 主体→会话与终端线→构建收敛→端到端验收→文档归档→<strong>需求复审与缺口补全</strong>）、提交台账、命令台账、环境侧记录</td>
+</tr>
+<tr>
+<td><code>Phase3-测试验收报告.md</code> · <code>.html</code></td>
+<td>R3-01~R3-09 逐项验收判定、DoD 逐条对照、终端线 R-C03 验收、35 项端到端实录、<strong>195/195 测试基线</strong>（含审核补全轮）、5 个缺陷的修复与回归、待补验证项、验收签字、<strong>§11 审核补记</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>阶段数据速览</strong>：测试 <strong>195/195 通过</strong>（Java 114 · Python 52 · wp-bff 29）· 端到端 <strong>35/35 通过</strong> · 检索 P99 <strong>366ms</strong> / 命中率 <strong>0.925</strong> / 缓存命中率 <strong>0.45</strong> · <strong>DEBT-001 闭合</strong>（内存检索 → Qdrant 向量检索）</p>
+<blockquote>
+<p>速览为 2026-09-18 <strong>需求审核与补全轮后</strong>的实测口径（补全前为 174/174：Java 100 · Python 52 · wp-bff 22）。</p>
+<p><strong>后续又有四轮收口</strong>不改变需求范围，但改变了基线：最新为 <strong>Java 130 · Python 62 · wp-bff 34</strong>
+（文档覆盖 106/106，契约 0 FAIL）。本表为空呈现<strong>阶段交付快照</strong>（历史留痕），
+最新值请见三件套各自的<strong>「补记」</strong>章节、<code>docs/项目进度总览.md</code> §四与 <code>docs/优化日志/</code>。</p>
+</blockquote>
+<h3 id="phase-4-2026-09-19">Phase 4 · 大脑期（2026-09-19）<a class="headerlink" href="#phase-4-2026-09-19" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>Phase4-阶段性报告.md</code> · <code>.html</code></td>
+<td>阶段目标、交付物清单（nlp 大脑层 1374 行 / session-manager FSM·持久化·BrainClient / wp-bff 大脑端点 / 终端线）、R4-01~R4-09 + R-C04 达成矩阵、架构演进、技术债与口径差异、下一步</td>
+</tr>
+<tr>
+<td><code>Phase4-开发执行日志.md</code> · <code>.html</code></td>
+<td>八阶段执行流程时间线（前置同步→Python 大脑层→Java 会话层→接线大脑层→BFF 与契约→终端线→<strong>运行态验证与缺陷修复</strong>→收口）、6 条提交台账、命令台账、环境侧记录与经验沉淀</td>
+</tr>
+<tr>
+<td><code>Phase4-测试验收报告.md</code> · <code>.html</code></td>
+<td>R4-01~R4-09 与 R-C04 逐条验收判定、DoD 对照、端到端实录（含<strong>杀进程重启后会话恢复</strong>）、测试基线、<strong>6 项缺陷的修复与回归</strong>（其中 3 项只有运行态才暴露）、待补验证项、验收签字</td>
+</tr>
+</tbody>
+</table>
+<p><strong>阶段数据速览</strong>：代码基线 <code>19c5347</code>（39 文件 +3839/-83）· 测试 <strong>Java 155 · Python 97 · wp-bff 43</strong>（共 <strong>295</strong>）
+· 契约 <strong>0 FAIL</strong>（implemented 8→11 路径）· 文档覆盖 <strong>113/113</strong> · 前端 typecheck + build 通过
+· 语义缓存命中率 <strong>57.1%~66.7%</strong>（DoD ≥20%）· 问答 <strong>104~186ms</strong>（缓存命中 23ms）</p>
+<h3 id="phase-2-phase-3-2026-09-15-2026-09-16">加固期 · Phase 2 之后、Phase 3 之前（2026-09-15 ~ 2026-09-16，非独立阶段）<a class="headerlink" href="#phase-2-phase-3-2026-09-15-2026-09-16" title="Permanent link">&para;</a></h3>
+<p>把已有能力做真、做稳、做可交付。本段<strong>不按三件套归档</strong>，
+过程与结论落在 <code>docs/优化日志/</code>，进度与功能矩阵统一收敛到 <code>docs/项目进度总览.md</code>。</p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>docs/优化日志/2026-09-16-契约对齐与总览聚合.md</code> · <code>.html</code></td>
+<td>契约 31→37 端点、<code>x-wp-status</code> 标记、<code>contract-check</code> 三条门禁与负向验证、<code>GET /api/wp/overview</code> 只聚合有真实来源的域、<code>docker-smoke</code> CI</td>
+</tr>
+<tr>
+<td><code>docs/项目进度总览.md</code> · <code>.html</code></td>
+<td>当前进度总览：阶段状态、功能矩阵（Java/Python/前端/BFF/基础设施）、测试基线、分支与远端拓扑、剩余项与 6 项已知缺口</td>
+</tr>
+<tr>
+<td><code>docs/功能开发流程.md</code> · <code>.html</code></td>
+<td>通用 8 步流水线、按技术栈差异、逐功能开发步骤与验收标准、新增功能清单、本机特有坑</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>同期的 <code>PROGRESS.md</code> 章节「2026-09-15 Work Platform Observability Update」「2026-09-16 Engineering
+Hardening」「2026-09-16 Contract Alignment &amp; Overview Aggregation」是这一段的逐年逐轮记录。</p>
+</blockquote>
+<hr />
+<h2 id="_4">命名规范<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<p>后续阶段请按以下格式在本目录追加：</p>
+<pre><code>Phase&lt;N&gt;-阶段性报告.md       + .html
+Phase&lt;N&gt;-开发执行日志.md     + .html
+Phase&lt;N&gt;-测试验收报告.md     + .html
+</code></pre>
+<ul>
+<li><code>&lt;N&gt;</code>：阶段序号（阿拉伯数字），如 <code>Phase3</code>、<code>Phase4</code></li>
+<li>阶段名称若需体现，可写进文档内标题（如「Phase 3 躯体期 · 阶段性报告」），<strong>文件名保持简洁</strong></li>
+<li>一个阶段一套三份，<strong>不合并</strong>（三类文档读者与用途不同）</li>
+</ul>
+<hr />
+<h2 id="html">生成 HTML 版本<a class="headerlink" href="#html" title="Permanent link">&para;</a></h2>
+<p>本目录的 HTML 由脚本统一生成（样式一致、含目录导航）：</p>
+<pre><code class="language-bash"># 从项目根执行。两种可用环境，按本机情况选一种：
+
+# 【A】无 anaconda 的机器（**WorkBuddy 侧现状**，2026-09-18 实测）：托管 Python + PYTHONPATH 指向 markdown 包目录
+PYTHONPATH=&quot;E:\AI\核心知识\.workbuddy\tmp\pylibs&quot; \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py --all &quot;docs/项目进度日志报告&quot;
+
+# 【B】有 anaconda 的机器（另一台开发机）
+E:/software/anaconda3/python.exe scripts/md2html-report.py --all &quot;docs/项目进度日志报告&quot;
+
+# 单文件模式
+PYTHONPATH=&quot;E:\AI\核心知识\.workbuddy\tmp\pylibs&quot; \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py &quot;docs/项目进度日志报告/Phase3-阶段性报告.md&quot;
+</code></pre>
+<blockquote>
+<p><strong>注意事项</strong>（踩坑记录）：
+- <strong>本机 anaconda 已于 2026-09-18 卸载</strong>（现只有 <code>E:/software/python/python312</code>，无 <code>markdown</code> 包），
+  故本机统一用环境【A】。markdown 包获取方式：<code>pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown</code>。
+- 中文字符路径需加引号。
+- <code>--all</code> 批量模式<strong>自动排除 <code>README.md</code></strong>（索引页保留纯 Markdown 即可），如需转换用单文件模式。
+- 修改 <code>.md</code> 后<strong>需重新生成对应 <code>.html</code></strong>，两者一并提交，避免版本漂移。
+- HTML 为自包含单文件（无外部依赖），可直接双击打开、也可用浏览器打印为 PDF。</p>
+</blockquote>
+<hr />
+<h2 id="_5">复现本阶段验证<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># Java 全量构建 + 测试（当前基线 61 项；Phase 2 归档时口径为 73 项，含 Python）
+cd services/java &amp;&amp; ../../scripts/mvn-dev.sh clean package
+
+# Python 测试（19 项）
+cd services/python/nlp-service
+../venv/Scripts/python.exe tests/test_intent.py
+../venv/Scripts/python.exe tests/test_ocr.py
+
+# 契约校验
+python scripts/contract-check.py
+
+# wp-bff 回归（控制面改动时）
+cd services/node/wp-bff &amp;&amp; node --test
+
+# 端到端演示（需 Docker 基础设施）
+./scripts/start.sh all &amp;&amp; ./scripts/healthcheck.sh
+# 然后按 docs/demo/Phase2-DEMO.md 执行
+</code></pre>
+<hr />
+<h2 id="_6">归档维护要求<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<p>新增阶段报告时，请同步完成：</p>
+<ul>
+<li>[ ] 三份 <code>.md</code> 齐备（阶段性报告 / 执行日志 / 测试验收报告）</li>
+<li>[ ] 生成对应 <code>.html</code> 并一并提交</li>
+<li>[ ] 在本 README 的「文件清单」中登记新阶段条目</li>
+<li>[ ] 更新项目根 <code>PROGRESS.md</code> 的对应阶段章节与验证结果</li>
+<li>[ ] 更新 <code>docs/项目进度总览.md</code>（阶段状态表 + 功能矩阵 + 测试基线，<strong>标注口径时间</strong>）</li>
+<li>[ ] 未通过项 / 待补验证项<strong>必须显式登记</strong>，不得省略（诚实留痕优先于好看）</li>
+</ul>
+<hr />
+<p><em>本目录建立于 2026-09-12 · 2026-09-17 补入加固期条目与双环境 HTML 生成说明 · 维护：探索者一号（WorkBuddy 侧）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
