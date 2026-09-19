@@ -17,6 +17,11 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.brain.llm_gateway import LlmGateway, LLM_GATEWAY, TemplateEngine
+from app.brain.pipeline import RagPipeline
+from app.brain.planner import PLANNER
+from app.brain.retrieval import RETRIEVER
+from app.brain.semantic_cache import SEMANTIC_CACHE
 from app.chunking import chunk_text
 from app.embedding import EMBEDDING_SERVICE
 from app.intent import CASCADE, EVAL_CORPUS, CORE_SCENARIOS
@@ -25,9 +30,12 @@ from app.reranker import RERANKER_SERVICE, RerankCandidate
 
 app = FastAPI(
     title="agent-lifeform nlp-service",
-    version="0.3.0",
-    description="意图识别（规则+L0 双级级联） / 实体提取 / OCR / 嵌入 / 重排",
+    version="0.4.0",
+    description="意图识别（规则+L0 双级级联） / 实体提取 / OCR / 嵌入 / 重排 / Phase4 大脑层（规划·RAG·语义缓存）",
 )
+
+# Phase 4 大脑层：LLM 路由 + RAG 管线（默认引擎为模板降级后端，见 llm_gateway）
+BRAIN_PIPELINE = RagPipeline(gateway=LLM_GATEWAY, cache=SEMANTIC_CACHE)
 
 logger = logging.getLogger("nlp-service")
 
@@ -97,10 +105,80 @@ async def unified_unhandled_exception_handler(request: Request, exc: Exception):
 
 @app.get("/healthz")
 def healthz():
-    return {"status": "ok", "service": "nlp-service", "version": "0.3.0",
+    return {"status": "ok", "service": "nlp-service", "version": "0.4.0",
             "intent_engine": "cascade(rule+l0)", "ocr": OCR_SERVICE.status()["engine"],
             "embedding": EMBEDDING_SERVICE.status()["backend"],
-            "reranker": RERANKER_SERVICE.status()["backend"]}
+            "reranker": RERANKER_SERVICE.status()["backend"],
+            "planner": "rule(SimplePlanner)", "llm": BRAIN_PIPELINE.gateway.health()["engines"],
+            "semantic_cache": SEMANTIC_CACHE.backend}
+
+
+# ─────────── Phase 4 大脑层 ───────────
+class BrainAskRequest(BaseModel):
+    question: str
+    session_id: str = ""
+    tenant_id: str = "default"
+    intent: str = ""
+    intent_confidence: float = 1.0
+    context: list[dict] = Field(default_factory=list)   # 最近 K 轮上下文（由 session-manager 传入）
+    use_cache: bool = True
+
+
+class BrainPlanRequest(BaseModel):
+    question: str
+    intent: str = ""
+    intent_confidence: float = 1.0
+
+
+@app.post("/api/nlp/brain/ask")
+def brain_ask(req: BrainAskRequest):
+    """R4-06 端到端问答：规划 → 检索 → 生成 → 来源标注（含缺口检测与语义缓存）。"""
+    if not req.question.strip():
+        raise HTTPException(status_code=400, detail="question must not be blank")
+    # 未提供意图时用本服务意图级联补齐（与 Phase 2 同源）
+    intent, confidence = req.intent, req.intent_confidence
+    if not intent:
+        try:
+            recognized = CASCADE.recognize(req.question, req.session_id, req.tenant_id)
+            intent = recognized.intent
+            confidence = recognized.confidence
+        except Exception:  # noqa: BLE001 - 意图失败不阻断问答，降级为未知意图
+            intent, confidence = "", 0.0
+    result = BRAIN_PIPELINE.run(
+        question=req.question,
+        session_id=req.session_id,
+        tenant_id=req.tenant_id,
+        intent=intent,
+        intent_confidence=confidence,
+        context=req.context,
+        use_cache=req.use_cache,
+    )
+    return result.to_dict()
+
+
+@app.post("/api/nlp/brain/plan")
+def brain_plan(req: BrainPlanRequest):
+    """R4-05 任务规划（只规划不执行）：意图 → 任务模板 + 槽位。"""
+    if not req.question.strip():
+        raise HTTPException(status_code=400, detail="question must not be blank")
+    return PLANNER.plan(req.question, req.intent, req.intent_confidence).to_dict()
+
+
+@app.get("/api/nlp/brain/health")
+def brain_health():
+    """大脑层健康：LLM 路由 / 语义缓存 / 规划器（降级状态必须可见）。"""
+    return {
+        "llm": BRAIN_PIPELINE.gateway.health(),
+        "semantic_cache": SEMANTIC_CACHE.health(),
+        "planner": {"name": "SimplePlanner", "engine": "rule"},
+        "retrieval": {"base_url": RETRIEVER.base_url, "timeout": RETRIEVER.timeout},
+    }
+
+
+@app.get("/api/nlp/brain/cache/stats")
+def brain_cache_stats():
+    """R4-04 语义缓存命中统计（命中率 = hits / lookups）。"""
+    return SEMANTIC_CACHE.health()
 
 
 # ─────────── 意图识别 ───────────

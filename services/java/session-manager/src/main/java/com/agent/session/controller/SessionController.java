@@ -2,6 +2,8 @@ package com.agent.session.controller;
 
 import com.agent.session.common.BizException;
 import com.agent.session.common.ErrorCode;
+import com.agent.session.fsm.SessionFsm;
+import com.agent.session.fsm.SessionStore;
 import com.agent.session.kafka.KafkaEventPublisher;
 import com.agent.session.bus.BusProxy;
 import com.agent.session.orchestration.BodyClient;
@@ -25,16 +27,26 @@ public class SessionController {
     private final NlpClient nlpClient;
     private final BodyClient bodyClient;
     private final ObjectMapper objectMapper;
+    /** R4-02 会话持久化（Redis Hash + 多轮上下文）；R4-01 状态迁移由 SessionFsm 裁决 */
+    private final SessionStore sessionStore;
 
     public SessionController(StringRedisTemplate redisTemplate, BusProxy busProxy,
                              KafkaEventPublisher kafkaEventPublisher, NlpClient nlpClient,
                              BodyClient bodyClient, ObjectMapper objectMapper) {
+        this(redisTemplate, busProxy, kafkaEventPublisher, nlpClient, bodyClient, objectMapper,
+                new SessionStore(redisTemplate, objectMapper));
+    }
+
+    public SessionController(StringRedisTemplate redisTemplate, BusProxy busProxy,
+                             KafkaEventPublisher kafkaEventPublisher, NlpClient nlpClient,
+                             BodyClient bodyClient, ObjectMapper objectMapper, SessionStore sessionStore) {
         this.redisTemplate = redisTemplate;
         this.busProxy = busProxy;
         this.kafkaEventPublisher = kafkaEventPublisher;
         this.nlpClient = nlpClient;
         this.bodyClient = bodyClient;
         this.objectMapper = objectMapper;
+        this.sessionStore = sessionStore;
     }
 
     @PostMapping
@@ -43,7 +55,8 @@ public class SessionController {
         String sessionId = UUID.randomUUID().toString();
         String key = SESSION_PREFIX + sessionId;
         redisTemplate.opsForHash().put(key, "tenant_id", tenantId);
-        redisTemplate.opsForHash().put(key, "status", "ACTIVE");
+        redisTemplate.opsForHash().put(key, "status",
+                SessionFsm.transition(SessionFsm.State.NEW, SessionFsm.Event.CREATE).name());
         redisTemplate.opsForHash().put(key, "created_at", String.valueOf(now));
         redisTemplate.opsForHash().put(key, "updated_at", String.valueOf(now));
         redisTemplate.opsForHash().put(key, "last_activity_at", String.valueOf(now));
@@ -71,8 +84,11 @@ public class SessionController {
     public Map<String, String> close(@PathVariable String sessionId,
                                      @RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId) {
         requireOwnedSession(sessionId, tenantId);
-        redisTemplate.delete(SESSION_PREFIX + sessionId);
-        redisTemplate.delete(SESSION_PREFIX + sessionId + MESSAGE_SUFFIX);
+        try {
+            sessionStore.close(sessionId);
+        } catch (SessionFsm.IllegalTransitionException e) {
+            throw new BizException(ErrorCode.AGENT_CONFLICT, "session cannot be closed: " + sessionId);
+        }
         return Map.of("session_id", sessionId, "status", "CLOSED");
     }
 
@@ -84,6 +100,11 @@ public class SessionController {
             throw new BizException(ErrorCode.AGENT_BAD_REQUEST, "question must not be blank");
         }
         requireOwnedSession(sessionId, tenantId);
+        try {
+            sessionStore.transition(sessionId, SessionFsm.Event.MESSAGE);
+        } catch (SessionFsm.IllegalTransitionException e) {
+            throw new BizException(ErrorCode.AGENT_CONFLICT, "session is closed: " + sessionId);
+        }
         long started = System.currentTimeMillis();
         Map<String, Object> intentResult = nlpClient.recognize(request.question(), sessionId, tenantId);
         List<Map<String, Object>> chunks = bodyClient.retrieve(request.question(), tenantId);
@@ -135,6 +156,24 @@ public class SessionController {
         String source = String.valueOf(chunks.get(0).getOrDefault("title", "knowledge"));
         String preview = content.length() > 240 ? content.substring(0, 240) + "..." : content;
         return "根据知识库《" + source + "》检索结果：" + preview;
+    }
+
+    /**
+     * R4-02 多轮上下文：取最近 K 轮消息（默认 10），供大脑层 Prompt 组装 / 前端回放。
+     */
+    @GetMapping("/{sessionId}/context")
+    public Map<String, Object> context(@PathVariable String sessionId,
+                                       @RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId,
+                                       @RequestParam(value = "turns", defaultValue = "10") int turns) {
+        Map<Object, Object> session = requireOwnedSession(sessionId, tenantId);
+        List<Map<String, Object>> messages = sessionStore.context(sessionId, turns);
+        Map<String, Object> result = new LinkedHashMap<>();
+        result.put("session_id", sessionId);
+        result.put("status", String.valueOf(session.getOrDefault("status", "UNKNOWN")));
+        result.put("turns", turns <= 0 ? SessionStore.DEFAULT_CONTEXT_TURNS : turns);
+        result.put("returned", messages.size());
+        result.put("messages", messages);
+        return result;
     }
 
     public record AskRequest(String question) {}

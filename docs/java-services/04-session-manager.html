@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:23 · 源文件 04-session-manager.md</span>
+  <span class="meta">生成于 2026-09-19 08:01 · 源文件 04-session-manager.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -260,8 +260,8 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
 <tr>
 <td><code>controller/SessionController.java</code></td>
 <td>控制器</td>
-<td style="text-align: right;">143</td>
-<td>会话 CRUD + <code>ask</code> 问答编排</td>
+<td style="text-align: right;">182</td>
+<td>会话 CRUD + <code>ask</code> 问答编排 + <code>context</code> 上下文端点</td>
 </tr>
 <tr>
 <td><code>bus/BusProxy.java</code></td>
@@ -352,6 +352,30 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
 <td>测试</td>
 <td style="text-align: right;">56</td>
 <td>上游降级与不降级两种语义</td>
+</tr>
+<tr>
+<td><code>fsm/SessionFsm.java</code></td>
+<td>状态机</td>
+<td style="text-align: right;">94</td>
+<td><strong>R4-01</strong> 会话状态机：<code>NEW→ACTIVE⇄IDLE→TIMEOUT/CLOSED</code> + 非法迁移</td>
+</tr>
+<tr>
+<td><code>fsm/SessionStore.java</code></td>
+<td>存储</td>
+<td style="text-align: right;">178</td>
+<td><strong>R4-02</strong> Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014）</td>
+</tr>
+<tr>
+<td><code>test/…/SessionFsmTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">82</td>
+<td>全量迁移、终态拒绝、超时可恢复</td>
+</tr>
+<tr>
+<td><code>test/…/SessionStoreTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">192</td>
+<td>落库字段 / TTL / 上下文窗口 / 旧数据兼容</td>
 </tr>
 </tbody>
 </table>

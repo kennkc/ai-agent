@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 23:19 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-19 08:01 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -151,6 +151,7 @@
 <li><a href="#411-2026-09-18">4.11 开发代理目标硬编码（2026-09-18 配置对齐发现并已修复 ✅）</a></li>
 <li><a href="#412-2026-09-18-docs">4.12 模块功能说明文档的「基线数字」无人守（2026-09-18 docs 核对发现并已修复 ✅）</a></li>
 <li><a href="#413-bff-4042026-09-18">4.13 全平台错误信封不一致 + BFF 方法不支持返回 404（2026-09-18 质量审核发现并已闭合 ✅）</a></li>
+<li><a href="#414-phase-4-2026-09-19">4.14 Phase 4 选型口径差异（2026-09-19 开工如实留痕）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -274,6 +275,38 @@
 <td><strong>不支持 PDF/DOCX 解析</strong>（显式拒绝，不静默当文本）</td>
 <td>接入文档解析通道（PDFBox / OCR）</td>
 <td>需要上传 PDF 时</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-014</strong></td>
+<td>session-manager（会话持久化）</td>
+<td>消息列表<strong>全量保留 + 读取时截断</strong>，无会话压缩</td>
+<td>会话压缩 + 窗口上限落库</td>
+<td>单会话 &gt; 100 轮</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-015</strong></td>
+<td>nlp-service（LLM 生成）</td>
+<td>未接入真实 LLM 引擎，走<strong>确定性模板后端</strong>（<code>generator=template</code>）</td>
+<td>OpenAI 兼容 / 本地推理引擎</td>
+<td>接入模型权重或 API Key</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-016</strong></td>
+<td>nlp-service（Token 计量）</td>
+<td>Token 用<strong>字符估算</strong>（中文 1.5 char/token），非分词器计数</td>
+<td>接入 tokenizer 精确计数</td>
+<td>接入真实模型后</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-017</strong></td>
+<td>nlp-service（任务规划）</td>
+<td>SimplePlanner 为<strong>规则模板映射</strong>（<code>planner=rule</code>），无模型规划</td>
+<td>LLM 规划 / 多步规划器</td>
+<td>P5 多模型策略阶段</td>
 <td>🟡</td>
 </tr>
 </tbody>
@@ -840,6 +873,48 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 销项标记未落盘（同批编辑里 14 落了、11 丢了），导致「§4.6 说已闭合、待办 11 说待确认」自相矛盾。
 本轮已补销项。这正是 <code>docs/异常流程归纳.md</code> D-22 记录的现象，本轮<strong>再次复现</strong>，说明该坑是高频的。</p>
 </blockquote>
+<h3 id="414-phase-4-2026-09-19">4.14 Phase 4 选型口径差异（2026-09-19 开工<strong>如实留痕</strong>）<a class="headerlink" href="#414-phase-4-2026-09-19" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>设计文档口径</th>
+<th>实现口径</th>
+<th>性质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>编排框架（R4-06）</td>
+<td>LangGraph <strong>0.2+</strong></td>
+<td>本机安装 <strong>1.2.11</strong>（<code>StateGraph</code> API 一致）</td>
+<td>版本差异，<strong>非选型变更</strong>；在 <code>pipeline.py</code> 模块注释留痕</td>
+</tr>
+<tr>
+<td>LLM 接入（R4-03）</td>
+<td>LiteLLM / 自研 Gateway</td>
+<td><strong>自研 <code>LlmGateway</code></strong>（L1/L2/L3 路由 + 超时重试 + 统计），引擎默认模板降级</td>
+<td>见 DEBT-015</td>
+</tr>
+<tr>
+<td>语义缓存（R4-04）</td>
+<td>Redis 向量相似 <strong>0.95</strong></td>
+<td>Redis（不可用时进程内兜底，标 <code>degraded</code>）+ <strong>复用 Phase 3 嵌入</strong></td>
+<td>相似度质量受 DEBT-010 影响：哈希嵌入非语义相似，命中判定偏<strong>字面相似</strong>，真实语义命中率会低于理论值</td>
+</tr>
+<tr>
+<td>会话持久化（R4-02）</td>
+<td>Redis Hash + TTL</td>
+<td>同设计实现；消息列表全量保留</td>
+<td>见 DEBT-014</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>判定</strong>：以上均<strong>不是 bug</strong>，但会影响"读设计文档的人"对技术栈的判断，故按规范留痕。
+需求·设计文档<strong>原文未改动</strong> —— 设计口径变更须先确认（见 §4.6 二选一处置）。</p>
+</blockquote>
+<hr />
 <h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>创建</strong>：任何简化实现落地时同步创建 —— 代码 <code>// DEBT-00X</code> 注释 <strong>+ 登记本文件</strong></li>
@@ -1042,11 +1117,30 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td><code>services/java/body-service/.../chunk/DocumentParser.java</code>（类注释）</td>
 <td>DEBT-013</td>
 </tr>
+<tr>
+<td><code>services/java/session-manager/.../fsm/SessionStore.java</code>（类注释）</td>
+<td>DEBT-014</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/app/brain/llm_gateway.py:31</code></td>
+<td>DEBT-015</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/app/brain/llm_gateway.py:33</code></td>
+<td>DEBT-016</td>
+</tr>
+<tr>
+<td><code>services/python/nlp-service/app/brain/planner.py</code>（模块注释）</td>
+<td>DEBT-017</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
 <p><strong>2026-09-18 审核补记</strong>：DEBT-010/011/012 此前只存在于代码注释、未登记本表（已补齐）；
 DEBT-013 为本轮新开。<strong>登记率现已 100%</strong>：代码中出现的每个 <code>DEBT-0xx</code> 都能在本表查到。</p>
+<p><strong>2026-09-19 Phase 4 开工补记</strong>：新增 DEBT-014~017（会话压缩 / LLM 引擎 / Token 计量 /
+规则规划器）。四者均为<strong>显式降级</strong>（<code>generator=template</code>、<code>planner=rule</code> 等标识可见），
+不属伪实现；触发点已写明，登记率保持 100%。</p>
 </blockquote>
 <hr />
 <p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em>

@@ -72,7 +72,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | 文件 | 类型 | 行数 | 职责 |
 |---|---|---:|---|
 | `SessionManagerApplication.java` | 启动类 | 19 | Spring Boot 入口 + 服务发现 |
-| `controller/SessionController.java` | 控制器 | 143 | 会话 CRUD + `ask` 问答编排 |
+| `controller/SessionController.java` | 控制器 | 182 | 会话 CRUD + `ask` 问答编排 + `context` 上下文端点 |
 | `bus/BusProxy.java` | 组件 | 34 | 总线调用的**容错包装**（异常吞掉返回 null） |
 | `nats/NatsClient.java` | 组件 | 75 | NATS 连接、同步请求-应答、异步发布 |
 | `kafka/KafkaEventPublisher.java` | 组件 | 55 | Kafka 事件发布（持久化事件通道） |
@@ -88,6 +88,10 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | `test/…/SessionControllerTest.java` | 测试 | 76 | 租户校验、跨租户拒绝、ask 链路 |
 | `test/…/OutboundHttpTest.java` | 测试 | 101 | **缺陷 D-1 回归守卫** |
 | `test/…/UpstreamDegradeTest.java` | 测试 | 56 | 上游降级与不降级两种语义 |
+| `fsm/SessionFsm.java` | 状态机 | 94 | **R4-01** 会话状态机：`NEW→ACTIVE⇄IDLE→TIMEOUT/CLOSED` + 非法迁移 | 
+| `fsm/SessionStore.java` | 存储 | 178 | **R4-02** Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014） |
+| `test/…/SessionFsmTest.java` | 测试 | 82 | 全量迁移、终态拒绝、超时可恢复 |
+| `test/…/SessionStoreTest.java` | 测试 | 192 | 落库字段 / TTL / 上下文窗口 / 旧数据兼容 |
 
 ## 4. 逐文件说明
 
