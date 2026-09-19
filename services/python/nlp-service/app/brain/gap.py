@@ -9,13 +9,22 @@
 """
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass, field
 from typing import Any
 
-# 覆盖充分阈值（需求文档 §6）
-COVERAGE_THRESHOLD = 0.85
-# 低于该分视为"无有效片段"
-MIN_USABLE_SCORE = 0.35
+# ── 阈值口径（务必读）────────────────────────────────────────────────
+# 需求文档 §6 的口径是「综合得分 ≥ 0.85 视为覆盖充分」，该值假设
+#   · 嵌入为 bge-m3（语义相似，DEBT-010 未闭合，现为字符 n-gram 哈希）
+#   · 重排为 bge-reranker-v2-m3（交叉编码，DEBT-011 未闭合，现为词法覆盖率）
+# 当前后端下实测打分分布落在 **0.15~0.35**（2026-09-19 实测 5 条命中：0.201~0.275），
+# 若直接套用 0.85，几乎每个问题都会被判「信息不足」——**不是知识库没数据，而是尺子不对**。
+#
+# 处置：阈值改由环境变量控制，默认值按**当前后端实测分布**校准；
+# DEBT-010 / DEBT-011 闭合（装真实模型）后，用环境变量调回设计口径即可，无需改代码。
+# 校准本身已登记在 `docs/技术债台账.md` §4.14。
+COVERAGE_THRESHOLD = float(os.getenv("GAP_COVERAGE_THRESHOLD", "0.35"))
+MIN_USABLE_SCORE = float(os.getenv("GAP_MIN_USABLE_SCORE", "0.15"))
 
 
 @dataclass
@@ -127,7 +136,14 @@ class SourceAnnotator:
 
 
 def _score_of(chunk: dict[str, Any]) -> float:
-    for key in ("rerank_score", "score"):
+    """取片段的**可用性打分**。
+
+    取值顺序刻意是 `score`（向量召回相似）→ `rerank_score`（重排分）→ 长度启发式：
+    重排分的**量纲随后端而变** —— 词法重排（DEBT-011 未闭合）实测压缩在 0.10~0.12，
+    交叉编码器又可能是 0~1 的另一种分布。拿它当绝对阈值判「可用」会让
+    **换了重排后端就整体失效**，因此统一以向量召回分为准，重排分只用于排序/展示。
+    """
+    for key in ("score", "rerank_score"):
         value = chunk.get(key)
         if isinstance(value, (int, float)):
             return max(0.0, min(1.0, float(value)))

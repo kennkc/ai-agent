@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 08:01 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-19 08:16 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -907,6 +907,18 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>Redis Hash + TTL</td>
 <td>同设计实现；消息列表全量保留</td>
 <td>见 DEBT-014</td>
+</tr>
+<tr>
+<td>缺口检测阈值（R4-07）</td>
+<td>覆盖度 <strong>≥0.85</strong> 视为充分（假设语义嵌入 + 交叉编码重排）</td>
+<td>默认 <strong>0.35</strong>（<code>GAP_COVERAGE_THRESHOLD</code> 可调）+ 可用分下限 <strong>0.15</strong>（<code>GAP_MIN_USABLE_SCORE</code>）</td>
+<td>实测哈希嵌入 + 词法重排下得分仅 0.10~0.28，套 0.85 会让<strong>每个问题都判信息不足</strong>；DEBT-010/011 闭合后调回设计值</td>
+</tr>
+<tr>
+<td>可用性打分口径（R4-07）</td>
+<td>未规定</td>
+<td>统一以 <strong><code>score</code></strong>（向量召回）判可用，<code>rerank_score</code> 仅用于排序展示</td>
+<td>重排分量纲随后端而变（词法重排压缩在 0.10~0.12），拿它当绝对阈值会<strong>换后端即失效</strong></td>
 </tr>
 </tbody>
 </table>

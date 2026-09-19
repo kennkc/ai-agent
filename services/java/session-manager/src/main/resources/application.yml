@@ -9,6 +9,9 @@ app:
   body:
     base-url: ${BODY_BASE_URL:http://127.0.0.1:8083}
     degrade-on-failure: ${BODY_DEGRADE_ON_FAILURE:true}
+  # Phase 4 大脑层（R4-06）：规划→检索→生成→来源标注
+  brain:
+    degrade-on-failure: ${BRAIN_DEGRADE_ON_FAILURE:true}
 
 grpc:
   port: ${GRPC_PORT:9092}

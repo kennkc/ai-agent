@@ -72,7 +72,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | 文件 | 类型 | 行数 | 职责 |
 |---|---|---:|---|
 | `SessionManagerApplication.java` | 启动类 | 19 | Spring Boot 入口 + 服务发现 |
-| `controller/SessionController.java` | 控制器 | 182 | 会话 CRUD + `ask` 问答编排 + `context` 上下文端点 |
+| `controller/SessionController.java` | 控制器 | 236 | 会话 CRUD + `ask`（走大脑层，降级本地直出）+ `context` 上下文端点 |
 | `bus/BusProxy.java` | 组件 | 34 | 总线调用的**容错包装**（异常吞掉返回 null） |
 | `nats/NatsClient.java` | 组件 | 75 | NATS 连接、同步请求-应答、异步发布 |
 | `kafka/KafkaEventPublisher.java` | 组件 | 55 | Kafka 事件发布（持久化事件通道） |
@@ -80,6 +80,8 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | `orchestration/NlpClient.java` | 客户端 | 56 | 调 `nlp-service` 做意图识别（含降级） |
 | `orchestration/BodyClient.java` | 客户端 | 44 | 调 `body-service` 做知识检索（含降级） |
 | `orchestration/OutboundHttp.java` | 工具类 | 46 | **跨服务 HTTP 统一出口**（HTTP/1.1 + 超时） |
+| `orchestration/BrainClient.java` | 客户端 | 143 | **R4-06** 大脑层 `/api/nlp/brain/ask` 调用（含降级，不伪造回答） |
+| `test/…/BrainClientWiringTest.java` | 测试 | 167 | 大脑层回传字段 / 上下文透传 / 降级标注 |
 | `common/ErrorCode.java` | 枚举 | 30 | 统一错误码定义 |
 | `common/BizException.java` | 异常 | 41 | 携带错误码 + 明细的业务异常 |
 | `common/GlobalExceptionHandler.java` | 切面 | 54 | 错误码 → HTTP 状态码映射与统一响应体 |

@@ -7,6 +7,7 @@ import com.agent.session.fsm.SessionStore;
 import com.agent.session.kafka.KafkaEventPublisher;
 import com.agent.session.bus.BusProxy;
 import com.agent.session.orchestration.BodyClient;
+import com.agent.session.orchestration.BrainClient;
 import com.agent.session.orchestration.NlpClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -14,6 +15,7 @@ import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
 import java.util.*;
+
 
 @RestController
 @RequestMapping("/api/session")
@@ -26,6 +28,8 @@ public class SessionController {
     private final KafkaEventPublisher kafkaEventPublisher;
     private final NlpClient nlpClient;
     private final BodyClient bodyClient;
+    /** R4-06 大脑层客户端（规划→检索→生成→来源标注），不可用时降级本地直出 */
+    private final BrainClient brainClient;
     private final ObjectMapper objectMapper;
     /** R4-02 会话持久化（Redis Hash + 多轮上下文）；R4-01 状态迁移由 SessionFsm 裁决 */
     private final SessionStore sessionStore;
@@ -37,9 +41,18 @@ public class SessionController {
                 new SessionStore(redisTemplate, objectMapper));
     }
 
+    /** 兼容构造（无大脑层客户端）：大脑层视为不可用，走本地检索直出。 */
     public SessionController(StringRedisTemplate redisTemplate, BusProxy busProxy,
                              KafkaEventPublisher kafkaEventPublisher, NlpClient nlpClient,
                              BodyClient bodyClient, ObjectMapper objectMapper, SessionStore sessionStore) {
+        this(redisTemplate, busProxy, kafkaEventPublisher, nlpClient, bodyClient, objectMapper,
+                sessionStore, null);
+    }
+
+    public SessionController(StringRedisTemplate redisTemplate, BusProxy busProxy,
+                             KafkaEventPublisher kafkaEventPublisher, NlpClient nlpClient,
+                             BodyClient bodyClient, ObjectMapper objectMapper, SessionStore sessionStore,
+                             BrainClient brainClient) {
         this.redisTemplate = redisTemplate;
         this.busProxy = busProxy;
         this.kafkaEventPublisher = kafkaEventPublisher;
@@ -47,6 +60,7 @@ public class SessionController {
         this.bodyClient = bodyClient;
         this.objectMapper = objectMapper;
         this.sessionStore = sessionStore;
+        this.brainClient = brainClient;
     }
 
     @PostMapping
@@ -107,15 +121,55 @@ public class SessionController {
         }
         long started = System.currentTimeMillis();
         Map<String, Object> intentResult = nlpClient.recognize(request.question(), sessionId, tenantId);
-        List<Map<String, Object>> chunks = bodyClient.retrieve(request.question(), tenantId);
-        String answer = buildAnswer(chunks);
+        String intent = String.valueOf(intentResult.getOrDefault("intent", "闲聊"));
+        double confidence = intentResult.get("confidence") instanceof Number n ? n.doubleValue() : 0.5;
+
+        // R4-06：优先走大脑层（规划→检索→生成→来源标注），不可用时降级本地检索直出
+        BrainClient.BrainAnswer brain = brainClient == null ? null
+                : brainClient.ask(request.question(), sessionId, tenantId, intent, confidence,
+                        sessionStore.context(sessionId));
+        List<String> degradedReasons = new ArrayList<>();
+        String answer;
+        List<Map<String, Object>> citations;
+        Map<String, Object> gap = Map.of();
+        List<Map<String, Object>> chain = List.of();
+        String generator = "none";
+        String decisionId = "";
+        if (brain != null && brain.available()) {
+            answer = brain.answer();
+            citations = brain.sources().isEmpty() ? bodyClient.retrieve(request.question(), tenantId) : brain.sources();
+            gap = brain.gap();
+            chain = brain.chain();
+            generator = brain.generator();
+            decisionId = brain.decisionId();
+            degradedReasons.addAll(brain.degradedReasons());
+        } else {
+            if (brain != null) {
+                degradedReasons.addAll(brain.degradedReasons());
+            } else {
+                degradedReasons.add("brain_client_not_configured");
+            }
+            List<Map<String, Object>> chunks = bodyClient.retrieve(request.question(), tenantId);
+            answer = buildAnswer(chunks);
+            citations = chunks;
+            generator = "local-retrieval";
+        }
         long latency = System.currentTimeMillis() - started;
-        appendMessage(sessionId, "user", request.question(), String.valueOf(intentResult.getOrDefault("intent", "闲聊")), "user", 0);
-        appendMessage(sessionId, "assistant", answer, String.valueOf(intentResult.getOrDefault("intent", "闲聊")), "llm", latency);
+        appendMessage(sessionId, "user", request.question(), intent, "user", 0);
+        appendMessage(sessionId, "assistant", answer, intent, generator, latency);
         touchSession(sessionId);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("session_id", sessionId); result.put("intent", intentResult.getOrDefault("intent", "闲聊"));
-        result.put("answer", answer); result.put("citations", chunks);
+        result.put("session_id", sessionId); result.put("intent", intent);
+        result.put("answer", answer); result.put("citations", citations);
+        // 降级可见：来源/缺口/决策链/生成器标识一律回传，前端据此决定是否打「降级」标记
+        result.put("sources", citations);
+        result.put("gap", gap);
+        result.put("chain", chain);
+        result.put("generator", generator);
+        result.put("decision_id", decisionId);
+        result.put("degraded", !degradedReasons.isEmpty());
+        result.put("degraded_reasons", degradedReasons);
+        result.put("latency_ms", latency);
         return result;
     }
 

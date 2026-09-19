@@ -175,21 +175,54 @@ def test_planner_guesses_template_when_intent_unknown():
 # ───────────────────────── R4-07 缺口检测 ─────────────────────────
 
 def test_gap_sufficient_when_scores_high():
-    verdict = GapDetector().detect([{"rerank_score": 0.95}, {"rerank_score": 0.9}])
+    # 设计文档 §6 口径：语义嵌入 + 交叉编码重排下 0.85
+    detector = GapDetector(threshold=0.85, min_usable=0.35)
+    verdict = detector.detect([{"rerank_score": 0.95}, {"rerank_score": 0.9}])
     assert verdict.sufficient and not verdict.has_gap
     assert verdict.coverage >= 0.85
 
 
 def test_gap_partial_insufficient_but_usable():
-    verdict = GapDetector().detect([{"score": 0.6}])
+    detector = GapDetector(threshold=0.85, min_usable=0.35)
+    verdict = detector.detect([{"score": 0.6}])
     assert not verdict.sufficient and not verdict.has_gap
     assert "部分信息可能不完整" in verdict.notice
+
+
+def test_gap_uses_vector_score_not_compressed_rerank():
+    """词法重排的 rerank_score 被压缩在 0.1 附近，若拿它判「可用」会全判缺口。
+
+    实测（2026-09-19）：score 0.20~0.28 / rerank_score 0.10~0.12。
+    判定统一以 score 为准，rerank_score 只用于排序展示。
+    """
+    detector = GapDetector(threshold=0.35, min_usable=0.15)
+    verdict = detector.detect([{"score": 0.27, "rerank_score": 0.12},
+                               {"score": 0.26, "rerank_score": 0.12}])
+    assert verdict.usable_chunks == 2
+    assert verdict.has_gap is False
+    assert verdict.coverage >= 0.35
 
 
 def test_gap_critical_when_no_usable_chunk():
     verdict = GapDetector().detect([])
     assert verdict.has_gap and verdict.usable_chunks == 0
     assert "信息不足" in verdict.notice
+
+
+def test_gap_defaults_are_calibrated_for_current_backends():
+    """默认阈值按当前后端实测分布校准（哈希嵌入 + 词法重排，得分约 0.15~0.35）。
+
+    需求文档口径 0.85 假设 bge-m3 + bge-reranker（DEBT-010/011 未闭合），
+    直接套用会让所有问题都判「信息不足」——那不是知识库没数据，而是尺子不对。
+    """
+    from app.brain import gap as gap_module
+
+    detector = GapDetector()          # 默认（校准值）
+    verdict = detector.detect([{"score": 0.27}, {"score": 0.26}, {"score": 0.25}])
+    assert verdict.has_gap is False          # 有可用片段，不应判关键缺口
+    assert verdict.usable_chunks == 3
+    assert detector.threshold == gap_module.COVERAGE_THRESHOLD
+    assert detector.threshold <= 0.85       # 校准值不高于设计口径
 
 
 # ───────────────────────── R4-08 来源标注 ─────────────────────────
