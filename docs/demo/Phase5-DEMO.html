@@ -1,0 +1,467 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 5 演示脚本：四肢期——执行与隔离 🦾</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 Phase5-DEMO.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#docker">一、自动化验证（无需 Docker，先跑这一层）</a><ul>
+<li><a href="#11-java">1.1 Java 全量构建与单测</a></li>
+<li><a href="#12-python-function-callingr5-06">1.2 Python Function Calling（R5-06）</a></li>
+<li><a href="#13-wp-bff">1.3 wp-bff 回归</a></li>
+<li><a href="#14">1.4 契约与文档覆盖</a></li>
+<li><a href="#15">1.5 前端</a></li>
+</ul>
+</li>
+<li><a href="#docker_1">二、端到端演示（需 Docker 基础设施）</a><ul>
+<li><a href="#20">2.0 启动</a></li>
+<li><a href="#21-r5-01">2.1 R5-01 工具注册表</a></li>
+<li><a href="#22-r5-03">2.2 R5-03 沙箱状态（先确认是否真隔离）</a></li>
+<li><a href="#23-r5-04-r5-05">2.3 R5-04 / R5-05 工具执行</a></li>
+<li><a href="#24-r5-03-r5-07">2.4 R5-03 / R5-07 逃逸样本（隔离的决定性证据）</a></li>
+<li><a href="#25-r5-08">2.5 R5-08 审计与指标</a></li>
+<li><a href="#26-in-06">2.6 IN-06 工具契约治理（影响面 + 门禁）</a></li>
+<li><a href="#27-r-c05">2.7 终端线（R-C05 执行视图）</a></li>
+</ul>
+</li>
+<li><a href="#_1">三、口径说明（诚信附注）</a></li>
+<li><a href="#_2">四、演示结论</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-5">Phase 5 演示脚本：四肢期——执行与隔离 🦾<a class="headerlink" href="#phase-5" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>演示目标</strong>：证明生命体已"长出四肢"——大脑的决策可以落到<strong>真实动作</strong>上（执行代码、发起 HTTP、
+精确计算），且动作受<strong>白名单 → 参数 Schema → 敏感规则</strong>三道闸约束，在<strong>真隔离沙箱</strong>里运行，
+结果<strong>全量落审计</strong>（PG 真相源 + Kafka 旁路）；隔离失效、审计降级、注册表降级一律<strong>显式可见</strong>。
+<strong>前置条件</strong>：Docker Desktop（不要升级，本机 Build 19041）、JDK 21、Maven 3.9+、Python 3.13 + venv、Node 22
+<strong>对应需求</strong>：R5-01 ~ R5-08（<code>Phase5-四肢期/需求设计文档.md</code>）+ 终端线 R-C05(预) + IN-06 工具契约治理
+<strong>版本</strong>：2026-09-19 收口版 —— 本版<strong>按复审后的真实代码逐条核对</strong>接口与返回值；
+沙箱一节给出<strong>内核级隔离证据</strong>（不止"守卫拦截"）。</p>
+</blockquote>
+<hr />
+<h2 id="docker">一、自动化验证（无需 Docker，先跑这一层）<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h2>
+<h3 id="11-java">1.1 Java 全量构建与单测<a class="headerlink" href="#11-java" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/java
+../../scripts/mvn-dev.sh test
+</code></pre>
+<p>预期（2026-09-19 实测）：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th style="text-align: right;">测试数</th>
+<th style="text-align: right;">失败</th>
+<th style="text-align: right;">错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>proto-contracts</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>session-manager</td>
+<td style="text-align: right;">43</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>sense-service</td>
+<td style="text-align: right;">53</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><strong>tool-executor</strong></td>
+<td style="text-align: right;"><strong>82</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>244</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<p>本阶段新增 <code>tool-executor</code> 82 项：<code>ToolGuardTest</code>(16) · <code>ToolRegistryTest</code>(13) · <code>ToolExecutorTest</code>(10) ·
+<code>GlobalExceptionHandlerTest</code>(9) · <code>HttpToolTest</code>(8) · <code>ToolAuditLogTest</code>(7) · <code>CalculatorToolTest</code>(6) ·
+<code>CodeToolTest</code>(6) · <code>SandboxExecutorTest</code>(5) · <code>ToolSchemaBaselineTest</code>(2)。</p>
+<h3 id="12-python-function-callingr5-06">1.2 Python Function Calling（R5-06）<a class="headerlink" href="#12-python-function-callingr5-06" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/python/nlp-service
+../venv/Scripts/python.exe -m pytest -q      # Windows
+</code></pre>
+<p>预期（2026-09-19 实测）：</p>
+<pre><code>139 passed
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>测试文件</th>
+<th>覆盖</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_function_calling.py</code></td>
+<td>工具 schema → function-calling 描述、组合任务（计算+查询）、<code>decider="rule"</code> 诚实标注</td>
+</tr>
+<tr>
+<td>其余</td>
+<td>Phase 2/3/4 存量（意图 / OCR / 分块 / 嵌入 / 重排 / HTTP 错误语义 / 大脑层 / 记忆图谱 / 评测集）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="13-wp-bff">1.3 wp-bff 回归<a class="headerlink" href="#13-wp-bff" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/node/wp-bff
+node --test
+</code></pre>
+<p>预期：</p>
+<pre><code># tests 73
+# pass 73
+# fail 0
+</code></pre>
+<p>本阶段新增工具域用例：<code>/api/wp/tools*</code> 只读端点（聚合 / 注册表 / 审计 / 指标 / 沙箱）、
+<code>POST /api/wp/tools/execute</code> 写路径鉴权反向用例。</p>
+<h3 id="14">1.4 契约与文档覆盖<a class="headerlink" href="#14" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd /e/AI/ai-agent
+python scripts/contract-check.py --work-platform
+# → 扫描端点 60 | implemented 30 路径（31 方法） | planned 30 | 工具契约基线 3 = ToolBootstrap 注册 3 | 0 FAIL
+python scripts/java-doc-coverage.py
+# → 157/157 业务源文件已登记（tool-executor 42/42）
+</code></pre>
+<h3 id="15">1.5 前端<a class="headerlink" href="#15" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd web/work-platform
+npx vue-tsc --noEmit &amp;&amp; npx vite build
+</code></pre>
+<p>预期：类型检查通过，<code>ExecutionView</code> 产出独立 chunk。</p>
+<hr />
+<h2 id="docker_1">二、端到端演示（需 Docker 基础设施）<a class="headerlink" href="#docker_1" title="Permanent link">&para;</a></h2>
+<h3 id="20">2.0 启动<a class="headerlink" href="#20" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd /e/AI/ai-agent
+docker compose up -d postgres kafka          # 审计真相源 + 事件旁路
+docker ps --format '{{.Names}} {{.Status}}'
+</code></pre>
+<p>构建沙箱镜像（<strong>前提</strong>，否则 <code>tool-executor</code> 启动即降级为受限子进程）：</p>
+<pre><code class="language-bash">docker build -t agent-sandbox:latest infra/docker/sandbox/
+docker images agent-sandbox                  # 期望约 124 MB
+</code></pre>
+<p>启动 tool-executor——<strong>务必显式指定端口</strong>（本机环境变量会污染 <code>server.port</code>）：</p>
+<pre><code class="language-bash">cd services/java
+../../scripts/mvn-dev.sh -pl tool-executor -am install -DskipTests
+&quot;E:/software/java/jdk-21/bin/java.exe&quot; -jar tool-executor/target/tool-executor-0.1.0-SNAPSHOT.jar \
+  --spring.cloud.nacos.discovery.enabled=false --spring.cloud.nacos.config.enabled=false --server.port=8084
+</code></pre>
+<p>启动日志<strong>必须</strong>出现（否则说明沙箱降级了）：</p>
+<pre><code>Docker 沙箱探测：available=true image=agent-sandbox:latest（不可用时将降级为受限子进程）
+Tomcat started on port 8084 (http)
+</code></pre>
+<p>启动 BFF 与前端：</p>
+<pre><code class="language-bash">cd services/node/wp-bff &amp;&amp; node server.js          # 8090
+cd web/work-platform &amp;&amp; npm run dev                # 3001
+</code></pre>
+<hr />
+<h3 id="21-r5-01">2.1 R5-01 工具注册表<a class="headerlink" href="#21-r5-01" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">curl -s --noproxy '*' http://127.0.0.1:8084/api/tool/registry
+</code></pre>
+<p>预期关键字段：</p>
+<pre><code class="language-json">{
+  &quot;summary&quot;: { &quot;tool_count&quot;: 3, &quot;change_count&quot;: 3 },
+  &quot;change_log&quot;: [
+    { &quot;action&quot;: &quot;REGISTER&quot;, &quot;tool_name&quot;: &quot;calculator&quot;, &quot;impact&quot;: [] },
+    { &quot;action&quot;: &quot;REGISTER&quot;, &quot;tool_name&quot;: &quot;code&quot;, &quot;impact&quot;: [] },
+    { &quot;action&quot;: &quot;REGISTER&quot;, &quot;tool_name&quot;: &quot;http&quot;, &quot;impact&quot;: [] }
+  ]
+}
+</code></pre>
+<h3 id="22-r5-03">2.2 R5-03 沙箱状态（<strong>先确认是否真隔离</strong>）<a class="headerlink" href="#22-r5-03" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">curl -s --noproxy '*' http://127.0.0.1:8084/api/tool/sandbox
+</code></pre>
+<p>预期（镜像就绪）：</p>
+<pre><code class="language-json">{
+  &quot;enabled&quot;: true,
+  &quot;active_backend&quot;: &quot;docker&quot;,
+  &quot;isolated&quot;: true,
+  &quot;degraded&quot;: false,
+  &quot;docker_available&quot;: true,
+  &quot;process_fallback_available&quot;: true,
+  &quot;timeout_ms&quot;: 10000,
+  &quot;memory_mb&quot;: 256,
+  &quot;note&quot;: &quot;Docker 真隔离：网络禁用 / 只读 rootfs / 去能力 / 资源限&quot;
+}
+</code></pre>
+<blockquote>
+<p><strong>降级口径</strong>：若 <code>active_backend=process-restricted</code> + <code>degraded=true</code>，说明 Docker 不可用，
+当前<strong>不是</strong>真隔离边界——必须据此调整对 R5-03 的结论，<strong>不得</strong>当作"沙箱验收通过"。</p>
+</blockquote>
+<h3 id="23-r5-04-r5-05">2.3 R5-04 / R5-05 工具执行<a class="headerlink" href="#23-r5-04-r5-05" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 计算（无 eval 的手写解析器）
+curl -s --noproxy '*' -X POST http://127.0.0.1:8084/api/tool/execute \
+  -H 'Content-Type: application/json' -H 'X-Tenant-Id: demo' \
+  -d '{&quot;tool_name&quot;:&quot;calculator&quot;,&quot;arguments&quot;:{&quot;expr&quot;:&quot;sqrt(2)+pow(2,10)&quot;},&quot;call_id&quot;:&quot;demo-calc&quot;}'
+
+# 代码执行（经沙箱）
+curl -s --noproxy '*' -X POST http://127.0.0.1:8084/api/tool/execute \
+  -H 'Content-Type: application/json' -H 'X-Tenant-Id: demo' \
+  -d '{&quot;tool_name&quot;:&quot;code&quot;,&quot;arguments&quot;:{&quot;code&quot;:&quot;print(sum(range(10)))&quot;},&quot;call_id&quot;:&quot;demo-code&quot;}'
+</code></pre>
+<p>预期（实测）：</p>
+<pre><code class="language-json">{ &quot;call_id&quot;: &quot;demo-calc&quot;, &quot;tool_name&quot;: &quot;calculator&quot;, &quot;success&quot;: true,
+  &quot;output&quot;: &quot;1025.414213562373&quot;, &quot;latency_ms&quot;: 3, &quot;audit_id&quot;: &quot;audit-…&quot; }
+
+{ &quot;call_id&quot;: &quot;demo-code&quot;, &quot;tool_name&quot;: &quot;code&quot;, &quot;success&quot;: true,
+  &quot;output&quot;: &quot;45&quot;, &quot;sandboxed&quot;: true, &quot;sandbox_backend&quot;: &quot;docker&quot;, &quot;degraded&quot;: false,
+  &quot;latency_ms&quot;: 3587, &quot;audit_id&quot;: &quot;audit-…&quot; }
+</code></pre>
+<h3 id="24-r5-03-r5-07">2.4 R5-03 / R5-07 逃逸样本（<strong>隔离的决定性证据</strong>）<a class="headerlink" href="#24-r5-03-r5-07" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 样本 A：出网（守卫应拦）
+curl -s --noproxy '*' -X POST http://127.0.0.1:8084/api/tool/execute \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;tool_name&quot;:&quot;code&quot;,&quot;arguments&quot;:{&quot;code&quot;:&quot;import urllib.request;print(urllib.request.urlopen(\&quot;http://example.com\&quot;).status)&quot;}}'
+
+# 样本 B：写 rootfs（沙箱只读应拦）
+curl -s --noproxy '*' -X POST http://127.0.0.1:8084/api/tool/execute \
+  -H 'Content-Type: application/json' \
+  -d '{&quot;tool_name&quot;:&quot;code&quot;,&quot;arguments&quot;:{&quot;code&quot;:&quot;open(\&quot;/evil.txt\&quot;,\&quot;w\&quot;).write(\&quot;x\&quot;)&quot;}}'
+</code></pre>
+<p>预期（实测）：</p>
+<pre><code class="language-json">// 样本 A → 403
+{ &quot;code&quot;: &quot;AGENT_TOOL_ARGS_BLOCKED&quot;,
+  &quot;message&quot;: &quot;参数命中安全拦截规则：(?i)\\b(import\\s+socket|socket\\.socket|urllib\\.request|requests\\.(get|post))\\b&quot;,
+  &quot;details&quot;: { &quot;matched&quot;: &quot;urllib.request&quot;, &quot;audit_id&quot;: &quot;audit-…&quot; } }
+
+// 样本 B → 400，stderr 暴露内核级拒绝
+{ &quot;code&quot;: &quot;AGENT_TOOL_EXEC_FAILED&quot;, &quot;message&quot;: &quot;沙箱执行返回非零退出码 1&quot;,
+  &quot;details&quot;: { &quot;sandbox_backend&quot;: &quot;docker&quot;,
+               &quot;stderr&quot;: &quot;OSError: [Errno 30] Read-only file system: '/evil.txt'&quot; } }
+</code></pre>
+<p><strong>直调 docker 复核（跳过守卫，证明隔离不止靠正则）</strong>：</p>
+<pre><code class="language-bash">docker run --rm -i --network none agent-sandbox:latest python3 -c \
+  &quot;import urllib.request;print(urllib.request.urlopen('http://example.com',timeout=3).status)&quot;
+# → socket.gaierror: [Errno -3] Temporary failure in name resolution
+
+docker run --rm -i --read-only agent-sandbox:latest python3 -c \
+  &quot;open('/evil.txt','w').write('x')&quot;
+# → OSError: [Errno 30] Read-only file system: '/evil.txt'
+
+docker run --rm -i --network none --read-only agent-sandbox:latest python3 -c &quot;print(2**10)&quot;
+# → 1024（正常执行不受影响）
+</code></pre>
+<h3 id="25-r5-08">2.5 R5-08 审计与指标<a class="headerlink" href="#25-r5-08" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">curl -s --noproxy '*' http://127.0.0.1:8084/api/tool/audit/stats
+curl -s --noproxy '*' http://127.0.0.1:8084/api/tool/metrics
+</code></pre>
+<p>预期：</p>
+<pre><code class="language-json">{ &quot;audit&quot;: { &quot;backend&quot;: &quot;postgres&quot;, &quot;degraded&quot;: false, &quot;total&quot;: 4, &quot;success&quot;: 2,
+             &quot;blocked&quot;: 1, &quot;sandboxed&quot;: 2, &quot;success_rate&quot;: 0.5 },
+  &quot;kafka&quot;: { &quot;truth_source&quot;: &quot;postgres.tool_audit_log&quot;, &quot;role&quot;: &quot;event-sidecar&quot;,
+             &quot;available&quot;: true, &quot;topic&quot;: &quot;lifeform.tool.invoked&quot; } }
+
+{ &quot;metrics&quot;: { &quot;window_size&quot;: 4, &quot;p50_ms&quot;: 3, &quot;p95_ms&quot;: 3587, &quot;p99_ms&quot;: 3587,
+               &quot;blocked_calls&quot;: 1, &quot;calls_by_tool&quot;: { &quot;calculator&quot;: 1, &quot;code&quot;: 3 } },
+  &quot;circuit_breakers&quot;: [ { &quot;tool_name&quot;: &quot;code&quot;, &quot;consecutive_failures&quot;: 2, &quot;state&quot;: &quot;closed&quot; } ] }
+</code></pre>
+<blockquote>
+<p><strong>审计真相源</strong>是 PG <code>tool_audit_log</code>，Kafka 仅旁路；PG 不可用时回落内存并标 <code>degraded=true</code>。</p>
+</blockquote>
+<h3 id="26-in-06">2.6 IN-06 工具契约治理（影响面 + 门禁）<a class="headerlink" href="#26-in-06" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">curl -s --noproxy '*' http://127.0.0.1:8084/api/tool/calculator/impact
+</code></pre>
+<p>在 work-platform <strong>执行视图</strong>点击任一工具的「影响面」按钮 → 抽屉展示
+<code>current_version</code> / <code>schema_changed</code> / <code>affected_agents</code> / <code>affected_flows</code> / <code>contract_test_required</code>。</p>
+<p><strong>门禁反向验证</strong>（应有条数断言）：</p>
+<pre><code class="language-bash">python scripts/contract-check.py --work-platform
+# 期望输出含：工具契约基线 3 个工具 | ToolBootstrap 注册 3 个
+# 把 contracts/tool-schema-baseline.json 删一条 → 门禁应 FAIL
+</code></pre>
+<h3 id="27-r-c05">2.7 终端线（R-C05 执行视图）<a class="headerlink" href="#27-r-c05" title="Permanent link">&para;</a></h3>
+<p>浏览器打开 <code>http://127.0.0.1:3001</code> → 侧栏「执行」模块：</p>
+<ul>
+<li>工具清单（名称 / 版本 / 沙箱需求 / 超时 / 白名单域名 / 是否弃用）</li>
+<li>注册表变更史（<code>REGISTER</code> / <code>DEPRECATE</code>）</li>
+<li>指标卡（P50 / P95 / P99 + 熔断器状态）</li>
+<li>沙箱卡片（<code>docker</code> / <code>真隔离</code> vs <code>受限子进程</code> / <code>已降级</code>）</li>
+<li>审计记录（成功 / 拦截 / 失败三类）</li>
+<li>「影响面」抽屉 + 工具试执行（<strong>写路径</strong>，经 Vite 代理注入控制令牌）</li>
+</ul>
+<blockquote>
+<p><strong>API 模式下</strong>：<code>data_source='live'</code> 显示「真实调用记录」；BFF 不可达时回落演示值并打
+「演示数据」徽标 + 顶栏降级横幅——<strong>不静默伪造</strong>。</p>
+</blockquote>
+<hr />
+<h2 id="_1">三、口径说明（<strong>诚信附注</strong>）<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>口径</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>沙箱真隔离</td>
+<td><strong>已实测</strong>（服务侧 <code>docker/isolated=true</code> + 内核级 <code>Errno 30</code> / <code>Errno -3</code>）；此前一轮运行曾报降级，因镜像尚未构建，已定位</td>
+</tr>
+<tr>
+<td><code>healthcheck.sh</code></td>
+<td>已补 8084 / 9095 / 8090 探针，但<strong>本轮未整体重跑</strong></td>
+</tr>
+<tr>
+<td>工具指标</td>
+<td>进程内滑动窗口，<strong>未接 Prometheus</strong>（DEBT-021）</td>
+</tr>
+<tr>
+<td>注册表</td>
+<td>进程内内存，重启丢失（DEBT-019）</td>
+</tr>
+<tr>
+<td>Schema 校验器</td>
+<td>实装 networknt，设计写 everit（DEBT-020）</td>
+</tr>
+<tr>
+<td>工具决策</td>
+<td>规则决策，如实标 <code>decider="rule"</code>（非 LLM 决策）</td>
+</tr>
+<tr>
+<td>超范围缺口</td>
+<td>WB-06 / WB-10 / RE-01~RE-04 <strong>未实现</strong>，已登记待决策</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_2">四、演示结论<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>四肢可用</strong>：三类工具真执行，回执标准化，审计可追溯。</li>
+<li><strong>隔离可证</strong>：恶意样本在内核层面被拒（网络 + 写盘），不依赖"守卫不放行"。</li>
+<li><strong>降级可见</strong>：沙箱 / 审计 / 注册表 / 决策四处降级均带标记，界面据实显示。</li>
+<li><strong>契约可守</strong>：工具 schema 基线与实现条数绑定，改工具必须先同步契约。</li>
+</ol></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

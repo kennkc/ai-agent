@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>工作平台真实数据链路打通 · 与沙箱探测「非阻塞化」修复</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 2026-09-19-工作平台真实链路打通与沙箱探测非阻塞化.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 结论摘要</a></li>
+<li><a href="#2-api">2. 缺陷一：前端"API 模式"名不副实（环境层）</a><ul>
+<li><a href="#21">2.1 证据链</a></li>
+<li><a href="#22">2.2 根因</a></li>
+<li><a href="#23">2.3 处置</a></li>
+<li><a href="#24">2.4 修复后各域真实性（实测样本）</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 缺陷二：沙箱探测阻塞请求线程（代码层，本轮主要修复）</a><ul>
+<li><a href="#31">3.1 现象</a></li>
+<li><a href="#32">3.2 定位</a></li>
+<li><a href="#33">3.3 修复</a></li>
+<li><a href="#34">3.4 修复后实测</a></li>
+<li><a href="#35">3.5 新增回归守卫</a></li>
+</ul>
+</li>
+<li><a href="#4">4. 验证与门禁</a></li>
+<li><a href="#5">5. 遗留与建议</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="_1">工作平台真实数据链路打通 · 与沙箱探测「非阻塞化」修复<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>项目</strong>: Agent-Lifeform | <strong>日期</strong>: 2026-09-19
+<strong>本轮范围</strong>: <code>web/work-platform</code>（API 模式数据源）· <code>services/node/wp-bff</code>（工具域代理）· <code>services/java/tool-executor</code>（沙箱探测）· 运行态进程治理
+<strong>触发</strong>：用户提问「前段 api 模式，当前是否使用真实数据」—— 排查发现<strong>配置是 API 模式，前端却在展示 100% Mock</strong>，并顺藤摸出一个<strong>上游把"慢"表达成"没有"</strong>的隐蔽缺陷</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 结论摘要<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>修复前</th>
+<th>修复后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>前端数据源</td>
+<td><code>VITE_DATA_SOURCE=api</code> 已生效，但<strong>无一个真实响应落地</strong></td>
+<td>7 类核心域走真实数据</td>
+</tr>
+<tr>
+<td><code>GET /api/wp/*</code>（经 3001 代理）</td>
+<td><strong>全部 500</strong></td>
+<td><strong>全部 200</strong></td>
+</tr>
+<tr>
+<td>BFF 实例</td>
+<td>8090 无监听；<strong>8095 挂着 Phase 3 遗留僵尸实例</strong>（无 Phase 4/5 端点）</td>
+<td>8090 = 最新代码；8095 已清理</td>
+</tr>
+<tr>
+<td>工具执行域</td>
+<td><code>available:false</code>，<code>gaps:[tools,registry,metrics,sandbox,audit]</code></td>
+<td><code>available:true</code>，3 个工具、审计 21 条、<code>partial:false</code></td>
+</tr>
+<tr>
+<td>沙箱状态</td>
+<td><code>sandbox:null</code> + <code>partial:["sandbox_unavailable"]</code>（<strong>误报</strong>）</td>
+<td><code>isolated:true / degraded:false / docker_available:true</code></td>
+</tr>
+<tr>
+<td>沙箱待办耗时</td>
+<td><strong>5.7s</strong>（超出上游 <strong>5.0s</strong> 预算 → 超时，余量仅 0.7s）</td>
+<td><strong>0.5s</strong>（恒定，越过 15s TTL 亦稳定）</td>
+</tr>
+<tr>
+<td>Java 测试基线</td>
+<td>244</td>
+<td><strong>248</strong>（+4 条探测性能契约）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-api">2. 缺陷一：前端"API 模式"名不副实（环境层）<a class="headerlink" href="#2-api" title="Permanent link">&para;</a></h2>
+<h3 id="21">2.1 证据链<a class="headerlink" href="#21" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>检查项</th>
+<th>实测</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>web/work-platform/.env</code></td>
+<td><code>VITE_DATA_SOURCE=api</code> / <code>VITE_API_BASE=/api/wp</code> ✅ 配置无误</td>
+</tr>
+<tr>
+<td>2</td>
+<td>前端 dev server</td>
+<td>跑在 <strong>3001</strong>（<code>vite --port 3001</code>）</td>
+</tr>
+<tr>
+<td>3</td>
+<td>vite 代理目标</td>
+<td><code>vite.config.ts:35</code> → <code>WP_BFF_URL \|\| http://127.0.0.1:8090</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>8090 实际状态</strong></td>
+<td><strong>无监听</strong>（直连 <code>code=000</code>）</td>
+</tr>
+<tr>
+<td>5</td>
+<td>经前端代理请求</td>
+<td><code>GET 127.0.0.1:3001/api/wp/overview</code> → <strong>500</strong></td>
+</tr>
+<tr>
+<td>6</td>
+<td>决定性实验</td>
+<td>在 8090 临时挂 <code>python -m http.server</code> 探针，日志出现 <code>"GET /api/wp/overview HTTP/1.1" 404</code> → <strong>证明 vite 代理确实打向 8090</strong></td>
+</tr>
+</tbody>
+</table>
+<p>请求 500 后被 <code>api/provider.ts</code> 的 <code>safe()</code> 逐个 scope 兜住，调 <code>reportDegrade()</code> 登记，再回落 Mock ——
+所以顶栏显示 <strong><code>API · 降级 N</code></strong>，那个 N 就是实话。</p>
+<h3 id="22">2.2 根因<a class="headerlink" href="#22" title="Permanent link">&para;</a></h3>
+<p><code>vite.config.ts</code> 的代理默认端口（8090）与 wp-bff 的 <code>WP_BFF_PORT</code> 是<strong>两个独立变量、无任何交叉校验</strong>。
+端口一错，界面就静默退化成「满屏 Mock + 一堆降级」，<strong>从页面上完全看不出是环境问题</strong>。</p>
+<h3 id="23">2.3 处置<a class="headerlink" href="#23" title="Permanent link">&para;</a></h3>
+<ul>
+<li>以最新代码在 <strong>8090</strong> 起 wp-bff（前端零改动，因 vite 默认代理口即 8090）。</li>
+<li>令牌文件路径两侧一致（<code>services/node/wp-bff/logs/wp-bff-control-token</code>），新实例启动后重新落盘，
+  vite 每请求动态读取 → 自动对齐，写路径不会因令牌过期而 403。</li>
+<li>清理 <strong>8095 僵尸实例</strong>（Phase 3 验收遗留，见 <code>Phase3-开发执行日志.md</code> 第 222 行"8090 被占用 → 改在 8095 验收"）：
+  它<strong>没有</strong> Phase 4/5 端点（<code>/tools</code>、<code>/brain/ask</code>、<code>/session/stats</code> 全 404），
+  且新实例已覆盖令牌文件 → 留着只会让写路径必然 403。</li>
+</ul>
+<h3 id="24">2.4 修复后各域真实性（实测样本）<a class="headerlink" href="#24" title="Permanent link">&para;</a></h3>
+<p><strong>真实数据</strong>（BFF 已实装）：</p>
+<table>
+<thead>
+<tr>
+<th>域</th>
+<th>样本</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>中间件</td>
+<td>8 项真实 TCP 探针：<code>redis/postgres/qdrant/nacos/jaeger/kafka</code> up（6），<code>nats/minio</code> down（2）</td>
+</tr>
+<tr>
+<td>知识库（体层）</td>
+<td><code>documents=8</code>、<code>vector_points=12</code>、<code>chunks=12</code>、<code>metadata_backend=pg</code>；检索 13 次、命中率 <code>0.4615</code>、缓存命中率 <code>0.4615</code>、<strong><code>rerank_degraded=4</code></strong>（真实降级计数）、P99 <code>35ms</code></td>
+</tr>
+<tr>
+<td>大脑</td>
+<td><code>brain_available=true</code> / <code>cache_available=true</code> / <code>knowledge_available=true</code> / <strong><code>degraded=false</code></strong>；LLM <code>template(L1)</code> 可用、<code>http(L2)</code> 不可用</td>
+</tr>
+<tr>
+<td>链路追踪</td>
+<td>Jaeger 真实：<code>jaeger-all-in-one</code> traces=20 / spans_24h=20</td>
+</tr>
+<tr>
+<td>会话统计</td>
+<td>真实 Redis <code>SCAN session:*</code>，<code>active_sessions=0</code></td>
+</tr>
+<tr>
+<td>工具执行</td>
+<td>注册表 3 工具（<code>calculator/code/http</code>）、审计 21 条（success 6 / blocked 5 / sandboxed 7）、<code>sandbox.isolated=true</code></td>
+</tr>
+<tr>
+<td>总览</td>
+<td><code>source=wp-bff</code>，<code>model_runtime</code> 三节点 healthy</td>
+</tr>
+</tbody>
+</table>
+<p><strong>仍为 Mock</strong>（两类，<strong>均带降级标注，不是缺陷</strong>）：</p>
+<ol>
+<li><strong>契约标 <code>planned</code>（BFF 未实装，14 个）</strong>：<code>vitals</code>、<code>organs</code>、<code>senses</code>、<code>evolution</code>、<code>collaboration</code>、
+   <code>experts</code>、<code>skills</code>、<code>connectors</code>、<code>automations</code>、<code>cases</code>、<code>approvals</code>、<code>models</code>、<code>remote_im</code>、<code>agents</code>
+   —— 这正是 <code>/overview</code> 返回的 <code>gaps</code> 数组（设计如此，非静默回落）。</li>
+<li><strong>下游服务未启动</strong>：如 <code>tool-executor</code> 未起时 <code>/tools</code> 如实返回 <code>available=false</code>。</li>
+</ol>
+<hr />
+<h2 id="3">3. 缺陷二：沙箱探测阻塞请求线程（代码层，本轮主要修复）<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<h3 id="31">3.1 现象<a class="headerlink" href="#31" title="Permanent link">&para;</a></h3>
+<p>工具域已能连上，但 <code>GET /api/wp/tools</code> 返回：</p>
+<pre><code class="language-json">{ &quot;sandbox&quot;: null, &quot;partial&quot;: true, &quot;partial_reasons&quot;: [&quot;sandbox_unavailable&quot;] }
+</code></pre>
+<p>而直连服务端点 <code>GET /api/tool/sandbox</code> <strong>其实是 200</strong>，只是<strong>耗时 5.7 秒</strong>。</p>
+<h3 id="32">3.2 定位<a class="headerlink" href="#32" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>事实</th>
+<th>出处</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>上游预算</td>
+<td><code>httpRequestJson(url, {..., timeoutMs = 5000})</code> 的默认值 —— <strong>工具域聚合调用时未传 <code>timeoutMs</code>，故实际预算是 5000ms</strong></td>
+<td><code>services/node/wp-bff/server.js:55</code>（HEAD 版）</td>
+</tr>
+<tr>
+<td>服务侧探测</td>
+<td><code>docker info</code>（5000ms 超时）+ <code>docker image inspect</code>（5000ms 超时），<strong>在请求线程内同步执行</strong></td>
+<td><code>DockerSandboxBackend.available()</code> 原实现</td>
+</tr>
+<tr>
+<td>实测冷探测</td>
+<td><strong>5.7s</strong>（Windows Docker Desktop 上单次 docker CLI 约 2.5s，两次叠加）</td>
+<td>两次独立计时</td>
+</tr>
+<tr>
+<td>结果</td>
+<td><strong>5.7s &gt; 5.0s → BFF 超时</strong>（余量仅 <strong>0.7s</strong>）→ 落 <code>null</code> → 视图显示"沙箱不可用"</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>口径更正（2026-09-19 复核）</strong>：本节初稿把上游预算写成 <code>httpGetJson(url, timeoutMs = 2500)</code>
+（<code>server.js:37</code>）—— <strong>那是另一个仅 GET 的辅助函数</strong>（<code>fetchJson</code>，供其他数据域用），
+与工具域聚合无关。工具域走的是 <code>jsonRequest</code> → <code>httpRequestJson</code>，默认 <strong>5000ms</strong>。
+两处都在 <code>server.js</code> 里且都是超时默认值，混淆成本极低，<strong>故保留更正痕迹</strong>。
+更正后的结论<strong>更严峻</strong>：真实余量只有 <strong>0.7s</strong>（不是 3.2s），意味着<strong>任何一次负载抖动都会复发</strong>。</p>
+</blockquote>
+<pre><code class="language-text">curl /api/tool/sandbox      → 200，5.7s（服务侧&quot;能答，只是慢&quot;）
+BFF 内部请求（5.0s 预算）   → 超时 → 落 null
+GET /api/wp/tools           → sandbox:null + partial:[&quot;sandbox_unavailable&quot;]
+执行视图                    → &quot;沙箱不可用&quot;（与实际完全相反）
+</code></pre>
+<p><strong>这是一类值得警惕的缺陷模式</strong>：一个「慢」被上游表达成了「没有」。
+更隐蔽的是 —— Phase 5 早期确实对应「镜像未构建」，所以这个错误结论<strong>看起来一直是对的</strong>；
+直到镜像构建完成、<code>available()</code> 真为 <code>true</code> 之后仍继续误报，才暴露出来。</p>
+<h3 id="33">3.3 修复<a class="headerlink" href="#33" title="Permanent link">&para;</a></h3>
+<p>把「可用性探测」从请求路径上摘下来：</p>
+<table>
+<thead>
+<tr>
+<th>行为</th>
+<th>时机</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>同步探测</td>
+<td><strong>仅启动一次</strong>（构造器内）</td>
+<td>使启动日志与首个请求都能拿到真实结论</td>
+</tr>
+<tr>
+<td><code>available()</code></td>
+<td>任意时刻</td>
+<td><strong>恒 O(1)</strong> 返回缓存值；缓存过期时<strong>投递后台守护线程</strong>刷新后立即返回</td>
+</tr>
+<tr>
+<td>门闩 <code>refreshing</code>（<code>AtomicBoolean</code>）</td>
+<td>并发查询</td>
+<td>同一时刻至多一个刷新在飞，避免探针风暴</td>
+</tr>
+<tr>
+<td>15s TTL（<code>PROBE_TTL_MS</code>）</td>
+<td>缓存有效期</td>
+<td>保持原语义不变</td>
+</tr>
+</tbody>
+</table>
+<p>同时抽出 <code>BooleanSupplier prober</code> 与 <code>probeTtlMs</code> 两个<strong>测试接缝</strong>，使"性能契约"可被断言 ——
+这类契约<strong>不会让任何功能用例失败</strong>，只会让上游悄悄降级，因此必须显式守住。</p>
+<h3 id="34">3.4 修复后实测<a class="headerlink" href="#34" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>修复前</th>
+<th>修复后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET /api/tool/sandbox</code>（越 TTL 连测 4 次）</td>
+<td>5.7s（且常超时）</td>
+<td><strong>692 / 507 / 564 / 509 ms</strong>，<code>docker_available=true</code> 稳定</td>
+</tr>
+<tr>
+<td><code>GET /api/wp/tools</code></td>
+<td><code>sandbox:null</code>, <code>partial:true</code></td>
+<td><code>sandbox.isolated=true</code>, <code>partial:false</code>, <code>partial_reasons:[]</code></td>
+</tr>
+<tr>
+<td>沙箱真实执行（<code>code</code> 工具，<code>print(128*17)</code>）</td>
+<td>—</td>
+<td><code>output=2176</code>、<code>sandboxed=true</code>、<code>sandbox_backend=docker</code>、<code>degraded=false</code></td>
+</tr>
+<tr>
+<td>逃逸样本（<code>os.system("rm -rf /")</code>）</td>
+<td>—</td>
+<td><strong>403 <code>AGENT_TOOL_ARGS_BLOCKED</code></strong>，命中规则 <code>\brm\s+-rf</code>，已落审计</td>
+</tr>
+</tbody>
+</table>
+<h3 id="35">3.5 新增回归守卫<a class="headerlink" href="#35" title="Permanent link">&para;</a></h3>
+<p><code>services/java/tool-executor/src/test/java/com/agent/tool/sandbox/DockerSandboxBackendTest.java</code>（4 条）：</p>
+<ol>
+<li><code>slowProbeNeverBlocksTheCaller</code> —— 注入 <strong>800ms 慢探测</strong> + <code>TTL=0</code> 强制走刷新分支，断言 <code>available()</code> <strong>&lt; 300ms</strong>；</li>
+<li><code>cachedProbeIsReusedWithinTtl</code> —— TTL 内重复查询<strong>不得</strong>触发新探测；</li>
+<li><code>disabledBackendIsFalseAndNeverProbes</code> —— <code>docker.enabled=false</code> 时零探测成本；</li>
+<li><code>productionConstructorStaysCheapWhenDisabled</code> —— 生产构造签名在禁用时同样不被拖慢。</li>
+</ol>
+<hr />
+<h2 id="4">4. 验证与门禁<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 全量</td>
+<td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh test</code></td>
+<td><strong>248 / 0 失败</strong>（BUILD SUCCESS）· proto 0 · gateway 2 · session-manager 43 · sense-service 53 · body-service 64 · <strong>tool-executor 86</strong></td>
+</tr>
+<tr>
+<td>工具模块</td>
+<td><code>mvn -pl tool-executor test</code></td>
+<td><strong>86 / 0 失败</strong>（含新增 4 条）</td>
+</tr>
+<tr>
+<td>沙箱真隔离</td>
+<td>直连 <code>POST /api/tool/execute</code></td>
+<td><code>sandboxed=true</code> / <code>sandbox_backend=docker</code> / <code>degraded=false</code></td>
+</tr>
+<tr>
+<td>守卫拦截</td>
+<td>逃逸样本</td>
+<td>403 + <code>audit_id</code> 落库</td>
+</tr>
+<tr>
+<td>前端链路</td>
+<td>经 <code>127.0.0.1:3001</code> 代理 7 域</td>
+<td>全部 200</td>
+</tr>
+<tr>
+<td>服务侧启动</td>
+<td><code>Docker 沙箱探测：available=true image=agent-sandbox:latest</code></td>
+<td>启动日志可见</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5">5. 遗留与建议<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>事项</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>BFF 超时语义</strong>（建议项，未改）</td>
+<td>BFF 把「超时」与「不可用」<strong>合并成同一个 <code>null</code></strong>。本次在服务侧根治，但该模式仍在：任何慢子请求都会被表达为"缺失"。若要根治，应在 <code>httpGetJson</code> 里区分 timeout 与 error，并把 <code>partial_reasons</code> 分成 <code>*_timeout</code> / <code>*_unavailable</code>。<strong>改动会触及 73 条 wp-bff 用例，未擅自进行</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>端口无交叉校验</strong>（建议项，未改）</td>
+<td>vite 代理 8090 与 <code>WP_BFF_PORT</code> 各自独立。可加启动期自检（目标不可达时终端醒目告警）或把端口固化为脚本常量</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>后台进程不持久</strong></td>
+<td>8090 BFF 与 8084 tool-executor 均为后台进程，<strong>重启后需手动再起</strong>：<br><code>cd services/node/wp-bff &amp;&amp; WP_BFF_PORT=8090 node server.js</code><br><code>cd services/java/tool-executor &amp;&amp; java -jar target/tool-executor-0.1.0-SNAPSHOT.jar --spring.cloud.nacos.discovery.enabled=false --spring.cloud.nacos.config.enabled=false --server.port=8084</code></td>
+</tr>
+<tr>
+<td>4</td>
+<td>本机探测提醒</td>
+<td>本机 Git Bash 设了 <code>http_proxy=http://127.0.0.1:53624</code>，直接 <code>curl 127.0.0.1:&lt;port&gt;</code> 会被代理拦成 <strong>502 假阳性</strong>。探测本地端口务必加 <code>--noproxy '*'</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>本轮为「真实链路打通 + 缺陷修复」轮，代码变更为 <code>DockerSandboxBackend.java</code>（非阻塞重构）+ 新增 <code>DockerSandboxBackendTest.java</code>；其余为运行态编排与文档回填。</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

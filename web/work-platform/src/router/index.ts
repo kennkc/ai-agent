@@ -11,6 +11,7 @@ const ModuleView = () => import('../views/ModuleView.vue')
 const MiddlewareView = () => import('../views/MiddlewareView.vue')
 const TracingView = () => import('../views/TracingView.vue')
 const KnowledgeView = () => import('../views/KnowledgeView.vue')
+const ExecutionView = () => import('../views/ExecutionView.vue')
 
 const moduleRoutes = [
   'vitals', 'brain', 'senses', 'evolution', 'collab', 'experts', 'skills',
@@ -31,6 +32,8 @@ const router = createRouter({
         { path: 'middleware', name: 'middleware', component: MiddlewareView },
         { path: 'knowledge', name: 'knowledge', component: KnowledgeView },
         { path: 'tracing', name: 'tracing', component: TracingView },
+        // R-C05(预) 执行视图：工具调用流 / 拦截记录 / 沙箱状态（wp-bff /tools 聚合）
+        { path: 'execution', name: 'execution', component: ExecutionView },
         ...moduleRoutes.map(id => ({
           path: id,
           name: id,

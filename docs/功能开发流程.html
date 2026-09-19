@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:42 · 源文件 功能开发流程.md</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 功能开发流程.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -132,12 +132,16 @@
 <li><a href="#34-nlp-service8000">3.4 意图识别（nlp-service，8000）</a></li>
 <li><a href="#35-ocrnlp-service-appocrpy">3.5 OCR（nlp-service / app/ocr.py）</a></li>
 <li><a href="#35b-nlp-service-phase-3">3.5b 嵌入 / 重排 / 分块（nlp-service）—— Phase 3 已交付</a></li>
+<li><a href="#35c-function-calling-nlp-service-apptools-phase-5">3.5c Function Calling 适配（nlp-service / app/tools/）—— Phase 5 已交付</a></li>
 <li><a href="#36-body-service8083-phase-3">3.6 躯体服务（body-service，8083）—— Phase 3 已交付</a></li>
+<li><a href="#36b-tool-executor8084-phase-5">3.6b 四肢服务 —— 工具执行（tool-executor，8084）—— Phase 5 已交付</a></li>
 <li><a href="#37-webwork-platform">3.7 工作平台前端（web/work-platform）</a></li>
 <li><a href="#38-ops-bff-servicesnodewp-bff8090">3.8 Ops BFF 与观测区（services/node/wp-bff，8090）</a></li>
 <li><a href="#39-docker-composeyml-scripts">3.9 基础设施编排（docker-compose.yml + scripts/）</a></li>
 <li><a href="#310-proto-contracts-scriptscontract-checkpy">3.10 契约治理（proto/ + contracts/ + scripts/contract-check.py）</a></li>
 <li><a href="#311-docs">3.11 文档与归档体系（docs/ + 两个脚本）</a></li>
+<li><a href="#312-contractstimeout-budgetyaml-scriptstimeout-budget-checkpy">3.12 跨服务超时预算（contracts/timeout-budget.yaml + scripts/timeout-budget-check.py）</a></li>
+<li><a href="#313-scriptsdoc-consistency-checkpy">3.13 文档一致性（scripts/doc-consistency-check.py）</a></li>
 </ul>
 </li>
 <li><a href="#_3">四、新增一个功能的操作清单</a></li>
@@ -147,7 +151,8 @@
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 功能开发流程<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-18 · <strong>代码基线</strong>：<code>998623a</code>（Phase 3 主体收口 <code>a5e0cd5</code> + 审核补全 / 口径对齐轮）
+<p><strong>口径时间</strong>：2026-09-19 · <strong>代码基线</strong>：Phase 5 四肢期开发线（<code>998623a</code> 之后再叠加四肢期代码：工具执行服务 + 工作平台执行视图）
+历史口径：2026-09-18 曾以 <code>998623a</code>（Phase 3 主体收口 <code>a5e0cd5</code> + 审核补全 / 口径对齐轮）记；Phase 4 / Phase 5 落地后按本行口径更新。
 本文件回答一个问题：<strong>这个项目里的每个功能，是怎么从需求走到可验收的？</strong>
 通用流水线各功能共用；逐功能一节说明各自的「需求源 → 设计 → 代码 → 契约 → 测试 → 验收」差异。</p>
 </blockquote>
@@ -355,6 +360,18 @@
 <li><strong>测试</strong>：<code>tests/test_embedding.py</code> 13 项 · <code>tests/test_rerank.py</code> 8 项 · <code>tests/test_chunking.py</code> 12 项 · <strong><code>tests/test_http_errors.py</code> 10 项（HTTP 层错误语义，2026-09-18 新增，此前该层零覆盖）</strong></li>
 <li><strong>开发步骤</strong>：①改模块 ②<code>pytest -q</code> ③若动分块规则，两语言都要改并各自跑测试</li>
 </ul>
+<h3 id="35c-function-calling-nlp-service-apptools-phase-5">3.5c Function Calling 适配（<code>nlp-service</code> / <code>app/tools/</code>）—— Phase 5 已交付<a class="headerlink" href="#35c-function-calling-nlp-service-apptools-phase-5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>Phase5-四肢期/需求设计文档.md</code>（R5-06）</li>
+<li><strong>代码入口</strong>：<code>app/tools/function_calling.py</code> —— 把 <code>tool-executor</code> 的工具 schema 转成 LLM 可用的
+  function-calling 描述（名称 / 参数 schema / 描述），供大脑层决策链在需要时发起工具调用</li>
+<li><strong>关键约定</strong>：</li>
+<li><strong>schema 单一真相</strong>：以 <code>contracts/tool-schema-baseline.json</code> 与 <code>tool-executor</code> 的 <code>ToolBootstrap</code> 为准，
+    Python 侧只做<strong>格式转换</strong>，不另立工具清单</li>
+<li><strong>不臆造工具</strong>：转换失败的条目跳过并留痕，不静默补默认值</li>
+<li><strong>测试</strong>：<code>tests/test_function_calling.py</code></li>
+<li><strong>开发步骤</strong>：①新增内置工具时先改 Java <code>ToolBootstrap</code> + 契约基线 ②同步 Python 转换 ③<code>pytest -q</code></li>
+</ul>
 <h3 id="36-body-service8083-phase-3">3.6 躯体服务（<code>body-service</code>，8083）—— Phase 3 已交付<a class="headerlink" href="#36-body-service8083-phase-3" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>需求源</strong>：<code>AGENT_CONTEXT/Phase3-躯体期/</code>（R3-01~R3-09 + 终端线 R-C03）</li>
@@ -375,6 +392,31 @@
 <li><strong>测试</strong>：10 个测试类 60 项（格式解析 / 分块 / 分层 / 缓存 / 内存元数据 / 存储门面对账 / 入库 / 检索 / Qdrant id / <strong>路由层错误语义</strong>）</li>
 <li><strong>验收标准</strong>：见 <code>docs/demo/Phase3-DEMO.md</code> 与《Phase3-测试验收报告》；端到端 35 项、P99 &lt; 500ms、缓存命中 ≥ 30%、租户隔离</li>
 <li><strong>开发步骤</strong>：①改代码 ②<code>mvn -pl body-service -am test</code> ③起中间件做端到端（<code>.workbuddy/tmp/phase3-e2e.py</code>）④更新 <code>docs/java-services/06-body-service.md</code> 与阶段文档</li>
+</ul>
+<h3 id="36b-tool-executor8084-phase-5">3.6b 四肢服务 —— 工具执行（<code>tool-executor</code>，8084）—— Phase 5 已交付<a class="headerlink" href="#36b-tool-executor8084-phase-5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>需求源</strong>：<code>AGENT_CONTEXT/Phase5-四肢期/</code>（R5-01~R5-08 + IN-06 + 终端线 R-C05/R-C09）</li>
+<li><strong>代码入口</strong>（32 主 + 10 测）：</li>
+<li>注册中心：<code>ToolRegistry</code>（注册/注销/版本/弃用 + 影响面分析 <code>ImpactReport</code>）· 启动装载：<code>ToolBootstrap</code>（当前 3 个内置工具）</li>
+<li>执行链：<code>ToolGuard</code>（白名单 / 参数校验 / 配额闸门）→ <code>ToolExecutor</code>（调用 + 超时 + 失败归类）→ <code>SandboxExecutor</code>
+    （<code>SandboxBackend</code> 抽象：<code>DockerSandboxBackend</code> 真隔离 / <code>RestrictedProcessBackend</code> 受限进程降级，<strong>降级可见不伪报</strong>）</li>
+<li>内置工具：<code>CalculatorTool</code> / <code>CodeTool</code> / <code>HttpTool</code>（<code>tools/</code>）</li>
+<li>审计与指标：<code>ToolAuditLog</code> + <code>AuditEventPublisher</code>（审计事件入 Kafka）· <code>ToolMetrics</code>（调用量/失败率/耗时）</li>
+<li>对外：<code>ToolController</code> —— <code>GET /api/tool/list</code>、<code>GET /api/tool/registry</code>、<code>GET /api/tool/{name}</code>、
+    <code>DELETE /api/tool/{name}</code>、<code>POST /api/tool/{name}/deprecate</code>、<code>GET /api/tool/{name}/impact</code>（IN-06）、
+    <code>POST /api/tool/execute</code>、<code>GET /api/tool/audit</code>、<code>GET /api/tool/audit/stats</code>、<code>GET /api/tool/metrics</code>、
+    <code>GET /api/tool/sandbox</code>（沙箱后端状态）、<code>GET /api/tool/health</code></li>
+<li>错误出口：<code>common/GlobalExceptionHandler</code> + <code>common/ErrorCode</code>（与 <code>contracts/work-platform-bff-openapi.yaml</code> 工具域错误码同源）</li>
+<li><strong>关键约定</strong>：</li>
+<li><strong>契约先行</strong>：工具 schema 基线落 <code>contracts/tool-schema-baseline.json</code>，<code>contract-check.py --work-platform</code> 校验
+    「基线条数 = <code>ToolBootstrap</code> 注册条数」，改内置工具必须同步两份，否则门禁红</li>
+<li><strong>沙箱诚实降级</strong>：Docker 后端不可用才回落受限进程，并在 <code>/api/tool/sandbox</code> 上报 <code>backend</code>/<code>degraded</code>，<strong>不谎报隔离</strong></li>
+<li><strong>写路径鉴权</strong>：<code>POST /api/tool/execute</code> 会真实执行工具，经 BFF 时与 <code>start/stop</code> 同级校验（来源白名单 + <code>X-WP-Control-Token</code>）</li>
+<li><strong>启动需显式端口</strong>：<code>--server.port=8084</code>（同 body-service，避免环境变量污染）</li>
+<li><strong>测试</strong>：10 个测试类（注册/版本/影响面、守卫闸门、执行与超时、沙箱后端选择与降级、审计与指标、控制层错误语义）</li>
+<li><strong>验收标准</strong>：见 <code>docs/demo/Phase5-DEMO.md</code> 与《Phase5-测试验收报告》；注册表可查、执行可审计、沙箱状态可观测、影响面可回放</li>
+<li><strong>开发步骤</strong>：①改代码 ②<code>mvn -pl tool-executor -am test</code> ③<code>python scripts/contract-check.py --work-platform</code> ④更新
+  <code>docs/java-services/09-tool-executor.md</code> 与阶段文档</li>
 </ul>
 <h3 id="37-webwork-platform">3.7 工作平台前端（<code>web/work-platform</code>）<a class="headerlink" href="#37-webwork-platform" title="Permanent link">&para;</a></h3>
 <ul>
@@ -400,6 +442,14 @@
     <code>middleware.*</code> 状态等都要按实测值写，不能凭设计文档填——本轮核对查出 4 类漂移，
     其中中间件 up/down 被整片写反</li>
 <li><strong>中间件卡片不受全局 <code>VITE_DATA_SOURCE</code> 限制</strong>：始终优先真实探针，BFF 不可达才回落并标注 <code>data_source='mock'</code></li>
+<li><strong>执行视图（R-C05/R-C09，Phase 5）</strong>：<code>src/views/ExecutionView.vue</code> 消费 <code>/api/wp/tools*</code>，展示工具清单 / 注册表 /
+    指标 / 沙箱 / 审计；<strong>工具执行（写路径）走 <code>plannedEndpointError()</code> 式的显式错误，不伪造成功</strong></li>
+<li><strong>分片缺失原因码必须翻成人话</strong>（2026-09-19）：<code>ExecutionView.vue</code> 的 <code>PARTIAL_REASON_LABELS</code>
+    把 <code>sandbox_timeout</code> 渲染为「沙箱状态读取超时（慢，非缺失）」。<strong>禁止把 raw code 直接打到界面</strong></li>
+<li><strong>代理目标可达性自检</strong>（2026-09-19）：<code>vite.config.ts</code> 的 <code>bffReachabilityGate()</code> 在启动时探活
+    <code>WP_BFF_URL</code> / <code>WP_GATEWAY_URL</code>，不可达即终端告警（每条目标只响一次）。
+    背景：<code>WP_BFF_URL</code>（代理目标）与 <code>WP_BFF_PORT</code>（BFF 监听）互不校验，端口一错前端<strong>静默满屏 Mock</strong>，
+    页面上看不出是环境问题。脚本侧对应约定：<strong><code>WP_BFF_URL</code> 由 <code>WP_BFF_PORT</code> 单点派生</strong></li>
 <li><strong>验收标准</strong>：typecheck + build 通过；API 模式下断掉 BFF 能看见降级提示</li>
 </ul>
 <h3 id="38-ops-bff-servicesnodewp-bff8090">3.8 Ops BFF 与观测区（<code>services/node/wp-bff</code>，8090）<a class="headerlink" href="#38-ops-bff-servicesnodewp-bff8090" title="Permanent link">&para;</a></h3>
@@ -407,7 +457,9 @@
 <li><strong>需求源</strong>：<code>WP-工作平台</code> + 「观测区」需求（中间件监控 / 链路追踪）+ 躯体视图（<code>/knowledge</code>）</li>
 <li><strong>代码入口</strong>：<code>server.js</code>（<code>createServer(options)</code>，spawn/probe/fetch <strong>可注入</strong>以便测试）、<code>test/server.test.js</code></li>
 <li><strong>端点清单</strong>：<code>GET /healthz</code> · <code>GET /overview</code> · <code>GET /middleware</code> · <code>POST /middleware/:key/start|stop</code> ·
-  <code>GET /tracing</code> · <strong><code>GET /knowledge</code></strong> · <strong><code>POST /knowledge/search</code></strong>（均登记进 <code>IMPLEMENTED_ENDPOINTS</code>）</li>
+  <code>GET /tracing</code> · <strong><code>GET /knowledge</code></strong> · <strong><code>POST /knowledge/search</code></strong> ·
+  <strong><code>GET /tools</code> / <code>/tools/registry</code> / <code>/tools/audit</code> / <code>/tools/audit/stats</code> / <code>/tools/metrics</code> / <code>/tools/sandbox</code></strong> ·
+  <strong><code>POST /tools/execute</code></strong>（均登记进 <code>IMPLEMENTED_ENDPOINTS</code>）</li>
 <li><strong>关键约定</strong>：</li>
 <li>控制端点（<code>start</code>/<code>stop</code>）<strong>必须同时</strong>过来源检查（<code>WP_BFF_ALLOWED_ORIGINS</code>）与
     控制令牌（<code>X-WP-Control-Token</code>，<code>timingSafeEqual</code> 比较）；缺失/错误 → 401，外来来源 → 403，
@@ -417,12 +469,12 @@
 <li>CORS：<strong>不要</strong>回 <code>Access-Control-Allow-Origin: *</code>，只对白名单来源回显并始终带 <code>Vary: Origin</code></li>
 <li>命令形状固定 + <strong>8 键白名单</strong>；未登记的 key → 403</li>
 <li>Vite 代理<strong>在服务端读令牌文件</strong>再注入请求头 → 令牌不进浏览器包；且<strong>不重写 <code>Origin</code></strong>（保持 CSRF 检查有效）</li>
-<li><strong>鉴权按方法判定，不按路径</strong>：只读（GET，以及只读语义的 <code>POST /knowledge/search</code>）免控制令牌，但需透传 <code>X-Tenant-Id</code>（租户隔离）；<strong>写路径 <code>POST /knowledge</code> 会真实改动知识库，必须与 <code>/middleware/{key}/start|stop</code> 同级校验（来源白名单 + <code>X-WP-Control-Token</code>）</strong>。开发环境由 Vite 代理对 <code>/api/wp/*</code> 统一注入令牌，前端无需处理——但<strong>直连 8090 会被 401/403 拒绝</strong>，这是有意的（曾因沿用只读豁免短暂出现无鉴权写入后门，已修复）</li>
+<li><strong>鉴权按方法判定，不按路径</strong>：只读（GET，以及只读语义的 <code>POST /knowledge/search</code>）免控制令牌，但需透传 <code>X-Tenant-Id</code>（租户隔离）；<strong>写路径 <code>POST /knowledge</code></strong>（以及 Phase 5 的 <strong><code>POST /tools/execute</code></strong>）会真实改动知识库 / 真正执行工具，必须与 <code>/middleware/{key}/start|stop</code> 同级校验（来源白名单 + <code>X-WP-Control-Token</code>）<strong>。开发环境由 Vite 代理对 <code>/api/wp/*</code> 统一注入令牌，前端无需处理——但</strong>直连 8090 会被 401/403 拒绝**，这是有意的（曾因沿用只读豁免短暂出现无鉴权写入后门，已修复）</li>
 <li><strong>错误语义与全平台一致</strong>（2026-09-18 对齐）：错误体统一为 <code>{code,message,details}</code>；
     路由层分流 —— 路径不存在 → 404 <code>AGENT_NOT_FOUND</code>，路径存在但方法不支持 → <strong>405 <code>AGENT_METHOD_NOT_ALLOWED</code> + <code>Allow</code> 头</strong>。
     该分流由 <code>ROUTE_GUARD</code> 实现，<strong>由 <code>IMPLEMENTED_ENDPOINTS</code> 派生</strong>（不另立第三份端点真相），
     因此<strong>新增端点只需登记一处</strong>。完整异常语义见 <code>docs/异常流程归纳.md</code> §2.2</li>
-<li><strong>测试</strong>：<code>node --test</code> 34 项（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据、躯体读端点与降级、<strong>知识写路径鉴权反向用例</strong>、<strong>404/405 错误语义与 <code>ROUTE_GUARD</code> 同源性</strong>）</li>
+<li><strong>测试</strong>：<code>node --test</code> <strong>81 项</strong>（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据、躯体读端点与降级、<strong>知识写路径鉴权反向用例</strong>、<strong>404/405 错误语义与 <code>ROUTE_GUARD</code> 同源性</strong>、<strong>Phase 5 工具域读端点与执行代理</strong>、<strong>子请求失败原因分类 <code>timeout</code> / <code>unreachable</code> / <code>endpoint_missing</code> / <code>http_error</code> / <code>bad_json</code></strong>）</li>
 <li><strong>开发步骤</strong>：①改契约（<code>x-wp-status</code>）②改 <code>server.js</code> ③补回归用例 ④<code>node --test</code> ⑤实测 <code>curl</code> 一次真实端点</li>
 </ul>
 <h3 id="39-docker-composeyml-scripts">3.9 基础设施编排（<code>docker-compose.yml</code> + <code>scripts/</code>）<a class="headerlink" href="#39-docker-composeyml-scripts" title="Permanent link">&para;</a></h3>
@@ -434,7 +486,66 @@
     <code>COMPOSE_PROJECT_NAME=agent-lifeform</code> 沿用存量资源</li>
 <li>根目录 <code>.env</code> 需提供 <code>MINIO_ROOT_USER</code> 等必需变量（模板见 <code>.env.example</code>）</li>
 <li><strong><code>.env</code> 一律不入库</strong>，只有 <code>.env.example</code> 入库（<code>.gitignore</code> 用 <code>.env</code> + <code>.env.*</code> + <code>!.env.example</code>）</li>
-<li><strong>验收标准</strong>：<code>docker compose config</code> 通过；<code>./scripts/start.sh all &amp;&amp; ./scripts/healthcheck.sh</code> → 16/16 OK</li>
+<li><strong>验收标准</strong>：<code>docker compose config</code> 通过；<code>./scripts/start.sh all &amp;&amp; ./scripts/healthcheck.sh</code> 全绿</li>
+</ul>
+<p><strong>脚本清单与职责（2026-09-19 补齐）</strong></p>
+<table>
+<thead>
+<tr>
+<th>脚本</th>
+<th>职责</th>
+<th>本机约束</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>start.sh</code></td>
+<td>六步起全栈：infra → java(5) → python → <strong>bff</strong> → <strong>frontend</strong> → verify</td>
+<td>需 <code>docker</code>；<code>WP_BFF_URL</code> 由 <code>WP_BFF_PORT</code> 单点派生</td>
+</tr>
+<tr>
+<td><code>start-dev.bat</code></td>
+<td>同上（Windows 批处理版）</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>start-test.sh</code></td>
+<td>CI 用：infra / java / python / verify 分步</td>
+<td>—</td>
+</tr>
+<tr>
+<td><code>healthcheck.sh</code> / <code>.bat</code></td>
+<td>探针汇总：8 中间件 + 5 Java(含 tool-executor) + 5 gRPC + 3 前端链路</td>
+<td>见下方 D-31</td>
+</tr>
+<tr>
+<td><code>timeout-budget-check.py</code></td>
+<td><strong>跨服务超时预算门禁</strong>：语义（上游 ≥ 下游最坏 × 1.5）/ 锚点（代码实值比对）/ 魔法数字三层</td>
+<td>见 §3.12</td>
+</tr>
+<tr>
+<td><code>doc-consistency-check.py</code></td>
+<td><strong>文档一致性门禁</strong>：异常编号 <code>D-xx</code> 唯一 / 章节号唯一 / md↔html 孪生同步</td>
+<td>见 §3.13</td>
+</tr>
+<tr>
+<td><code>start.sh gate</code></td>
+<td>启动前跑上述两道门禁；失败需显式 <code>SKIP_BUDGET_GATE=1</code> 才跳过</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong><code>start.sh</code> 的两个必守约定</strong>：
+  1. <strong><code>WP_BFF_URL</code> 只从 <code>WP_BFF_PORT</code> 派生</strong>（<code>export WP_BFF_URL="${WP_BFF_URL:-http://127.0.0.1:$WP_BFF_PORT}"</code>）。
+     两者独立配置时没有任何交叉校验，端口一错前端静默满屏 Mock，页面上完全看不出是环境问题
+  2. <strong><code>JAVA_SERVICES</code> 必须与 <code>services/java</code> 下的模块清单同步</strong>（当前 5 个，含 <code>tool-executor</code>）——
+     漏一个不会报错，只会"这个域一直显示不可用"</li>
+<li><strong>healthcheck 的隐形陷阱（实测踩过）</strong>：<code>set -e</code> + <code>code=$(curl ...)</code> 会让脚本在
+  <strong>第一个不可达服务处直接终止</strong>（命令替换里赋值语句的退出码 = curl 的退出码，连不上即非 0）。
+  <strong>检查脚本恰好在它最该工作的场景下失效</strong> —— 报不出"谁挂了"，只安静地少输出一半。
+  必须写成 <code>code=$(curl ... || true)</code>；输出重定向用 <code>-o /dev/null</code> 而非 <code>-o NUL</code>。
+  完整异常谱系见 <code>docs/异常流程归纳.md</code> §3.2 D-31</li>
 </ul>
 <h3 id="310-proto-contracts-scriptscontract-checkpy">3.10 契约治理（<code>proto/</code> + <code>contracts/</code> + <code>scripts/contract-check.py</code>）<a class="headerlink" href="#310-proto-contracts-scriptscontract-checkpy" title="Permanent link">&para;</a></h3>
 <ul>
@@ -445,8 +556,9 @@
      <strong>默认生命周期不调 protoc</strong>（插件在本机清理目录时会原生阻塞、构建永久卡死）；
      契约变更时 Java 用 <code>-Pproto-gen</code>、Python 用 <code>scripts/proto-gen.sh</code> 重新生成
      → 逐条使用说明与变更流程见 <code>docs/proto契约使用说明.md</code>
-  2. <strong>工作平台 BFF OpenAPI</strong>：<code>contracts/work-platform-bff-openapi.yaml</code>（<strong>39 端点</strong>，
-     implemented <strong>8 路径 / 9 方法</strong> / planned 31；口径以 <code>contract-check.py --work-platform</code> 输出为准）</li>
+  2. <strong>工作平台 BFF OpenAPI</strong>：<code>contracts/work-platform-bff-openapi.yaml</code>（扫描 <strong>60 端点</strong>，
+     implemented <strong>30 路径 / 31 方法</strong> / planned 30；<strong>工具域 schema 基线</strong> <code>contracts/tool-schema-baseline.json</code>；
+     口径以 <code>contract-check.py --work-platform</code> 输出为准）</li>
 <li><strong>门禁规则（<code>contract-check.py</code> 三条）</strong>：
   1. 实现端点必须已登记且标记 <code>implemented</code>
   2. <code>provider.ts</code> 里调用的每个路径必须能匹配契约模板
@@ -472,6 +584,93 @@
 <li>未通过项 / 待补验证项<strong>必须显式登记</strong>，不得省略（<strong>诚实留痕优先于好看</strong>）</li>
 <li>历史归档<strong>不回改</strong>：旧口径（如 54/73 项测试）保留原样，新口径写进当期文档并标注时间</li>
 </ul>
+<h3 id="312-contractstimeout-budgetyaml-scriptstimeout-budget-checkpy">3.12 跨服务超时预算（<code>contracts/timeout-budget.yaml</code> + <code>scripts/timeout-budget-check.py</code>）<a class="headerlink" href="#312-contractstimeout-budgetyaml-scriptstimeout-budget-checkpy" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>为什么单独成节</strong>：超时错配<strong>不触发任何功能断言</strong> —— 单测全绿、契约 0 FAIL，
+  只在两个预算的差值里静默降级（把「慢」叙述成「不可用」）。2026-09-19 因此连踩两次，
+  故把它变成机器门禁，而不是靠人记得住。</li>
+<li><strong>权威登记表</strong>：<code>contracts/timeout-budget.yaml</code> —— 每条跨服务边一行记录
+  <strong>上游预算</strong>与<strong>下游最坏耗时</strong>两个数字（加上耗时依据、代码锚点、状态）。
+  当前 19 条边：<code>ok=16 · gap=3 · fail=0</code>（gap 为<strong>已登记未修</strong>的倒挂，门禁列出但不判失败）。</li>
+<li><strong>不变量</strong>：<code>上游预算 ≥ 下游最坏耗时 × 1.5</code>。豁免的两类边需显式 <code>exempt_headroom: true</code>
+  （docker 启停 watchdog / TCP 健康探针 —— 它们的超时是<strong>预期结果</strong>而非失败）。</li>
+<li><strong>三层门禁</strong>（<code>scripts/timeout-budget-check.py</code>）：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>内容</th>
+<th>防的是</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 语义</td>
+<td>上游 ≥ 下游最坏 × 1.5</td>
+<td>预算倒挂</td>
+</tr>
+<tr>
+<td>② 锚点</td>
+<td>按登记表正则从<strong>真实代码</strong>提实值比对</td>
+<td>「表里写 A、代码是 B」</td>
+</tr>
+<tr>
+<td>③ 魔法数字</td>
+<td>扫<strong>调用点</strong>禁止就地写数字</td>
+<td>②的盲区（锚点只看常量定义）</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>wp-bff 调用纪律</strong>：新增跨服务调用<strong>必须用命名档位</strong>
+  （<code>READ</code> / <code>RETRIEVE</code> / <code>GENERATE</code> / <code>WRITE</code> / <code>EXECUTE</code> / <code>SANDBOX_PROBE</code> / <code>MIDDLEWARE_*</code>），
+  不得就地写 <code>timeoutMs: 30000</code>。<strong>生成型链路（会触发 LLM）必须显式声明 <code>GENERATE</code> 档</strong>；
+  <strong>读型端点必须保持短预算</strong> —— 一刀切拉长会让真实故障等 45s 才暴露降级。两条都有 wp-bff 用例守着。</li>
+<li><strong>开发步骤</strong>：①改代码 ②<code>cd services/node/wp-bff &amp;&amp; node --test</code> ③改登记表
+  ④<code>python scripts/timeout-budget-check.py</code> ⑤<strong>改任一侧后必须同步另一侧</strong>，否则门禁红</li>
+<li><strong>反向验证（改门禁时必做）</strong>：门禁绿不等于门禁有效 ——
+  把档位改成不足值应 FAIL、把调用点换回字面值应报 <code>MAGIC</code>。
+  实测记录见 <code>docs/优化日志/2026-09-19-跨服务超时预算登记表与门禁落地.md</code> §6.2</li>
+</ul>
+<h3 id="313-scriptsdoc-consistency-checkpy">3.13 文档一致性（<code>scripts/doc-consistency-check.py</code>）<a class="headerlink" href="#313-scriptsdoc-consistency-checkpy" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>为什么单独成节</strong>：本仓的文档坑反复以同一形状出现 —— <strong>约束写在文档里、但没人守</strong>。
+  2026-09-19 实测：给 <code>docs/异常流程归纳.md</code> 追加异常条目时取了已在用的 <code>D-17</code>~<code>D-21</code>，
+  <strong>文档照常渲染、门禁全绿，撞号静默存在</strong>，直到人工 <code>grep | uniq -d</code> 才发现。</li>
+<li><strong>三类检查</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>检查</th>
+<th>防的是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 异常编号唯一</td>
+<td><code>D-xx</code> 撞号（该文件 §3 的 <code>D</code> 组）</td>
+</tr>
+<tr>
+<td>② 章节号唯一</td>
+<td><code>### 3.3</code> 出现两次（插入新章节后忘记顺延）</td>
+</tr>
+<tr>
+<td>③ md↔html 孪生同步</td>
+<td>改了 <code>.md</code> 忘了重生 <code>.html</code>，页面停在旧口径</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>编号约定（写在该文件 §3 开头）</strong>：<code>D-xx</code> 按<strong>新增时间</strong>递增，<strong>与章节顺序不同步</strong>；
+  唯一硬约束是<strong>全局唯一</strong>。新增条目前先 <code>grep -o '^| D-[0-9]*' docs/异常流程归纳.md | sort | uniq -d</code> 确认无撞号。</li>
+<li><strong>本门禁只查「编号撞号」与「孪生过期」，不查内容准确性</strong> ——
+  用例数 / 行数 / 端点计数仍须拿实测输出对。</li>
+<li><strong>用法</strong>：<code>python scripts/doc-consistency-check.py</code>；CI 里 html 未落盘时加 <code>--no-twin</code>。</li>
+<li><strong>开发步骤</strong>：①改 md ②重生孪生（<code>md2html-report.py &lt;file&gt;</code>）③跑本门禁</li>
+<li><strong>反向验证（改门禁时必做）</strong>：植入撞号应 FAIL、植入重复章节号应 FAIL、只改 md 不重生 html 应报孪生过期。</li>
+</ul>
 <hr />
 <h2 id="_3">四、新增一个功能的操作清单<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
 <pre><code class="language-text">[ ] 0. 同步前置：git fetch + 解读对方改动（README §8.0）
@@ -480,7 +679,7 @@
 [ ] 3. 实现：单模块最小改动，不夹带其他阶段内容
 [ ] 4. 测试：单测 + 覆盖本次修复的回归用例
 [ ] 5. 文档：PROGRESS.md / 阶段文档 / docs 索引 / java-services 登记
-[ ] 6. 验证：Java 130 + Python 62 + 契约 0 FAIL + wp-bff 34 + Vue typecheck/build + 文档覆盖率 106/106
+[ ] 6. 验证：Java 248 + Python 158 + wp-bff 87 + 契约 0 FAIL + 超时预算 0 FAIL + 文档一致性 0 FAIL + Vue typecheck/build + 文档覆盖率 158/158
 [ ] 7. 提交：一句话说清「改了什么、为什么」，中文
 [ ] 8. 对齐：三分支 ff-only，推送前先 fetch 并等用户授权
 </code></pre>

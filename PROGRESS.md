@@ -1,6 +1,6 @@
 # Agent-Lifeform Development Progress
 
-> Last updated: 2026-09-18
+> Last updated: 2026-09-19
 
 ## Archived stage reports
 
@@ -328,6 +328,153 @@ The latent `sense-service 9093 ↔ Alertmanager (P7) 9093` overlap is registered
 changed. Docs updated in step: `docs/java-services/*`, `docs/proto契约使用说明.md`, `docs/demo/Phase*`,
 `docs/技术债台账.md` (§4.17), `docs/项目进度总览.md`.
 
+## Phase 5 (四肢期 / Limb Stage, 2026-09-19)
+
+Scope: R5-01~R5-08 plus the terminal-line R-C05 (pre) and the innovation item IN-06
+(tool-contract governance). Delivered as a **new independent Maven module** `tool-executor`
+(HTTP 8084 / gRPC 9095) — no existing service was rewritten, so there is no compatibility debt.
+
+### Registry & execution (R5-01 / R5-02)
+
+- [x] `registry/ToolRegistry` — register / list / detail / unregister / deprecate (30-day window);
+      semver versioning with a **SHA-256 schema fingerprint** (first 16 hex chars) as the stable
+      "did the schema change" criterion; action classification `REGISTER` / `VERSION_UPGRADE` /
+      `SCHEMA_CHANGE` / `REREGISTER` / `DEPRECATE` / `UNREGISTER`
+- [x] `registry/ToolBootstrap` — the three built-ins self-register on `ApplicationReadyEvent`;
+      consumer declarations (`brain-planner` / `combo-task` / `code-assist`) feed the impact analysis
+- [x] `exec/ToolExecutor` — fixed order whitelist -> schema -> sensitive-args -> circuit-breaker ->
+      timed execution -> normalisation -> audit, with two invariants: **audit is never lost**
+      (the method never throws; failures return a normalised result and the controller picks the
+      HTTP semantics) and **a timeout never hangs** (dedicated daemon pool, hard timeout,
+      `cancel(true)`, consecutive-failure breaker at 3 / 30 s)
+- [x] Failure paths return the sandbox facts (`exit_code` / `sandbox_backend` / `stdout` /
+      `stderr`, clipped to 2000 chars) so "non-zero exit code 1" is no longer the only clue
+
+### Sandbox isolation (R5-03 / R5-05)
+
+- [x] `sandbox/SandboxExecutor` is the single entry point: static pre-check first (**12 dangerous-code
+      rules** hit -> rejected before any backend is touched), then Docker (isolated) else the
+      restricted-process fallback
+- [x] `sandbox/DockerSandboxBackend` — `--network none`, `--memory/--memory-swap` 256m, `--cpus 0.5`,
+      `--pids-limit 64`, `--read-only` + 16m tmpfs, `--user 1000:1000`, `--cap-drop ALL`,
+      `--security-opt no-new-privileges`; `available()` probes both the daemon **and** the image,
+      cached 15 s
+- [x] `sandbox/RestrictedProcessBackend` — **honest degradation, not an isolation boundary**:
+      results always carry `degraded=true`, and `SandboxExecutor.execute()` forcibly re-stamps the
+      flag so a fallback result can never be presented as a sandbox result
+- [x] `tools/CalculatorTool` — hand-written recursive-descent parser, **no `eval` / no script
+      engine** (a calculator is the tool an LLM triggers most; `eval` would bypass the whole
+      validation gate)
+- [x] `tools/HttpTool` — SSRF check first, then the domain allow-list (`*.suffix` supported),
+      response body clipped to `HTTP_MAX_BODY_BYTES`
+- [x] `tools/CodeTool` — always via `SandboxExecutor`; pipes `sandbox_backend` / `sandbox_degraded` /
+      `rejected` through so "where did this actually run" stays observable
+
+### Security gates & audit (R5-07 / R5-08)
+
+- [x] `guard/ToolGuard` — whitelist (not listed -> rejected **without reaching the executor**),
+      JSON-Schema **Draft-07** argument validation returning field-level `details`, and sensitive-arg
+      scanning (12 global rules + per-tool patterns) covering file deletion, disk destruction,
+      privilege escalation, sensitive files, reverse shells, path traversal, download-and-execute,
+      dynamic execution and raw network access
+- [x] `audit/ToolAuditLog` — **PG `tool_audit_log` is the truth source**, Kafka
+      (`lifeform.tool.invoked`) is an event sidecar only (a bus hiccup must not lose an audit);
+      PG unavailable -> in-process ring buffer with `degraded=true` and an honest `dropped` count;
+      argument summaries redact `token` / `secret` / `password` / `key` / `credential`
+- [x] Blocked-counting caliber is shared between the SQL and the in-memory path: only whitelist /
+      sensitive-arg / sandbox rejections count as **security blocks** — an argument-format error
+      (`AGENT_TOOL_ARGS_INVALID`) does not
+
+### IN-06 tool-contract governance
+
+- [x] Impact analysis over **explicitly registered** consumers; `ImpactReport.note` states that
+      hard-coded callers will not appear (registered as DEBT-019)
+- [x] **The gate now reads the schema hash**: `contracts/tool-schema-baseline.json` is compared by
+      both `registry/ToolSchemaBaselineTest` and `scripts/contract-check.py`, so "changed a tool
+      schema but forgot the baseline" fails instead of relying on the `contract_test_required` flag
+      being noticed by a human
+
+### Terminal line (R-C05 预) & BFF
+
+- [x] wp-bff proxies 9 methods under `/api/wp/tools*` (`POST /tools/execute` is a control endpoint:
+      origin allow-list + `X-WP-Control-Token`); contract flipped to `implemented` with the
+      `ErrorEnvelope.code.enum` extended by the seven tool-domain codes
+- [x] work-platform **ExecutionView**: tool cards (version / `schema_hash` / timeout / sandbox flag /
+      breaker badge), a real trial-run drawer, sandbox status lamp, audit stream, success rate and
+      P50/P95/P99, plus the **IN-06 impact drawer** driven by `getToolImpact(name)`
+- [x] `scripts/healthcheck.sh` now also probes **8084 / 9095 / 8090**
+
+### Verification (2026-09-19)
+
+- `scripts/mvn-dev.sh test`: **251 passed / 0 failed** (gateway 2 · session 43 · sense 53 ·
+  body **67** · **tool-executor 86**; body +3 from the GAP-closing round)
+- `pytest`: **158 passed / 1 skipped** · wp-bff `node --test`: **87 passed**
+- `contract-check.py --work-platform`: 60 endpoints, implemented 30 paths / 31 methods, **0 FAIL**;
+  tool baseline 3 tools <-> 3 registered
+- `timeout-budget-check.py`: 19 cross-service edges, **ok=19 / gap=0 / fail=0** — **all inversions
+  cleared** on 2026-09-19 (GAP-closing round, direction: *tighten the inner layer, cover from the
+  outer layer*):
+  - **GAP-01 closed by tightening the downstream**: `BRAIN_TOTAL_BUDGET_MS` 25000 -> **20000** (the
+    old 25 s cap exceeded the cascade worst case of 22 s and never bound); session `BRAIN_TIMEOUT`
+    30 s is now exactly 1.5x. Raising the upstream to 33 s instead would have pushed the session
+    total budget to 38 s and worsened GAP-06 to require >= 57 s — headroom is a function of *both*
+    sides.
+  - **GAP-05 closed by giving the downstream an end-to-end budget (and fixing a registry lie)**:
+    body `/retrieve` pipeline = embed (12 s) + Qdrant (2 s) + rerank (10 s); the registered "10 s"
+    was merely body's outbound read timeout. New `common/BudgetGuard.java` wraps the warm pipeline
+    in `RETRIEVAL_TOTAL_BUDGET_MS = 10 s` (504 `AGENT_TIMEOUT`, never an empty result disguised as
+    "no data"); upstream `RETRIEVAL_BUDGET_MS` 8000 -> **15000**, and the second caliber
+    `RETRIEVAL_TIMEOUT_SECONDS` was retired (retrieval.py derives its timeout from budget.py).
+  - **GAP-06 closed with a dedicated tier**: new `ASK_TIMEOUT_MS = 53000` serves only the
+    session `/ask` edge; `GENERATE` stays 45000 (shared by `/brain/ask` and memory edges). A guard
+    assertion enforces `ASK > GENERATE` so the two tiers cannot silently merge back.
+  - Earlier round for context: **wp-bff's own 5 inversions were cleared** (`brain/ask` + `memory/*`
+    5000 -> 45000 against an LLM-cascade worst case of 22000 ms; knowledge ingest `30000` hard-coded
+    -> `WRITE` 60000). The inversions were *already live*, not a future risk: even with only
+    `TemplateEngine`, worst case `3 s x 2 = 6 s` exceeded the old 5000 ms default.
+- **REC-01 — deadline propagation (2026-09-19)**: `nlp-service` gained `app/budget.py`
+  (`run_with_budget` / `BudgetExceeded`), all budgets returning `504 AGENT_TIMEOUT`; the LLM cascade
+  uses `min(level timeout, remaining budget)` per level and reports `deadline_exceeded`;
+  `session-manager` gained `RequestBudget` (35 s per ask, per-hop `clamp`, no call is issued once
+  the budget is spent) plus named tiers (`INTENT` 5 s / `RETRIEVE` 15 s / `BRAIN` 30 s).
+  Lesson recorded in the registry header: capping a downstream budget makes its worst case
+  *provable* **and** changes the upstream headroom ratio — both sides must be reconciled in the
+  same round.
+- **Gate blind spot found and fixed while reconciling the table**: the original anchor regex
+  `READ_TIMEOUT = Duration\.ofSeconds\((\d+)\)` **substring-matched** `DEFAULT_READ_TIMEOUT`, so TB-11 /
+  TB-12 silently kept reading the stale 10 s default instead of their real tier. Anchors were tightened
+  to named tiers and downstream anchors added for TB-06 / TB-09 / TB-11 / TB-12 / TB-13 / TB-15 / TB-16.
+  Reverse-verified in the GAP-closing round: a planted anchor drift (19999 vs 20000) → `fail=1 / exit=1`.
+- **Test-writing pitfall caught by a red test**: stubbing `embed` does nothing because the pipeline
+  calls the mocked `embedOne` (the interception layer never reaches the real body); stubs must target
+  the layer that is actually invoked, otherwise the test is fake-green.
+- `doc-consistency-check.py`: **0 FAIL** — anomaly IDs unique, section numbers unique,
+  md/html twins in sync
+- `java-doc-coverage.py`: **160/160** (`BudgetGuard.java` registered; tool-executor 43/43)
+- Runtime probes on :8084 — `calculator` `sqrt(2)+pow(2,10)` OK; `code` `print(128*17)` OK
+  (`sandboxed=true, sandbox_backend=docker, degraded=false`);
+  `rm -rf` and outbound-network samples both **403 + audited**;
+  `GET /api/tool/sandbox` reports `docker_available=true` / `active_backend=docker` /
+  `isolated=true` / `degraded=false`
+
+> **Closed (2026-09-19, real-link round)**: `agent-sandbox:latest` **is** built on this host
+> (124 MB) and **R5-03 is now verified on the real Docker isolation path**, not only the degraded
+> backend — kernel-level evidence: outbound → `Errno -3 Temporary failure in name resolution`,
+> rootfs write → `OSError: Errno 30 Read-only file system`. The earlier `docker_available=false`
+> was a *timing* artifact (the image was not yet built when the JVM probed), and a second defect
+> was found behind it: `DockerSandboxBackend.available()` ran `docker info` + `image inspect`
+> **synchronously on the request thread** (5.7 s cold on Windows), which exceeded wp-bff's 2.5 s
+> sub-request budget (`server.js:46`) and made `/api/wp/tools` report
+> `sandbox:null + partial:["sandbox_unavailable"]` — *a slow answer expressed upstream as a
+> missing one*. Fixed by making `available()` **O(1) and non-blocking** (probe once at startup,
+> refresh on a daemon thread behind a 15 s TTL, single-flight latch); endpoint latency
+> 5.7 s → 0.5 s, `partial:false`. Guarded by 4 new assertions in
+> `sandbox/DockerSandboxBackendTest` (slow probe must not block the caller, no probe storm within
+> TTL, zero probe cost when disabled). See
+> `docs/优化日志/2026-09-19-工作平台真实链路打通与沙箱探测非阻塞化.md`.
+> DEBT-019~021 (in-process registry, networknt-vs-everit choice, metrics not on Prometheus) are
+> registered with triggers rather than silently carried.
+
 ## Frontend
 
 - [x] Vue 3 + Vite + TypeScript + Element Plus work-platform scaffold
@@ -627,7 +774,13 @@ gateway (8080) is still unverified at runtime because **Spring WebFlux does not 
   Done on 2026-09-18: Phase 3 (R3-01~R3-09 + R-C03) delivered the full knowledge pipeline,
   three-tier storage, semantic retrieval, reranking, RAG and the sense->body closed loop;
   DEBT-001 closed. **Phase 4 (大脑期 / brain stage, R4-01~R4-09 + R-C04) landed on 2026-09-19**;
-  Phase 5 (四肢期 / limb stage, tool execution) is next.
+  **Phase 5 (四肢期 / limb stage, R5-01~R5-08 + R-C05 预 + IN-06) landed on 2026-09-19**.
+  Phase 6 (小脑期 / orchestration) is next.
+- **Sandbox true isolation is unverified on this host**: `agent-sandbox:latest` is not built, so
+  `docker_available=false` and execution goes through the restricted-process fallback
+  (`degraded=true`). Build the image and re-run the escape-sample set before R5-03 is written up
+  as verified.
+- Tool registry is in-process only (no etcd) and tool metrics are not on Prometheus — DEBT-019/021.
 - Real embedding (BGE-M3) and cross-encoder reranker weights are not installed on this host;
   the services fall back to deterministic backends and report `degraded=true` (honest degradation,
   never faked). Installing the models switches them automatically.

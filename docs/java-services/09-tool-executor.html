@@ -1,0 +1,1151 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>09 · tool-executor 四肢服务（Phase 5 四肢期）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 09-tool-executor.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 模块职责</a></li>
+<li><a href="#2">2. 执行链路（固定顺序，不可换）</a></li>
+<li><a href="#3-phase-12">3. 与 Phase 1/2 的关系</a></li>
+<li><a href="#4">4. 文件清单</a><ul>
+<li><a href="#41-32-3003">4.1 主代码（32 个，3003 行）</a></li>
+<li><a href="#42-11-86">4.2 测试（11 个文件，86 个用例，全绿）</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 逐文件说明（关键实现）</a><ul>
+<li><a href="#51-guardtoolguardjava-182">5.1 guard/ToolGuard.java · 安全三闸 · 182 行</a></li>
+<li><a href="#52-exectoolexecutorjava-232">5.2 exec/ToolExecutor.java · 执行引擎 · 232 行</a></li>
+<li><a href="#53-sandboxsandboxexecutorjava-105">5.3 sandbox/SandboxExecutor.java · 沙箱唯一入口 · 105 行</a></li>
+<li><a href="#54-sandboxdockersandboxbackendjava-110">5.4 sandbox/DockerSandboxBackend.java · 真隔离 · 110 行</a><ul>
+<li><a href="#2026-09-19">⚠️ 探测必须非阻塞（2026-09-19 缺陷修复）</a></li>
+</ul>
+</li>
+<li><a href="#55-sandboxrestrictedprocessbackendjava-86">5.5 sandbox/RestrictedProcessBackend.java · 降级路径 · 86 行</a></li>
+<li><a href="#56-sandboxprocessrunnerjava-90">5.6 sandbox/ProcessRunner.java · 子进程助手 · 90 行</a></li>
+<li><a href="#57-registrytoolregistryjava-217">5.7 registry/ToolRegistry.java · 注册表 + 契约治理 · 217 行</a></li>
+<li><a href="#58-registrytoolbootstrapjava-70">5.8 registry/ToolBootstrap.java · 内置工具注册 · 70 行</a></li>
+<li><a href="#59-audittoolauditlogjava-299">5.9 audit/ToolAuditLog.java · 审计真相源 · 299 行</a></li>
+<li><a href="#510-exectoolmetricsjava-75">5.10 exec/ToolMetrics.java · 指标 · 75 行</a></li>
+<li><a href="#511-toolscalculatortooljava-248">5.11 tools/CalculatorTool.java · 计算器 · 248 行</a></li>
+<li><a href="#512-toolshttptooljava-http-157">5.12 tools/HttpTool.java · HTTP 工具 · 157 行</a></li>
+<li><a href="#513-toolscodetooljava-70">5.13 tools/CodeTool.java · 代码执行 · 70 行</a></li>
+<li><a href="#514-controllertoolcontrollerjava-259">5.14 controller/ToolController.java · 控制器 · 259 行</a></li>
+<li><a href="#515-commonglobalexceptionhandlerjava-98">5.15 common/GlobalExceptionHandler.java · 统一异常出口 · 98 行</a></li>
+</ul>
+</li>
+<li><a href="#6-in-06-p1-08">6. IN-06 契约基线（P1-08 闭合）</a></li>
+<li><a href="#7">7. 降级清单（诚实上报，不虚构）</a></li>
+<li><a href="#8-applicationyml">8. 配置项（application.yml）</a></li>
+<li><a href="#9-nacos-p1-11">9. Nacos 注册口径（P1-11 明确）</a></li>
+<li><a href="#10">10. 修改指引</a></li>
+<li><a href="#11">11. 接口调用示例</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="09-tool-executor-phase-5">09 · tool-executor 四肢服务（Phase 5 四肢期）<a class="headerlink" href="#09-tool-executor-phase-5" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>模块路径：<code>services/java/tool-executor/</code>
+源文件：<strong>32 个主代码（3003 行）+ 11 个测试（1420 行 / 86 个用例，全绿）</strong>
+HTTP 端口：<strong>8084</strong> · gRPC 端口：<strong>9095</strong>
+外部依赖：PostgreSQL（审计真相源）· Kafka（审计事件旁路）· Docker（沙箱主路径）
+阶段来源：Phase 5 四肢期 —— R5-01（注册表）/ R5-02（执行）/ R5-03（沙箱）/ R5-04（计算·HTTP）/ R5-05（代码执行）/ R5-07（安全闸）/ R5-08（审计），以及创新项 IN-06（工具契约治理）</p>
+</blockquote>
+<h2 id="1">1. 模块职责<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p><code>tool-executor</code> 是生命体的<strong>四肢</strong>：大脑（<code>session-manager</code> 的规划器）决定「做什么」，
+本服务负责「<strong>安全地做出来</strong>」。它是全平台<strong>唯一</strong>允许执行外部动作（算数、出网、跑代码）的入口。</p>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>能力</th>
+<th>落点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R5-01</td>
+<td>工具注册表：注册 / 列表 / 详情 / 卸载</td>
+<td><code>registry/ToolRegistry</code> + <code>registry/ToolBootstrap</code></td>
+</tr>
+<tr>
+<td>R5-02</td>
+<td>执行引擎：校验 → 执行 → 超时熔断 → 结果标准化</td>
+<td><code>exec/ToolExecutor</code></td>
+</tr>
+<tr>
+<td>R5-03</td>
+<td>沙箱隔离：Docker 真隔离 + 受限子进程降级</td>
+<td><code>sandbox/*</code></td>
+</tr>
+<tr>
+<td>R5-04</td>
+<td>内置工具：计算器（无 eval）+ HTTP（域名白名单）</td>
+<td><code>tools/CalculatorTool</code>、<code>tools/HttpTool</code></td>
+</tr>
+<tr>
+<td>R5-05</td>
+<td>代码执行：stdout/stderr 回传 + 危险操作拦截</td>
+<td><code>tools/CodeTool</code> + <code>sandbox/SandboxExecutor</code></td>
+</tr>
+<tr>
+<td>R5-07</td>
+<td>安全三闸：白名单 / 参数 Schema / 敏感参数</td>
+<td><code>guard/ToolGuard</code></td>
+</tr>
+<tr>
+<td>R5-08</td>
+<td>全量审计：工具 / 参数 / 结果 / 耗时 / 租户</td>
+<td><code>audit/ToolAuditLog</code> + <code>audit/AuditEventPublisher</code></td>
+</tr>
+<tr>
+<td>IN-06</td>
+<td>契约治理：semver + schema 指纹 + 变更影响分析</td>
+<td><code>registry/ToolRegistry.impact()</code> + <code>registry/ImpactReport</code></td>
+</tr>
+</tbody>
+</table>
+<p>对应工作平台<strong>执行视图</strong>（<code>web/work-platform/src/views/ExecutionView.vue</code>）：工具卡片、试运行抽屉、
+沙箱状态灯、审计流水、熔断徽标、<strong>影响面抽屉</strong>（IN-06 前端入口）。</p>
+<h2 id="2">2. 执行链路（固定顺序，不可换）<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">POST /api/tool/execute
+  │
+  ├─ ① 白名单        guard.checkWhitelist(name)      ← 不在名单 → AGENT_TOOL_NOT_ALLOWED（不触达执行器）
+  ├─ ② 参数 Schema   guard.checkSchema(def, args)    ← Draft-07 校验 → AGENT_TOOL_ARGS_INVALID（带字段级 details）
+  ├─ ③ 敏感参数      guard.checkSensitive(def, args) ← 全局 + 工具级双重扫描 → AGENT_TOOL_ARGS_BLOCKED
+  ├─ ④ 熔断检查      breaker.open()?                 ← 打开中 → AGENT_TOOL_CIRCUIT_OPEN（快速失败）
+  ├─ ⑤ 带超时执行    pool.submit(handler.execute).get(timeoutMs)   ← 超时 → AGENT_TIMEOUT + 计一次失败
+  ├─ ⑥ 结果标准化    ToolOutcome → ToolCallResult     ← 失败也回传 stdout/stderr/exit_code（截断 2000 字）
+  └─ ⑦ 收口          audit(必写) + metrics + Kafka 旁路
+</code></pre>
+<p><strong>两条不变量</strong>（写进 <code>ToolExecutor</code> 类注释，并有单测守卫）：</p>
+<ol>
+<li><strong>审计不丢</strong>：无论成功、被拦、超时还是熔断，<strong>都写一条审计</strong>（R5-08「全量记录」）。
+   因此 <code>ToolExecutor.execute()</code> <strong>不抛异常</strong>——失败也返回标准化结果，由 Controller 决定 HTTP 语义。</li>
+<li><strong>超时不悬挂</strong>：工具在独立守护线程池（固定 8 线程）执行并带硬超时；超时后 <code>future.cancel(true)</code>、
+   计一次失败，达到阈值（默认 3）触发熔断，后续调用快速失败。</li>
+</ol>
+<h2 id="3-phase-12">3. 与 Phase 1/2 的关系<a class="headerlink" href="#3-phase-12" title="Permanent link">&para;</a></h2>
+<p>Phase 5 之前平台<strong>没有</strong>执行层：<code>session-manager</code> 的规划器只能"说"要调用工具，
+没有任何落点。本模块是<strong>新增</strong>服务（端口 8084 亦为本阶段新分配），不替换任何旧实现，
+因此不存在兼容包袱；对上游只暴露一条无状态 HTTP 契约（<code>contracts/work-platform-bff-openapi.yaml</code> 的 <code>/tools</code> 段）。</p>
+<h2 id="4">4. 文件清单<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h3 id="41-32-3003">4.1 主代码（32 个，3003 行）<a class="headerlink" href="#41-32-3003" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>类型</th>
+<th style="text-align: right;">行数</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>ToolExecutorApplication.java</code></td>
+<td>启动类</td>
+<td style="text-align: right;">24</td>
+<td>Spring Boot 入口 + Nacos 注册</td>
+</tr>
+<tr>
+<td><code>common/ErrorCode.java</code></td>
+<td>枚举</td>
+<td style="text-align: right;">44</td>
+<td>统一错误码（R1-08 对齐副本 + <strong>7 个工具域专属码</strong>）</td>
+</tr>
+<tr>
+<td><code>common/BizException.java</code></td>
+<td>异常</td>
+<td style="text-align: right;">33</td>
+<td>携带错误码 + 明细，支持链式 <code>.with()</code></td>
+</tr>
+<tr>
+<td><code>common/GlobalExceptionHandler.java</code></td>
+<td>切面</td>
+<td style="text-align: right;">98</td>
+<td>错误码 → HTTP 响应体 + 路由层 404/405/415 分流</td>
+</tr>
+<tr>
+<td><code>grpc/GrpcHealthServer.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">37</td>
+<td>gRPC Health 探针（<strong>9095</strong>）</td>
+</tr>
+<tr>
+<td><code>model/ToolMeta.java</code></td>
+<td>record</td>
+<td style="text-align: right;">45</td>
+<td>工具元数据（semver / JSON Schema / 超时 / 敏感正则 / 废弃期）</td>
+</tr>
+<tr>
+<td><code>model/ToolDefinition.java</code></td>
+<td>record</td>
+<td style="text-align: right;">8</td>
+<td>注册表条目：元数据 + 实现绑定</td>
+</tr>
+<tr>
+<td><code>model/ToolHandler.java</code></td>
+<td>接口</td>
+<td style="text-align: right;">17</td>
+<td>工具实现契约（<strong>不得</strong>自行校验或审计）</td>
+</tr>
+<tr>
+<td><code>model/ToolContext.java</code></td>
+<td>record</td>
+<td style="text-align: right;">19</td>
+<td>执行上下文（租户 / callId / 截止时间）</td>
+</tr>
+<tr>
+<td><code>model/ToolOutcome.java</code></td>
+<td>值对象</td>
+<td style="text-align: right;">61</td>
+<td>工具原生结果（<strong>容忍 null</strong>，失败路径 stdout 常为 null）</td>
+</tr>
+<tr>
+<td><code>model/ToolCallResult.java</code></td>
+<td>值对象</td>
+<td style="text-align: right;">109</td>
+<td>标准化结果（成功/失败<strong>形状恒定</strong>）</td>
+</tr>
+<tr>
+<td><code>registry/ToolRegistry.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">217</td>
+<td>R5-01 注册表 + IN-06 版本治理 / <strong>schema 指纹</strong> / 影响分析</td>
+</tr>
+<tr>
+<td><code>registry/ToolBootstrap.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">70</td>
+<td>启动时内置工具自注册 + 消费方登记（<code>ApplicationReadyEvent</code>）</td>
+</tr>
+<tr>
+<td><code>registry/ToolVersionRecord.java</code></td>
+<td>record</td>
+<td style="text-align: right;">29</td>
+<td>一条版本变更记录</td>
+</tr>
+<tr>
+<td><code>registry/ImpactReport.java</code></td>
+<td>record</td>
+<td style="text-align: right;">25</td>
+<td>影响分析报告（受影响 Agent / 流程 / 是否需契约测试）</td>
+</tr>
+<tr>
+<td><code>guard/ToolGuard.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">182</td>
+<td>R5-07 三闸 + <strong>静态代码预检</strong>（12 条规则）</td>
+</tr>
+<tr>
+<td><code>exec/ToolExecutor.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">232</td>
+<td>R5-02 执行引擎 + 简单熔断器 + 失败细节回传</td>
+</tr>
+<tr>
+<td><code>exec/ToolMetrics.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">75</td>
+<td>成功率 / P50·P95·P99 / 拦截计数（滑动窗口 500）</td>
+</tr>
+<tr>
+<td><code>sandbox/SandboxBackend.java</code></td>
+<td>接口</td>
+<td style="text-align: right;">15</td>
+<td>沙箱后端契约（可插拔）</td>
+</tr>
+<tr>
+<td><code>sandbox/SandboxExecutor.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">105</td>
+<td>沙箱<strong>唯一入口</strong>：静态预检 → 选后端 → 执行 → 标降级</td>
+</tr>
+<tr>
+<td><code>sandbox/DockerSandboxBackend.java</code></td>
+<td>实现</td>
+<td style="text-align: right;">161</td>
+<td>R5-03 主路径：Docker 真隔离（网络禁用 / 只读 rootfs / 去能力）+ <strong>非阻塞探测</strong></td>
+</tr>
+<tr>
+<td><code>sandbox/RestrictedProcessBackend.java</code></td>
+<td>实现</td>
+<td style="text-align: right;">86</td>
+<td><strong>降级路径</strong>（非隔离边界，恒 <code>degraded=true</code>）</td>
+</tr>
+<tr>
+<td><code>sandbox/ProcessRunner.java</code></td>
+<td>工具</td>
+<td style="text-align: right;">90</td>
+<td>子进程执行：硬超时 + 并发排空 + 超时强杀</td>
+</tr>
+<tr>
+<td><code>sandbox/SandboxSpec.java</code></td>
+<td>record</td>
+<td style="text-align: right;">29</td>
+<td>沙箱请求（语言 / 代码 / 超时 / 内存 / 出网开关）</td>
+</tr>
+<tr>
+<td><code>sandbox/SandboxResult.java</code></td>
+<td>record</td>
+<td style="text-align: right;">33</td>
+<td>沙箱结果（含 <code>degraded</code> / <code>rejected</code> / <code>backend</code>）</td>
+</tr>
+<tr>
+<td><code>audit/ToolAuditEntry.java</code></td>
+<td>record</td>
+<td style="text-align: right;">48</td>
+<td>一条审计记录</td>
+</tr>
+<tr>
+<td><code>audit/ToolAuditLog.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">299</td>
+<td>R5-08 审计真相源（PG 表 + <strong>内存降级</strong> + 参数脱敏）</td>
+</tr>
+<tr>
+<td><code>audit/AuditEventPublisher.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">78</td>
+<td>Kafka 事件旁路（<strong>非真相源</strong>，失败即降级不抛出）</td>
+</tr>
+<tr>
+<td><code>controller/ToolController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">259</td>
+<td>注册表 / 执行 / 审计 / 指标 / 沙箱 五组接口</td>
+</tr>
+<tr>
+<td><code>tools/CalculatorTool.java</code></td>
+<td>工具</td>
+<td style="text-align: right;">248</td>
+<td>R5-04 算术（<strong>手写递归下降解析，无 eval</strong>）</td>
+</tr>
+<tr>
+<td><code>tools/HttpTool.java</code></td>
+<td>工具</td>
+<td style="text-align: right;">157</td>
+<td>R5-04 HTTP（域名白名单 + SSRF 内网拦截）</td>
+</tr>
+<tr>
+<td><code>tools/CodeTool.java</code></td>
+<td>工具</td>
+<td style="text-align: right;">70</td>
+<td>R5-05 代码执行（<strong>一律经 <code>SandboxExecutor</code></strong>）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-11-86">4.2 测试（11 个文件，86 个用例，全绿）<a class="headerlink" href="#42-11-86" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th style="text-align: right;">行数</th>
+<th style="text-align: right;">用例</th>
+<th>覆盖验收点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>registry/ToolRegistryTest.java</code></td>
+<td style="text-align: right;">191</td>
+<td style="text-align: right;">13</td>
+<td>R5-01 注册/卸载幂等、IN-06 semver 判定 / schema 指纹 / 影响分析</td>
+</tr>
+<tr>
+<td><code>registry/ToolSchemaBaselineTest.java</code></td>
+<td style="text-align: right;">90</td>
+<td style="text-align: right;">2</td>
+<td><strong>IN-06 契约基线</strong>：内置工具 schema_hash 与 <code>contracts/tool-schema-baseline.json</code> 一致</td>
+</tr>
+<tr>
+<td><code>guard/ToolGuardTest.java</code></td>
+<td style="text-align: right;">180</td>
+<td style="text-align: right;">16</td>
+<td>R5-07 三闸：白名单拒绝 / Schema 字段级错误 / 12 条危险模式 / SSRF</td>
+</tr>
+<tr>
+<td><code>exec/ToolExecutorTest.java</code></td>
+<td style="text-align: right;">263</td>
+<td style="text-align: right;">10</td>
+<td>R5-02 全序：成功 / 未注册 / 参数错 / 被拦 / 超时熔断 / <strong>审计必写</strong></td>
+</tr>
+<tr>
+<td><code>sandbox/DockerSandboxBackendTest.java</code></td>
+<td style="text-align: right;">109</td>
+<td style="text-align: right;">4</td>
+<td><strong>探测性能契约</strong>：慢探测不得阻塞调用方 / TTL 内不重探 / 禁用零成本</td>
+</tr>
+<tr>
+<td><code>sandbox/SandboxExecutorTest.java</code></td>
+<td style="text-align: right;">95</td>
+<td style="text-align: right;">5</td>
+<td>R5-03 静态预检拦截 / 后端选择 / <strong>降级必标 degraded</strong></td>
+</tr>
+<tr>
+<td><code>audit/ToolAuditLogTest.java</code></td>
+<td style="text-align: right;">138</td>
+<td style="text-align: right;">7</td>
+<td>R5-08 全量记录 / 租户隔离 / <strong>参数脱敏</strong> / PG 不可用降级</td>
+</tr>
+<tr>
+<td><code>tools/CalculatorToolTest.java</code></td>
+<td style="text-align: right;">73</td>
+<td style="text-align: right;">6</td>
+<td>R5-04 运算优先级 / 函数 / 非法字符 / <strong>无 eval</strong></td>
+</tr>
+<tr>
+<td><code>tools/CodeToolTest.java</code></td>
+<td style="text-align: right;">94</td>
+<td style="text-align: right;">6</td>
+<td>R5-05 stdout/stderr 回传 / 危险代码拦截 / 后端透传</td>
+</tr>
+<tr>
+<td><code>tools/HttpToolTest.java</code></td>
+<td style="text-align: right;">85</td>
+<td style="text-align: right;">8</td>
+<td>R5-04 域名白名单 / 通配 <code>*.</code> / 内网地址拒绝</td>
+</tr>
+<tr>
+<td><code>common/GlobalExceptionHandlerTest.java</code></td>
+<td style="text-align: right;">102</td>
+<td style="text-align: right;">9</td>
+<td>错误码 → 状态码映射 / 路由层 404·405·415 / <strong>真实故障仍 500</strong></td>
+</tr>
+</tbody>
+</table>
+<h2 id="5">5. 逐文件说明（关键实现）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<h3 id="51-guardtoolguardjava-182">5.1 <code>guard/ToolGuard.java</code> · 安全三闸 · 182 行<a class="headerlink" href="#51-guardtoolguardjava-182" title="Permanent link">&para;</a></h3>
+<p><strong>闸 1 白名单</strong>：<code>TOOL_WHITELIST</code>（默认 <code>calculator,http,code</code>）。不在名单 → 抛
+<code>AGENT_TOOL_NOT_ALLOWED</code>，<strong>不触达执行器</strong>（这是 R5-07 验收「白名单外拒绝」的落点）。</p>
+<p><strong>闸 2 参数 Schema</strong>：按工具 <code>parametersSchema</code>（JSON Schema <strong>Draft-07</strong>）逐字段校验，
+失败返回<strong>字段级 <code>details</code></strong>（<code>instanceLocation → message</code>），便于 LLM 自我修正后重试。</p>
+<p><strong>闸 3 敏感参数</strong>：全局 12 条危险模式 + 工具级 <code>sensitivePatterns</code> 双重扫描<strong>字符串参数</strong>，
+命中即抛 <code>AGENT_TOOL_ARGS_BLOCKED</code> 并回传命中片段（截断 64 字）与命中的规则原文。</p>
+<p>全局规则覆盖 R5-03 攻击样本集：文件删除（<code>rm -rf</code> / <code>shutil.rmtree</code> / <code>os.remove</code>）、
+磁盘破坏（<code>mkfs</code> / <code>dd if=</code> / fork 炸弹）、关机重启、提权（<code>sudo</code> / <code>chmod 777</code> / <code>setcap</code>）、
+敏感文件（<code>/etc/shadow</code> / <code>id_rsa</code> / <code>.aws/credentials</code>）、反弹 shell（<code>bash -i &gt;&amp;</code> / <code>nc -e</code> / <code>/dev/tcp/</code>）、
+路径穿越（<code>../../</code>）、下载即执行（<code>curl … | sh</code>）、动态执行（<code>os.system</code> / <code>subprocess</code> / <code>Runtime.exec</code>）、
+网络外联（<code>socket</code> / <code>urllib.request</code> / <code>requests.get</code>）。</p>
+<p>另有 <code>INTERNAL_ADDRESS</code> 专用规则（SSRF）：<code>localhost</code> / <code>127.</code> / <code>10.</code> / <code>192.168.</code> / <code>172.16-31.</code> /
+<code>169.254.</code>（云元数据）/ <code>metadata.google.internal</code>。</p>
+<p><code>staticCodeScan(code)</code> 是<strong>沙箱前的第一道闸</strong>，返回命中规则列表供 <code>SandboxExecutor</code> 决策。</p>
+<blockquote>
+<p><strong>选型留痕</strong>：开发设计文档写 "JSON Schema (everit)"，实装为 networknt <code>json-schema-validator</code> ——
+同为 Draft-07 校验器、能力等价，差异登记《技术债台账》<strong>DEBT-020</strong>。
+<code>schemaCache</code> 用 <code>computeIfAbsent</code> 缓存已解析 schema，避免每次调用重新解析。</p>
+</blockquote>
+<h3 id="52-exectoolexecutorjava-232">5.2 <code>exec/ToolExecutor.java</code> · 执行引擎 · 232 行<a class="headerlink" href="#52-exectoolexecutorjava-232" title="Permanent link">&para;</a></h3>
+<p>顺序见 §2。三处关键取舍：</p>
+<ol>
+<li><strong>熔断器计"业务失败"</strong>：不只是超时，工具返回 <code>success=false</code> 也计一次连续失败——
+   连续失败说明工具本身不可靠，而不是调用方运气差。</li>
+<li><strong>被安全拦截也计失败</strong>：<code>AGENT_TOOL_ARGS_BLOCKED</code> / <code>AGENT_SANDBOX_REJECTED</code> 走 WARN 日志并计入熔断，
+   防止"被拦 → 重试 → 再被拦"的刷调用行为。</li>
+<li><strong>失败路径必须回传沙箱事实</strong>（<code>failureDetails()</code>）：<code>ToolOutcome.data()</code> 是 <code>Map&lt;String,Object&gt;</code>，
+   而 <code>ToolCallResult.details</code> 是 <code>Map&lt;String,String&gt;</code>，此前直接丢弃 data，
+   导致"沙箱执行返回非零退出码 1"成了调用方唯一能看到的线索（R5-02「错误友好」不达标）。
+   现挑出 <code>exit_code</code> / <code>sandbox_backend</code> / <code>stdout</code> / <code>stderr</code> 四项，stdout/stderr 截断 2000 字。</li>
+</ol>
+<h3 id="53-sandboxsandboxexecutorjava-105">5.3 <code>sandbox/SandboxExecutor.java</code> · 沙箱唯一入口 · 105 行<a class="headerlink" href="#53-sandboxsandboxexecutorjava-105" title="Permanent link">&para;</a></h3>
+<pre><code class="language-text">静态预检（guard.staticCodeScan）── 命中 → rejected（AGENT_SANDBOX_REJECTED，未进入任何后端）
+  └─ 通过 → 选后端：Docker available()? ── 是 → docker 真隔离（isolated=true, degraded=false）
+                                        └─ 否 → 受限子进程（isolated=false, degraded=true）
+       → 执行（硬超时）→ 超时 → 强制终止 + 熔断信号
+</code></pre>
+<p><strong>总开关</strong>：<code>SANDBOX_ENABLED=false</code> 时直接抛 <code>AGENT_SANDBOX_REJECTED</code>（部署文档 §8 回滚路径）。</p>
+<p><strong>降级不可隐瞒</strong>：<code>execute()</code> 末尾有一处<strong>强制补标</strong> —— 只要后端 <code>isolated()==false</code>，
+无论结果怎么构造，<code>degraded</code> 一律置 <code>true</code>。这是"受限子进程绝不冒充沙箱"的代码级保证。</p>
+<p><code>status()</code> 是执行视图「沙箱状态」的数据源，字段：<code>enabled / active_backend / isolated / degraded /
+docker_available / process_fallback_available / timeout_ms / memory_mb / note</code>。</p>
+<h3 id="54-sandboxdockersandboxbackendjava-110">5.4 <code>sandbox/DockerSandboxBackend.java</code> · 真隔离 · 110 行<a class="headerlink" href="#54-sandboxdockersandboxbackendjava-110" title="Permanent link">&para;</a></h3>
+<p><code>docker run</code> 完整参数（R5-03「只读 rootfs + 网络禁用 + 资源限制」）：</p>
+<pre><code class="language-text">--rm -i
+--network none                                  # 网络禁用（验收「网络访问被拦」）
+--memory 256m --memory-swap 256m                # 内存硬限（禁 swap 规避）
+--cpus 0.5                                      # CPU 限
+--pids-limit 64                                 # 防 fork 炸弹
+--read-only --tmpfs /tmp:rw,size=16m            # 只读 rootfs + 可写 tmpfs
+--user 1000:1000                                # 非 root
+--cap-drop ALL --security-opt no-new-privileges # 去能力 + 禁提权
+agent-sandbox:latest python3 -
+</code></pre>
+<p><code>available()</code> 探两件事：<code>docker info</code>（守护进程可达）<strong>且</strong> <code>docker image inspect &lt;image&gt;</code>（镜像已构建）。
+两段探测结果缓存 <strong>15 秒</strong>（<code>PROBE_TTL_MS</code>），避免每次执行都浪费一个启动周期才降级。</p>
+<p>镜像由 <code>infra/docker/sandbox/Dockerfile</code> 构建。<strong>镜像未构建时本后端 <code>available()=false</code></strong>，
+<code>SandboxExecutor</code> 自动落到受限子进程并如实标降级 —— 见 §8「当前实测状态」。</p>
+<h4 id="2026-09-19">⚠️ 探测必须非阻塞（2026-09-19 缺陷修复）<a class="headerlink" href="#2026-09-19" title="Permanent link">&para;</a></h4>
+<p><strong>先前的写法</strong>（读起来完全合理，但有隐蔽缺陷）：<code>available()</code> 在缓存过期时<strong>同步</strong>跑 docker CLI。
+实测在 Windows Docker Desktop 上 <code>docker info</code> + <code>image inspect</code> <strong>冷探测需 5.7 秒</strong>，
+而上游 wp-bff 给工具域子请求的预算是 <strong>5000ms</strong>（<code>httpRequestJson</code> 的默认超时，
+<code>services/node/wp-bff/server.js:55</code>；工具域聚合调用时未传 <code>timeoutMs</code>）。
+<strong>两者只差 0.7 秒</strong> —— 任何一次负载抖动都会复发。于是：</p>
+<pre><code class="language-text">curl /api/tool/sandbox         → 200，但耗时 5.7s（服务侧其实&quot;能答&quot;）
+BFF 内部请求（5.0s 预算）      → 超时 → 落 null
+GET /api/wp/tools              → sandbox: null, partial: true, [&quot;sandbox_unavailable&quot;]
+执行视图                       → 显示&quot;沙箱不可用&quot;（与实际相反）
+</code></pre>
+<blockquote>
+<p><strong>口径更正（2026-09-19 复核）</strong>：本节初稿写"上游 2500ms（<code>server.js:46</code> <code>httpGetJson</code>）"——
+那是<strong>另一个仅 GET 的辅助函数</strong>，与工具域无关。工具域走 <code>jsonRequest</code> → <code>httpRequestJson</code>，
+默认 5000ms。保留更正痕迹以免后人重蹈。另：修复后工具域的预算已显式化为
+<code>WP_BFF_TOOL_TIMEOUT_MS=5000</code> / <code>WP_BFF_TOOL_SANDBOX_TIMEOUT_MS=8000</code>（沙箱分片单独放宽）。</p>
+</blockquote>
+<p><strong>一个"慢"被上游表达成了"没有"</strong> —— 而巧合的是，它在 Phase 5 早期确实对应
+"镜像未构建"，所以错误结论看起来一直是对的，直到镜像构建完成后仍继续误报才暴露。</p>
+<p><strong>现在的契约</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>行为</th>
+<th>时机</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>同步探测</td>
+<td><strong>仅启动一次</strong></td>
+<td>构造器内执行，使启动日志与首个请求都拿到真结论</td>
+</tr>
+<tr>
+<td><code>available()</code></td>
+<td>任意时刻</td>
+<td><strong>恒 O(1)</strong> 返回缓存值；缓存过期时<b>投递后台线程</b>刷新后立即返回</td>
+</tr>
+<tr>
+<td>门闩 <code>refreshing</code></td>
+<td>并发查询</td>
+<td>同一时刻至多一个刷新在飞，避免探针风暴</td>
+</tr>
+</tbody>
+</table>
+<p>回归守卫：<code>sandbox/DockerSandboxBackendTest</code>（4 条）——「慢探测不得阻塞调用方」
+（注入 800ms 慢探测 + TTL=0 强制走刷新分支，断言 <code>available()</code> &lt; 300ms）、
+「TTL 内不重复探测」、「禁用分支零探测成本」。
+<strong>这类"性能契约"必须显式断言</strong>：它不会让任何功能用例失败，只会让上游悄悄降级。</p>
+<h3 id="55-sandboxrestrictedprocessbackendjava-86">5.5 <code>sandbox/RestrictedProcessBackend.java</code> · 降级路径 · 86 行<a class="headerlink" href="#55-sandboxrestrictedprocessbackendjava-86" title="Permanent link">&para;</a></h3>
+<p><strong>诚实定性</strong>（类注释原文）：本后端<strong>做不到</strong>真正的隔离——无法 rootfs 只读、无法真正断网、
+无法限制 pids。它只提供三件事：</p>
+<ol>
+<li>代码不内联在 shell 里（写临时目录后以 <code>python -</code> 独立进程执行）；</li>
+<li>工作目录隔离到每次调用独有的临时目录，<code>finally</code> 中尽力清理；</li>
+<li>硬超时 + 强制终止（与 Docker 后端<strong>共用同一套 <code>ProcessRunner</code></strong>，保证超时语义一致）。</li>
+</ol>
+<p>其结果<strong>恒带 <code>degraded=true</code></strong>，视图层据此显示降级徽标。</p>
+<h3 id="56-sandboxprocessrunnerjava-90">5.6 <code>sandbox/ProcessRunner.java</code> · 子进程助手 · 90 行<a class="headerlink" href="#56-sandboxprocessrunnerjava-90" title="Permanent link">&para;</a></h3>
+<p>带硬超时、<strong>并发排空 stdout/stderr</strong>（避免管道写满导致子进程假死——这是子进程执行的经典坑）、
+超时后 <code>destroyForcibly()</code>。<code>Outcome</code> 记录 <code>exitCode / stdout / stderr / timedOut / elapsedMs / error</code>，
+<code>ok()</code> 的判定是「未超时 且 无错误 且 exitCode==0」。沙箱与降级后端共用，避免两处各写一份超时逻辑。</p>
+<h3 id="57-registrytoolregistryjava-217">5.7 <code>registry/ToolRegistry.java</code> · 注册表 + 契约治理 · 217 行<a class="headerlink" href="#57-registrytoolregistryjava-217" title="Permanent link">&para;</a></h3>
+<p><strong>存储口径（如实）</strong>：注册表本体为<strong>进程内注册 + 启动时内置工具自注册</strong>；版本与变更历史同为进程内。
+设计文档写 "etcd/内存"，本阶段取「<strong>内存</strong>」一侧 —— <strong>未接 etcd</strong>，跨实例共享与持久化登记 <strong>DEBT-019</strong>。
+<code>GET /api/tool/list</code> 与 <code>/health</code> 都如实回传 <code>registry_backend=in-memory</code>，不假装是持久化注册中心。</p>
+<p><strong>IN-06 三件事</strong>：</p>
+<ol>
+<li><strong>semver 版本化</strong>：每次注册记录 <code>name@version</code> + schema 指纹。重复注册自动判定动作：
+   指纹变了 → <code>SCHEMA_CHANGE</code>；指纹未变但版本变了 → <code>VERSION_UPGRADE</code>；两者都没变 → <code>REREGISTER</code>。</li>
+<li><strong>变更影响分析</strong>：<code>registerConsumer(tool, agentId, flowId)</code> 显式登记消费方，
+   <code>impact(name)</code> 据此给出<strong>确定的</strong>受影响清单（不猜测）。</li>
+<li><strong>契约测试触发</strong>：schema 变更且存在消费方时，<code>ImpactReport.contractTestRequired=true</code>。</li>
+</ol>
+<p><strong>schema 指纹</strong> <code>fingerprint(schema)</code>：SHA-256 前 16 位十六进制，是「schema 是否变了」的稳定判据，
+同时被 <code>ToolSchemaBaselineTest</code> 与 <code>scripts/contract-check.py</code> 消费（见 §6）。</p>
+<h3 id="58-registrytoolbootstrapjava-70">5.8 <code>registry/ToolBootstrap.java</code> · 内置工具注册 · 70 行<a class="headerlink" href="#58-registrytoolbootstrapjava-70" title="Permanent link">&para;</a></h3>
+<p><code>ApplicationReadyEvent</code> 时注册三个内置工具，并登记<strong>声明过的消费方</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>工具</th>
+<th>版本</th>
+<th style="text-align: right;">超时</th>
+<th>沙箱</th>
+<th>登记消费方</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>calculator</code></td>
+<td>1.0.0</td>
+<td style="text-align: right;">3000ms</td>
+<td>否</td>
+<td><code>brain-planner</code>（Agent）/ <code>combo-task</code>（流程）</td>
+</tr>
+<tr>
+<td><code>http</code></td>
+<td>1.0.0</td>
+<td style="text-align: right;">10000ms</td>
+<td>否</td>
+<td><code>brain-planner</code> / <code>combo-task</code></td>
+</tr>
+<tr>
+<td><code>code</code></td>
+<td>1.0.0</td>
+<td style="text-align: right;">12000ms</td>
+<td><strong>是</strong></td>
+<td><code>code-assist</code>（Agent + 流程）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>已知边界（DEBT-019）</strong>：若日后消费方改用别的工具，<strong>须同步改这里</strong>，否则影响分析会漏报。
+类注释明确写出这一点，避免被误读为"影响分析能自动发现所有调用方"。</p>
+</blockquote>
+<h3 id="59-audittoolauditlogjava-299">5.9 <code>audit/ToolAuditLog.java</code> · 审计真相源 · 299 行<a class="headerlink" href="#59-audittoolauditlogjava-299" title="Permanent link">&para;</a></h3>
+<p><strong>真相源是 PG 表 <code>tool_audit_log</code></strong>（<code>CREATE TABLE IF NOT EXISTS</code> + 租户索引自举，不引 Flyway）。
+Kafka 仅事件旁路 —— 这是有意的：<strong>审计不能因为总线抖动而丢</strong>。</p>
+<p>分级口径（诚实）：</p>
+<table>
+<thead>
+<tr>
+<th>backend</th>
+<th>条件</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>postgres</code></td>
+<td>PG 可达</td>
+<td>审计真落库（真相源）</td>
+</tr>
+<tr>
+<td><code>memory</code></td>
+<td>PG 不可达</td>
+<td>落进程内环形缓冲（默认容量 500，<strong>重启即失</strong>），响应 <code>degraded=true</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>写路径</strong>：<code>record()</code> 每次调用都写（不论成功/被拦/超时）。落库异常 → 自动转内存并置 <code>degraded</code>，
+<strong>不静默假装落库成功</strong>。<code>dropped</code> 计数如实上报被环形缓冲挤掉的条数。</p>
+<p><strong>参数脱敏</strong>：<code>summarize()</code> 对 key 含 <code>token / secret / password / key / credential</code> 的字段
+只留长度（<code>***(N chars)</code>），避免审计库本身成为泄露面。</p>
+<p><strong>「拦截」口径（<code>isBlocked</code>）</strong>：只有<strong>白名单拒绝 / 敏感参数命中 / 沙箱拒绝</strong>三种算安全拦截；
+<strong>参数格式错（<code>AGENT_TOOL_ARGS_INVALID</code>）不算拦截</strong>——那是调用方用错了，不是安全事件。
+PG 侧 <code>stats()</code> 的 SQL 与内存侧 <code>isBlocked()</code> <strong>口径同源</strong>，两处不能各写一套。</p>
+<h3 id="510-exectoolmetricsjava-75">5.10 <code>exec/ToolMetrics.java</code> · 指标 · 75 行<a class="headerlink" href="#510-exectoolmetricsjava-75" title="Permanent link">&para;</a></h3>
+<p>滑动窗口保留最近 <strong>500</strong> 次调用样本，给出 <code>success_rate / p50_ms / p95_ms / p99_ms /
+total_calls / total_failures / blocked_calls / calls_by_tool</code>。
+支撑 DoD「工具成功率 ≥ 90%」「执行 P99 &lt; 2s」的量化验收。
+<strong>未接 Prometheus</strong>，当前只对视图/报表供数（《技术债台账》<strong>DEBT-021</strong>）。</p>
+<h3 id="511-toolscalculatortooljava-248">5.11 <code>tools/CalculatorTool.java</code> · 计算器 · 248 行<a class="headerlink" href="#511-toolscalculatortooljava-248" title="Permanent link">&para;</a></h3>
+<p><strong>不使用任何 eval / 脚本引擎</strong> —— 手写<strong>递归下降解析器</strong>。理由（类注释原文）：
+计算器是 LLM 最常触发的工具，一旦走 <code>eval</code> 或 <code>nashorn</code>，等于把「参数校验」这道闸整个绕过
+（表达式本身就是代码）。本实现只认白名单运算符与函数，其余字符一律词法报错。</p>
+<p>支持 <code>+ - * / % ^</code>、括号、一元正负，以及 <code>sqrt abs min max round floor ceil pow sin cos tan log log10 exp</code>。
+返回 data 含 <code>expr / value / integer / int_value</code>。</p>
+<h3 id="512-toolshttptooljava-http-157">5.12 <code>tools/HttpTool.java</code> · HTTP 工具 · 157 行<a class="headerlink" href="#512-toolshttptooljava-http-157" title="Permanent link">&para;</a></h3>
+<p><strong>两道闸</strong>（顺序：先 SSRF 再白名单 —— 避免白名单里误配内网域也能放行）：</p>
+<ol>
+<li><code>guard.checkNotInternalAddress(url)</code>：拒绝 localhost / 127. / 10. / 172.16-31. / 192.168. / 169.254.（云元数据）/ metadata；</li>
+<li><strong>域名白名单</strong> <code>HTTP_ALLOW_DOMAINS</code>（默认 <code>api.open-meteo.com,httpbin.org,api.github.com</code>），
+   支持精确域与 <code>*.suffix</code> 通配。命中失败 → <code>AGENT_TOOL_ARGS_BLOCKED</code>。</li>
+</ol>
+<p>响应体按 <code>HTTP_MAX_BODY_BYTES</code>（默认 8192）<strong>截断</strong>，避免大响应灌爆 LLM 上下文；
+返回 data 含 <code>status / url / method / content_type / body / truncated</code>。</p>
+<h3 id="513-toolscodetooljava-70">5.13 <code>tools/CodeTool.java</code> · 代码执行 · 70 行<a class="headerlink" href="#513-toolscodetooljava-70" title="Permanent link">&para;</a></h3>
+<p><strong>一律经 <code>SandboxExecutor</code></strong>，工具自身不做任何执行、不做任何校验。
+把沙箱结果标准化并<strong>透传</strong> <code>sandbox_backend</code> / <code>sandbox_degraded</code> / <code>rejected</code>，
+让「这次到底跑在哪」对调用方<strong>可观测</strong>（这是"降级不隐瞒"在工具层的落点）。</p>
+<p>失败语义：<code>rejected=true</code> → <code>AGENT_SANDBOX_REJECTED</code>；<code>!success</code> → <code>AGENT_TOOL_EXEC_FAILED</code>
+（消息优先用沙箱 note，否则回退"非零退出码 N"）。</p>
+<h3 id="514-controllertoolcontrollerjava-259">5.14 <code>controller/ToolController.java</code> · 控制器 · 259 行<a class="headerlink" href="#514-controllertoolcontrollerjava-259" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>路径</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/list</code></td>
+<td>工具注册表清单（含 <code>schema_hash</code> / 熔断状态 / <code>registry_backend</code>）</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/registry</code></td>
+<td>注册表摘要 + 变更历史 + semver/废弃期策略</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/{name}</code></td>
+<td>单工具详情（含 JSON Schema 原文与指纹）</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/{name}/impact</code></td>
+<td><strong>IN-06 变更影响分析</strong>（受影响 Agent/流程、是否需契约测试）</td>
+</tr>
+<tr>
+<td><code>DELETE</code></td>
+<td><code>/api/tool/{name}</code></td>
+<td>卸载工具（R5-01 验收：可卸载）</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/tool/{name}/deprecate</code></td>
+<td>标记废弃（默认废弃期 30 天：<code>2026-09-19 → 2026-10-19</code>）</td>
+</tr>
+<tr>
+<td><code>POST</code></td>
+<td><code>/api/tool/execute</code></td>
+<td><strong>执行工具</strong>（R5-02）</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/audit</code></td>
+<td>审计明细（租户隔离，limit 上限 500）</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/audit/stats</code></td>
+<td>审计汇总 + Kafka 旁路健康</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/metrics</code></td>
+<td>成功率 / P50·P95·P99 / 各工具熔断状态</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/sandbox</code></td>
+<td>沙箱状态（R-C05 执行视图数据源）</td>
+</tr>
+<tr>
+<td><code>GET</code></td>
+<td><code>/api/tool/health</code></td>
+<td>存活检查（含工具数 / 审计 backend / 沙箱状态）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>执行失败时</strong>：走统一错误信封 + <strong>真实状态码</strong>，<code>details</code> 额外带 <code>call_id</code> / <code>audit_id</code> / <code>latency_ms</code>，
+使调用方一次就能拿到足够的排障信息。</p>
+<p><strong>租户来源</strong>：网关注入的 <code>X-Tenant-Id</code>，<strong>不信任请求体里的租户字段</strong>。</p>
+<h3 id="515-commonglobalexceptionhandlerjava-98">5.15 <code>common/GlobalExceptionHandler.java</code> · 统一异常出口 · 98 行<a class="headerlink" href="#515-commonglobalexceptionhandlerjava-98" title="Permanent link">&para;</a></h3>
+<p>响应体 <code>{code, message, details}</code>，与 <code>body-service</code> / <code>sense-service</code> / <code>session-manager</code> <strong>同源形状</strong>。</p>
+<p>工具域状态码映射（<strong>注意与通用码的差异</strong>）：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th>HTTP</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AGENT_TOOL_NOT_ALLOWED</code> / <code>AGENT_TOOL_ARGS_BLOCKED</code> / <code>AGENT_SANDBOX_REJECTED</code> / <code>AGENT_FORBIDDEN</code></td>
+<td><strong>403</strong></td>
+</tr>
+<tr>
+<td><code>AGENT_TOOL_ARGS_INVALID</code> / <code>AGENT_BAD_REQUEST</code></td>
+<td>400</td>
+</tr>
+<tr>
+<td><code>AGENT_NOT_FOUND</code></td>
+<td>404</td>
+</tr>
+<tr>
+<td><code>AGENT_METHOD_NOT_ALLOWED</code></td>
+<td>405</td>
+</tr>
+<tr>
+<td><code>AGENT_TIMEOUT</code></td>
+<td>504</td>
+</tr>
+<tr>
+<td><code>AGENT_UPSTREAM_UNAVAILABLE</code></td>
+<td>502</td>
+</tr>
+<tr>
+<td><code>AGENT_BUS_UNAVAILABLE</code></td>
+<td>503</td>
+</tr>
+<tr>
+<td>兜底</td>
+<td>500 <code>AGENT_INTERNAL_ERROR</code>（只记日志，不回传内部消息）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>语义要点：<strong>「被拒 ≠ 服务不可用」</strong>。前三个码都是<strong>已落审计的真实调用结果</strong>（403），
+前端据此可以区分「这次调用被安全策略拒绝了」与「服务/网关坏了」。
+「未映射路由 → 404」这条也不能少，否则 planned 端点会被兜底吞成 500。</p>
+</blockquote>
+<h2 id="6-in-06-p1-08">6. IN-06 契约基线（P1-08 闭合）<a class="headerlink" href="#6-in-06-p1-08" title="Permanent link">&para;</a></h2>
+<p>「schema 变更触发 L1 契约测试」此前只是 <code>ImpactReport</code> 上的一个<strong>标记位</strong>，契约门禁并不消费它。
+2026-09-19 补齐闭环：</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>落点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>基线文件</td>
+<td><code>contracts/tool-schema-baseline.json</code>（工具名 → <code>version</code> + <code>schema_hash</code>）</td>
+</tr>
+<tr>
+<td>单测守卫</td>
+<td><code>registry/ToolSchemaBaselineTest</code>（2 项）：内置工具指纹必须与基线一致</td>
+</tr>
+<tr>
+<td>门禁消费</td>
+<td><code>scripts/contract-check.py</code>：§ 工具 schema 段比对基线，不一致 → <strong>FAIL</strong></td>
+</tr>
+</tbody>
+</table>
+<p>因此「改了工具 schema 却忘了更新契约基线」现在会<strong>直接红</strong>，而不是靠人记得去看 <code>contract_test_required</code>。</p>
+<h2 id="7">7. 降级清单（诚实上报，不虚构）<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>不可用表现</th>
+<th>上报方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Docker / 沙箱镜像</td>
+<td>落到受限子进程</td>
+<td><code>sandbox_backend=process-restricted</code> + <code>degraded=true</code> + 视图降级徽标</td>
+</tr>
+<tr>
+<td>沙箱总开关关闭</td>
+<td>代码执行直接拒绝</td>
+<td><code>AGENT_SANDBOX_REJECTED</code>（404? 不，403；见 §5.15）</td>
+</tr>
+<tr>
+<td>PostgreSQL</td>
+<td>审计落进程内环形缓冲</td>
+<td><code>audit_backend=memory</code> + <code>degraded=true</code> + <code>dropped</code> 计数</td>
+</tr>
+<tr>
+<td>Kafka</td>
+<td>审计事件旁路关闭</td>
+<td><code>kafka.available=false</code>；<strong>不影响 PG 落库</strong></td>
+</tr>
+<tr>
+<td>注册表持久化</td>
+<td>无 etcd，仅进程内</td>
+<td><code>registry_backend=in-memory</code>（DEBT-019）</td>
+</tr>
+<tr>
+<td>Prometheus 指标</td>
+<td>仅进程内滑动窗口</td>
+<td><code>metrics</code> 仅视图可读（DEBT-021）</td>
+</tr>
+<tr>
+<td>影响分析消费方</td>
+<td>只覆盖<strong>显式登记</strong>的 Agent/流程</td>
+<td><code>ImpactReport.note</code> 明确写出"硬编码调用方不会出现在此列表中"</td>
+</tr>
+</tbody>
+</table>
+<h2 id="8-applicationyml">8. 配置项（<code>application.yml</code>）<a class="headerlink" href="#8-applicationyml" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>server.port</code> / <code>grpc.port</code></td>
+<td>8084 / 9095</td>
+<td>HTTP / gRPC</td>
+</tr>
+<tr>
+<td><code>app.tool.whitelist</code></td>
+<td><code>calculator,http,code</code></td>
+<td>R5-07 工具白名单（<code>TOOL_WHITELIST</code>）</td>
+</tr>
+<tr>
+<td><code>app.tool.circuit.failure-threshold</code> / <code>open-ms</code></td>
+<td>3 / 30000</td>
+<td>熔断阈值与打开时长</td>
+</tr>
+<tr>
+<td><code>app.tool.http.allow-domains</code></td>
+<td><code>api.open-meteo.com,httpbin.org,api.github.com</code></td>
+<td>HTTP 域名白名单</td>
+</tr>
+<tr>
+<td><code>app.tool.http.max-body-bytes</code></td>
+<td>8192</td>
+<td>响应体截断</td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.enabled</code> / <code>timeout-ms</code> / <code>memory-mb</code></td>
+<td>true / 10000 / 256</td>
+<td>沙箱总开关与默认限额</td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.docker.enabled</code> / <code>image</code> / <code>python</code></td>
+<td>true / <code>agent-sandbox:latest</code> / <code>python3</code></td>
+<td>Docker 后端</td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.process.fallback-enabled</code> / <code>python-bin</code></td>
+<td>true / <code>python</code></td>
+<td>降级后端</td>
+</tr>
+<tr>
+<td><code>app.tool.audit.memory-capacity</code></td>
+<td>500</td>
+<td>内存审计环形缓冲容量</td>
+</tr>
+<tr>
+<td><code>app.tool.audit.kafka-enabled</code> / <code>kafka-bootstrap</code> / <code>kafka-topic</code></td>
+<td>true / <code>127.0.0.1:9092</code> / <code>lifeform.tool.invoked</code></td>
+<td>审计事件旁路</td>
+</tr>
+<tr>
+<td><code>spring.cloud.nacos.discovery.register-enabled</code></td>
+<td><code>${NACOS_ENABLED:false}</code></td>
+<td><strong>单体本地开发关、集成环境开</strong>（见 §9）</td>
+</tr>
+<tr>
+<td><code>spring.datasource.url/username/password</code></td>
+<td><code>jdbc:postgresql://127.0.0.1:5432/lifeform</code> / <code>agent</code> / <code>agent123</code></td>
+<td>审计库</td>
+</tr>
+<tr>
+<td><code>management.otlp.tracing.endpoint</code></td>
+<td><code>http://localhost:4318/v1/traces</code></td>
+<td>链路追踪</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>运行注意：本机（WorkBuddy 环境）注入的代理环境变量会被 Spring 宽松绑定误解析为端口。
+<strong>启动时显式传 <code>--server.port=8084</code></strong>（或先 <code>env -u SERVER__PORT -u SERVER__HOST</code>）可绕开。</p>
+</blockquote>
+<h2 id="9-nacos-p1-11">9. Nacos 注册口径（P1-11 明确）<a class="headerlink" href="#9-nacos-p1-11" title="Permanent link">&para;</a></h2>
+<p><code>register-enabled</code> 默认 <strong>false</strong>，这是<strong>有意</strong>的，不是遗漏：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>取值</th>
+<th>理由</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>本机单体开发 / 单测 / CI</td>
+<td><code>false</code></td>
+<td>无 Nacos 也能完整运行与验证，降低环境门槛</td>
+</tr>
+<tr>
+<td>集成环境 / 部署（<code>docker-compose</code> 全量）</td>
+<td><code>true</code>（<code>NACOS_ENABLED=true</code>）</td>
+<td>供网关按服务名发现</td>
+</tr>
+</tbody>
+</table>
+<p>部署文档 §3 要求「Nacos 注册 (8084)」指的是<strong>集成环境口径</strong>；本地看到 <code>register-enabled=false</code>
+不是配置漂移，而是当前场景正确取值。</p>
+<h2 id="10">10. 修改指引<a class="headerlink" href="#10" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>改动位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新增内置工具</td>
+<td>实现 <code>ToolHandler</code> → <code>ToolBootstrap.registerBuiltins()</code> 注册 → <strong>更新 <code>contracts/tool-schema-baseline.json</code></strong>（否则契约门禁红）</td>
+</tr>
+<tr>
+<td>调整白名单</td>
+<td><code>application.yml</code> 的 <code>app.tool.whitelist</code>（无需改码）</td>
+</tr>
+<tr>
+<td>新增敏感拦截规则</td>
+<td><code>ToolGuard.GLOBAL_BLOCKED</code>（<strong>同时看 <code>ToolGuardTest</code> 的规则计数断言</strong>）</td>
+</tr>
+<tr>
+<td>调整熔断阈值</td>
+<td><code>app.tool.circuit.*</code></td>
+</tr>
+<tr>
+<td>换 JSON Schema 校验器</td>
+<td><code>ToolGuard</code> 的 <code>schemaFactory</code>（当前 networknt，DEBT-020）</td>
+</tr>
+<tr>
+<td>让沙箱真隔离生效</td>
+<td><strong>构建镜像</strong> <code>docker build -t agent-sandbox:latest infra/docker/sandbox/</code>，再重跑逃逸样本</td>
+</tr>
+<tr>
+<td>接入 Prometheus</td>
+<td><code>ToolMetrics</code>（当前仅进程内窗口，DEBT-021）</td>
+</tr>
+<tr>
+<td>接入 etcd 持久化注册表</td>
+<td><code>ToolRegistry</code> 的 <code>definitions</code> / <code>history</code>（当前内存，DEBT-019）</td>
+</tr>
+<tr>
+<td>新增错误码</td>
+<td><code>common/ErrorCode</code> + <code>GlobalExceptionHandler</code> 的 switch + <code>contracts/*-openapi.yaml</code> 的 <code>ErrorEnvelope.code.enum</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="11">11. 接口调用示例<a class="headerlink" href="#11" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 注册表清单
+curl http://127.0.0.1:8084/api/tool/list
+
+# 执行计算器
+curl -X POST http://127.0.0.1:8084/api/tool/execute \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: demo&quot; \
+  -d '{&quot;tool_name&quot;:&quot;calculator&quot;,&quot;arguments&quot;:{&quot;expr&quot;:&quot;sqrt(2)+pow(2,10)&quot;}}'
+
+# 执行代码（沙箱）
+curl -X POST http://127.0.0.1:8084/api/tool/execute \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: demo&quot; \
+  -d '{&quot;tool_name&quot;:&quot;code&quot;,&quot;arguments&quot;:{&quot;code&quot;:&quot;print(\&quot;hello\&quot;)&quot;}}'
+
+# 被安全拦截（预期 403 + AGENT_TOOL_ARGS_BLOCKED，且已落审计）
+curl -X POST http://127.0.0.1:8084/api/tool/execute \
+  -H &quot;Content-Type: application/json&quot; -H &quot;X-Tenant-Id: demo&quot; \
+  -d '{&quot;tool_name&quot;:&quot;code&quot;,&quot;arguments&quot;:{&quot;code&quot;:&quot;import shutil; shutil.rmtree(\&quot;/\&quot;)&quot;}}'
+
+# 影响面（IN-06，执行视图「查看影响面」抽屉的数据源）
+curl http://127.0.0.1:8084/api/tool/code/impact
+
+# 沙箱状态
+curl http://127.0.0.1:8084/api/tool/sandbox
+
+# 审计流水
+curl &quot;http://127.0.0.1:8084/api/tool/audit?limit=20&quot; -H &quot;X-Tenant-Id: demo&quot;
+</code></pre>
+<p>经网关访问时把主机换成 <code>http://127.0.0.1:8080</code>（路由 <code>/api/tool/**</code>），
+并且<strong>必须带 <code>Authorization: Bearer &lt;token&gt;</code></strong> —— 网关会校验令牌并覆写 <code>X-Tenant-Id</code>。</p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

@@ -4,6 +4,7 @@ import com.agent.body.client.EmbeddingClient;
 import com.agent.body.client.QdrantClient;
 import com.agent.body.client.RerankClient;
 import com.agent.body.common.BizException;
+import com.agent.body.common.BudgetGuard;
 import com.agent.body.store.HotCacheStore;
 import com.agent.body.store.InMemoryMetadataStore;
 import com.agent.body.store.StorageFacade;
@@ -41,7 +42,9 @@ class RetrievalServiceTest {
         metrics = new KnowledgeMetrics();
         StorageFacade storage = new StorageFacade(new InMemoryMetadataStore(), hotCache, qdrant,
                 new TierRouter(3600, 2.0, 1.0));
-        retrievalService = new RetrievalService(embeddingClient, qdrant, rerankClient, storage, metrics, 50);
+        retrievalService = new RetrievalService(embeddingClient, qdrant, rerankClient, storage, metrics, 50, 0);
+        // 预算 0 = 显式不限：本类的既有用例关注降级/排序语义，与时间无关。
+        // 端到端预算行为见下方「GAP-05 端到端预算」小节。
         Mockito.when(hotCache.backend()).thenReturn("redis");
     }
 
@@ -189,5 +192,50 @@ class RetrievalServiceTest {
 
         assertEquals("原始问题", plan.effectiveQuery());
         assertEquals("", plan.refineQuery());
+    }
+
+    // ─────────── GAP-05 端到端预算（2026-09-19 · 与 REC-01 同路线）───────────
+
+    @Test
+    void warmPipelineOverBudgetSurfacesAsTimeoutNotEmptyResult() {
+        // 向量化挂死（超过预算）→ 必须抛 AGENT_TIMEOUT（504 语义），
+        // **不得**返回空结果冒充「没有数据」—— 那会把「慢」塌缩成「无结果」。
+        StorageFacade storage = new StorageFacade(new InMemoryMetadataStore(), hotCache, qdrant,
+                new TierRouter(3600, 2.0, 1.0));
+        RetrievalService tight = new RetrievalService(embeddingClient, qdrant, rerankClient, storage, metrics, 50, 200);
+        stubEmbeddingSlow(2_000);
+
+        BizException exception = assertThrows(BizException.class,
+                () -> tight.retrieve("t1", "慢检索问题", 5, false));
+        assertEquals(com.agent.body.common.ErrorCode.AGENT_TIMEOUT, exception.errorCode());
+        Mockito.verify(qdrant, Mockito.never()).search(anyString(), any(), anyInt());
+    }
+
+    @Test
+    void budgetGuardReturnsValueWhenWithinBudgetAndPropagatesBusinessErrors() {
+        assertEquals("ok", BudgetGuard.runWithBudget(() -> "ok", 1_000, "op"));
+        // 业务异常原样穿透 —— 预算执行器只负责时间，不改写业务错误语义。
+        BizException biz = new BizException(com.agent.body.common.ErrorCode.AGENT_UPSTREAM_UNAVAILABLE, "嵌入不可用");
+        BizException propagated = assertThrows(BizException.class,
+                () -> BudgetGuard.runWithBudget(() -> { throw biz; }, 1_000, "op"));
+        assertEquals(com.agent.body.common.ErrorCode.AGENT_UPSTREAM_UNAVAILABLE, propagated.errorCode());
+    }
+
+    @Test
+    void budgetGuardZeroMeansExplicitlyUnlimitedNotInstantFailure() {
+        // 与 Python 侧约定一致：<= 0 =「显式不限」，不是「0ms 内必须完成」。
+        assertEquals("done", BudgetGuard.runWithBudget(() -> {
+            try { Thread.sleep(30); } catch (InterruptedException ignored) { }
+            return "done";
+        }, 0, "op"));
+    }
+
+    private void stubEmbeddingSlow(long sleepMs) {
+        // 注意：retrieve 调用的是 embedOne（mock 拦截后**不会**走到内部 embed），
+        // 所以「慢」必须 stub 在 embedOne 上 —— stub embed 会被静默跳过，用例假绿。
+        Mockito.when(embeddingClient.embedOne(anyString())).thenAnswer(invocation -> {
+            try { Thread.sleep(sleepMs); } catch (InterruptedException ignored) { }
+            return new double[]{0.1, 0.2};
+        });
     }
 }

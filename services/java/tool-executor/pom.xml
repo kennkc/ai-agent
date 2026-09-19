@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent><groupId>com.agent</groupId><artifactId>agent-lifeform-parent</artifactId><version>0.1.0-SNAPSHOT</version></parent>
+    <artifactId>tool-executor</artifactId><name>tool-executor</name>
+    <description>Tool registry / guarded execution / sandbox isolation / audit (Phase 5 limbs layer)</description>
+    <dependencies>
+        <dependency><groupId>com.agent</groupId><artifactId>proto-contracts</artifactId><version>0.1.0-SNAPSHOT</version></dependency>
+        <dependency><groupId>io.grpc</groupId><artifactId>grpc-netty</artifactId></dependency>
+        <dependency><groupId>io.grpc</groupId><artifactId>grpc-services</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-web</artifactId></dependency>
+        <dependency><groupId>com.alibaba.cloud</groupId><artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId></dependency>
+        <!-- R5-07 工具参数校验：JSON Schema 标准实现（设计选型 everit，实装 networknt——
+             二者同为 JSON Schema Draft-07 校验器，差异已在《技术债台账》留痕） -->
+        <dependency>
+            <groupId>com.networknt</groupId>
+            <artifactId>json-schema-validator</artifactId>
+            <version>${json-schema-validator.version}</version>
+        </dependency>
+        <!-- R5-08 工具审计：Kafka 事件 → PG 落库（不可用时内存降级并标 degraded） -->
+        <dependency>
+            <groupId>org.apache.kafka</groupId>
+            <artifactId>kafka-clients</artifactId>
+            <version>3.7.0</version>
+        </dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-jdbc</artifactId></dependency>
+        <dependency><groupId>org.postgresql</groupId><artifactId>postgresql</artifactId><scope>runtime</scope></dependency>
+        <!-- 链路追踪 + 健康检查 -->
+        <dependency><groupId>io.micrometer</groupId><artifactId>micrometer-tracing-bridge-otel</artifactId></dependency>
+        <dependency><groupId>io.opentelemetry</groupId><artifactId>opentelemetry-exporter-otlp</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-actuator</artifactId></dependency>
+        <dependency><groupId>org.springframework.boot</groupId><artifactId>spring-boot-starter-test</artifactId><scope>test</scope></dependency>
+    </dependencies>
+    <build><plugins><plugin><groupId>org.springframework.boot</groupId><artifactId>spring-boot-maven-plugin</artifactId></plugin></plugins></build>
+</project>

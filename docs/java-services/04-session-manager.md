@@ -1,7 +1,7 @@
 # 04 · session-manager 会话服务
 
 > 模块路径：`services/java/session-manager/`
-> 源文件：**13 个主代码 + 5 个测试**（主代码 616 行）
+> 源文件：**16 个主代码（1389 行）+ 10 个测试（933 行 / 43 个用例）**
 > HTTP 端口：**8081** · gRPC 端口：**19092**（原 9092 与 Kafka 宿主端口冲突，2026-09-19 外移）
 > 主要依赖：Spring Web、Spring Data Redis、NATS（jnats）、Kafka clients
 
@@ -72,26 +72,28 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | 文件 | 类型 | 行数 | 职责 |
 |---|---|---:|---|
 | `SessionManagerApplication.java` | 启动类 | 19 | Spring Boot 入口 + 服务发现 |
-| `controller/SessionController.java` | 控制器 | 244 | 会话 CRUD + `ask`（走大脑层，降级本地直出）+ `context` 上下文端点；主构造 `@Autowired` |
+| `controller/SessionController.java` | 控制器 | 280 | 会话 CRUD + `ask`（走大脑层，降级本地直出）+ `context` 上下文端点；主构造 `@Autowired`；ask 链路起 `RequestBudget` |
 | `bus/BusProxy.java` | 组件 | 34 | 总线调用的**容错包装**（异常吞掉返回 null） |
 | `nats/NatsClient.java` | 组件 | 75 | NATS 连接、同步请求-应答、异步发布 |
 | `kafka/KafkaEventPublisher.java` | 组件 | 55 | Kafka 事件发布（持久化事件通道） |
 | `kafka/KafkaEventConsumer.java` | 组件 | 66 | Kafka 事件消费（审计/回放用） |
-| `orchestration/NlpClient.java` | 客户端 | 56 | 调 `nlp-service` 做意图识别（含降级） |
-| `orchestration/BodyClient.java` | 客户端 | 44 | 调 `body-service` 做知识检索（含降级） |
-| `orchestration/OutboundHttp.java` | 工具类 | 46 | **跨服务 HTTP 统一出口**（HTTP/1.1 + 超时） |
-| `orchestration/BrainClient.java` | 客户端 | 143 | **R4-06** 大脑层 `/api/nlp/brain/ask` 调用（含降级，不伪造回答） |
-| `test/…/BrainClientWiringTest.java` | 测试 | 167 | 大脑层回传字段 / 上下文透传 / 降级标注 |\n| `test/…/SessionWiringTest.java` | 测试 | 42 | **Spring 装配约束**：控制器唯一 `@Autowired` 构造 + SessionStore 为 Bean（防运行态启动失败） |
-| `common/ErrorCode.java` | 枚举 | 30 | 统一错误码定义 |
+| `orchestration/NlpClient.java` | 客户端 | 82 | 调 `nlp-service` 做意图识别（含降级）；读超时走 `INTENT_TIMEOUT` 档（5s） |
+| `orchestration/BodyClient.java` | 客户端 | 84 | 调 `body-service` 做知识检索（含降级）；读超时走 `RETRIEVE_TIMEOUT` 档（15s） |
+| `orchestration/BrainClient.java` | 客户端 | 166 | **R4-06** 大脑层 `/api/nlp/brain/ask` 调用（含降级，不伪造回答）；读超时走 `BRAIN_TIMEOUT` 档（30s） |
+| `orchestration/OutboundHttp.java` | 工具类 | 142 | **跨服务 HTTP 统一出口**（HTTP/1.1 + **具名超时档位**，见 §4.9） |
+| `orchestration/RequestBudget.java` | 工具类 | 60 | **REC-01** 一次请求的总预算：每跳读超时取 `min(该跳档位, 剩余)`，耗尽即**不发起调用**（见 §4.16） |
+| `test/…/BrainClientWiringTest.java` | 测试 | 173 | 大脑层回传字段 / 上下文透传 / 降级标注 |
+| `test/…/SessionWiringTest.java` | 测试 | 42 | **Spring 装配约束**：控制器唯一 `@Autowired` 构造 + SessionStore 为 Bean（防运行态启动失败） |
+| `common/ErrorCode.java` | 枚举 | 32 | 统一错误码定义 |
 | `common/BizException.java` | 异常 | 41 | 携带错误码 + 明细的业务异常 |
-| `common/GlobalExceptionHandler.java` | 切面 | 54 | 错误码 → HTTP 状态码映射与统一响应体 |
+| `common/GlobalExceptionHandler.java` | 切面 | 94 | 错误码 → HTTP 状态码映射与统一响应体 |
 | `grpc/GrpcHealthServer.java` | 组件 | 32 | gRPC Health 探针 |
 | `test/…/BusProxyTest.java` | 测试 | 21 | 总线代理序列化与委托 |
-| `test/…/SessionControllerTest.java` | 测试 | 76 | 租户校验、跨租户拒绝、ask 链路 |
+| `test/…/SessionControllerTest.java` | 测试 | 80 | 租户校验、跨租户拒绝、ask 链路 |
 | `test/…/OutboundHttpTest.java` | 测试 | 101 | **缺陷 D-1 回归守卫** |
 | `test/…/UpstreamDegradeTest.java` | 测试 | 56 | 上游降级与不降级两种语义 |
-| `fsm/SessionFsm.java` | 状态机 | 94 | **R4-01** 会话状态机：`NEW→ACTIVE⇄IDLE→TIMEOUT/CLOSED` + 非法迁移 | 
-| `fsm/SessionStore.java` | 存储 | 188 | **R4-02** Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014）；`@Component`（多构造需显式指定注入构造） |
+| `fsm/SessionFsm.java` | 状态机 | 94 | **R4-01** 会话状态机：`NEW→ACTIVE⇄IDLE→TIMEOUT/CLOSED` + 非法迁移 |
+| `fsm/SessionStore.java` | 存储 | 281 | **R4-02** Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014）；`@Component`（多构造需显式指定注入构造） |
 | `test/…/SessionFsmTest.java` | 测试 | 82 | 全量迁移、终态拒绝、超时可恢复 |
 | `test/…/SessionStoreTest.java` | 测试 | 192 | 落库字段 / TTL / 上下文窗口 / 旧数据兼容 |
 
@@ -209,7 +211,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 - **`fallback()` 的语义**：`{"intent":"闲聊","confidence":0.5,"engine":"FALLBACK"}` ——
   特意带上 `engine` 字段，让调用方/前端能区分「真实识别」与「降级兜底」，避免把兜底结果当成识别结果展示。
 
-### 4.8 `orchestration/BodyClient.java` · 客户端 · 52 行
+### 4.8 `orchestration/BodyClient.java` · 客户端 · 84 行
 
 - **职责**：调用 `body-service` 的 `POST /api/body/retrieve` 做**语义检索**（Phase 3 起由
   `RetrievalService` 承载：缓存优先 → 向量召回 → 重排）。
@@ -220,17 +222,26 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 - **配置**：`app.body.base-url`（默认 `http://127.0.0.1:8083`）、`app.body.degrade-on-failure`（默认 `true`）。
 - **降级**：返回 `List.of()`（空结果），使 `buildAnswer` 走「未找到足够信息」话术。
 
-### 4.9 `orchestration/OutboundHttp.java` · 工具类 · 46 行
+### 4.9 `orchestration/OutboundHttp.java` · 工具类 · 142 行
 
-- **职责**：跨服务 HTTP 调用的**唯一出口**，封装 HTTP/1.1 锁定与超时。
+- **职责**：跨服务 HTTP 调用的**唯一出口**，封装 HTTP/1.1 锁定与**具名超时档位**。
 - **成员**：
 
 | 成员 | 值 / 说明 |
 |---|---|
 | `CONNECT_TIMEOUT` | 3 秒（内网调用足够，过长只会拖慢失败反馈） |
-| `READ_TIMEOUT` | 10 秒 |
+| `INTENT_TIMEOUT` | 5 秒 · 意图识别（规则级联，毫秒级操作） |
+| `RETRIEVE_TIMEOUT` | 15 秒 · 检索型（body 读超时 10s，余量 1.5x） |
+| `BRAIN_TIMEOUT` | 30 秒 · LLM 生成型（级联最坏 22s） |
+| `DEFAULT_READ_TIMEOUT` | 10 秒 · **兜底**，仅用于未声明用途的读 |
+| `ASK_TOTAL_BUDGET_MS` | 35000 · 一次 ask 的**总预算**（意图 5s + 生成 30s），见 `RequestBudget` |
 | `client()` | 返回 `HttpClient`，`Version.HTTP_1_1` + 连接超时 |
-| `restClient(baseUrl)` | 返回 `RestClient`，基于 `JdkClientHttpRequestFactory` + 读超时 |
+| `restClient(baseUrl)` / `restClient(baseUrl, timeout)` | 返回 `RestClient`，基于 `JdkClientHttpRequestFactory` + 指定档位读超时 |
+
+> **为什么不再是一个 `READ_TIMEOUT`**：原先是单值 10s，于是「意图识别」（毫秒级）
+> 与「LLM 生成」（秒级）共用一个数字 —— **必然对一方过长、对另一方过短**。
+> 具名档位让每个调用点声明**用途**，登记表的锚点也才能锚到"这一个档"而不是兜底值
+> （见 `contracts/timeout-budget.yaml` 表头说明与 §9.1）。
 
 - **类的可见性**：`public final` + 私有构造 —— 纯静态工具类，不允许实例化。
 - **强制约定**：见 §2.3。新增跨服务调用（如将来调 `sense-service`）必须经本类。
@@ -365,6 +376,44 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 
 前四条是「缺陷回归」，最后一条是**防矫枉过正**——如果只写前四条，把兜底分支整体改成 404 也能过测，
 那就会把真实故障也伪装成"接口不存在"。这个用例的存在使那次修改成为**受约束的修复**。
+
+### 4.15 `fsm/SessionStatsTest.java` · 3 个用例（R-C04 会话统计）
+
+会话统计（活跃会话 / 状态分布 / 意图分布）是**大脑视图的真实数据源**，测试断言其口径：
+
+| 用例 | 验证内容 |
+|---|---|
+| `stats_counts_active_sessions_and_excludes_closed` | `active_sessions` **剔除 CLOSED**；`scanned_sessions` 为扫描总数；`by_status` / `by_intent` 分布正确；`note` 显式写明数据来自 SCAN |
+| `stats_filters_by_tenant` | 显式传 `tenant` 时只统计该租户 |
+| `stats_degrades_to_empty_when_scan_unavailable` | **SCAN 失败时降级为空统计**（不是抛异常）——视图不会因 Redis 异常而 500 |
+
+**技术手法**：内部静态子类 `StoreWithKeys extends SessionStore` 覆写 `scanSessionKeys`，
+用给定键集合替代真 SCAN（单测不连真 Redis，真 SCAN 由集成/端到端覆盖）。
+mock `HashOperations.entries` / `ListOperations.range` 时先在 Lambda 里取 `Object key = inv.getArgument(0)`
+再 `String.valueOf(key)` —— 直接 `getArgument(0)` 会被推断成 `char[]` 重载并 `ClassCastException`
+（与 `SessionStoreTest` 同一坑，注释已留痕）。
+
+### 4.16 `orchestration/RequestBudget.java` · 工具类 · 60 行（REC-01）
+
+- **职责**：承载**一次请求的总预算（deadline）**，让调用链上**每一跳**都只能在剩余预算内发起。
+- **为什么需要**：若每一跳各用自己的档位超时，链路最坏耗时就是**各跳超时之和**，叠加重试后是**乘积**。
+  后果有两个：① 上游无论把预算调多大都可能不够（下游会自己膨胀）；
+  ② 「快速失败并降级」被变成「长时间等待后仍然降级」，既伤体验又掩盖故障。
+- **核心 API**：
+
+| 方法 | 语义 |
+|---|---|
+| `of(totalMs)` | 以总预算起算，**计时从此刻开始** |
+| `remainingMs()` | 剩余预算；耗尽返回 `0`（**不返回负数**，避免被误当成"无限"） |
+| `exhausted()` | 剩余 ≤ 0 |
+| `clamp(ceilingMs)` | 本跳实际可用读超时 = `min(档位上限, 剩余)`；**返回 0 表示不应发起该跳调用** |
+
+- **关键约束（写进类注释）**：各跳档位上限之和必须 `≤` 总预算 —— 否则"总预算"只是装饰。
+  本类的存在使登记表里可以登记**一个常量**作为"下游最坏耗时"，而不是一串加法。
+- **调用点**：`SessionController` 的 ask 链路（`RequestBudget.of(ASK_TOTAL_BUDGET_MS)`），
+  经 `NlpClient` / `BodyClient` / `BrainClient` 逐跳 `clamp`。
+- **相关**：登记表 `contracts/timeout-budget.yaml` 的 TB-09 下游锚点即锚在 `ASK_TOTAL_BUDGET_MS`；
+  Python 侧的对等物是 `app/budget.py` 的 `Deadline`，两侧同一语义、各自实现。
 
 ## 5. 配置项
 

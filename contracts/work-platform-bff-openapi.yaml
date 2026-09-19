@@ -66,6 +66,15 @@ components:
             - AGENT_BUS_UNAVAILABLE
             - AGENT_UPSTREAM_UNAVAILABLE
             - AGENT_INTERNAL_ERROR
+            # Phase 5 四肢期：工具域专属码（tool-executor `ErrorCode` 同源副本）
+            # 「被拒 ≠ 服务不可用」：前四个码都是**已落审计的真实调用结果**，
+            # 出现在 200 + success:false 的执行响应里，而不是 5xx。
+            - AGENT_TOOL_NOT_ALLOWED
+            - AGENT_TOOL_ARGS_INVALID
+            - AGENT_TOOL_ARGS_BLOCKED
+            - AGENT_TOOL_EXEC_FAILED
+            - AGENT_TOOL_CIRCUIT_OPEN
+            - AGENT_SANDBOX_REJECTED
           example: AGENT_NOT_FOUND
         message: { type: string, example: 接口不存在：/api/wp/not-exist }
         details:
@@ -1030,6 +1039,155 @@ paths:
       parameters:
         - { name: session_id, in: path, required: true, schema: { type: string } }
         - { name: turns, in: query, required: false, schema: { type: integer, default: 10 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools:
+    x-wp-status: implemented
+    get:
+      summary: 'R-C05(预) 执行视图聚合：工具清单 / 注册表 / 指标 / 沙箱 / 审计（代理 tool-executor）'
+      description: >-
+        tool-executor 不可用时回 200 + available=false + reason + reason_code（降级可见，非 5xx），
+        分片缺失时回 partial=true + partial_reasons + partial_note（不把「取不到」写成 0）。
+        **降级码三分**：`*_unavailable`（对端未启动/连接被拒）、`*_timeout`（对端未在预算内返回，
+        是「慢」不是「没有」）、`*_missing`（端点 404，对端版本旧于本 BFF）。
+        各类预算见响应字段 `probe_budget_ms`（沙箱端点需探测 Docker，预算单独放宽）。
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools/registry:
+    x-wp-status: implemented
+    get:
+      summary: 'IN-06 工具注册表摘要 + 变更历史（semver 与废弃期策略）'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools/audit:
+    x-wp-status: implemented
+    get:
+      summary: 'R5-08 工具调用审计明细（租户隔离，最近 N 条）'
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 50 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools/audit/stats:
+    x-wp-status: implemented
+    get:
+      summary: 'R5-08 工具调用审计汇总（总数 / 成功 / 拦截 / 沙箱化）'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools/metrics:
+    x-wp-status: implemented
+    get:
+      summary: '工具执行指标：成功率 / P50·P95·P99 与各工具熔断状态'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools/sandbox:
+    x-wp-status: implemented
+    get:
+      summary: 'R-C05(预) 沙箱状态：生效后端 / 是否真隔离 / 降级原因'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools/execute:
+    x-wp-status: implemented
+    post:
+      summary: 'R5-02 执行工具（控制端点：来源白名单 + X-WP-Control-Token）'
+      description: >-
+        工具被守卫/参数校验/沙箱拒绝时回 200 + available=true + success=false + error_code
+        （已落审计的真实调用结果）；仅当四肢层不可达时回 available=false + reason。
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [tool_name]
+              properties:
+                tool_name: { type: string }
+                arguments: { type: object }
+                call_id: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '401':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '403':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools/{name}:
+    x-wp-status: implemented
+    get:
+      summary: '单工具详情（含 JSON Schema 指纹、超时、沙箱要求与熔断状态）'
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /tools/{name}/impact:
+    x-wp-status: implemented
+    get:
+      summary: 'IN-06 工具变更影响分析（受影响 Agent / 流程 / 是否需契约测试）'
+      parameters:
+        - { name: name, in: path, required: true, schema: { type: string } }
       responses:
         '200':
           description: OK

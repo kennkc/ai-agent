@@ -1,0 +1,397 @@
+# 跨服务超时预算登记表（权威副本）
+#
+# 为什么需要这份表
+# ────────────────
+# 超时值天然分散在每个服务的代码里，各自看都合理，**相遇即错**：
+#   - 上游给 5s，下游内部读超时 10s  → 上游先把「慢」说成「不可用」
+#   - 下游自己不设总预算上限，重试放大 → 上游无论给多少都可能不够
+# 2026-09-19 实测：沙箱冷探测 5.7s 撞上 wp-bff 5s 预算，前端显示「沙箱不可用」，
+# 而直连该端点其实是 200 —— 一个纯「慢」被上游表达成了「没有」。
+#
+# 这份表把每条跨服务调用边的**两个数字**（上游预算 / 下游最坏耗时）放在同一行，
+# 由 `scripts/timeout-budget-check.py` 校验两件事：
+#   ① 语义：upstream_budget_ms >= downstream_worst_case_ms × min_headroom_ratio
+#   ② 锚定：按 upstream_anchor_pattern 从真实代码里提取实值，与表中数字比对
+#      → 防「表里写 A、代码是 B」的漂移（这正是技术债台账「数字级门禁未落地」）
+#
+# 结构约定（重要）
+# ────────────────
+# 本文件被 `scripts/timeout-budget-check.py` 以**行式解析**读取（仓内不引入 PyYAML 依赖，
+# 与 contract-check.py 同一路线）。因此 `edges:` 与 `gaps:` 下的条目**必须保持扁平**：
+# 条目内只能有一层 `key: value`，不得再嵌套子 map。嵌套会静默解析失败。
+#
+# 修改约定
+# ────────
+# 任何新增跨服务调用、或调整任一侧超时，都必须同步本表并跑门禁。
+# 缺口（已知倒挂）登记在 `gaps:` 段，**不得静默**：status=gap 的条目会被门禁
+# 单独列出但不算失败，直到被修复后改为 status=ok。
+#
+# 2026-09-19（REC-01 轮）本条约定第一次被真正动用：session-manager 改用具名档位
+# （INTENT 5s / RETRIEVE 15s / BRAIN 30s）并引入 ask 总预算 35s，nlp-service 引入
+# run_with_budget（BRAIN 25s / EMBED 12s / OCR 12s）后，本表同步：
+#   - TB-12 / TB-13 / TB-15 由 gap 转 ok（GAP-02 / GAP-03 / GAP-04 闭合）
+#   - TB-11 / TB-16 数值随代码上移，但仍未达 1.5x 余量比，继续登记
+#   - 新增 TB-09 的 GAP-06：下游最坏从「读超时 10s」变成「总预算 35s」，余量反被摊薄
+# 教训：给下游加预算上限会**提高**下游最坏耗时的可信度，同时**改变上游余量比** ——
+# 两侧必须同轮更新，否则「闭合一个缺口」会悄悄制造另一个。
+#
+# 2026-09-19（GAP 收尾轮）三条遗留倒挂一次闭合（方向：内层收敛、外层覆盖）：
+#   - GAP-01：nlp 侧 BRAIN_TOTAL_BUDGET_MS 25s → 20s（原 25s > 级联最坏 22s，从不构成约束），
+#     session BRAIN_TIMEOUT 30s 对它恰好 1.5x；级联（推导最坏 22s）在 20s 预算内被截断
+#   - GAP-05：body-service /retrieve 加端到端预算 RETRIEVAL_TOTAL_BUDGET_MS = 10s
+#     （原表把「body 出站读超时 10s」误当端到端最坏 —— 真实管线 = 嵌入 12s + Qdrant 2s + 重排 10s），
+#     nlp 上游 RETRIEVAL_BUDGET_MS 8s → 15s（并回收第二套口径 RETRIEVAL_TIMEOUT_SECONDS）
+#   - GAP-06：wp-bff 新增专用 ASK 档 53s（35s × 1.5 = 52.5s）服务 session /ask 单边；
+#     GENERATE 档保持 45s 不动（被 /brain/ask 等多条边共享，不宜随本边抬高）
+#   - REC-02：门禁已挂进 scripts/start.sh preflight（timeout-budget + doc-consistency 双门禁）
+
+version: 1
+
+meta:
+  checked_at: 2026-09-19
+  # 上游预算至少要留给下游最坏耗时的余量倍数。取 1.5 的理由：
+  # 跨服务调用还叠加了网络往返、序列化、调度抖动，1.2 太紧（实测沙箱那条 1.4 仍出过事）。
+  min_headroom_ratio: 1.5
+  owner: 探索者一号（WorkBuddy 侧）
+
+# ─────────── 上游预算档位（wp-bff，按「操作类型」而非按端点硬编码）───────────
+#
+# 教训：不要给所有子请求一个统一的默认超时。操作类型差异极大 ——
+# 纯查询是毫秒级，LLM 生成是秒级。统一值必然对一方过长、对另一方过短。
+budget_tiers:
+  READ: 5000
+  RETRIEVE: 15000
+  GENERATE: 45000
+  ASK: 53000
+  WRITE: 60000
+  EXECUTE: 60000
+  SANDBOX_PROBE: 9000
+  MIDDLEWARE_START: 180000
+  MIDDLEWARE_STOP: 120000
+
+# ─────────── 跨服务调用边 ───────────
+edges:
+
+  # ── wp-bff → tool-executor ──
+  - id: TB-01
+    caller: wp-bff
+    callee: tool-executor
+    operation: "GET /api/tool/sandbox"
+    tier: SANDBOX_PROBE
+    upstream_budget_ms: 9000
+    downstream_worst_case_ms: 5700
+    downstream_basis: "docker info + docker image inspect 冷探测（Windows Docker Desktop 实测）"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const TOOL_SANDBOX_TIMEOUT_MS = Number\(process\.env\.WP_BFF_TOOL_SANDBOX_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    status: ok
+    note: "2026-09-19 修复：服务侧 available() 非阻塞化（5.7s→0.5s），本预算为双保险"
+
+  - id: TB-02
+    caller: wp-bff
+    callee: tool-executor
+    operation: "GET /api/tool/list | registry | metrics | audit | audit/stats"
+    tier: READ
+    upstream_budget_ms: 5000
+    downstream_worst_case_ms: 500
+    downstream_basis: "进程内注册表 + PG 审计分页查询"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const TOOL_SUBREQUEST_TIMEOUT_MS = Number\(process\.env\.WP_BFF_TOOL_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    status: ok
+
+  - id: TB-03
+    caller: wp-bff
+    callee: tool-executor
+    operation: "POST /api/tool/execute"
+    tier: EXECUTE
+    upstream_budget_ms: 60000
+    downstream_worst_case_ms: 15000
+    downstream_basis: "HttpTool 读超时上限 min(配置, 15000)；沙箱 timeout-ms 10000"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const EXECUTE_TIMEOUT_MS = Number\(process\.env\.WP_BFF_EXECUTE_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    status: ok
+
+  # ── wp-bff → body-service ──
+  - id: TB-04
+    caller: wp-bff
+    callee: body-service
+    operation: "POST /api/body/knowledge (入库 / 重入库)"
+    tier: WRITE
+    upstream_budget_ms: 60000
+    downstream_worst_case_ms: 30000
+    downstream_basis: "EmbeddingClient 读超时 30s（首包权重加载可能慢）"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const WRITE_TIMEOUT_MS = Number\(process\.env\.WP_BFF_WRITE_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    status: ok
+    note: "2026-09-19 由 30000 提到 60000：原值等于下游最坏耗时，余量 0"
+
+  - id: TB-05
+    caller: wp-bff
+    callee: body-service
+    operation: "GET /api/body/knowledge/stats | POST /api/body/retrieve"
+    tier: RETRIEVE
+    upstream_budget_ms: 15000
+    downstream_worst_case_ms: 10000
+    downstream_basis: "body-service OutboundHttp DEFAULT_READ_TIMEOUT = 10s"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const RETRIEVE_TIMEOUT_MS = Number\(process\.env\.WP_BFF_RETRIEVE_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    status: ok
+    note: "2026-09-19 修复：原用 READ 档 5000ms，**小于**下游读超时 10s —— 典型倒挂"
+
+  # ── wp-bff → nlp-service ──
+  - id: TB-06
+    caller: wp-bff
+    callee: nlp-service
+    operation: "POST /api/nlp/brain/ask"
+    tier: GENERATE
+    upstream_budget_ms: 45000
+    downstream_worst_case_ms: 20000
+    downstream_basis: "nlp 侧 BRAIN_TOTAL_BUDGET_MS = 20s 硬上限（GAP-01 收紧：原 25s > 级联推导最坏 22s，从不构成约束；现级联在预算内被截断）"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const GENERATE_TIMEOUT_MS = Number\(process\.env\.WP_BFF_GENERATE_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    downstream_anchor_file: services/python/nlp-service/app/budget.py
+    downstream_anchor_pattern: "BRAIN_TOTAL_BUDGET_MS = int\(os\.getenv\(\"BRAIN_TOTAL_BUDGET_MS\", \"(\d+)\"\)\)"
+    downstream_anchor_scale: 1
+    downstream_anchor_expected_ms: 20000
+    status: ok
+    note: "2026-09-19 修复：原用默认 5000ms，且只跑 TemplateEngine 时最坏 L1 3s×2=6s 就已超 5s。下游最坏由 22000（级联推导）改为 20000（预算硬上限，GAP-01 闭合）—— 推导值不再假装成最坏"
+
+  - id: TB-07
+    caller: wp-bff
+    callee: nlp-service
+    operation: "POST /api/nlp/brain/memory/ingest | memory/compress"
+    tier: GENERATE
+    upstream_budget_ms: 45000
+    downstream_worst_case_ms: 22000
+    downstream_basis: "同上（记忆抽取/压缩均走 LLM 级联）"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const GENERATE_TIMEOUT_MS = Number\(process\.env\.WP_BFF_GENERATE_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    status: ok
+
+  - id: TB-08
+    caller: wp-bff
+    callee: nlp-service
+    operation: "GET /brain/health | /brain/cache/stats | /brain/decisions | /brain/decision/{id}"
+    tier: READ
+    upstream_budget_ms: 5000
+    downstream_worst_case_ms: 1000
+    downstream_basis: "进程内网关统计 + PG 索引查询，无 LLM 调用"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const READ_TIMEOUT_MS = Number\(process\.env\.WP_BFF_READ_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    status: ok
+
+  # ── wp-bff → session-manager ──
+  - id: TB-09
+    caller: wp-bff
+    callee: session-manager
+    operation: "POST /api/session/{id}/ask"
+    tier: ASK
+    upstream_budget_ms: 53000
+    downstream_worst_case_ms: 35000
+    downstream_basis: "session-manager 一次 ask 的**总预算** ASK_TOTAL_BUDGET_MS = 35s（意图 5s + 生成 30s）；REC-01 后由 RequestBudget 硬性收口，不再等于单个读超时"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const ASK_TIMEOUT_MS = Number\(process\.env\.WP_BFF_ASK_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    downstream_anchor_file: services/java/session-manager/src/main/java/com/agent/session/orchestration/OutboundHttp.java
+    downstream_anchor_pattern: "ASK_TOTAL_BUDGET_MS = (\d+)_000"
+    downstream_anchor_scale: 1000
+    downstream_anchor_expected_ms: 35000
+    status: ok
+    note: "2026-09-19 闭合 GAP-06：新增专用 ASK 档 53s（35s × 1.5 = 52.5s）。**不直接抬高 GENERATE 档** —— 它被 /brain/ask 等多条边共享，抬高会把那些「快速失败并降级」的边一起拖慢"
+
+  - id: TB-10
+    caller: wp-bff
+    callee: session-manager
+    operation: "GET /api/session/stats | POST /api/session | GET /api/session/{id} | /context"
+    tier: READ
+    upstream_budget_ms: 5000
+    downstream_worst_case_ms: 500
+    downstream_basis: "Redis Hash 读写，单次往返"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const READ_TIMEOUT_MS = Number\(process\.env\.WP_BFF_READ_TIMEOUT_MS \|\| (\d+)\)"
+    upstream_anchor_scale: 1
+    status: ok
+
+  # ── session-manager → 下游 ──
+  - id: TB-11
+    caller: session-manager
+    callee: nlp-service
+    operation: "POST /api/nlp/brain/ask"
+    upstream_budget_ms: 30000
+    downstream_worst_case_ms: 20000
+    downstream_basis: "nlp 侧 BRAIN_TOTAL_BUDGET_MS = 20s 硬上限（GAP-01 收紧：25s → 20s，原上限大于级联推导最坏 22s、从不构成约束）；级联（L2 8s×2 + L1 3s×2 = 22s）在预算内被截断"
+    upstream_anchor_file: services/java/session-manager/src/main/java/com/agent/session/orchestration/OutboundHttp.java
+    upstream_anchor_pattern: "BRAIN_TIMEOUT = Duration\.ofSeconds\((\d+)\)"
+    upstream_anchor_scale: 1000
+    downstream_anchor_file: services/python/nlp-service/app/budget.py
+    downstream_anchor_pattern: "BRAIN_TOTAL_BUDGET_MS = int\(os\.getenv\(\"BRAIN_TOTAL_BUDGET_MS\", \"(\d+)\"\)\)"
+    downstream_anchor_scale: 1
+    downstream_anchor_expected_ms: 20000
+    status: ok
+    note: "2026-09-19 闭合 GAP-01：闭合方式是**收紧下游**（20s），而非把上游抬到 33s —— 后者会把 session 总预算顶到 38s，反把 GAP-06 恶化到需要 ≥57s 才能盖住。30s / 20s = 1.5x"
+
+  - id: TB-12
+    caller: session-manager
+    callee: body-service
+    operation: "GET /api/body/retrieve（问答上下文检索）"
+    upstream_budget_ms: 15000
+    downstream_worst_case_ms: 10000
+    downstream_basis: "body-service OutboundHttp DEFAULT_READ_TIMEOUT = 10s"
+    upstream_anchor_file: services/java/session-manager/src/main/java/com/agent/session/orchestration/OutboundHttp.java
+    upstream_anchor_pattern: "RETRIEVE_TIMEOUT = Duration\.ofSeconds\((\d+)\)"
+    upstream_anchor_scale: 1000
+    status: ok
+    note: "2026-09-19 闭合 GAP-02：上游改用具名档 RETRIEVE_TIMEOUT = 15s（原 10s = 下游读超时，余量 1.00x）；现余量 1.50x"
+
+  # ── body-service → 下游 ──
+  - id: TB-13
+    caller: body-service
+    callee: nlp-service
+    operation: "POST /api/nlp/embed（向量化）"
+    upstream_budget_ms: 30000
+    downstream_worst_case_ms: 12000
+    downstream_basis: "nlp-service EMBED_BUDGET_MS = 12s 硬上限（run_with_budget 包裹同步计算）"
+    upstream_anchor_file: services/java/body-service/src/main/resources/application.yml
+    upstream_anchor_pattern: "embed-read-timeout-seconds: \$\{EMBED_READ_TIMEOUT_SECONDS:(\d+)\}"
+    upstream_anchor_scale: 1000
+    downstream_anchor_file: services/python/nlp-service/app/budget.py
+    downstream_anchor_pattern: "EMBED_BUDGET_MS = int\(os\.getenv\(\"EMBED_BUDGET_MS\", \"(\d+)\"\)\)"
+    downstream_anchor_scale: 1
+    downstream_anchor_expected_ms: 12000
+    status: ok
+    note: "2026-09-19 闭合 GAP-03：Python 侧 /api/nlp/embed 接入 run_with_budget（12s），超时返回 504 AGENT_TIMEOUT —— 下游最坏耗时从「不可证明」变为有界"
+
+  - id: TB-14
+    caller: body-service
+    callee: qdrant
+    operation: "向量检索 / upsert"
+    upstream_budget_ms: 10000
+    downstream_worst_case_ms: 2000
+    downstream_basis: "Qdrant 单次 ANN 查询实测 P99 < 100ms，2s 为保守上限"
+    upstream_anchor_file: services/java/body-service/src/main/java/com/agent/body/client/OutboundHttp.java
+    upstream_anchor_pattern: "DEFAULT_READ_TIMEOUT = Duration\.ofSeconds\((\d+)\)"
+    upstream_anchor_scale: 1000
+    status: ok
+
+  # ── sense-service → 下游 ──
+  - id: TB-15
+    caller: sense-service
+    callee: nlp-service
+    operation: "POST /api/nlp/ocr"
+    upstream_budget_ms: 20000
+    downstream_worst_case_ms: 12000
+    downstream_basis: "nlp-service OCR_BUDGET_MS = 12s 硬上限（run_with_budget）"
+    upstream_anchor_file: services/java/sense-service/src/main/resources/application.yml
+    upstream_anchor_pattern: "timeout-ms: (\d+)\n    baseline-confidence"
+    upstream_anchor_scale: 1
+    downstream_anchor_file: services/python/nlp-service/app/budget.py
+    downstream_anchor_pattern: "OCR_BUDGET_MS = int\(os\.getenv\(\"OCR_BUDGET_MS\", \"(\d+)\"\)\)"
+    downstream_anchor_scale: 1
+    downstream_anchor_expected_ms: 12000
+    status: ok
+    note: "2026-09-19 闭合 GAP-04：Python 侧 /api/nlp/ocr 接入 run_with_budget（12s）"
+
+  # ── nlp-service → 下游 ──
+  - id: TB-16
+    caller: nlp-service
+    callee: body-service
+    operation: "POST /api/body/retrieve（RAG 检索）"
+    upstream_budget_ms: 15000
+    downstream_worst_case_ms: 10000
+    downstream_basis: "body 检索端到端预算 RETRIEVAL_TOTAL_BUDGET_MS = 10s（BudgetGuard 硬性收口，超时 504 AGENT_TIMEOUT）"
+    upstream_anchor_file: services/python/nlp-service/app/budget.py
+    upstream_anchor_pattern: "RETRIEVAL_BUDGET_MS = int\(os\.getenv\(\"RETRIEVAL_BUDGET_MS\", \"(\d+)\"\)\)"
+    upstream_anchor_scale: 1
+    downstream_anchor_file: services/java/body-service/src/main/resources/application.yml
+    downstream_anchor_pattern: "total-budget-ms: \$\{RETRIEVAL_TOTAL_BUDGET_MS:(\d+)\}"
+    downstream_anchor_scale: 1
+    downstream_anchor_expected_ms: 10000
+    status: ok
+    note: "2026-09-19 闭合 GAP-05：上游 8s → 15s（RETRIEVAL_BUDGET_MS，并回收第二套口径 RETRIEVAL_TIMEOUT_SECONDS）；下游由 body 端到端预算 10s 收口（此前登记的「出站读超时 10s」低估了真实管线最坏）。15s / 10s = 1.5x"
+
+  - id: TB-17
+    caller: nlp-service
+    callee: tool-executor
+    operation: "GET /api/tool/list（Function Calling 工具目录）"
+    upstream_budget_ms: 8000
+    downstream_worst_case_ms: 1000
+    downstream_basis: "进程内注册表"
+    upstream_anchor_file: services/python/nlp-service/app/tools/function_calling.py
+    upstream_anchor_pattern: "/api/tool/list\", timeout=(\d+)\)"
+    upstream_anchor_scale: 1000
+    status: ok
+
+  # ── 基础设施（不同量级，豁免余量校验，仅登记）──
+  - id: TB-18
+    caller: wp-bff
+    callee: docker
+    operation: "中间件 start watchdog"
+    tier: MIDDLEWARE_START
+    upstream_budget_ms: 180000
+    downstream_worst_case_ms: 30000
+    downstream_basis: "容器启动实测 10~30s"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "const START_TIMEOUT_MS = (\d+)"
+    upstream_anchor_scale: 1
+    exempt_headroom: true
+    status: ok
+    note: "watchdog 语义：超时不是失败，是解除中间态的兜底，故豁免余量校验"
+
+  - id: TB-19
+    caller: wp-bff
+    callee: "postgres | redis | qdrant | nacos | jaeger | kafka | nats | minio"
+    operation: "TCP 健康探针"
+    upstream_budget_ms: 900
+    downstream_worst_case_ms: 900
+    downstream_basis: "探测阈值本身即判定标准（连通即返回，不等待业务处理）"
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: "function probeTcp\(port, timeoutMs = (\d+)\)"
+    upstream_anchor_scale: 1
+    exempt_headroom: true
+    status: ok
+    note: "探针语义特殊：超时 = 判定为 down，是**预期结果**而非错误"
+
+# ─────────── 调用点魔法数字扫描 ───────────
+#
+# 锚点校验（edge 上的 *_anchor_pattern）锚的是**常量定义**，看不见调用点就地写死的数字。
+# 2026-09-19 实测被绕过一次：`POST /api/body/knowledge` 调用点写 `timeoutMs: 30000`
+# （= 下游最坏耗时，余量 0），而表中记的是常量 60000 —— 门禁全绿，缺陷仍在。
+# 故单独扫调用点：凡跨服务调用不得就地写数字，必须用 budget_tiers 命名档位。
+magic_number_scan:
+
+  - id: MNS-01
+    file: services/node/wp-bff/server.js
+    pattern: "timeoutMs:\s*(\d{2,})"
+    note: "wp-bff 所有跨服务调用点；`httpGetJson` 的 2500 是默认**形参**而非 key，故不命中"
+
+# ─────────── 已知缺口（倒挂未闭合）───────────
+#
+# 这些条目门禁会**单独列出但不判失败** —— 目的是让它们可见、可追踪，
+# 而不是靠「门禁绿了」把问题掩盖成不存在。
+#
+# 2026-09-19（GAP 收尾轮）：GAP-01 ~ GAP-06 全部闭合，本段暂空。
+# 教训保留：闭合 GAP-01 时若选「把上游抬到 33s」，GAP-06 会恶化到 ≥57s ——
+# **余量比是两侧的函数，闭合一处前先看它对相邻边的推挤**。
+gaps: []
+
+# ─────────── 系统性建议（未落地，供 P6 决策）───────────
+recommendations:
+
+  - id: REC-01
+    title: "LLM 级联需要总预算上限（deadline propagation）"
+    detail: "当前 max_retries=1 且逐级放宽超时（L1 3s -> L2 8s -> L3 20s），最坏耗时是各级超时与重试次数的乘积，随层级与重试数增长而膨胀。正确做法是给一次 generate() 调用一个总 deadline，级联只在该 deadline 内调度，这样上游预算才能可靠覆盖下游 —— 否则只能靠不断调大上游超时，而这会把「快速失败并降级」变成「长时间等待后仍降级」，损害体验且掩盖故障。"
+
+  - id: REC-02
+    title: "本表应纳入 CI 与启动自检"
+    detail: "门禁脚本已可跑；后续应挂进 CI 与 start.sh 前置检查，使超时错配在提交期而非运行期暴露。"
+
+  - id: REC-03
+    title: "同语言内也应复核「上游预算 vs 下游最坏」"
+    detail: "本轮只覆盖跨服务调用；单服务内的线程池等待 / 队列超时同样存在同类错配风险。"

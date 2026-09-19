@@ -1,0 +1,76 @@
+server:
+  port: 8084
+
+grpc:
+  port: ${GRPC_PORT:9095}
+
+# ── Phase 5 四肢期（R5-01~R5-08）：工具注册 / 执行 / 沙箱 / 审计 ──
+app:
+  tool:
+    # R5-07 工具白名单：不在名单内的工具一律拒绝（含未注册工具）
+    whitelist: ${TOOL_WHITELIST:calculator,http,code}
+    # R5-02 熔断：连续失败达阈值 → 打开 30s 快速失败
+    circuit:
+      failure-threshold: ${TOOL_FAILURE_THRESHOLD:3}
+      open-ms: ${TOOL_CIRCUIT_OPEN_MS:30000}
+    # R5-04 HTTP 工具域名白名单（SSRF 第一道；第二道是内网地址拦截）
+    # 默认含 open-meteo（免密钥天气 API）以便组合任务演示可直接命中真实数据
+    http:
+      allow-domains: ${HTTP_ALLOW_DOMAINS:api.open-meteo.com,httpbin.org,api.github.com}
+      max-body-bytes: ${HTTP_MAX_BODY_BYTES:8192}
+    # R5-03 沙箱策略（对齐部署文档 §2 的 SANDBOX_TIMEOUT_MS / SANDBOX_MEMORY_MB）
+    sandbox:
+      enabled: ${SANDBOX_ENABLED:true}
+      timeout-ms: ${SANDBOX_TIMEOUT_MS:10000}
+      memory-mb: ${SANDBOX_MEMORY_MB:256}
+      docker:
+        enabled: ${SANDBOX_DOCKER_ENABLED:true}
+        image: ${SANDBOX_IMAGE:agent-sandbox:latest}
+        python: ${SANDBOX_DOCKER_PYTHON:python3}
+      # Docker 不可用时的降级后端：**不是隔离边界**，结果恒带 degraded=true
+      process:
+        fallback-enabled: ${SANDBOX_PROCESS_FALLBACK:true}
+        python-bin: ${SANDBOX_PYTHON_BIN:python}
+    # R5-08 审计：真相源是 PG 表 tool_audit_log；Kafka 仅事件旁路
+    audit:
+      memory-capacity: ${TOOL_AUDIT_MEMORY_CAPACITY:500}
+      kafka-enabled: ${TOOL_AUDIT_KAFKA_ENABLED:true}
+      kafka-bootstrap: ${KAFKA_BOOTSTRAP:127.0.0.1:9092}
+      kafka-topic: ${KAFKA_TOOL_TOPIC:lifeform.tool.invoked}
+
+spring:
+  application:
+    name: tool-executor
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        # 未启动 Nacos 时不影响单体运行
+        register-enabled: ${NACOS_ENABLED:false}
+  datasource:
+    url: ${PG_URL:jdbc:postgresql://127.0.0.1:5432/lifeform}
+    username: ${PG_USER:agent}
+    password: ${PG_PASSWORD:agent123}
+    hikari:
+      connection-timeout: 3000
+      initialization-fail-timeout: -1
+      maximum-pool-size: 6
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://localhost:4318/v1/traces}
+
+logging:
+  level:
+    com.agent: INFO

@@ -2,6 +2,7 @@ import type {
   ApprovalItem, AutomationItem, CaseItem, ChatMessage, CollaborationMessage, ConnectorItem,
   EvolutionMetric, ExpertProfile, HealingRecord, ManagedModel, MetricCard, MiddlewareOverview, ModelCallPoint, ModelRoute, ModelRuntimeNode, NotificationItem, OnlineAgent, OptimizationSuggestion, OrganHealth, OverviewWorkflow, RemoteChannel, RemoteFlowEvent,
   ResultArtifact, SearchItem, SenseChannel, SkillItem, SuggestionExecution, TaskItem, TracingOverview, VitalSign, MiddlewareNode,
+  ExecutionOverview, ToolExecutionResult, ToolImpactReport,
 } from '../types'
 
 export const metrics: MetricCard[] = [
@@ -528,4 +529,125 @@ export const tracingSeed: TracingOverview = {
     { trace_id: '77e2c8a4d1b95c03', service: 'gateway-service', operation: 'POST /api/auth/token', duration_ms: 34, spans: 2, time: '21:22:31', status: 'ok' },
     { trace_id: '1a8f3d6b9c05e247', service: 'session-manager', operation: 'POST /api/session/{id}/ask', duration_ms: 502, spans: 6, time: '21:18:05', status: 'error' },
   ],
+}
+
+// ─────────── R-C05(预) 执行视图：四肢层工具演示数据 ───────────
+// 字段口径与 tool-executor 真实返回**逐字段对齐**（2026-09-19 实测 /api/tool/list 后校正）：
+//   1. 参数名必须是真实的 `expr`（calculator）/ `code`（code）/ `url`（http），
+//      写成 `expression`/`source` 会让演示参数照抄到真实服务时被 schema 校验拒绝；
+//   2. `registered_at` / `changed_at` 真实为 **epoch 毫秒**，不是格式化字符串；
+//   3. `change_log[].action` 实际为大写 `REGISTER`，`impact` 为**数组**（可为空）；
+//   4. `metrics.success_rate` 在窗口无样本时为 `null` —— 不能拿 0 冒充「全失败」。
+export const executionSeed: ExecutionOverview = {
+  available: true,
+  tenant_id: 'default',
+  checked_at: '21:30:12',
+  tool_url: 'http://127.0.0.1:8084',
+  total: 3,
+  registry_backend: 'in-memory',
+  tools: [
+    { name: 'calculator', version: '1.0.0', description: '安全的算术计算器：支持 + - * / % ^、括号与 sqrt/abs/min/max/round/pow/log 等函数。', sandbox_required: false, timeout_ms: 3000, whitelist_domains: [], deprecated: false, owner: 'lifeform-core', registered_at: 1789796935302, circuit: { tool_name: 'calculator', state: 'closed', consecutive_failures: 0 } },
+    { name: 'code', version: '1.0.0', description: '在沙箱中执行 Python 代码片段，返回 stdout/stderr。危险操作在入沙箱前被拦截。', sandbox_required: true, timeout_ms: 12000, whitelist_domains: [], deprecated: false, owner: 'lifeform-core', registered_at: 1789796935303, circuit: { tool_name: 'code', state: 'closed', consecutive_failures: 0 } },
+    { name: 'http', version: '1.0.0', description: '白名单域名 HTTP 抓取（SSRF 防护：域名白名单 + 内网地址拦截 + 响应体截断）。', sandbox_required: false, timeout_ms: 8000, whitelist_domains: ['api.open-meteo.com', 'httpbin.org', 'api.github.com'], deprecated: false, owner: 'lifeform-core', registered_at: 1789796935303, circuit: { tool_name: 'http', state: 'closed', consecutive_failures: 0 } },
+  ],
+  registry: {
+    summary: { tool_count: 3, deprecated_count: 0, change_count: 3, storage: 'in-memory', registry_backend: 'in-memory' },
+    change_log: [
+      { tool_name: 'calculator', version: '1.0.0', schema_hash: '97836bb2787ca2b0', action: 'REGISTER', previous_version: null, changed_at: 1789796935303, changed_by: 'lifeform-core', impact: [] },
+      { tool_name: 'code', version: '1.0.0', schema_hash: '335bafd3d28c861a', action: 'REGISTER', previous_version: null, changed_at: 1789796935303, changed_by: 'lifeform-core', impact: [] },
+      { tool_name: 'http', version: '1.0.0', schema_hash: '900f82a69608fde8', action: 'REGISTER', previous_version: null, changed_at: 1789796935303, changed_by: 'lifeform-core', impact: [] },
+    ],
+    semver_policy: '工具接口 semver 版本化；schema 变更即触发 L1 契约测试（IN-06）',
+    deprecation_policy: '废弃期 30 天，期间仍可调用并返回 deprecated=true',
+  },
+  metrics: {
+    metrics: { window_size: 24, total_calls: 41, total_failures: 5, blocked_calls: 3, success_rate: 0.875, p50_ms: 6, p95_ms: 38, p99_ms: 62, calls_by_tool: { calculator: 22, http: 13, code: 6 } },
+    circuit_breakers: [
+      { tool_name: 'calculator', state: 'closed', consecutive_failures: 0 },
+      { tool_name: 'code', state: 'closed', consecutive_failures: 0 },
+      { tool_name: 'http', state: 'closed', consecutive_failures: 1 },
+    ],
+  },
+  sandbox: {
+    enabled: true, active_backend: 'process-restricted', isolated: false, degraded: true,
+    docker_available: false, process_fallback_available: true, timeout_ms: 10000, memory_mb: 256,
+    note: '未检测到可用沙箱镜像 —— 已降级为受限子进程（非隔离边界），仅静态预检 + 硬超时',
+  },
+  audit: {
+    total: 5, audit_backend: 'postgres', degraded: false,
+    items: [
+      { audit_id: 'a-1041', call_id: 'call-7f3a91c2', tool_name: 'calculator', args: '{"expr":"(128*1.07+36)/2"}', success: true, output: '{"result":86.48}', latency_ms: 4, sandboxed: false, created_at: 1758285600000, requested_by: 'work-platform' },
+      { audit_id: 'a-1040', call_id: 'call-2b8e40d5', tool_name: 'http', args: '{"url":"https://api.open-meteo.com/v1/forecast?latitude=31.2&longitude=121.5"}', success: true, output: '{"status":200,"bytes":842}', latency_ms: 61, sandboxed: false, created_at: 1758285480000, requested_by: 'work-platform' },
+      { audit_id: 'a-1039', call_id: 'call-9c1d77ab', tool_name: 'code', args: '{"code":"import os; os.system(\'rm -rf /\')"}', success: false, error_code: 'AGENT_TOOL_ARGS_BLOCKED', error_message: '参数命中危险模式：os.system', latency_ms: 1, sandboxed: false, created_at: 1758285300000, requested_by: 'work-platform' },
+      { audit_id: 'a-1038', call_id: 'call-4e6b2f90', tool_name: 'http', args: '{"url":"https://evil.example.net/collect"}', success: false, error_code: 'AGENT_TOOL_ARGS_BLOCKED', error_message: '目标域不在白名单内', latency_ms: 2, sandboxed: false, created_at: 1758285120000, requested_by: 'work-platform' },
+      { audit_id: 'a-1037', call_id: 'call-1a5c83de', tool_name: 'code', args: '{"code":"print(sum(range(1000)))"}', success: true, output: '499500', latency_ms: 318, sandboxed: true, sandbox_backend: 'docker', created_at: 1758284900000, requested_by: 'work-platform' },
+    ],
+  },
+  audit_stats: {
+    audit: { backend: 'postgres', degraded: false, total: 41, success: 36, blocked: 3, sandboxed: 6, success_rate: 0.878 },
+    kafka: { available: true, topic: 'lifeform.tool.invoked', published: 41 },
+  },
+  partial: false,
+  partial_reasons: [],
+  note: '演示数据（VITE_DATA_SOURCE=mock）：工具调用记录与沙箱状态均非真实执行结果',
+  data_source: 'mock',
+}
+
+/**
+ * 演示执行：不真跑工具，返回带 mock 标注的结果。
+ * 危险参数按真实守卫口径拒绝 —— 演示也能看到「拦截」这条路径，而不是只有成功路径。
+ * 参数键与真实 schema 一致（code / expr / url）。
+ */
+const MOCK_DANGEROUS = /(os\.system|subprocess\.(popen|call|run)|rm\s+-rf|Runtime\.getRuntime\(\)\.exec)/i
+export function executeToolMock(toolName: string, args: Record<string, unknown>): ToolExecutionResult {
+  mockCallSeq += 1
+  const callId = `call-mock-${mockCallSeq}`
+  const source = String(args.code ?? args.expr ?? args.url ?? '')
+  if (MOCK_DANGEROUS.test(source)) {
+    return {
+      available: true, tool_name: toolName, success: false,
+      error_code: 'AGENT_TOOL_ARGS_BLOCKED', error_message: '参数命中危险模式（演示判定，与真实守卫同口径）',
+      call_id: callId, audit_id: callId, latency_ms: 1, bff_latency_ms: 2,
+      checked_at: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+      data_source: 'mock', reason: '演示数据源：本次未真实执行工具',
+    }
+  }
+  return {
+    available: true, tool_name: toolName, success: true,
+    output: { demo: true, input: args, note: '演示数据源未真实执行，切换 VITE_DATA_SOURCE=api 后走 tool-executor' },
+    call_id: callId, audit_id: callId, latency_ms: 5, bff_latency_ms: 7, sandboxed: toolName === 'code',
+    sandbox_backend: toolName === 'code' ? 'process-restricted' : undefined,
+    checked_at: new Date().toLocaleTimeString('zh-CN', { hour12: false }),
+    data_source: 'mock', reason: '演示数据源：本次未真实执行工具',
+  }
+}
+let mockCallSeq = 0
+
+/**
+ * IN-06 影响分析演示数据（BFF `GET /tools/{name}/impact`）。
+ *
+ * 与真实实现同口径：**消费方来自注册表显式登记**（`ToolBootstrap.registerConsumer`），
+ * 因此是"登记过的"，不是猜出来的；`note` 必须一起展示，避免把"没登记"读成"安全"。
+ */
+const MOCK_TOOL_CONSUMERS: Record<string, { agents: string[]; flows: string[] }> = {
+  calculator: { agents: ['brain-planner'], flows: ['combo-task'] },
+  http: { agents: ['brain-planner'], flows: ['combo-task'] },
+  code: { agents: ['code-assist'], flows: ['code-assist'] },
+}
+export function toolImpactMock(toolName: string): ToolImpactReport {
+  const consumers = MOCK_TOOL_CONSUMERS[toolName] || { agents: [], flows: [] }
+  const known = Boolean(MOCK_TOOL_CONSUMERS[toolName])
+  return {
+    tool_name: toolName,
+    current_version: known ? '1.0.0' : null,
+    schema_hash: executionSeed.registry?.change_log.find((item) => item.tool_name === toolName)?.schema_hash,
+    affected_agents: consumers.agents,
+    affected_flows: consumers.flows,
+    schema_changed: false,
+    contract_test_required: false,
+    note: known
+      ? '以上为注册表登记的消费方，变更后需回归其契约测试'
+      : '工具未登记消费方 —— 影响分析只覆盖**显式登记过**的 Agent/流程；硬编码调用方不会出现在此列表中',
+    data_source: 'mock',
+  }
 }

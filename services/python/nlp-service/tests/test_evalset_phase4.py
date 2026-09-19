@@ -39,7 +39,8 @@ class _StubRetriever:
         self.passage = passage
         self.title = title
 
-    def retrieve(self, query: str, tenant_id: str = "default", top_k: int = 5) -> RetrievalOutcome:
+    def retrieve(self, query: str, tenant_id: str = "default", top_k: int = 5,
+                 timeout: float | None = None) -> RetrievalOutcome:
         return RetrievalOutcome(chunks=[{
             "chunk_id": "eval-1", "doc_id": "eval-doc", "title": self.title,
             "content": self.passage, "score": 0.9, "rerank_score": 0.9,

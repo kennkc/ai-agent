@@ -1,0 +1,421 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>优化建议落地 · 超时语义区分与启动链路自检</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 2026-09-19-优化建议落地-超时语义区分与启动链路自检.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 结论摘要</a></li>
+<li><a href="#2-null">2. 缺陷一：上游把「慢」和「没有」合并成同一个 null</a><ul>
+<li><a href="#21">2.1 问题的本质</a></li>
+<li><a href="#22">2.2 修复</a></li>
+<li><a href="#23">2.3 工具域聚合升级</a></li>
+<li><a href="#24">2.4 前端侧</a></li>
+</ul>
+</li>
+<li><a href="#3-vite-bff">3. 缺陷二：vite 代理目标与 BFF 端口无交叉校验</a><ul>
+<li><a href="#31">3.1 为什么危险</a></li>
+<li><a href="#32">3.2 修复</a></li>
+</ul>
+</li>
+<li><a href="#4-healthcheck">4. 缺陷三：启动脚本缺服务 + healthcheck 自废武功</a><ul>
+<li><a href="#41">4.1 启动脚本</a></li>
+<li><a href="#42-healthcheck-set-e">4.2 healthcheck 的 set -e 自杀缺陷（本轮新发现）</a></li>
+<li><a href="#43">4.3 整体重跑结果</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 验证</a></li>
+<li><a href="#6">6. 留下的思考</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="_1">优化建议落地 · 超时语义区分与启动链路自检<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>项目</strong>: Agent-Lifeform | <strong>日期</strong>: 2026-09-19
+<strong>本轮范围</strong>: <code>services/node/wp-bff</code>（传输层 + 工具域聚合）· <code>web/work-platform</code>（vite 代理自检 + 执行视图）· <code>scripts/</code>（启动与健康检查脚本）
+<strong>触发</strong>：上一轮（《工作平台真实链路打通与沙箱探测非阻塞化》）交付时留下三条优化建议，用户指示「按优化建议执行任务」，本轮逐条落地
+<strong>代码基线</strong>：<code>0921345</code>（开工前已核对远端三分支无新提交）</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 结论摘要<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>落地前</th>
+<th>落地后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>子请求失败语义</td>
+<td>全部塌缩为 <code>null</code>（超时 = 连不上 = 404 = 坏 JSON）</td>
+<td>五类分明：<code>timeout</code> / <code>unreachable</code> / <code>endpoint_missing</code> / <code>http_error</code> / <code>bad_json</code></td>
+</tr>
+<tr>
+<td>工具域分片缺失码</td>
+<td><code>sandbox_unavailable</code>（<strong>掩盖真相</strong>）</td>
+<td><code>sandbox_timeout</code> / <code>sandbox_missing</code> / <code>sandbox_unavailable</code> 三码分开</td>
+</tr>
+<tr>
+<td>前端告警文案</td>
+<td>直接打印 raw code</td>
+<td>翻成人话，并显式标注「慢，非缺失」</td>
+</tr>
+<tr>
+<td>vite 代理目标</td>
+<td>与 <code>WP_BFF_PORT</code> <strong>互不校验</strong>，错了静默满屏 Mock</td>
+<td>启动探活 + 不可达终端告警</td>
+</tr>
+<tr>
+<td>启动脚本</td>
+<td><code>start.sh</code> / <code>start-dev.bat</code> <strong>缺 wp-bff 与前端两步</strong></td>
+<td>补齐；<code>WP_BFF_URL</code> 由 <code>WP_BFF_PORT</code> 单点派生</td>
+</tr>
+<tr>
+<td>healthcheck</td>
+<td><code>set -e</code> 自杀：首个不可达服务处即终止，<strong>报不出谁挂了</strong></td>
+<td>修好并<strong>整体重跑</strong>：19 OK / 6 BAD（BAD 均为本轮未启动）</td>
+</tr>
+<tr>
+<td>wp-bff 测试</td>
+<td>73</td>
+<td><strong>81 / 0 失败</strong>（+8）</td>
+</tr>
+<tr>
+<td>Java / 契约 / 文档覆盖</td>
+<td>248 / 0 FAIL / 158-158</td>
+<td>248 / 0 FAIL / 158-158（本轮未动 Java）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2-null">2. 缺陷一：上游把「慢」和「没有」合并成同一个 <code>null</code><a class="headerlink" href="#2-null" title="Permanent link">&para;</a></h2>
+<h3 id="21">2.1 问题的本质<a class="headerlink" href="#21" title="Permanent link">&para;</a></h3>
+<p>上一轮在服务侧把沙箱探测改成非阻塞（5.7s → 0.5s），但<strong>表达层的问题没动</strong>：</p>
+<pre><code class="language-js">// 修复前
+function httpRequestJson(url, { ... } = {}) {
+  return new Promise(resolve =&gt; {
+    ...
+    request.on('timeout', () =&gt; { request.destroy(); resolve(null) })
+    request.on('error',   () =&gt; resolve(null))
+    response.on('end',    () =&gt; { try { resolve(JSON.parse(raw)) } catch { resolve(null) } })
+  })
+}
+</code></pre>
+<p>四种完全不同的失败——<strong>对端太慢 / 对端没起 / 端点不存在 / 返回不是 JSON</strong>——全部 <code>resolve(null)</code>。
+调用方拿到 <code>null</code> 只能写一句"不可用"。于是：</p>
+<ul>
+<li>沙箱探测冷启动慢 5.7s → 被叙述成 <strong>"沙箱不可用"</strong></li>
+<li>tool-executor 是旧版本、没有 <code>/api/tool/sandbox</code> → 同样被叙述成 <strong>"沙箱不可用"</strong></li>
+<li>服务真的没起 → 还是 <strong>"沙箱不可用"</strong></li>
+</ul>
+<p><strong>三者运维动作完全不同</strong>（重试 / 重启服务 / 升级服务），却给出同一句话。</p>
+<h3 id="22">2.2 修复<a class="headerlink" href="#22" title="Permanent link">&para;</a></h3>
+<p>新增 <code>httpRequestJsonMeta()</code>，返回结构化的失败原因：</p>
+<pre><code class="language-js">{ ok: true,  data: {...}, status: 200 }
+{ ok: false, data: null,  reason: 'timeout'|'unreachable'|'endpoint_missing'|'http_error'|'bad_json', status?: number }
+</code></pre>
+<p><code>404</code> 单独识别为 <code>endpoint_missing</code>（<strong>版本不匹配的强信号</strong>，与"服务不可达"是两回事）。
+原 <code>httpRequestJson</code> 保留为丢弃原因后的薄封装 —— <strong>既有 73 条用例零改动全绿</strong>，向后兼容。</p>
+<h3 id="23">2.3 工具域聚合升级<a class="headerlink" href="#23" title="Permanent link">&para;</a></h3>
+<pre><code>partial_reasons: ['sandbox_timeout']      ← 慢
+partial_reasons: ['sandbox_missing']      ← 端点不存在（版本旧）
+partial_reasons: ['sandbox_unavailable']  ← 真连不上
+</code></pre>
+<p>同时新增三个字段：</p>
+<table>
+<thead>
+<tr>
+<th>字段</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>reason_code</code></td>
+<td>整体不可用时的机器码，供前端分支</td>
+</tr>
+<tr>
+<td><code>partial_note</code></td>
+<td>人类可读解释（"对端未在预算内返回 —— 这是慢，不是没有"）</td>
+</tr>
+<tr>
+<td><code>probe_budget_ms</code></td>
+<td><code>{default, sandbox}</code> 各子请求预算，排查用</td>
+</tr>
+</tbody>
+</table>
+<p>另外把<strong>沙箱分片单独放宽超时预算</strong> —— 它是唯一会触发容器探测的子请求，用与普通读端点
+相同的预算本身就是设计错配。</p>
+<p><strong>预算口径更正（同日复核）</strong>：本文件初稿写"上游 2500ms 预算"，实际工具域走的是
+<code>httpRequestJson</code> 默认 <strong>5000ms</strong>（<code>WP_BFF_TOOL_TIMEOUT_MS</code> 现在显式化为 5000，沙箱 8000）。
+<code>httpGetJson(url, timeoutMs = 2500)</code> 是另一个仅 GET 的辅助函数，与工具域无关 —— 两者都在
+<code>server.js</code> 里且都是超时默认值，极易混淆。<strong>更正后余量只有 0.7s，比初稿描述的更脆弱。</strong>
+详见《2026-09-19-工作平台真实链路打通与沙箱探测非阻塞化》§3.2 的口径更正。</p>
+<h3 id="24">2.4 前端侧<a class="headerlink" href="#24" title="Permanent link">&para;</a></h3>
+<p><code>ExecutionView.vue</code> 新增 <code>PARTIAL_REASON_LABELS</code> 映射表，分片缺失告警不再打印 raw code：</p>
+<pre><code>sandbox_timeout → 「沙箱状态读取超时（慢，非缺失）」
+sandbox_missing → 「沙箱端点不存在（服务版本可能较旧）」
+</code></pre>
+<p>整体不可用的空态面板同时展示 <code>reason_code</code>，并对 <code>timeout</code> / <code>endpoint_missing</code> 各给一句
+<strong>下一步动作</strong>（"重试通常即恢复" / "多半是服务版本旧于本 BFF"）。</p>
+<p><code>types/index.ts</code> 的 <code>ExecutionOverview</code> 补 <code>reason_code</code> / <code>partial_note</code> / <code>probe_budget_ms</code>。</p>
+<hr />
+<h2 id="3-vite-bff">3. 缺陷二：vite 代理目标与 BFF 端口无交叉校验<a class="headerlink" href="#3-vite-bff" title="Permanent link">&para;</a></h2>
+<h3 id="31">3.1 为什么危险<a class="headerlink" href="#31" title="Permanent link">&para;</a></h3>
+<p><code>WP_BFF_URL</code>（前端代理目标）与 <code>WP_BFF_PORT</code>（wp-bff 监听端口）是<strong>两个互不校验的环境变量</strong>。
+端口一错，页面不会报错：</p>
+<pre><code>请求 → 500 → api/provider.ts 的 safe() 兜住 → 逐 scope reportDegrade() → 回落 Mock
+</code></pre>
+<p>用户看到的是「满屏演示数据 + 顶栏一堆降级」，<strong>从页面上无法判断这是环境问题</strong>。
+上一轮实测就踩到了：BFF 落在 8090，代理想指别处。</p>
+<h3 id="32">3.2 修复<a class="headerlink" href="#32" title="Permanent link">&para;</a></h3>
+<p><code>vite.config.ts</code> 新增 <code>bffReachabilityGate()</code> 插件：</p>
+<ul>
+<li><strong>启动期探活</strong>：对 <code>WP_BFF_URL</code> 与 <code>WP_GATEWAY_URL</code> 各打一次 <code>/api/wp/healthz</code>（gateway 打根路径）</li>
+<li><strong>不可达 → 终端醒目告警</strong>，直接给出 <code>WP_BFF_URL</code> 当前值与 <code>WP_BFF_PORT</code> 的排查提示</li>
+<li><strong>每条目标只响一次</strong>，不刷屏</li>
+<li>非阻塞（异步探活，不拖慢 dev server 启动）</li>
+</ul>
+<p><strong>实测验证</strong>：<code>WP_BFF_URL=http://127.0.0.1:9999</code> 起 vite → 终端输出告警；
+经该实例打代理请求失败但<strong>进程不崩</strong>（无未捕获异常），3001/3099 监听正常。</p>
+<hr />
+<h2 id="4-healthcheck">4. 缺陷三：启动脚本缺服务 + healthcheck 自废武功<a class="headerlink" href="#4-healthcheck" title="Permanent link">&para;</a></h2>
+<h3 id="41">4.1 启动脚本<a class="headerlink" href="#41" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>脚本</th>
+<th>变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>scripts/start.sh</code></td>
+<td>新增 <code>start_bff</code> / <code>start_frontend</code>；<code>JAVA_SERVICES</code> 补 <code>tool-executor</code>；<strong><code>WP_BFF_URL="${WP_BFF_URL:-http://127.0.0.1:$WP_BFF_PORT}"</code></strong> —— 单点派生，从根上消除两变量漂移</td>
+</tr>
+<tr>
+<td><code>scripts/start-dev.bat</code></td>
+<td>对齐（补 BFF 与前端步骤、同一端口派生规则）</td>
+</tr>
+<tr>
+<td><code>scripts/start-test.sh</code></td>
+<td><code>start_java</code> 补 <code>tool-executor</code>（原来只起 4 个服务）</td>
+</tr>
+<tr>
+<td><code>scripts/healthcheck.sh</code> / <code>.bat</code></td>
+<td>补 <code>8084</code> / <code>9095</code> / <code>8090</code> 三个探针</td>
+</tr>
+</tbody>
+</table>
+<h3 id="42-healthcheck-set-e">4.2 healthcheck 的 <code>set -e</code> 自杀缺陷（本轮新发现）<a class="headerlink" href="#42-healthcheck-set-e" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">set -e
+check_http() { code=$(curl -s --noproxy &quot;*&quot; -o NUL -w &quot;%{http_code}&quot; --max-time 5 &quot;$url&quot; 2&gt;/dev/null); ... }
+</code></pre>
+<p><strong>问题</strong>：命令替换里，<code>code=$(...)</code> 这个赋值的退出码 <strong>= curl 的退出码</strong>。
+curl 连不上时以非 0 退出（如 7 = Failed to connect），配合 <code>set -e</code>
+→ <strong>脚本在第一个不可达服务处直接终止</strong>。</p>
+<p>也就是说：<strong>这个脚本恰好在它最该工作的场景下失效</strong> —— 服务挂掉时它报不出来，
+只会安静地少输出一半。实测 <code>exit=7</code>，<code>[java services]</code> 之后一行都没有。</p>
+<p><strong>修法</strong>：
+- 命令替换加 <code>|| true</code>，把非 0 退出码吃掉
+- <code>-o NUL</code> 改为 <code>-o /dev/null</code>（<code>NUL</code> 依赖 Windows 设备名，Git Bash 下不可靠）</p>
+<h3 id="43">4.3 整体重跑结果<a class="headerlink" href="#43" title="Permanent link">&para;</a></h3>
+<pre><code>[infrastructure]   Redis OK · PostgreSQL OK · Qdrant OK · NATS BAD · Nacos OK · MinIO BAD · Kafka OK · Jaeger OK
+[java services]    gateway BAD · session-manager OK · sense BAD · body OK · tool-executor OK
+[grpc health]      gateway-grpc BAD · session-grpc OK · sense-grpc BAD · body-grpc OK · tool-grpc OK
+[python+fe+bff]    nlp-service OK · work-platform OK · wp-bff OK
+</code></pre>
+<p><strong>19 OK / 6 BAD</strong>。BAD 全部是"本轮未启动"：<code>gateway</code> / <code>sense-service</code>（含各自 gRPC）未起，
+<code>NATS</code> / <code>MinIO</code> 非 Phase 5 依赖。<strong>如实列出，不刷绿、不掩盖。</strong></p>
+<hr />
+<h2 id="5">5. 验证<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>类别</th>
+<th>命令</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>wp-bff</td>
+<td><code>node --test</code></td>
+<td><strong>81 pass / 0 fail</strong>（+8：失败原因分类 × 5、分片缺码后缀 × 2、预算字段 × 1）</td>
+</tr>
+<tr>
+<td>Java</td>
+<td><code>scripts/mvn-dev.sh test</code></td>
+<td>248 / 0 失败（本轮未动 Java，基线不变）</td>
+</tr>
+<tr>
+<td>契约（跨服务）</td>
+<td><code>python scripts/contract-check.py</code></td>
+<td><strong>0 FAIL</strong>（3 WARN 为既有字典登记项）</td>
+</tr>
+<tr>
+<td>契约（工作平台）</td>
+<td><code>python scripts/contract-check.py --work-platform</code></td>
+<td>60 端点，implemented <strong>30 路径 / 31 方法</strong>，<strong>0 FAIL</strong></td>
+</tr>
+<tr>
+<td>文档覆盖</td>
+<td><code>python scripts/java-doc-coverage.py</code></td>
+<td><strong>158/158</strong></td>
+</tr>
+<tr>
+<td>前端</td>
+<td><code>vue-tsc --noEmit</code> + <code>vite build</code></td>
+<td>均通过</td>
+</tr>
+<tr>
+<td>端到端</td>
+<td>经 3001 代理打 <code>/api/wp/tools</code></td>
+<td><code>partial:false</code>，<code>probe_budget_ms</code> 生效，沙箱 <code>isolated=true / degraded=false</code></td>
+</tr>
+<tr>
+<td>自检回归</td>
+<td><code>WP_BFF_URL=127.0.0.1:9999</code> 起 vite</td>
+<td>终端告警出现；代理失败<strong>不崩</strong>；监听正常</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6">6. 留下的思考<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<p><strong>同一类错误在本轮出现了三次，形状完全一致</strong>：</p>
+<ol>
+<li><code>DockerSandboxBackend.available()</code> 在请求线程同步跑 docker CLI → <strong>慢</strong>被表达成<strong>没有</strong></li>
+<li><code>httpRequestJson</code> 把所有失败塌缩成 <code>null</code> → <strong>原因</strong>被表达成<strong>没有</strong></li>
+<li><code>healthcheck.sh</code> 的 <code>set -e</code> → 脚本<strong>在"发现故障"这个动作上失败</strong>，于是<strong>故障</strong>被表达成<strong>没有</strong></li>
+</ol>
+<p>三处的共同点：<strong>下游只拿到一个空值，就丢失了全部可行动信息</strong>。
+这不是三个孤立的 bug，是同一个认知缺陷的三次显形 —— 值得作为后续评审的一条检查项：</p>
+<blockquote>
+<p>任何 <code>null</code> / <code>false</code> / 空数组的返回点，问一句「调用方还能区分出哪几种情况？如果只剩一种，
+那运维动作是不是就无从下手了？」</p>
+</blockquote>
+<p>另一条更窄但更实际的：<strong>跨服务超时预算的乘积关系没有守门</strong>。
+BFF 给子请求 5000ms，服务侧操作 5700ms —— 两个数字各自合理，相遇即错，<strong>且只差 0.7s</strong>。
+本机无法用单测覆盖（要真起服务 + 真慢），只能靠运行态实测发现。
+已记入 <code>docs/技术债台账.md</code>（跨服务超时预算）。</p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

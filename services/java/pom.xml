@@ -25,6 +25,8 @@
         <module>session-manager</module>
         <module>sense-service</module>
         <module>body-service</module>
+        <!-- Phase 5 四肢期（R5-01~R5-08）：工具注册 / 执行 / 沙箱 / 审计 -->
+        <module>tool-executor</module>
     </modules>
 
     <properties>
@@ -38,6 +40,8 @@
         <jsoup.version>1.17.2</jsoup.version>
         <minio.version>8.2.1</minio.version>
         <resilience4j.version>2.2.0</resilience4j.version>
+        <!-- Phase 5 四肢期新增：工具参数 JSON Schema 校验（R5-07） -->
+        <json-schema-validator.version>1.5.1</json-schema-validator.version>
     </properties>
 
     <dependencyManagement>

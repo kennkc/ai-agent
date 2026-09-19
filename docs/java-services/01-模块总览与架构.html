@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:32 · 源文件 01-模块总览与架构.md</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 01-模块总览与架构.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -177,8 +177,8 @@
 <tr>
 <td>四肢层</td>
 <td>工具调用、代码执行、沙箱</td>
-<td>—</td>
-<td>Phase 5+</td>
+<td><code>tool-executor</code>（注册表 + 执行引擎 + 沙箱 + 审计）</td>
+<td><strong>Phase 5 已实现</strong></td>
 </tr>
 <tr>
 <td>小脑层</td>
@@ -249,6 +249,13 @@
 <td style="text-align: right;">9094</td>
 <td>格式解析 + 三层存储 + 语义检索 + 重排 + RAG + 对账 + 感官事件入库</td>
 </tr>
+<tr>
+<td><code>tool-executor</code></td>
+<td><code>tool-executor</code></td>
+<td style="text-align: right;">8084</td>
+<td style="text-align: right;">9095</td>
+<td>工具注册表（R5-01）+ 执行引擎（R5-02）+ 沙箱（R5-03/05）+ 安全闸（R5-07）+ 审计（R5-08）+ 契约治理（IN-06）</td>
+</tr>
 </tbody>
 </table>
 <p>Python 侧的 <code>nlp-service</code>（端口 8000）不在本文档范围，但它是问答链路的必经环节，此处标出以完整呈现链路。</p>
@@ -258,21 +265,23 @@
                         │  路由 / JWT / 租户    │
                         └──────────┬───────────┘
                                    │ lb:// 服务发现（Nacos）
-          ┌──────────────┬─────────┴────────┬──────────────┐
-          ▼              ▼                  ▼              ▼
-   /api/session/**  /api/sense/**     /api/nlp/**    /api/body/**
-          │              │                  │              │
-   ┌──────▼──────┐  ┌────▼─────┐     ┌──────▼─────┐  ┌─────▼──────┐
-   │  session-   │  │  sense-  │     │  nlp-      │  │   body-    │
-   │  manager    │  │  service │     │  service   │  │  service   │
-   │    8081     │  │   8082   │     │  (Python)  │  │    8083    │
-   └──┬───┬───┬──┘  └────┬─────┘     └────────────┘  └─────▲──────┘
-      │   │   │          │                                  │
-      │   │   └──HTTP────┼──────────────────────────────────┘
-      │   │              │  返回检索结果
-      │   └──HTTP────────┼──▶ nlp-service /api/nlp/intent
-      │                  │
-      └──NATS / Kafka────┴──▶ 消息总线（脊柱神经）
+          ┌──────────────┬─────────┴────────┬──────────────┬──────────────┐
+          ▼              ▼                  ▼              ▼              ▼
+   /api/session/**  /api/sense/**     /api/nlp/**    /api/body/**   /api/tool/**
+          │              │                  │              │              │
+   ┌──────▼──────┐  ┌────▼─────┐     ┌──────▼─────┐  ┌─────▼──────┐ ┌─────▼──────┐
+   │  session-   │  │  sense-  │     │  nlp-      │  │   body-    │ │   tool-    │
+   │  manager    │  │  service │     │  service   │  │  service   │ │  executor  │
+   │    8081     │  │   8082   │     │  (Python)  │  │    8083    │ │    8084    │
+   └──┬───┬───┬──┘  └────┬─────┘     └────────────┘  └─────▲──────┘ └─────▲──────┘
+      │   │   │          │                                  │              │
+      │   │   └──HTTP────┼──────────────────────────────────┘              │
+      │   │              │  返回检索结果                                   │
+      │   └──HTTP────────┼──▶ nlp-service /api/nlp/intent                  │
+      │                  │                                                 │
+      └──NATS / Kafka────┴──▶ 消息总线（脊柱神经）                          │
+                                                                           │
+   （Phase 5+）大脑规划器 / 组合任务 ──HTTP /api/tool/execute──────────────┘
 
   所有模块 ──▶ proto-contracts（编译期依赖，含 gRPC 契约与 Health 服务）
 </code></pre>
@@ -283,6 +292,9 @@
   对 <code>sense-service</code> 走 NATS 请求-应答（异步采集，允许延迟）。</li>
 <li><strong><code>sense-service</code> 不反向调用 <code>session-manager</code></strong>，采集结果通过事件（<code>lifeform.sense.collected</code>）广播，
   由 Phase 3 的入库消费者订阅 —— 保证感官层与大脑层解耦。</li>
+<li><strong><code>tool-executor</code> 是平台唯一允许执行外部动作的模块</strong>（算数 / 出网 / 跑代码）；
+  它对上游只提供一条无状态 HTTP 契约，不反向调用任何服务，审计真相源是自己的 PG 表
+  <code>tool_audit_log</code>（Kafka 仅事件旁路）。</li>
 </ul>
 <h2 id="4">4. 两条主要链路<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
 <h3 id="41-vs1-phase-1">4.1 VS1 问答链路（Phase 1 打通，当前主干）<a class="headerlink" href="#41-vs1-phase-1" title="Permanent link">&para;</a></h3>
@@ -361,7 +373,7 @@ POST /api/session/{id}/ask            → 提问
 │       ├── security/              # R2-02 SSRF 出站守卫
 │       ├── staging/               # R2-10 隔离暂存（多后端）
 │       └── util/                  # HTTP 客户端构建器 / 文本抽取
-└── body-service/                  # 27 main + 9 test
+└── body-service/                  # 27 main + 11 test
     ├── pom.xml
     └── src/main/java/com/agent/body/
         ├── BodyServiceApplication.java
@@ -374,6 +386,20 @@ POST /api/session/{id}/ask            → 提问
         ├── grpc/
         ├── service/               # 入库 / 检索 / RAG / 指标
         └── store/                 # 三层存储（PG 冷 / Redis 热 / 门面 + 分层路由）
+└── tool-executor/                 # 32 main + 10 test（Phase 5 四肢期）
+    ├── pom.xml
+    └── src/main/java/com/agent/tool/
+        ├── ToolExecutorApplication.java
+        ├── audit/                 # R5-08 全量审计（PG 真相源 + Kafka 旁路）
+        ├── common/                # 错误码 / 业务异常 / 全局异常处理
+        ├── controller/            # ToolController（注册表 / 执行 / 审计 / 指标 / 沙箱）
+        ├── exec/                  # R5-02 执行引擎 + 熔断 + 指标
+        ├── grpc/
+        ├── guard/                 # R5-07 三闸（白名单 / Schema / 敏感参数）
+        ├── model/                 # 工具元数据与结果模型
+        ├── registry/              # R5-01 注册表 + IN-06 契约治理
+        ├── sandbox/               # R5-03/R5-05 沙箱（Docker + 受限子进程降级）
+        └── tools/                 # R5-04/R5-05 内置工具（calculator / http / code）
 </code></pre>
 <h2 id="6">6. 技术基线<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
 <table>
@@ -436,9 +462,14 @@ POST /api/session/{id}/ask            → 提问
 <td>仅 <code>sense-service</code> 使用（退避重试）</td>
 </tr>
 <tr>
+<td>json-schema-validator</td>
+<td>由父 POM 管理</td>
+<td>仅 <code>tool-executor</code> 使用（networknt，Draft-07；设计文档原写 everit，差异见 DEBT-020）</td>
+</tr>
+<tr>
 <td>Kafka clients</td>
 <td>由父 POM 管理</td>
-<td><code>session-manager</code> 事件通道</td>
+<td><code>session-manager</code> 事件通道；<code>tool-executor</code> 审计事件旁路</td>
 </tr>
 <tr>
 <td>jnats / 自研客户端</td>
@@ -500,6 +531,7 @@ POST /api/session/{id}/ask            → 提问
 <li>要改问答链路 → <a href="04-session-manager.md">04-session-manager</a></li>
 <li>要加采集渠道 / 调质检策略 → <a href="05-sense-service.md">05-sense-service</a></li>
 <li>要接入 / 调试知识库 → <a href="06-body-service.md">06-body-service</a></li>
+<li>要改工具注册 / 执行 / 沙箱 / 审计 → <a href="09-tool-executor.md">09-tool-executor</a></li>
 <li>要部署或排查环境问题 → <a href="07-运行时配置与横切约定.md">07-运行时配置与横切约定</a></li>
 </ul></main>
 </div>

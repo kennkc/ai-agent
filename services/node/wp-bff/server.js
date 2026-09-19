@@ -10,6 +10,15 @@
  *   GET  /api/wp/knowledge               躯体层知识统计（知识量 / 检索 P99 / 命中率 / 三层存储）
  *   POST /api/wp/knowledge               知识入库（单篇）—— 代理体层，工作平台侧写路径
  *   POST /api/wp/knowledge/search        检索测试（返回命中片段与高亮词，供前端标注）
+ *   GET  /api/wp/tools                   执行视图聚合（R-C05 预：工具调用流 + 沙箱状态）
+ *   GET  /api/wp/tools/registry          工具注册表摘要 + 变更历史（IN-06）
+ *   GET  /api/wp/tools/audit             工具调用审计明细（R5-08）
+ *   GET  /api/wp/tools/audit/stats       工具调用审计汇总
+ *   GET  /api/wp/tools/metrics           成功率 / P50·P95·P99 / 熔断状态
+ *   GET  /api/wp/tools/sandbox           沙箱状态
+ *   POST /api/wp/tools/execute           执行工具（控制端点：来源白名单 + 控制令牌）
+ *   GET  /api/wp/tools/{name}            单工具详情
+ *   GET  /api/wp/tools/{name}/impact     工具变更影响分析（IN-06）
  *   GET  /api/wp/healthz                 进程存活 + 控制面配置自检（只读）
  *
  * 安全模型（2026-09-16 加固，09-18 补写路径边界）：
@@ -34,6 +43,33 @@ const DEFAULT_ALLOWED_ORIGINS = [
   'http://[::1]:3001',
 ]
 
+// ─────────── 跨服务超时预算（权威登记表：contracts/timeout-budget.yaml）───────────
+//
+// 为什么分档，而不是给所有子请求一个统一定时值：
+//   操作类型差异极大 —— 纯查询是毫秒级，LLM 生成是秒级。给同一个值，
+//   对读型必然过长（掩盖真实故障），对生成型必然过短（把「慢」说成「没有」）。
+//   Phase 5 实测的正是后者：沙箱冷探测 5.7s 撞上 5s 统一预算，
+//   `/api/wp/tools` 长期宣称「沙箱不可用」，而直连该端点是 200。
+//
+// 约束：每个常量必须 >= 登记表中对应边的 downstream_worst_case_ms × min_headroom_ratio。
+// 改动任一侧后，必须同步登记表并重跑 `python scripts/timeout-budget-check.py`（CI 门禁）。
+//
+// 注意（本文件易混淆点）：这里存在多个超时值，用途完全不同 ——
+//   · 下方 WP_* 档位常量：**跨服务调用**预算，参与登记表门禁
+//   · `httpGetJson` 的 2500ms：仅供本地聚合读取，不对应任何跨服务边
+//   · `START/STOP_TIMEOUT_MS`：docker 容器启停 watchdog，量级差两个数量级
+// 新增跨服务调用请用下方档位常量，不要就地写魔法数字。
+const READ_TIMEOUT_MS = Number(process.env.WP_BFF_READ_TIMEOUT_MS || 5000)
+const RETRIEVE_TIMEOUT_MS = Number(process.env.WP_BFF_RETRIEVE_TIMEOUT_MS || 15000)
+const GENERATE_TIMEOUT_MS = Number(process.env.WP_BFF_GENERATE_TIMEOUT_MS || 45000)
+// ASK 档：仅服务 wp-bff → session-manager /ask 这一条边（GAP-06 闭合，2026-09-19）。
+// session 一次 ask 的下游最坏 = ASK_TOTAL_BUDGET_MS = 35s（RequestBudget 硬上限），
+// 53s / 35s = 1.51x。**不直接抬高 GENERATE 档**：它被 /brain/ask 等多条边共享，
+// 抬高会把那些「快速失败并降级」的边一起拖慢。
+const ASK_TIMEOUT_MS = Number(process.env.WP_BFF_ASK_TIMEOUT_MS || 53000)
+const WRITE_TIMEOUT_MS = Number(process.env.WP_BFF_WRITE_TIMEOUT_MS || 60000)
+const EXECUTE_TIMEOUT_MS = Number(process.env.WP_BFF_EXECUTE_TIMEOUT_MS || 60000)
+
 function httpGetJson(url, timeoutMs = 2500) {
   return new Promise(resolve => {
     const request = http.get(url, { timeout: timeoutMs }, response => {
@@ -49,12 +85,22 @@ function httpGetJson(url, timeoutMs = 2500) {
 }
 
 /**
- * 通用 JSON 出站请求（GET/POST）。失败一律 resolve(null)，
- * 由调用方按「诚实地报告不可用」处理，绝不返回伪造数据。
+ * 带**失败原因**的通用 JSON 出站请求（GET/POST）。
+ *
+ * 为什么需要它：把「超时 / 连接拒绝 / 404 / 非 JSON」统统折叠成 `null` 时，
+ * 上层只能把 null 表达成「不可用」——于是一个**只是慢**的接口会被写成**不存在**。
+ * Phase 5 实测到 `GET /api/tool/sandbox` 冷探测 5.7s 超过 5s 预算，
+ * `/api/wp/tools` 因此长期宣称「沙箱不可用」，与服务侧真相相反且无从察觉。
+ * 本函数保留原因，让上层能如实区分「慢」与「没有」。
+ *
+ * @returns {Promise<{ok: true, data: any, reason: null}
+ *                 | {ok: false, data: null, reason: 'timeout'|'unreachable'|'endpoint_missing'|'http_error'|'bad_json', status?: number}>}
  */
-function httpRequestJson(url, { method = 'GET', headers = {}, body = null, timeoutMs = 5000 } = {}) {
+function httpRequestJsonMeta(url, { method = 'GET', headers = {}, body = null, timeoutMs = READ_TIMEOUT_MS } = {}) {
   return new Promise(resolve => {
     const payload = body == null ? null : Buffer.from(JSON.stringify(body), 'utf8')
+    let settled = false
+    const finish = outcome => { if (!settled) { settled = true; resolve(outcome) } }
     const request = http.request(url, {
       method,
       timeout: timeoutMs,
@@ -66,14 +112,30 @@ function httpRequestJson(url, { method = 'GET', headers = {}, body = null, timeo
       let raw = ''
       response.on('data', chunk => { raw += chunk })
       response.on('end', () => {
-        try { resolve(JSON.parse(raw)) } catch { resolve(null) }
+        const status = response.statusCode
+        if (status === 404) return finish({ ok: false, data: null, reason: 'endpoint_missing', status })
+        if (status < 200 || status >= 300) return finish({ ok: false, data: null, reason: 'http_error', status })
+        try { finish({ ok: true, data: JSON.parse(raw), reason: null }) }
+        catch { finish({ ok: false, data: null, reason: 'bad_json', status }) }
       })
     })
-    request.on('timeout', () => { request.destroy(); resolve(null) })
-    request.on('error', () => resolve(null))
+    request.on('timeout', () => { request.destroy(); finish({ ok: false, data: null, reason: 'timeout' }) })
+    request.on('error', () => finish({ ok: false, data: null, reason: 'unreachable' }))
     if (payload) request.write(payload)
     request.end()
   })
+}
+
+/**
+ * 通用 JSON 出站请求（GET/POST）。失败一律 resolve(null)，
+ * 由调用方按「诚实地报告不可用」处理，绝不返回伪造数据。
+ *
+ * 需要区分失败原因的调用方请用 {@link httpRequestJsonMeta}；本函数是它丢弃原因后的薄封装，
+ * 两者共享同一套传输行为（超时/状态码/解析口径一致）。
+ */
+async function httpRequestJson(url, opts = {}) {
+  const outcome = await httpRequestJsonMeta(url, opts)
+  return outcome.ok ? outcome.data : null
 }
 
 /** 读取请求体 JSON（带体积上限，避免超大请求拖垮 BFF） */
@@ -163,6 +225,16 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'GET', path: '/knowledge' },
   { method: 'POST', path: '/knowledge' },
   { method: 'POST', path: '/knowledge/search' },
+  // R-C05(预) / R5 / IN-06 四肢层工具执行视图
+  { method: 'GET', path: '/tools' },
+  { method: 'GET', path: '/tools/registry' },
+  { method: 'GET', path: '/tools/audit' },
+  { method: 'GET', path: '/tools/audit/stats' },
+  { method: 'GET', path: '/tools/metrics' },
+  { method: 'GET', path: '/tools/sandbox' },
+  { method: 'POST', path: '/tools/execute' },
+  { method: 'GET', path: '/tools/{name}' },
+  { method: 'GET', path: '/tools/{name}/impact' },
   { method: 'GET', path: '/brain' },
   { method: 'GET', path: '/brain/{decision_id}' },
   { method: 'POST', path: '/brain/ask' },
@@ -219,6 +291,23 @@ const ROUTE_GUARD = (() => {
   }
 })()
 
+/**
+ * `/api/wp/tools` 下的**固定子路径段**（registry / audit / metrics / sandbox / execute），
+ * 由 `IMPLEMENTED_ENDPOINTS` 派生 —— 参数路由 `/tools/{name}` 必须让开这些名字。
+ *
+ * 为什么必须让开：`/tools/execute` 只接受 POST。若参数路由先拦截 GET，
+ * 就会变成「代理一个名为 execute 的工具详情」并返回 200，
+ * 而 ROUTE_GUARD 判定的是 405 —— 同一个请求两种语义，路由层分流形同虚设。
+ * 工具名与固定段重名时以固定段为准（工具注册表里本来也不允许叫 execute）。
+ */
+const TOOL_RESERVED_SEGMENTS = new Set(
+  IMPLEMENTED_ENDPOINTS
+    .map(item => item.path)
+    .filter(routePath => routePath.startsWith('/tools/'))
+    .map(routePath => routePath.slice('/tools/'.length).split('/')[0])
+    .filter(segment => segment && !segment.startsWith('{')),
+)
+
 /** 总览页仍待 BFF 实现的聚合数据域，透传给前端用于降级展示 */
 const OVERVIEW_GAPS = [
   'vitals', 'organs', 'senses', 'evolution', 'collaboration',
@@ -230,6 +319,8 @@ const OVERVIEW_GAPS = [
 const DEFAULT_BODY_URL = String(process.env.WP_BFF_BODY_URL || 'http://127.0.0.1:8083').replace(/\/+$/, '')
 const DEFAULT_NLP_URL = String(process.env.WP_BFF_NLP_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '')
 const DEFAULT_SESSION_URL = String(process.env.WP_BFF_SESSION_URL || 'http://127.0.0.1:8081').replace(/\/+$/, '')
+/** 四肢层（tool-executor）地址；未启动时 /tools 系列如实返回 available=false */
+const DEFAULT_TOOL_URL = String(process.env.WP_BFF_TOOL_URL || 'http://127.0.0.1:8084').replace(/\/+$/, '')
 
 const START_TIMEOUT_MS = 180000
 const STOP_TIMEOUT_MS = 120000
@@ -291,9 +382,22 @@ function createServer(options = {}) {
   const probeImpl = options.probeImpl || probeTcp
   const fetchJson = options.fetchJson || httpGetJson
   const jsonRequest = options.jsonRequest || httpRequestJson
+  // 带原因的出站请求（工具域聚合与代理用）。注入假传输的测试没有原因信息，
+  // 只能退回通用 reason='unreachable' —— 不假装知道细节，生产路径才拿得到 timeout/404 级区分。
+  const jsonRequestMeta = options.jsonRequestMeta || (
+    options.jsonRequest
+      ? async (url, opts) => {
+        const data = await options.jsonRequest(url, opts).catch(() => null)
+        return data == null
+          ? { ok: false, data: null, reason: 'unreachable' }
+          : { ok: true, data, reason: null }
+      }
+      : httpRequestJsonMeta
+  )
   const bodyUrl = String(options.bodyUrl || DEFAULT_BODY_URL).replace(/\/+$/, '')
   const nlpUrl = String(options.nlpUrl || DEFAULT_NLP_URL).replace(/\/+$/, '')
   const sessionUrl = String(options.sessionUrl || DEFAULT_SESSION_URL).replace(/\/+$/, '')
+  const toolUrl = String(options.toolUrl || DEFAULT_TOOL_URL).replace(/\/+$/, '')
   const repoRoot = options.repoRoot || path.resolve(__dirname, '..', '..', '..')
   const auditPath = options.auditPath || path.join(__dirname, 'logs', 'wp-bff-audit.log')
 
@@ -671,7 +775,7 @@ function createServer(options = {}) {
     const [brain, cache, knowledge] = await Promise.all([
       jsonRequest(`${nlpUrl}/api/nlp/brain/health`, { headers }).catch(() => null),
       jsonRequest(`${nlpUrl}/api/nlp/brain/cache/stats`, { headers }).catch(() => null),
-      jsonRequest(`${bodyUrl}/api/body/knowledge/stats`, { headers }).catch(() => null),
+      jsonRequest(`${bodyUrl}/api/body/knowledge/stats`, { headers, timeoutMs: RETRIEVE_TIMEOUT_MS }).catch(() => null),
     ])
     if (!brain) {
       return {
@@ -848,6 +952,8 @@ function createServer(options = {}) {
       method: 'POST',
       headers: { 'X-Tenant-Id': tenantId },
       body: { text: String(payload.text), tenant_id: tenantId },
+      // 记忆抽取走 LLM 级联，必须用生成档；落到读型默认会把「慢」说成「大脑层不可用」
+      timeoutMs: GENERATE_TIMEOUT_MS,
     }).catch(() => null)
     if (!result) {
       return send(req, res, 200, {
@@ -867,6 +973,7 @@ function createServer(options = {}) {
       method: 'POST',
       headers: { 'X-Tenant-Id': tenantId },
       body: { text: String(payload.text), tenant_id: tenantId, depth: Number(payload.depth || 2) },
+      timeoutMs: GENERATE_TIMEOUT_MS,
     }).catch(() => null)
     if (!result) {
       return send(req, res, 200, {
@@ -947,6 +1054,8 @@ function createServer(options = {}) {
         method: 'POST',
         headers: { 'X-Tenant-Id': tenantId },
         body: { question },
+        // 会话问答内部转调 nlp /brain/ask（LLM 级联），下游最坏是 35s 总预算 —— 用专用 ASK 档（TB-09）
+        timeoutMs: ASK_TIMEOUT_MS,
       })
     } catch (error) {
       upstreamError = error
@@ -1051,6 +1160,8 @@ function createServer(options = {}) {
         context: Array.isArray(payload.context) ? payload.context : [],
         use_cache: payload.use_cache !== false,
       },
+      // 大脑问答是 LLM 生成型链路（级联最坏 22s），必须用生成档
+      timeoutMs: GENERATE_TIMEOUT_MS,
     }).catch(() => null)
     if (!result || typeof result !== 'object') {
       return send(req, res, 200, {
@@ -1114,6 +1225,7 @@ function createServer(options = {}) {
       method: 'POST',
       headers: { 'X-Tenant-Id': tenantId },
       body: { query, top_k: topK, use_cache: payload.use_cache !== false },
+      timeoutMs: RETRIEVE_TIMEOUT_MS,
     })
     const latencyMs = Date.now() - startedAt
     if (!Array.isArray(hits)) {
@@ -1209,7 +1321,9 @@ function createServer(options = {}) {
       method: 'POST',
       headers: { 'X-Tenant-Id': tenantId },
       body: outbound,
-      timeoutMs: 30000,
+      // 入库要跑嵌入（下游读超时 30s）。原为写死的 30000 —— 与下游最坏耗时相等、
+      // 余量为 0，且魔法数字不受登记表锚点约束，故改用命名档位（TB-04）
+      timeoutMs: WRITE_TIMEOUT_MS,
     })
     const latencyMs = Date.now() - startedAt
     if (!result || typeof result !== 'object') {
@@ -1256,6 +1370,248 @@ function createServer(options = {}) {
       if (source[key] !== undefined && source[key] !== null) document[key] = source[key]
     }
     return document
+  }
+
+  // ─────────── R-C05(预) 执行视图：四肢层工具（代理 tool-executor）───────────
+  //
+  // 语义约定（与大脑层端点保持同一口径）：
+  //   - 四肢层不可达        → HTTP 200 + `available:false` + reason + `reason_code`（**降级**，不是故障）
+  //   - 到达工具层但执行失败 → `available:true` + `success:false` + `error_code`
+  //     （守卫拦截 / 参数非法 / 沙箱拒绝 / 超时）—— 这是**已落审计的真实调用结果**，
+  //     与"服务不可用"是两回事，不能混为一谈地丢掉。
+  //   - 任何情况下都**不用 0 / 空数组冒充**「没有工具」「零次调用」。
+  //   - **「慢」不得写成「没有」**：取不到分片时按传输层原因细分
+  //     （`*_timeout` / `*_missing` / `*_unavailable`），并附 `partial_note` 说明。
+  //     历史教训见 §httpRequestJsonMeta 注释。
+
+  /** 执行视图待取到的数据域，四肢层不可用时透传给前端做降级标注 */
+  const TOOL_GAPS = ['tools', 'registry', 'metrics', 'sandbox', 'audit']
+
+  /**
+   * 工具域子请求超时预算。默认 5s 对齐其余域的 `httpRequestJson` 默认值；
+   * `/api/tool/sandbox` 需要探测 Docker 守护进程与镜像（冷探测在 Windows 上实测 5.7s），
+   * 因此单独给更宽的预算 —— 预算是**按域的真实最坏耗时**定的，不是一刀切。
+   */
+  const TOOL_SUBREQUEST_TIMEOUT_MS = Number(process.env.WP_BFF_TOOL_TIMEOUT_MS || 5000)
+  const TOOL_SANDBOX_TIMEOUT_MS = Number(process.env.WP_BFF_TOOL_SANDBOX_TIMEOUT_MS || 9000)
+
+  /** 分片 → 通用降级码（原因细分在此后缀上做替换，保持既有契约词根不变） */
+  const TOOL_SLICE_CODES = {
+    registry: 'registry_unavailable',
+    metrics: 'metrics_unavailable',
+    sandbox: 'sandbox_unavailable',
+    audit_stats: 'audit_stats_unavailable',
+    audit: 'audit_unavailable',
+  }
+
+  /** 传输层原因 → 人话（用于 reason 文案，避免把「慢」说成「没有」） */
+  const PROBE_REASON_TEXT = {
+    timeout: '读取超时，对端未在预算内返回（服务可能在冷启动 / 负载过高）—— 这是「慢」，不是「没有」',
+    endpoint_missing: '端点不存在（HTTP 404），对端可能是旧版本服务，缺少本端点',
+    http_error: '对端返回非 2xx 状态码',
+    bad_json: '对端返回不是合法 JSON',
+    unreachable: '对端未启动或连接被拒绝',
+  }
+
+  /** 失败 outcome → 分片降级码；成功返回 null */
+  function sliceDegradeCode(slice, outcome) {
+    if (outcome.ok) return null
+    const base = TOOL_SLICE_CODES[slice]
+    if (outcome.reason === 'timeout') return base.replace('_unavailable', '_timeout')
+    if (outcome.reason === 'endpoint_missing') return base.replace('_unavailable', '_missing')
+    return base
+  }
+
+  function toolDown(reason, extra = {}) {
+    return { available: false, reason, tool_url: toolUrl, gaps: TOOL_GAPS, ...extra }
+  }
+
+  /** 四肢层整体不可达时的统一信封：把传输层原因如实翻成人话 */
+  function toolDownFromProbe(pathLabel, outcome, extra = {}) {
+    const detail = PROBE_REASON_TEXT[outcome.reason] || PROBE_REASON_TEXT.unreachable
+    return toolDown(`四肢层不可用：${pathLabel} ${detail}（工具调用记录与沙箱状态无法上报）`, {
+      reason_code: outcome.reason,
+      ...extra,
+    })
+  }
+
+  /** 执行视图聚合（R-C05 预）：一次取齐工具清单 / 注册表 / 指标 / 沙箱 / 审计。 */
+  async function handleTools(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const headers = { 'X-Tenant-Id': tenantId }
+    const call = (path, timeoutMs) =>
+      jsonRequestMeta(`${toolUrl}${path}`, { headers, timeoutMs }).catch(() => ({ ok: false, data: null, reason: 'unreachable' }))
+    const [list, registry, metrics, sandbox, auditStats, auditPage] = await Promise.all([
+      call('/api/tool/list', TOOL_SUBREQUEST_TIMEOUT_MS),
+      call('/api/tool/registry', TOOL_SUBREQUEST_TIMEOUT_MS),
+      call('/api/tool/metrics', TOOL_SUBREQUEST_TIMEOUT_MS),
+      call('/api/tool/sandbox', TOOL_SANDBOX_TIMEOUT_MS),
+      call('/api/tool/audit/stats', TOOL_SUBREQUEST_TIMEOUT_MS),
+      call('/api/tool/audit?limit=20', TOOL_SUBREQUEST_TIMEOUT_MS),
+    ])
+    if (!list.ok || typeof list.data !== 'object' || list.data === null) {
+      return send(req, res, 200, {
+        data: toolDownFromProbe('工具清单', list, {
+          tenant_id: tenantId,
+          checked_at: nowTime(),
+          probe_budget_ms: { default: TOOL_SUBREQUEST_TIMEOUT_MS, sandbox: TOOL_SANDBOX_TIMEOUT_MS },
+        }),
+      })
+    }
+    const slices = { registry, metrics, sandbox, audit_stats: auditStats, audit: auditPage }
+    const partialReasons = Object.entries(slices)
+      .map(([slice, outcome]) => sliceDegradeCode(slice, outcome))
+      .filter(Boolean)
+    const timedOut = partialReasons.filter(code => code.endsWith('_timeout'))
+    const missing = partialReasons.filter(code => code.endsWith('_missing'))
+    const note = []
+    if (timedOut.length) {
+      note.push(`其中 ${timedOut.length} 项为**超时**（${timedOut.join(' / ')}）：服务被调用时未在预算内返回，不代表该能力缺失`)
+    }
+    if (missing.length) {
+      note.push(`其中 ${missing.length} 项端点不存在（${missing.join(' / ')}）：对端版本可能旧于本 BFF`)
+    }
+    send(req, res, 200, {
+      data: {
+        available: true,
+        tenant_id: tenantId,
+        checked_at: nowTime(),
+        tool_url: toolUrl,
+        tools: Array.isArray(list.data.tools) ? list.data.tools : [],
+        total: Number(list.data.total || 0),
+        registry_backend: list.data.registry_backend || 'unknown',
+        // 分片失败一律 null —— 不给 {} 让前端渲染成 0
+        registry: registry.ok ? registry.data : null,
+        metrics: metrics.ok ? metrics.data : null,
+        sandbox: sandbox.ok ? sandbox.data : null,
+        audit_stats: auditStats.ok ? auditStats.data : null,
+        audit: auditPage.ok ? auditPage.data : null,
+        // 分片级降级：整体可用但个别分片取不到时如实标注，不让前端把"缺"读成"零"
+        partial: partialReasons.length > 0,
+        partial_reasons: partialReasons,
+        partial_note: note.length ? note.join('；') : null,
+        probe_budget_ms: { default: TOOL_SUBREQUEST_TIMEOUT_MS, sandbox: TOOL_SANDBOX_TIMEOUT_MS },
+        note: 'metrics.success_rate 口径为「最近窗口采样」，非全量历史；audit 为最近 20 条',
+      },
+    })
+  }
+
+  /** 通用四肢层 GET 代理：不可用时统一降级信封（含传输层原因细分）。 */
+  async function proxyTool(req, res, path, pick, timeoutMs = TOOL_SUBREQUEST_TIMEOUT_MS) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const outcome = await jsonRequestMeta(`${toolUrl}${path}`, {
+      headers: { 'X-Tenant-Id': tenantId },
+      timeoutMs,
+    }).catch(() => ({ ok: false, data: null, reason: 'unreachable' }))
+    if (!outcome.ok || !outcome.data || typeof outcome.data !== 'object') {
+      return send(req, res, 200, {
+        data: toolDownFromProbe(path, outcome, { tenant_id: tenantId, checked_at: nowTime() }),
+      })
+    }
+    return send(req, res, 200, { data: { available: true, tenant_id: tenantId, checked_at: nowTime(), ...pick(outcome.data) } })
+  }
+
+  const handleToolsRegistry = (req, res) =>
+    proxyTool(req, res, '/api/tool/registry', p => ({
+      summary: p.summary || null,
+      change_log: Array.isArray(p.change_log) ? p.change_log : [],
+      semver_policy: p.semver_policy,
+      deprecation_policy: p.deprecation_policy,
+    }))
+
+  const handleToolsAudit = (req, res, limit) =>
+    proxyTool(req, res, `/api/tool/audit?limit=${limit}`, p => ({
+      items: Array.isArray(p.items) ? p.items : [],
+      total: Number(p.total || 0),
+      audit_backend: p.audit_backend,
+      degraded: Boolean(p.degraded),
+    }))
+
+  const handleToolsAuditStats = (req, res) =>
+    proxyTool(req, res, '/api/tool/audit/stats', p => ({ audit: p.audit || null, kafka: p.kafka || null }))
+
+  const handleToolsMetrics = (req, res) =>
+    proxyTool(req, res, '/api/tool/metrics', p => ({
+      metrics: p.metrics || null,
+      circuit_breakers: Array.isArray(p.circuit_breakers) ? p.circuit_breakers : [],
+    }))
+
+  const handleToolsSandbox = (req, res) =>
+    // 沙箱端点要走 Docker 守护进程 + 镜像探测，预算单独放宽（见 TOOL_SANDBOX_TIMEOUT_MS）
+    proxyTool(req, res, '/api/tool/sandbox', p => ({ sandbox: p }), TOOL_SANDBOX_TIMEOUT_MS)
+
+  const handleToolDetail = (req, res, name) =>
+    proxyTool(req, res, `/api/tool/${encodeURIComponent(name)}`, p => ({ tool: p }))
+
+  const handleToolImpact = (req, res, name) =>
+    proxyTool(req, res, `/api/tool/${encodeURIComponent(name)}/impact`, p => ({ impact: p }))
+
+  /**
+   * 工具执行（写路径）：来源白名单 + 控制令牌，与 `/middleware/{key}/start`、
+   * `/knowledge` 的 POST 同级。执行会真实产生副作用（网络请求 / 沙箱进程 / 审计落库），
+   * 未鉴权即暴露等于给出一条"免令牌触发工具"的后门。
+   */
+  async function handleToolExecute(req, res) {
+    const auth = authorizeControl(req)
+    if (!auth.ok) {
+      audit('REJECT_AUTH', 'tools', `execute ${auth.message}`)
+      return fail(req, res, auth.status, auth.code, auth.message, auth.details)
+    }
+    let payload
+    try {
+      payload = await readJsonBody(req, 256 * 1024)
+    } catch (error) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', String(error.message || error))
+    }
+    const toolName = String(payload.tool_name || '').trim()
+    if (!toolName) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'tool_name 不能为空', { field: 'tool_name' })
+    }
+    const tenantId = String(req.headers['x-tenant-id'] || payload.tenant_id || 'default')
+    const requestedBy = String(req.headers['x-requested-by'] || 'work-platform')
+    const args = (payload.arguments && typeof payload.arguments === 'object') ? payload.arguments : {}
+    const startedAt = Date.now()
+    const result = await jsonRequest(`${toolUrl}/api/tool/execute`, {
+      method: 'POST',
+      headers: { 'X-Tenant-Id': tenantId, 'X-Requested-By': requestedBy },
+      body: { tool_name: toolName, arguments: args, call_id: payload.call_id },
+      timeoutMs: EXECUTE_TIMEOUT_MS,
+    }).catch(() => null)
+    const bffLatencyMs = Date.now() - startedAt
+    if (!result || typeof result !== 'object') {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          tenant_id: tenantId,
+          tool_name: toolName,
+          bff_latency_ms: bffLatencyMs,
+          checked_at: nowTime(),
+          reason: '四肢层不可用：tool-executor 未启动或执行接口异常，本次调用未生效',
+        },
+      })
+    }
+    // 统一错误信封（AGENT_*）：工具被真实拒绝（守卫/参数/沙箱/超时），已落审计 ——
+    // 回 available:true + success:false，让执行视图把它当成一条真实调用记录渲染。
+    if (result.code) {
+      return send(req, res, 200, {
+        data: {
+          available: true,
+          tenant_id: tenantId,
+          tool_name: toolName,
+          success: false,
+          error_code: String(result.code),
+          error_message: String(result.message || ''),
+          details: result.details || {},
+          audit_id: (result.details && result.details.audit_id) || null,
+          bff_latency_ms: bffLatencyMs,
+          checked_at: nowTime(),
+        },
+      })
+    }
+    audit('TOOL_EXEC', toolName, `tenant=${tenantId} success=${result.success !== false} bff=${bffLatencyMs}ms`)
+    return send(req, res, 200, {
+      data: { available: true, tenant_id: tenantId, bff_latency_ms: bffLatencyMs, checked_at: nowTime(), ...result },
+    })
   }
 
   function handleHealthz(req, res) {
@@ -1305,6 +1661,22 @@ function createServer(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/wp/brain/memory/stats') return handleMemoryStats(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/session/stats') return handleSessionStats(req, res)
     if (req.method === 'POST' && url.pathname === '/api/wp/session') return handleSessionCreate(req, res)
+    // R-C05(预) 执行视图。固定子路径必须排在 /tools/{name} 之前，否则会被宽松参数正则吃掉
+    if (req.method === 'GET' && url.pathname === '/api/wp/tools') return handleTools(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/tools/registry') return handleToolsRegistry(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/tools/audit/stats') return handleToolsAuditStats(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/tools/audit') {
+      return handleToolsAudit(req, res, Number(url.searchParams.get('limit') || 50))
+    }
+    if (req.method === 'GET' && url.pathname === '/api/wp/tools/metrics') return handleToolsMetrics(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/tools/sandbox') return handleToolsSandbox(req, res)
+    if (req.method === 'POST' && url.pathname === '/api/wp/tools/execute') return handleToolExecute(req, res)
+    const toolImpact = url.pathname.match(/^\/api\/wp\/tools\/([a-z0-9-]{1,64})\/impact$/)
+    if (req.method === 'GET' && toolImpact) return handleToolImpact(req, res, toolImpact[1])
+    const toolOne = url.pathname.match(/^\/api\/wp\/tools\/([a-z0-9-]{1,64})$/)
+    if (req.method === 'GET' && toolOne && !TOOL_RESERVED_SEGMENTS.has(toolOne[1])) {
+      return handleToolDetail(req, res, toolOne[1])
+    }
     const sessionAsk = url.pathname.match(/^\/api\/wp\/session\/([a-z0-9-]{8,64})\/ask$/)
     if (req.method === 'POST' && sessionAsk) return handleSessionAsk(req, res, sessionAsk[1])
     const sessionCtx = url.pathname.match(/^\/api\/wp\/session\/([a-z0-9-]{8,64})\/context$/)
@@ -1370,17 +1742,32 @@ module.exports = {
   WHITELIST,
   IMPLEMENTED_ENDPOINTS,
   ROUTE_GUARD,
+  TOOL_RESERVED_SEGMENTS,
   OVERVIEW_GAPS,
   DEFAULT_ALLOWED_ORIGINS,
   DEFAULT_BODY_URL,
+  DEFAULT_TOOL_URL,
   createServer,
   startServer,
   resolveControlToken,
   resolveAllowedOrigins,
   timingSafeEqual,
   originVerdict,
-  // 以下三个为纯函数，导出以便单测直接覆盖（无需起 HTTP 服务）
+  // 以下为纯函数/传输层，导出以便单测直接覆盖（无需起 HTTP 服务）
   queryTerms,
   buildSnippet,
   readJsonBody,
+  httpRequestJson,
+  httpRequestJsonMeta,
+  // 超时档位（权威登记表：contracts/timeout-budget.yaml）。
+  // 导出给单测用于**镜像生产默认值** —— 注入替身若不补默认值，读型调用会录到 undefined，
+  // 用例就只能断言「有没有传」，而断言不了「档位对不对」。
+  TIMEOUT_TIERS: {
+    READ: READ_TIMEOUT_MS,
+    RETRIEVE: RETRIEVE_TIMEOUT_MS,
+    GENERATE: GENERATE_TIMEOUT_MS,
+    ASK: ASK_TIMEOUT_MS,
+    WRITE: WRITE_TIMEOUT_MS,
+    EXECUTE: EXECUTE_TIMEOUT_MS,
+  },
 }

@@ -2,7 +2,7 @@ export type ModuleId =
   | 'overview' | 'vitals' | 'brain' | 'senses' | 'evolution' | 'collab'
   | 'tasks' | 'chat' | 'experts' | 'skills' | 'connectors' | 'automation' | 'models' | 'remote'
   | 'cases' | 'approvals'
-  | 'middleware' | 'tracing' | 'knowledge'
+  | 'middleware' | 'tracing' | 'knowledge' | 'execution'
 
 export type ModuleGroup = '生命体区' | '工作台区' | '治理区' | '观测区'
 export type ThemeMode = 'dark' | 'light' | 'system'
@@ -699,4 +699,212 @@ export interface OverviewCockpit {
   model_calls: ModelCallPoint[]
   model_runtime: ModelRuntimeNode[]
   optimization_suggestions: OptimizationSuggestion[]
+}
+
+// ─────────── R-C05(预) 执行视图：四肢层工具（代理 tool-executor） ───────────
+
+/** 工具熔断状态（ToolExecutor.breakerState） */
+export interface ToolCircuitState {
+  tool_name: string
+  state: 'closed' | 'open'
+  consecutive_failures: number
+  open_until?: number
+}
+
+/** 工具注册表条目（GET /api/tool/list → BFF /tools） */
+export interface ExecutionTool {
+  name: string
+  version: string
+  description?: string
+  /**
+   * JSON Schema Draft-07 —— tool-executor 回传的是**字符串**（`ToolMeta.parametersSchema`），
+   * 不是已解析对象。取用时需 `JSON.parse`，故联合类型放宽以兼容两种来源。
+   */
+  parameters_schema?: string | Record<string, unknown>
+  /** 参数 Schema 指纹；变更即触发 L1 契约测试（IN-06） */
+  schema_hash?: string
+  sandbox_required: boolean
+  timeout_ms: number
+  whitelist_domains?: string[]
+  deprecated: boolean
+  deprecated_since?: string | null
+  removed_after?: string | null
+  owner?: string
+  /** 注册时间：tool-executor 回传 epoch 毫秒（契约宽松，允许 ISO 串） */
+  registered_at?: number | string
+  circuit?: ToolCircuitState
+}
+
+/** 工具调用审计明细（R5-08）：一次真实调用一行 */
+export interface ToolAuditEntry {
+  audit_id: string
+  call_id?: string
+  tenant_id?: string
+  tool_name: string
+  tool_version?: string
+  /** 参数摘要（已脱敏） */
+  args?: string
+  success: boolean
+  output?: string | null
+  error_code?: string | null
+  error_message?: string | null
+  latency_ms: number
+  sandboxed: boolean
+  sandbox_backend?: string
+  degraded?: boolean
+  created_at?: number
+  requested_by?: string
+}
+
+/** 工具执行指标（最近窗口采样，非全量历史） */
+export interface ToolMetricsSnapshot {
+  window_size?: number
+  total_calls: number
+  total_failures: number
+  blocked_calls: number
+  /** 窗口内成功率；无样本时为 null（不填 0 冒充「全部失败」） */
+  success_rate: number | null
+  p50_ms: number
+  p95_ms: number
+  p99_ms: number
+  calls_by_tool?: Record<string, number>
+}
+
+/** 沙箱状态：是否真隔离（degraded=true 表示已降级为受限子进程，非隔离边界） */
+export interface ToolSandboxStatus {
+  enabled: boolean
+  active_backend: string
+  isolated: boolean
+  degraded: boolean
+  docker_available: boolean
+  process_fallback_available: boolean
+  timeout_ms: number
+  memory_mb: number
+  note?: string
+}
+
+/** 注册表变更记录（IN-06 版本并存 / 废弃期） */
+export interface ToolRegistryChange {
+  tool_name: string
+  version: string
+  schema_hash?: string
+  /** 实际返回为大写动作名：REGISTER / UPDATE / DEPRECATE */
+  action: string
+  previous_version?: string | null
+  /** epoch 毫秒（契约宽松，允许 ISO 串） */
+  changed_at?: number | string
+  changed_by?: string
+  /** 受影响面：当前实现回传数组（可能为空数组），旧口径曾为字符串 */
+  impact?: string[] | string
+}
+
+export interface ToolRegistrySummary {
+  tool_count: number
+  deprecated_count: number
+  change_count: number
+  storage?: string
+  registry_backend?: string
+}
+
+export interface ToolChangeLog {
+  summary: ToolRegistrySummary | null
+  change_log: ToolRegistryChange[]
+  semver_policy?: string
+  deprecation_policy?: string
+}
+
+/** 审计汇总 */
+export interface ToolAuditStats {
+  backend: string
+  degraded: boolean
+  total: number
+  success: number
+  blocked: number
+  sandboxed: number
+  success_rate: number | null
+}
+
+/** 工具执行结果（BFF POST /tools/execute） */
+export interface ToolExecutionResult {
+  available: boolean
+  tenant_id?: string
+  tool_name: string
+  success?: boolean
+  output?: unknown
+  error_code?: string
+  error_message?: string
+  details?: Record<string, string>
+  call_id?: string
+  audit_id?: string | null
+  /** 工具层实测耗时 */
+  latency_ms?: number
+  /** BFF 侧往返耗时（含网络） */
+  bff_latency_ms?: number
+  sandboxed?: boolean
+  sandbox_backend?: string
+  degraded?: boolean
+  checked_at?: string
+  reason?: string
+  data_source?: 'live' | 'mock'
+}
+
+/**
+ * 执行视图聚合（BFF GET /tools）。
+ *
+ * `available=false` 表示四肢层不可用（tool-executor 未启动）—— 此时各分片缺失，
+ * 界面必须展示"不可用"而不是把缺失渲染成 0；
+ * `partial=true` 表示整体可用但个别分片没取到，具体见 `partial_reasons`。
+ *
+ * `partial_reasons` 里的码**带失败原因后缀**：`_timeout` 是对端在预算内没返回（"慢"），
+ * `_missing` 是端点不存在（版本旧），`_unavailable` 才是真连不上。
+ * 三者必须分别叙述 —— 把"慢"说成"没有"曾导致沙箱状态被误报不可用。
+ * 人类可读解释见 `partial_note`；各子请求预算见 `probe_budget_ms`。
+ */
+export interface ExecutionOverview {
+  available: boolean
+  tenant_id?: string
+  checked_at?: string
+  tool_url?: string
+  reason?: string
+  /** 四肢层不可用时的机器码：`timeout` / `unreachable` / `endpoint_missing` / `http_error` / `bad_json` */
+  reason_code?: string
+  gaps?: string[]
+  tools?: ExecutionTool[]
+  total?: number
+  registry_backend?: string
+  registry?: ToolChangeLog | null
+  metrics?: { metrics: ToolMetricsSnapshot; circuit_breakers: ToolCircuitState[] } | null
+  sandbox?: ToolSandboxStatus | null
+  audit?: { items: ToolAuditEntry[]; total: number; audit_backend?: string; degraded?: boolean } | null
+  audit_stats?: { audit: ToolAuditStats; kafka?: Record<string, unknown> } | null
+  partial?: boolean
+  partial_reasons?: string[]
+  /** 分片缺失的人类可读解释（含"这是慢不是没有"的提示），可能为 null */
+  partial_note?: string | null
+  /** 各子请求超时预算（毫秒），供排查"慢 vs 没有"用 */
+  probe_budget_ms?: { default: number; sandbox: number }
+  note?: string
+  data_source?: 'live' | 'mock'
+}
+
+/**
+ * IN-06 工具变更影响分析（BFF `GET /tools/{name}/impact` → `{ impact: {...} }`）。
+ *
+ * **口径如实**：`affected_agents` / `affected_flows` 只覆盖注册表里
+ * **显式登记过**的消费方（`ToolRegistry.registerConsumer`），硬编码调用方不会出现，
+ * 因此列表为空**不等于没有影响**（`note` 会说明这一点）。
+ */
+export interface ToolImpactReport {
+  tool_name: string
+  current_version?: string | null
+  schema_hash?: string
+  affected_agents: string[]
+  affected_flows: string[]
+  /** 历史上发生过 schema 变更（版本维度） */
+  schema_changed: boolean
+  /** 有变更且存在登记消费方 → 需回归其 L1 契约测试 */
+  contract_test_required: boolean
+  note?: string
+  /** 前端本地标注（非上游字段） */
+  data_source?: 'live' | 'mock'
 }

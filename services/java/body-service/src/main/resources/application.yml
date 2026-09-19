@@ -27,6 +27,10 @@ app:
       ttl-seconds: ${CACHE_TTL_SECONDS:3600}
     retrieval:
       candidate-top-k: ${RETRIEVAL_CANDIDATE_TOP_K:50}
+      # 检索端到端预算（TB-16 downstream 口径，2026-09-19 GAP-05 闭合）：
+      # 向量化 + Qdrant + 重排共享的上限，超时返回 504 AGENT_TIMEOUT。
+      # <=0 表示显式不限（仅测试用）。上游 nlp RETRIEVAL_BUDGET_MS=15s 对它保持 1.5x。
+      total-budget-ms: ${RETRIEVAL_TOTAL_BUDGET_MS:10000}
     ingest:
       embed-batch-size: ${EMBED_BATCH_SIZE:16}
     # 感官→躯体 采集事件消费（R3-09）

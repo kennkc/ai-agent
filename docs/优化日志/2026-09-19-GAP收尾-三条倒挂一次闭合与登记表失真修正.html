@@ -1,0 +1,317 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>优化日志：GAP 收尾 —— 三条倒挂一次闭合与登记表失真修正（2026-09-19）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 2026-09-19-GAP收尾-三条倒挂一次闭合与登记表失真修正.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1-rec-01-gap">1. 起点：REC-01 轮留下的三条 gap</a></li>
+<li><a href="#2">2. 三条怎么闭合的</a><ul>
+<li><a href="#21-gap-01-nlp-session">2.1 GAP-01：收紧 nlp 上限，而不是抬高 session 上游</a></li>
+<li><a href="#22-gap-05">2.2 GAP-05：修掉一个登记表失真，再闭合倒挂</a></li>
+<li><a href="#23-gap-06-generate">2.3 GAP-06：单列档位，不动 GENERATE</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 测试揭出的写用例陷阱</a></li>
+<li><a href="#4">4. 门禁反向验证（规矩不变）</a></li>
+<li><a href="#5">5. 验证基线</a></li>
+<li><a href="#6">6. 遗留与决策项</a></li>
+<li><a href="#7">7. 认知沉淀</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="gap-2026-09-19">优化日志：GAP 收尾 —— 三条倒挂一次闭合与登记表失真修正（2026-09-19）<a class="headerlink" href="#gap-2026-09-19" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>上游文档：<code>docs/优化日志/2026-09-19-REC-01-LLM级联总预算与跨服务预算同步.md</code>（同日上一轮）
+登记表：<code>contracts/timeout-budget.yaml</code> · 门禁：<code>scripts/timeout-budget-check.py</code></p>
+</blockquote>
+<hr />
+<h2 id="1-rec-01-gap">1. 起点：REC-01 轮留下的三条 gap<a class="headerlink" href="#1-rec-01-gap" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>边</th>
+<th>问题</th>
+<th>余量比</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GAP-01</td>
+<td>session → nlp <code>/brain/ask</code></td>
+<td>上游 30s 对下游最坏 22s</td>
+<td>0.91x</td>
+</tr>
+<tr>
+<td>GAP-05</td>
+<td>nlp → body 检索</td>
+<td>上游 8s &lt; 下游读超时 10s</td>
+<td>0.80x</td>
+</tr>
+<tr>
+<td>GAP-06</td>
+<td>wp-bff → session <code>/ask</code></td>
+<td>GENERATE 45s 对 session 总预算 35s</td>
+<td>1.29x</td>
+</tr>
+</tbody>
+</table>
+<p>三条的 fix_hint 各给了两个方向。本轮统一选<strong>内层收敛、外层覆盖</strong>（REC-01 的哲学），
+而不是把上游超时层层抬高 —— 那会把「快速失败并降级」变成「长时间等待后仍降级」。</p>
+<hr />
+<h2 id="2">2. 三条怎么闭合的<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-gap-01-nlp-session">2.1 GAP-01：收紧 nlp 上限，而不是抬高 session 上游<a class="headerlink" href="#21-gap-01-nlp-session" title="Permanent link">&para;</a></h3>
+<p>选了 fix_hint ②：<code>BRAIN_TOTAL_BUDGET_MS</code> 25s → <strong>20s</strong>。</p>
+<p><strong>为什么原 25s 等于没有</strong>：级联推导最坏 22s &lt; 25s，预算从不构成约束 ——
+"有预算"和"预算有用"是两回事。收紧到 20s 后它成为<strong>真正的硬上限</strong>，
+级联（L2 8s×2 + L1 3s×2 = 22s）在预算内被截断，session <code>BRAIN_TIMEOUT</code> 30s 对它恰好 1.5x。</p>
+<p><strong>为什么不选 ①（上游抬到 33s）</strong>：session 总预算 = 意图 5s + 生成 33s = 38s，
+GAP-06 会从 45s/35s=1.29x 恶化到需要 ≥57s 才能盖住 —— <strong>余量比是两侧的函数，
+闭合一处前先看它对相邻边的推挤</strong>。</p>
+<blockquote>
+<p><strong>取舍如实登记</strong>：20s 预算意味着检索若吃满 15s（GAP-05 闭合后的新值），
+生成只剩 5s —— L1 单次 3s 够用，重试会被截断。这是刻意的：下游病态变慢时
+<strong>更快失败</strong>，正是 deadline 的本意。</p>
+</blockquote>
+<h3 id="22-gap-05">2.2 GAP-05：修掉一个登记表失真，再闭合倒挂<a class="headerlink" href="#22-gap-05" title="Permanent link">&para;</a></h3>
+<p>复查 body <code>/retrieve</code> 真实管线时发现，表里 TB-16 的下游最坏 "10s" 本身就是<strong>失真</strong>：</p>
+<pre><code class="language-text">登记依据：「body-service OutboundHttp DEFAULT_READ_TIMEOUT = 10s」
+真实管线：查询向量化（nlp embed 预算 12s）→ Qdrant（2s）→ 重排（读超时 10s）
+真实端到端最坏 ≈ 24s，不是 10s —— 表把「单个出站读超时」误当成了「端到端最坏」
+</code></pre>
+<p><strong>教训：登记表里"下游最坏耗时"必须是端到端的最坏，不能拿某一跳的读超时冒充 ——
+否则门禁的余量比是从假数字算出来的。</strong></p>
+<p>修法与 REC-01 同路线：</p>
+<ol>
+<li>body-service 新增 <strong><code>common/BudgetGuard.java</code></strong>（约 100 行）：
+   warm 管线（嵌入 + Qdrant + 重排）在 <code>RETRIEVAL_TOTAL_BUDGET_MS = 10s</code> 端到端预算内执行，
+   超时抛 <code>AGENT_TIMEOUT</code>（→ 504），<strong>绝不返回空结果冒充"无结果"</strong>（检索是 Must 项）；
+   语义与 Python 侧 <code>run_with_budget</code> 对齐（<code>&lt;=0 = 显式不限</code>；诚实边界：工作线程不可强杀）。</li>
+<li>nlp 上游 <code>RETRIEVAL_BUDGET_MS</code> 8s → <strong>15s</strong>（15s / 10s = 1.5x）。</li>
+<li><strong>口径合一</strong>：废除 <code>RETRIEVAL_TIMEOUT_SECONDS</code>（与 <code>RETRIEVAL_BUDGET_MS</code> 同值不同名，
+   是潜在漂移源）；<code>retrieval.py</code> 的 <code>DEFAULT_TIMEOUT</code> 改由 <code>budget.py</code> 派生（毫秒→秒换算）。</li>
+</ol>
+<h3 id="23-gap-06-generate">2.3 GAP-06：单列档位，不动 GENERATE<a class="headerlink" href="#23-gap-06-generate" title="Permanent link">&para;</a></h3>
+<p>wp-bff 新增 <strong><code>ASK_TIMEOUT_MS = 53000</code></strong>（35s × 1.5 = 52.5s），
+只服务 <code>POST /api/session/{id}/ask</code> 这一条边；<strong>GENERATE 档保持 45s 不动</strong> ——
+它被 <code>/brain/ask</code>、<code>memory/ingest|compress</code> 等多条边共享，抬高会把那些
+"快速失败并降级"的边一起拖慢。用例同步加了防退化断言：<strong>ASK 必须严格大于 GENERATE</strong>
+（两档被合并回一个值 = GAP-06 复发）。</p>
+<hr />
+<h2 id="3">3. 测试揭出的写用例陷阱<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<p>首轮 <code>warmPipelineOverBudgetSurfacesAsTimeoutNotEmptyResult</code> 假绿（预算 200ms、7ms 正常返回）。</p>
+<p><strong>根因</strong>：检索链路调的是 <code>embeddingClient.embedOne(...)</code>，而用例 stub 的是它内部的
+<code>embed(...)</code> —— mock 拦截层根本不会走到真实方法体，所以 stub 被静默跳过，
+管线拿到 Mockito 默认空值照常跑完。</p>
+<p><strong>修法</strong>：stub 打在<strong>实际被调用的那一层</strong>（<code>embedOne</code>）。已把这条写进用例注释。</p>
+<blockquote>
+<p>与本轮另一条认知同源：<strong>stub / 锚点 / 断言，都必须精确锚定在被验证的边界上</strong>，
+锚松了不是"没验证"，是"假装验证了"。</p>
+</blockquote>
+<hr />
+<h2 id="4">4. 门禁反向验证（规矩不变）<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<p>把 TB-11 的下游锚点期望值改成 19999（代码实值 20000）复跑：</p>
+<pre><code class="language-text">FAIL TB-11 — 下游锚点漂移：代码实值 20000ms != 表中期望 19999ms
+合计: ok=18 · gap=0 · fail=1    （exit=1）
+</code></pre>
+<p>还原后 ok=19 · gap=0 · fail=0。</p>
+<hr />
+<h2 id="5">5. 验证基线<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 全量</td>
+<td><strong>251 / 0 失败</strong>（BUILD SUCCESS；body 64→67：BudgetGuard 2 例 + 超时用例；session 43 / sense 53 / tool-executor 86 不变）</td>
+</tr>
+<tr>
+<td>Python <code>pytest</code></td>
+<td><strong>158 passed / 1 skipped</strong></td>
+</tr>
+<tr>
+<td>wp-bff <code>node --test</code></td>
+<td><strong>87 / 0 失败</strong>（改写 session ask 档位断言 + 防退化断言）</td>
+</tr>
+<tr>
+<td>超时预算门禁</td>
+<td><strong>ok=19 · gap=0 · fail=0</strong>（反向验证：锚点漂移 → fail=1 / exit=1）</td>
+</tr>
+<tr>
+<td>契约门禁（跨服务 / 工作平台）</td>
+<td>0 FAIL / 0 FAIL</td>
+</tr>
+<tr>
+<td>文档覆盖</td>
+<td>160/160（登记 <code>BudgetGuard.java</code> 后）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6">6. 遗留与决策项<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>REC-02 的 <strong>CI 部分</strong>：仓内无 CI 工作流，start.sh preflight 已挂双门禁</td>
+<td>待建 CI 时一并挂</td>
+</tr>
+<tr>
+<td>2</td>
+<td>REC-03：单服务内（线程池 / 队列）同类错配复核</td>
+<td>未做，供 P6 决策</td>
+</tr>
+<tr>
+<td>3</td>
+<td>三分支提交推送</td>
+<td><strong>待用户授权</strong></td>
+</tr>
+<tr>
+<td>4</td>
+<td>8090 BFF / 8084 tool-executor 后台进程</td>
+<td>重启后需手动再起</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7. 认知沉淀<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>"有预算" ≠ "预算有用"</strong> —— 上限大于最坏耗时的预算从不构成约束，等于装饰。
+   收紧到能咬住最坏路径，才算数。</li>
+<li><strong>余量比是两侧的函数</strong> —— 闭合一处缺口前，先算它对相邻边的推挤
+   （GAP-01 若选"抬上游"会把 GAP-06 恶化一档）。</li>
+<li><strong>登记表的数字必须是端到端的最坏</strong> —— 拿单个出站读超时冒充端到端最坏，
+   门禁的余量比就是从假数字算出来的。</li>
+<li><strong>stub 必须打在被调用的那一层</strong> —— mock 拦截层之下不会被走到，stub 错层即假绿。</li>
+</ol></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

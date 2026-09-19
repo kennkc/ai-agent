@@ -1,0 +1,597 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent-Lifeform · AI Agent 生命体架构</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:41 · 源文件 README.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 项目定位</a></li>
+<li><a href="#2">2. 当前技术栈</a></li>
+<li><a href="#3">3. 目录结构</a></li>
+<li><a href="#4">4. 快速启动</a><ul>
+<li><a href="#41-linux-macos">4.1 Linux / macOS</a></li>
+<li><a href="#42-windows">4.2 Windows</a></li>
+<li><a href="#43-vue">4.3 单独启动 Vue 工作平台（含观测区）</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 安全基线</a></li>
+<li><a href="#6-vs1">6. VS1 冒烟测试</a></li>
+<li><a href="#7">7. 验证命令</a><ul>
+<li><a href="#java">Java</a></li>
+<li><a href="#_1">契约</a></li>
+<li><a href="#vue">Vue 前端</a></li>
+</ul>
+</li>
+<li><a href="#8">8. 更新流程</a><ul>
+<li><a href="#80">8.0 通用前置：变更前先同步远端（强制）</a></li>
+<li><a href="#81">8.1 设计文档更新</a></li>
+<li><a href="#82">8.2 代码更新</a></li>
+<li><a href="#83">8.3 前端更新</a></li>
+<li><a href="#84">8.4 分支与发布治理</a><ul>
+<li><a href="#841">8.4.1 远端拓扑与推送配置</a></li>
+</ul>
+</li>
+<li><a href="#85">8.5 提交前检查</a></li>
+</ul>
+</li>
+<li><a href="#9">9. 当前进度</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="agent-lifeform-ai-agent">Agent-Lifeform · AI Agent 生命体架构<a class="headerlink" href="#agent-lifeform-ai-agent" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>当前基线：Phase 0 / Phase 1 / Phase 2 / Phase 3 / <strong>Phase 4（大脑期）</strong> / <strong>Phase 5（四肢期）</strong> 均已交付并通过验收；
+VS1 垂直切片、Phase 3 知识闭环、Phase 4 大脑问答链路与 Phase 5 工具执行链路均已打通
+（<strong>251 Java + 158 Python + 87 wp-bff tests green</strong>，契约校验 0 FAIL，超时预算 0 FAIL（ok=19 · gap=0），
+文档一致性 0 FAIL，Java 文档覆盖 160/160）。
+另：Phase 4 交付后于 <strong>2026-09-19 完成需求复审与补全</strong>（2 项语义级伪实现已修复 + 3 项跨链路
+一致性缺陷已闭合 + 未落地项补齐），详见三件套补记与 <code>docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md</code>。
+<strong>Phase 5（四肢期）同日落地并复审收口</strong>：新增独立服务 <code>tool-executor</code>（8084/9095）、wp-bff 工具域 9 端点、
+工作平台执行视图（R-C05）、IN-06 契约基线门禁；沙箱真隔离（Docker 路径）尚未实测，如实登记。
+下一阶段为 <strong>Phase 6（小脑期 / 编排）</strong>。
+技术栈：Java 21 + Spring Cloud Alibaba + Python 3.12 + FastAPI + Vue 3 + Vite + Element Plus。</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 项目定位<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>Agent-Lifeform 采用“人体生命体”隐喻构建 AI Agent 系统，核心分层包括：</p>
+<ul>
+<li>大脑层：意图识别、会话状态、任务规划、LLM 推理网关</li>
+<li>感官层：文本、URL、文件、OCR、语音等采集渠道</li>
+<li>躯体层：知识库、向量检索、RAG、存储生命周期</li>
+<li>四肢层：工具调用、代码执行、沙箱</li>
+<li>小脑层：DAG、Saga、多 Agent 编排</li>
+<li>免疫层：安全、容错、审批、多租户</li>
+<li>进化层：反馈学习、知识自愈、模型评测</li>
+</ul>
+<p>Phase 2 感官回路（已落地）：</p>
+<p><code>R0 定时 / R1 指令 → 五感渠道 → 标准化五字段 → 质检 → 隔离暂存(MinIO) → 事件(lifeform.sense.collected) → Console 感官视图</code></p>
+<p>Phase 3 躯体回路（已落地，2026-09-18）：</p>
+<p><code>感官事件 → 格式解析 → 分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷） → 语义检索（缓存优先 → 召回 → 重排） → RAG → 工作平台躯体视图</code></p>
+<p>当前前台主入口为 Vue 3 工作平台：</p>
+<pre><code class="language-text">用户 → work-platform
+→ gateway-service
+→ session-manager
+→ nlp-service
+→ body-service
+→ 回答与结果工作区
+</code></pre>
+<hr />
+<h2 id="2">2. 当前技术栈<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>领域</th>
+<th>选型</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 服务</td>
+<td>Java 21 + Spring Boot 3 + Spring Cloud Alibaba</td>
+</tr>
+<tr>
+<td>Python AI 服务</td>
+<td>Python 3.12 + FastAPI</td>
+</tr>
+<tr>
+<td>前端</td>
+<td>Vue 3 + Vite + TypeScript + Element Plus</td>
+</tr>
+<tr>
+<td>前端状态</td>
+<td>Pinia（服务端 Query/缓存层待后续阶段引入 TanStack Query）</td>
+</tr>
+<tr>
+<td>前端路由</td>
+<td>Vue Router</td>
+</tr>
+<tr>
+<td>DAG 可视化</td>
+<td>自研 SVG + CSS 拓扑（Vue Flow 待编排期引入）</td>
+</tr>
+<tr>
+<td>实时通信</td>
+<td>当前为 REST 轮询；WebSocket 推送为设计目标，代码尚未接入</td>
+</tr>
+<tr>
+<td>数据层</td>
+<td>PostgreSQL（关系元数据真相源；镜像为 pgvector 变体但当前<strong>未启用向量列</strong>）、Qdrant（向量主库）、Redis、MinIO</td>
+</tr>
+<tr>
+<td>消息总线</td>
+<td>NATS JetStream + Kafka</td>
+</tr>
+<tr>
+<td>可观测性</td>
+<td>OpenTelemetry + Jaeger + Prometheus + Grafana</td>
+</tr>
+<tr>
+<td>契约</td>
+<td>Protobuf/gRPC + OpenAPI</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3">3. 目录结构<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">ai-agent/
+├── contracts/                     # BFF OpenAPI 契约可执行副本
+├── docs/
+│   ├── demo/                      # 各阶段验收演示脚本（Phase0/1/2/3）
+│   ├── java-services/             # Java 服务源码逐文件说明（模块总览/契约/各服务/配置约定，MD+HTML）
+│   ├── 项目进度日志报告/           # 阶段报告、执行日志、测试验收报告（MD+HTML）
+│   └── ...
+├── infra/                         # 基础设施说明
+├── proto/                         # Protobuf 契约（生成 Java 桩已入库 proto-contracts/src/main/java）
+├── scripts/                       # 启动、健康检查、契约校验、mvn-dev.sh、md2html-report.py
+├── services/
+│   ├── java/
+│   │   ├── proto-contracts/       # Proto Java/gRPC 生成模块
+│   │   ├── gateway-service/       # 网关、JWT、租户透传、gRPC 健康
+│   │   ├── session-manager/       # 会话、BusProxy、NATS/Kafka、VS1 编排
+│   │   ├── sense-service/         # 五感渠道、R0/R1 采集、质检、暂存、死信
+│   │   └── body-service/          # 躯体：知识管道（解析 / 分块 / 嵌入 / 三层存储 / 语义检索 / 重排 / RAG）
+│   ├── python/
+│   │   └── nlp-service/           # 规则+L0 级联意图识别、OCR 代理
+│   └── node/
+│       └── wp-bff/                # work-platform BFF（:8090 中间件真实启停 + 链路追踪 + 知识统计/写入/检索代理）
+└── web/
+    ├── work-platform/             # Vue 3 + Element Plus 主工作平台
+    └── console/                   # 旧静态 Mock 运维参考（Phase 2 感官视图）
+</code></pre>
+<hr />
+<h2 id="4">4. 快速启动<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<p>首次启动基础设施前，复制并填写本地环境变量：</p>
+<pre><code class="language-bash">cp .env.example .env
+# 设置 MINIO_ROOT_USER / MINIO_ROOT_PASSWORD
+# 以及服务侧 MINIO_ACCESS_KEY / MINIO_SECRET_KEY
+</code></pre>
+<blockquote>
+<p><code>.env</code>、本地暂存数据、Vite 缓存和构建产物均不会提交到仓库。</p>
+</blockquote>
+<h3 id="41-linux-macos">4.1 Linux / macOS<a class="headerlink" href="#41-linux-macos" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 一键启动基础设施、Java、Python、Vue 前端
+./scripts/start.sh all
+
+# 健康检查
+./scripts/healthcheck.sh
+</code></pre>
+<p>也可以按模块启动：</p>
+<pre><code class="language-bash">./scripts/start.sh infra
+./scripts/start.sh java
+./scripts/start.sh python
+./scripts/start.sh frontend
+</code></pre>
+<h3 id="42-windows">4.2 Windows<a class="headerlink" href="#42-windows" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bat">scripts\start-dev.bat all
+scripts\healthcheck.bat
+</code></pre>
+<p>按模块启动：</p>
+<pre><code class="language-bat">scripts\start-dev.bat infra
+scripts\start-dev.bat java
+scripts\start-dev.bat python
+scripts\start-dev.bat frontend
+</code></pre>
+<h3 id="43-vue">4.3 单独启动 Vue 工作平台（含观测区）<a class="headerlink" href="#43-vue" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 1) 启动 BFF（观测区的中间件探针/启停与链路追踪数据源，零依赖 Node &gt;= 20）
+node services/node/wp-bff/server.js        # 监听 127.0.0.1:8090
+
+# 2) 启动前端（双栈监听，localhost / 127.0.0.1 / 局域网 IP 均可访问）
+cd web/work-platform
+npm install
+npm run dev
+</code></pre>
+<p>默认地址：<code>http://localhost:3001</code>。开发期 Vite 代理 <code>/api/wp</code> → <code>http://127.0.0.1:8090</code>。</p>
+<p>数据源切换：<code>web/work-platform/.env</code> 中 <code>VITE_DATA_SOURCE=mock|api</code>（当前开发环境为 <code>api</code>）。
+API 模式下观测区两页展示真实数据：<strong>中间件监控</strong>（8 容器实时探针、单卡片启停、一键串行启动/终止，真实执行 <code>docker compose up -d / stop</code>，8-key 白名单）与<strong>链路追踪</strong>（真实 Jaeger 服务统计与最近链路）。</p>
+<p><strong>数据源降级不再静默</strong>（2026-09-16 起）：BFF 未覆盖或请求失败的数据域仍会回落 Mock，但顶栏会显示 <code>API · 降级 N</code> 徽标并在页面顶部给出黄色横幅，点击可查看是哪些数据域、因为什么原因在展示 Mock 数据。</p>
+<p><strong>中间件控制面需要令牌</strong>：<code>POST /api/wp/middleware/:key/start|stop</code> 必须同时满足「来源白名单」与「控制令牌」两项校验。令牌优先取环境变量 <code>WP_BFF_CONTROL_TOKEN</code>，未配置时由 wp-bff 启动时随机生成到 <code>services/node/wp-bff/logs/wp-bff-control-token</code>；开发期 Vite 代理在服务端读取该文件并注入请求头，令牌不会进入浏览器。局域网 IP 访问开发服务器时需把该来源加入 <code>WP_BFF_ALLOWED_ORIGINS</code>。详见 <code>services/node/wp-bff/README.md</code>。</p>
+<hr />
+<h2 id="5">5. 安全基线<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<ul>
+<li>开发环境通过 <code>JWT_SECRET</code> 注入本地密钥，生产环境必须使用独立密钥管理系统。</li>
+<li><code>/api/auth/token</code> 仅在开发配置下启用，并限制 loopback 访问。</li>
+<li>所有业务请求必须携带有效 JWT。</li>
+<li>Gateway 将已验证 JWT 中的 <code>tenant_id</code> 写入 <code>X-Tenant-Id</code>。</li>
+<li>Session、Sense、Body 服务不得信任 query/body 中的租户字段。</li>
+<li>URL 采集默认禁止 loopback、私网、链路本地、组播和自动重定向。</li>
+<li>工作平台 BFF 控制面（<code>wp-bff</code>）固定绑定 <code>127.0.0.1</code>，并叠加来源白名单（Origin/Referer）+ 控制令牌双校验；CORS 不再使用通配符。</li>
+<li>生产环境仍需补充 OAuth2/RBAC、mTLS、Vault/KMS、限流和审计保留策略；<code>wp-bff</code> 的进程级静态令牌需替换为租户级 JWT 鉴权与最小权限模型（Phase 7）。</li>
+</ul>
+<hr />
+<h2 id="6-vs1">6. VS1 冒烟测试<a class="headerlink" href="#6-vs1" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 1. 获取开发 Token
+curl -X POST &quot;http://127.0.0.1:8080/api/auth/token?tenantId=default&quot;
+
+# 2. 创建会话
+curl -X POST &quot;http://127.0.0.1:8080/api/session&quot; \
+  -H &quot;Authorization: Bearer &lt;token&gt;&quot;
+
+# 3. 写入本地知识
+curl -X POST &quot;http://127.0.0.1:8080/api/body/ingest&quot; \
+  -H &quot;Authorization: Bearer &lt;token&gt;&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;doc_id&quot;:&quot;doc-1&quot;,&quot;title&quot;:&quot;架构说明&quot;,&quot;content&quot;:&quot;Agent-Lifeform uses gateway session nlp body services&quot;,&quot;source&quot;:&quot;demo&quot;}'
+
+# 4. 通过 VS1 提问
+curl -X POST &quot;http://127.0.0.1:8080/api/session/&lt;session_id&gt;/ask&quot; \
+  -H &quot;Authorization: Bearer &lt;token&gt;&quot; \
+  -H &quot;Content-Type: application/json&quot; \
+  -d '{&quot;question&quot;:&quot;Agent-Lifeform 的架构是什么&quot;}'
+</code></pre>
+<hr />
+<h2 id="7">7. 验证命令<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<h3 id="java">Java<a class="headerlink" href="#java" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/java
+../../scripts/mvn-dev.sh clean package     # 130 tests, 0 failures
+                                           # gateway 2 · session-manager 15 · sense-service 53 · body-service 60
+
+cd services/node/wp-bff
+node --test                                # 34 passed（含控制面鉴权与路由层错误语义）
+
+cd services/python/nlp-service
+../venv/Scripts/python.exe -m pytest -q    # 62 passed（意图 / OCR / 分块 / 嵌入 / 重排 + HTTP 错误层）
+
+python scripts/java-doc-coverage.py        # 106/106 业务源文件已登记
+</code></pre>
+<blockquote>
+<p><code>scripts/mvn-dev.sh</code> 是 Maven 直调包装（通过 <code>plexus-classworlds</code> 启动），
+用于规避部分 Windows 主机上 <code>mvn.cmd</code> 损坏导致的构建卡死。</p>
+</blockquote>
+<h3 id="_1">契约<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">python scripts/contract-check.py
+python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
+</code></pre>
+<h3 id="vue">Vue 前端<a class="headerlink" href="#vue" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd web/work-platform
+npm install
+npm run typecheck
+npm run build
+</code></pre>
+<hr />
+<h2 id="8">8. 更新流程<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<p>README 不仅是说明文档，也是项目更新流程入口。后续每次修改项目时，必须按以下顺序执行。</p>
+<h3 id="80">8.0 通用前置：变更前先同步远端（强制）<a class="headerlink" href="#80" title="Permanent link">&para;</a></h3>
+<p>任何仓库的内容变更（代码 / 文档 / 配置）之前，必须先同步并<strong>解读</strong>远端改动，避免覆盖协作者的工作：</p>
+<ol>
+<li><strong>拉取</strong>：<code>git fetch &lt;remote&gt;</code> —— 不要直接 <code>git pull</code>，先在无副作用状态下解读</li>
+<li><strong>判断</strong>：<code>git rev-list --left-right --count @{u}...HEAD</code>（输出为 <code>落后 领先</code>）</li>
+<li><strong>落后 &gt; 0 时必须解读</strong>：
+   - <code>git log --oneline HEAD..@{u}</code> —— 对方提交主题
+   - <code>git diff --stat HEAD..@{u}</code> —— 涉及哪些文件
+   - 触及本任务相关文件时用 <code>git show &lt;sha&gt;</code> 读具体改动</li>
+<li><strong>形成结论再动手</strong>：对方改了什么 / 是否与本任务重叠 / 采取何种处理</li>
+<li><strong>合并后复验</strong>：merge 或 rebase 之后重跑受影响范围的验证，再继续开发</li>
+</ol>
+<p>多仓库一键扫描（只读，不改动工作区）：</p>
+<pre><code class="language-powershell">pwsh -File &quot;$env:USERPROFILE\.agents\skills\git-sync-before-change\scripts\scan-remote-updates.ps1&quot; -Repo &quot;E:\ai_workspace\project_space\ai-agent-lifeform\codex\ai-agent&quot;,&quot;E:\ai_workspace\project_space\AI知识库\任务指挥中心知识库&quot;
+</code></pre>
+<p>该约定已登记为 Codex 技能 <code>git-sync-before-change</code>（变更前先同步远端并解读对方改动）。</p>
+<p><strong>冲突处理红线</strong>：按「时间 + 语义」逐项合并，禁止整文件覆盖任一侧。</p>
+<h3 id="81">8.1 设计文档更新<a class="headerlink" href="#81" title="Permanent link">&para;</a></h3>
+<p>文档源目录：</p>
+<pre><code class="language-text">E:\ai_workspace\project_space\AI知识库\任务指挥中心知识库\核心知识
+</code></pre>
+<p>更新步骤：</p>
+<ol>
+<li>修改权威 Markdown 文档。</li>
+<li>如涉及前端框架、接口、阶段计划或架构决策，补充或更新对应 ADR。</li>
+<li>更新 <code>AGENT_CONTEXT\D3-资源治理\文档版本索引.md</code>。</li>
+<li>执行 HTML 镜像同步：</li>
+</ol>
+<pre><code class="language-bash">cd E:\ai_workspace\project_space\AI知识库\任务指挥中心知识库\核心知识
+python md2html.py
+python md2html.py --dry-run
+</code></pre>
+<ol start="5">
+<li>确认 <code>done: 0 HTML file(s) would be updated</code>。</li>
+<li>提交文档仓库：</li>
+</ol>
+<pre><code class="language-bash">git add -u
+git commit -m &quot;docs: &lt;中文更新说明&gt;&quot;
+</code></pre>
+<h3 id="82">8.2 代码更新<a class="headerlink" href="#82" title="Permanent link">&para;</a></h3>
+<ol>
+<li>先执行 §8.0 的同步检查（fetch + 解读远端改动），再从 <code>codex/main</code> 接续开发。</li>
+<li>按阶段或垂直切片修改服务代码。</li>
+<li>同步更新对应阶段文档：
+   - 需求设计文档
+   - 开发设计文档
+   - 测试设计案例文档
+   - 部署文档</li>
+<li>新增或修改接口时同步更新：
+   - <code>proto/</code>
+   - <code>contracts/</code>
+   - <code>contract-check.py</code></li>
+<li>更新 <code>PROGRESS.md</code>。</li>
+<li>执行验证：</li>
+</ol>
+<pre><code class="language-bash"># Java
+cd services/java
+JAVA_HOME=&lt;jdk21&gt; mvn test
+JAVA_HOME=&lt;jdk21&gt; mvn package -DskipTests
+
+# 契约
+python scripts/contract-check.py
+python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
+
+# Vue
+cd web/work-platform
+npm run typecheck
+npm run build
+</code></pre>
+<ol start="7">
+<li>提交开发仓库：</li>
+</ol>
+<pre><code class="language-bash">git add -A
+git commit -m &quot;feat: &lt;中文更新说明&gt;&quot;
+</code></pre>
+<h3 id="83">8.3 前端更新<a class="headerlink" href="#83" title="Permanent link">&para;</a></h3>
+<p>前端主目录：</p>
+<pre><code class="language-text">web/work-platform
+</code></pre>
+<p>更新步骤：</p>
+<ol>
+<li>先更新 <code>src/config/modules.ts</code> 和 <code>src/types/index.ts</code>。</li>
+<li>再更新路由、页面、Mock 数据和 <code>ConsoleDataProvider</code>/<code>WorkPlatformDataProvider</code>。</li>
+<li>保持 Mock 与 API 数据结构一致。</li>
+<li>新增页面必须同步更新：
+   - <code>src/router/index.ts</code>
+   - <code>src/layouts/PlatformLayout.vue</code>
+   - <code>src/views/</code>
+   - 对应 README 或阶段文档</li>
+<li>执行：</li>
+</ol>
+<pre><code class="language-bash">npm run typecheck
+npm run build
+</code></pre>
+<ol start="6">
+<li>确认 <code>dist/</code> 构建成功后再提交。</li>
+</ol>
+<h3 id="84">8.4 分支与发布治理<a class="headerlink" href="#84" title="Permanent link">&para;</a></h3>
+<p>截至 2026-09-16，三个长期分支内容对齐、指向同一提交；同日主线更名为 <code>codex/main</code>：</p>
+<table>
+<thead>
+<tr>
+<th>分支</th>
+<th>角色与约定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>codex/main</code></td>
+<td>本机主开发分支（2026-09-16 起），日常改动先落这里</td>
+</tr>
+<tr>
+<td><code>dev</code></td>
+<td>另一台远端开发机的工作分支，与主线保持同内容</td>
+</tr>
+<tr>
+<td><code>workbuddy/main</code></td>
+<td>主开发线（Phase 0/1/2 + 工作平台 + Java 服务文档集），与主线保持同内容</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>2026-09-16 决策</strong>：三支保持内容对齐 —— 每次收口时用 <code>git merge --ff-only</code> 把
+<code>codex/main</code> 同步到 <code>dev</code> 与 <code>workbuddy/main</code>（推送前必须先 <code>git fetch</code>
+确认对方进度）；吸收其他分支的提交时按「时间 + 语义」逐项合并，不做覆盖式合并。</p>
+</blockquote>
+<p>约定：</p>
+<ol>
+<li>任一分支上的改动，收口时通过 <code>git merge --ff-only</code> 同步到另两个分支，保持三分支内容一致。</li>
+<li>分支名与内容出现偏差时，在阶段收口时新建语义正确的分支，不做历史重写。
+   —— 2026-09-16 已按此约定执行：主线切换为 <code>codex/main</code>；旧名 <code>codex/phase0-1-hardening</code>
+   在确认其提交已全部包含后删除（本机工作副本 / 本地 origin 仓库 / GitHub 三处同步清理）。</li>
+<li>每次合并后必须重跑全量验证（Java / Python / 契约 / wp-bff / Vue typecheck+build）再推送。</li>
+<li>冲突处理按「时间 + 语义」逐项合并，禁止直接覆盖对方改动。</li>
+</ol>
+<h4 id="841">8.4.1 远端拓扑与推送配置<a class="headerlink" href="#841" title="Permanent link">&para;</a></h4>
+<pre><code class="language-text">本机工作副本 ──fetch──&gt; 本地镜像仓库 (ai-agent) ──SSH──&gt; GitHub
+      └─────────────── push (pushurl) ───────────────────┘
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>remote</th>
+<th>fetch 地址</th>
+<th>push 地址</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>origin</code></td>
+<td>本地镜像仓库 <code>&lt;repo&gt;\ai-agent</code>（拉取快，不占网络）</td>
+<td><code>git@github.com:kennkc/ai-agent.git</code>（<strong>直达 GitHub</strong>）</td>
+</tr>
+<tr>
+<td><code>github</code></td>
+<td><code>git@github.com:kennkc/ai-agent.git</code></td>
+<td>同左</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>拉取协作者最新</strong>：<code>git fetch github &amp;&amp; git merge --ff-only github/codex/main</code></li>
+<li><strong>推送</strong>：<code>git push origin codex/main</code>（直达 GitHub，不再需要"先推镜像、再推 GitHub"的两步转发）</li>
+<li><strong>注意</strong>：推送直达 GitHub 后，本地镜像仓库会滞后。若要从镜像拉取，先在镜像仓库执行 <code>git fetch origin</code> 或 <code>git merge --ff-only origin/codex/main</code></li>
+<li><strong>网络约束</strong>：本机 HTTPS（443）被阻断，GitHub 通信统一走 SSH（22 端口，密钥已就绪）</li>
+</ul>
+<p>推送三个长期分支：</p>
+<pre><code class="language-powershell">git push origin codex/main
+git push origin codex/main:dev
+git push origin codex/main:workbuddy/main
+</code></pre>
+<h3 id="85">8.5 提交前检查<a class="headerlink" href="#85" title="Permanent link">&para;</a></h3>
+<p>每次提交前必须确认：</p>
+<pre><code class="language-text">[ ] Markdown 已更新
+[ ] HTML 镜像已同步
+[ ] 版本索引已更新
+[ ] PROGRESS.md 已更新
+[ ] Maven 测试通过
+[ ] 契约检查 0 FAIL
+[ ] Vue typecheck 通过
+[ ] Vue build 通过
+[ ] wp-bff `node --test` 通过（控制面改动时）
+[ ] 未提交 node_modules、dist、target、logs 和本地密钥
+</code></pre>
+<hr />
+<h2 id="9">9. 当前进度<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[x] Phase 0：骨架、proto、gRPC Health、CI、契约校验</li>
+<li>[x] Phase 1：Gateway、JWT、租户隔离、BusProxy、NATS、Kafka、OTLP/Jaeger</li>
+<li>[x] VS1：session → intent → local retrieval → template answer</li>
+<li>[x] Vue 3 + Element Plus 工作平台工程</li>
+<li>[x] Phase 2：五感渠道、R0/R1 采集、质检、隔离暂存、意图级联（R2-01~R2-10）</li>
+<li>[ ] OCR 端到端验收（需安装 PaddleOCR 或 Tesseract）</li>
+<li>[x] Docker 运行时冒烟（2026-09-13：8 容器 + 4 Java + Python + 前端，healthcheck 16/16，问答链路 200）</li>
+<li>[x] 观测区与最小 Ops BFF：中间件监控 / 链路追踪（2026-09-15）</li>
+<li>[x] 工程加固（2026-09-16）：wp-bff 控制面鉴权 + CORS 收紧、数据源降级可见化、链路采样口径标注、CI 补 Python/wp-bff 测试、前端路由懒加载</li>
+<li>[x] Phase 3：躯体期知识管道 —— 入库 / 三层存储 / 语义检索 / 重排 / RAG，body-service 重写（2026-09-18）</li>
+<li>[x] Phase 3 收口三轮加固：Mock/API 对齐、文档口径同步、全平台错误信封统一与异常流程归档（2026-09-18）</li>
+<li>[x] Phase 4：大脑期 —— 会话 FSM/持久化、LLM Gateway、语义缓存、任务规划、RAG 决策链、
+      缺口检测与来源标注、wp-bff 大脑端点、工作平台对话界面与 Console 大脑视图（2026-09-19）</li>
+<li>[x] Phase 5：四肢期 —— 新增 <code>tool-executor</code>（工具注册表 / 执行引擎 / 沙箱隔离 / 安全三闸 /
+      全量审计 / IN-06 契约治理）、wp-bff 工具域 9 端点、工作平台执行视图、Python Function Calling（2026-09-19）</li>
+<li>[ ] Phase 6-8：编排（小脑）、免疫、自进化</li>
+</ul>
+<p>详细进度见：<code>PROGRESS.md</code> · 当前状态总览与功能矩阵见 <code>docs/项目进度总览.md</code> ·
+各功能开发流程见 <code>docs/功能开发流程.md</code> · 文档地图见 <code>docs/README.md</code></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

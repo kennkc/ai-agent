@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:32 · 源文件 04-session-manager.md</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 04-session-manager.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -136,8 +136,8 @@
 <li><a href="#45-kafkakafkaeventpublisherjava-55">4.5 kafka/KafkaEventPublisher.java · 组件 · 55 行</a></li>
 <li><a href="#46-kafkakafkaeventconsumerjava-66">4.6 kafka/KafkaEventConsumer.java · 组件 · 66 行</a></li>
 <li><a href="#47-orchestrationnlpclientjava-56">4.7 orchestration/NlpClient.java · 客户端 · 56 行</a></li>
-<li><a href="#48-orchestrationbodyclientjava-52">4.8 orchestration/BodyClient.java · 客户端 · 52 行</a></li>
-<li><a href="#49-orchestrationoutboundhttpjava-46">4.9 orchestration/OutboundHttp.java · 工具类 · 46 行</a></li>
+<li><a href="#48-orchestrationbodyclientjava-84">4.8 orchestration/BodyClient.java · 客户端 · 84 行</a></li>
+<li><a href="#49-orchestrationoutboundhttpjava-142">4.9 orchestration/OutboundHttp.java · 工具类 · 142 行</a></li>
 <li><a href="#410-commonerrorcodejava-30">4.10 common/ErrorCode.java · 枚举 · 30 行</a></li>
 <li><a href="#411-commonbizexceptionjava-41">4.11 common/BizException.java · 异常 · 41 行</a></li>
 <li><a href="#412-commonglobalexceptionhandlerjava-94">4.12 common/GlobalExceptionHandler.java · 切面 · 94 行</a></li>
@@ -150,6 +150,8 @@
 <li><a href="#commonglobalexceptionhandlertestjava-5-2026-09-18">common/GlobalExceptionHandlerTest.java · 5 个用例（2026-09-18 新增）</a></li>
 </ul>
 </li>
+<li><a href="#415-fsmsessionstatstestjava-3-r-c04">4.15 fsm/SessionStatsTest.java · 3 个用例（R-C04 会话统计）</a></li>
+<li><a href="#416-orchestrationrequestbudgetjava-60-rec-01">4.16 orchestration/RequestBudget.java · 工具类 · 60 行（REC-01）</a></li>
 </ul>
 </li>
 <li><a href="#5">5. 配置项</a></li>
@@ -160,7 +162,7 @@
   <main class="doc"><h1 id="04-session-manager">04 · session-manager 会话服务<a class="headerlink" href="#04-session-manager" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>模块路径：<code>services/java/session-manager/</code>
-源文件：<strong>13 个主代码 + 5 个测试</strong>（主代码 616 行）
+源文件：<strong>16 个主代码（1389 行）+ 10 个测试（933 行 / 43 个用例）</strong>
 HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（原 9092 与 Kafka 宿主端口冲突，2026-09-19 外移）
 主要依赖：Spring Web、Spring Data Redis、NATS（jnats）、Kafka clients</p>
 </blockquote>
@@ -260,8 +262,8 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <tr>
 <td><code>controller/SessionController.java</code></td>
 <td>控制器</td>
-<td style="text-align: right;">244</td>
-<td>会话 CRUD + <code>ask</code>（走大脑层，降级本地直出）+ <code>context</code> 上下文端点；主构造 <code>@Autowired</code></td>
+<td style="text-align: right;">280</td>
+<td>会话 CRUD + <code>ask</code>（走大脑层，降级本地直出）+ <code>context</code> 上下文端点；主构造 <code>@Autowired</code>；ask 链路起 <code>RequestBudget</code></td>
 </tr>
 <tr>
 <td><code>bus/BusProxy.java</code></td>
@@ -290,37 +292,49 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <tr>
 <td><code>orchestration/NlpClient.java</code></td>
 <td>客户端</td>
-<td style="text-align: right;">56</td>
-<td>调 <code>nlp-service</code> 做意图识别（含降级）</td>
+<td style="text-align: right;">82</td>
+<td>调 <code>nlp-service</code> 做意图识别（含降级）；读超时走 <code>INTENT_TIMEOUT</code> 档（5s）</td>
 </tr>
 <tr>
 <td><code>orchestration/BodyClient.java</code></td>
 <td>客户端</td>
-<td style="text-align: right;">44</td>
-<td>调 <code>body-service</code> 做知识检索（含降级）</td>
-</tr>
-<tr>
-<td><code>orchestration/OutboundHttp.java</code></td>
-<td>工具类</td>
-<td style="text-align: right;">46</td>
-<td><strong>跨服务 HTTP 统一出口</strong>（HTTP/1.1 + 超时）</td>
+<td style="text-align: right;">84</td>
+<td>调 <code>body-service</code> 做知识检索（含降级）；读超时走 <code>RETRIEVE_TIMEOUT</code> 档（15s）</td>
 </tr>
 <tr>
 <td><code>orchestration/BrainClient.java</code></td>
 <td>客户端</td>
-<td style="text-align: right;">143</td>
-<td><strong>R4-06</strong> 大脑层 <code>/api/nlp/brain/ask</code> 调用（含降级，不伪造回答）</td>
+<td style="text-align: right;">166</td>
+<td><strong>R4-06</strong> 大脑层 <code>/api/nlp/brain/ask</code> 调用（含降级，不伪造回答）；读超时走 <code>BRAIN_TIMEOUT</code> 档（30s）</td>
+</tr>
+<tr>
+<td><code>orchestration/OutboundHttp.java</code></td>
+<td>工具类</td>
+<td style="text-align: right;">142</td>
+<td><strong>跨服务 HTTP 统一出口</strong>（HTTP/1.1 + <strong>具名超时档位</strong>，见 §4.9）</td>
+</tr>
+<tr>
+<td><code>orchestration/RequestBudget.java</code></td>
+<td>工具类</td>
+<td style="text-align: right;">60</td>
+<td><strong>REC-01</strong> 一次请求的总预算：每跳读超时取 <code>min(该跳档位, 剩余)</code>，耗尽即<strong>不发起调用</strong>（见 §4.16）</td>
 </tr>
 <tr>
 <td><code>test/…/BrainClientWiringTest.java</code></td>
 <td>测试</td>
-<td style="text-align: right;">167</td>
+<td style="text-align: right;">173</td>
 <td>大脑层回传字段 / 上下文透传 / 降级标注</td>
+</tr>
+<tr>
+<td><code>test/…/SessionWiringTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">42</td>
+<td><strong>Spring 装配约束</strong>：控制器唯一 <code>@Autowired</code> 构造 + SessionStore 为 Bean（防运行态启动失败）</td>
 </tr>
 <tr>
 <td><code>common/ErrorCode.java</code></td>
 <td>枚举</td>
-<td style="text-align: right;">30</td>
+<td style="text-align: right;">32</td>
 <td>统一错误码定义</td>
 </tr>
 <tr>
@@ -332,7 +346,7 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <tr>
 <td><code>common/GlobalExceptionHandler.java</code></td>
 <td>切面</td>
-<td style="text-align: right;">54</td>
+<td style="text-align: right;">94</td>
 <td>错误码 → HTTP 状态码映射与统一响应体</td>
 </tr>
 <tr>
@@ -350,7 +364,7 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <tr>
 <td><code>test/…/SessionControllerTest.java</code></td>
 <td>测试</td>
-<td style="text-align: right;">76</td>
+<td style="text-align: right;">80</td>
 <td>租户校验、跨租户拒绝、ask 链路</td>
 </tr>
 <tr>
@@ -374,7 +388,7 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <tr>
 <td><code>fsm/SessionStore.java</code></td>
 <td>存储</td>
-<td style="text-align: right;">188</td>
+<td style="text-align: right;">281</td>
 <td><strong>R4-02</strong> Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014）；<code>@Component</code>（多构造需显式指定注入构造）</td>
 </tr>
 <tr>
@@ -551,7 +565,7 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <li><strong><code>fallback()</code> 的语义</strong>：<code>{"intent":"闲聊","confidence":0.5,"engine":"FALLBACK"}</code> ——
   特意带上 <code>engine</code> 字段，让调用方/前端能区分「真实识别」与「降级兜底」，避免把兜底结果当成识别结果展示。</li>
 </ul>
-<h3 id="48-orchestrationbodyclientjava-52">4.8 <code>orchestration/BodyClient.java</code> · 客户端 · 52 行<a class="headerlink" href="#48-orchestrationbodyclientjava-52" title="Permanent link">&para;</a></h3>
+<h3 id="48-orchestrationbodyclientjava-84">4.8 <code>orchestration/BodyClient.java</code> · 客户端 · 84 行<a class="headerlink" href="#48-orchestrationbodyclientjava-84" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>职责</strong>：调用 <code>body-service</code> 的 <code>POST /api/body/retrieve</code> 做<strong>语义检索</strong>（Phase 3 起由
   <code>RetrievalService</code> 承载：缓存优先 → 向量召回 → 重排）。</li>
@@ -562,9 +576,9 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <li><strong>配置</strong>：<code>app.body.base-url</code>（默认 <code>http://127.0.0.1:8083</code>）、<code>app.body.degrade-on-failure</code>（默认 <code>true</code>）。</li>
 <li><strong>降级</strong>：返回 <code>List.of()</code>（空结果），使 <code>buildAnswer</code> 走「未找到足够信息」话术。</li>
 </ul>
-<h3 id="49-orchestrationoutboundhttpjava-46">4.9 <code>orchestration/OutboundHttp.java</code> · 工具类 · 46 行<a class="headerlink" href="#49-orchestrationoutboundhttpjava-46" title="Permanent link">&para;</a></h3>
+<h3 id="49-orchestrationoutboundhttpjava-142">4.9 <code>orchestration/OutboundHttp.java</code> · 工具类 · 142 行<a class="headerlink" href="#49-orchestrationoutboundhttpjava-142" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>职责</strong>：跨服务 HTTP 调用的<strong>唯一出口</strong>，封装 HTTP/1.1 锁定与超时。</li>
+<li><strong>职责</strong>：跨服务 HTTP 调用的<strong>唯一出口</strong>，封装 HTTP/1.1 锁定与<strong>具名超时档位</strong>。</li>
 <li><strong>成员</strong>：</li>
 </ul>
 <table>
@@ -580,19 +594,41 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <td>3 秒（内网调用足够，过长只会拖慢失败反馈）</td>
 </tr>
 <tr>
-<td><code>READ_TIMEOUT</code></td>
-<td>10 秒</td>
+<td><code>INTENT_TIMEOUT</code></td>
+<td>5 秒 · 意图识别（规则级联，毫秒级操作）</td>
+</tr>
+<tr>
+<td><code>RETRIEVE_TIMEOUT</code></td>
+<td>15 秒 · 检索型（body 读超时 10s，余量 1.5x）</td>
+</tr>
+<tr>
+<td><code>BRAIN_TIMEOUT</code></td>
+<td>30 秒 · LLM 生成型（级联最坏 22s）</td>
+</tr>
+<tr>
+<td><code>DEFAULT_READ_TIMEOUT</code></td>
+<td>10 秒 · <strong>兜底</strong>，仅用于未声明用途的读</td>
+</tr>
+<tr>
+<td><code>ASK_TOTAL_BUDGET_MS</code></td>
+<td>35000 · 一次 ask 的<strong>总预算</strong>（意图 5s + 生成 30s），见 <code>RequestBudget</code></td>
 </tr>
 <tr>
 <td><code>client()</code></td>
 <td>返回 <code>HttpClient</code>，<code>Version.HTTP_1_1</code> + 连接超时</td>
 </tr>
 <tr>
-<td><code>restClient(baseUrl)</code></td>
-<td>返回 <code>RestClient</code>，基于 <code>JdkClientHttpRequestFactory</code> + 读超时</td>
+<td><code>restClient(baseUrl)</code> / <code>restClient(baseUrl, timeout)</code></td>
+<td>返回 <code>RestClient</code>，基于 <code>JdkClientHttpRequestFactory</code> + 指定档位读超时</td>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>为什么不再是一个 <code>READ_TIMEOUT</code></strong>：原先是单值 10s，于是「意图识别」（毫秒级）
+与「LLM 生成」（秒级）共用一个数字 —— <strong>必然对一方过长、对另一方过短</strong>。
+具名档位让每个调用点声明<strong>用途</strong>，登记表的锚点也才能锚到"这一个档"而不是兜底值
+（见 <code>contracts/timeout-budget.yaml</code> 表头说明与 §9.1）。</p>
+</blockquote>
 <ul>
 <li><strong>类的可见性</strong>：<code>public final</code> + 私有构造 —— 纯静态工具类，不允许实例化。</li>
 <li><strong>强制约定</strong>：见 §2.3。新增跨服务调用（如将来调 <code>sense-service</code>）必须经本类。</li>
@@ -912,6 +948,77 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 </table>
 <p>前四条是「缺陷回归」，最后一条是<strong>防矫枉过正</strong>——如果只写前四条，把兜底分支整体改成 404 也能过测，
 那就会把真实故障也伪装成"接口不存在"。这个用例的存在使那次修改成为<strong>受约束的修复</strong>。</p>
+<h3 id="415-fsmsessionstatstestjava-3-r-c04">4.15 <code>fsm/SessionStatsTest.java</code> · 3 个用例（R-C04 会话统计）<a class="headerlink" href="#415-fsmsessionstatstestjava-3-r-c04" title="Permanent link">&para;</a></h3>
+<p>会话统计（活跃会话 / 状态分布 / 意图分布）是<strong>大脑视图的真实数据源</strong>，测试断言其口径：</p>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>验证内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>stats_counts_active_sessions_and_excludes_closed</code></td>
+<td><code>active_sessions</code> <strong>剔除 CLOSED</strong>；<code>scanned_sessions</code> 为扫描总数；<code>by_status</code> / <code>by_intent</code> 分布正确；<code>note</code> 显式写明数据来自 SCAN</td>
+</tr>
+<tr>
+<td><code>stats_filters_by_tenant</code></td>
+<td>显式传 <code>tenant</code> 时只统计该租户</td>
+</tr>
+<tr>
+<td><code>stats_degrades_to_empty_when_scan_unavailable</code></td>
+<td><strong>SCAN 失败时降级为空统计</strong>（不是抛异常）——视图不会因 Redis 异常而 500</td>
+</tr>
+</tbody>
+</table>
+<p><strong>技术手法</strong>：内部静态子类 <code>StoreWithKeys extends SessionStore</code> 覆写 <code>scanSessionKeys</code>，
+用给定键集合替代真 SCAN（单测不连真 Redis，真 SCAN 由集成/端到端覆盖）。
+mock <code>HashOperations.entries</code> / <code>ListOperations.range</code> 时先在 Lambda 里取 <code>Object key = inv.getArgument(0)</code>
+再 <code>String.valueOf(key)</code> —— 直接 <code>getArgument(0)</code> 会被推断成 <code>char[]</code> 重载并 <code>ClassCastException</code>
+（与 <code>SessionStoreTest</code> 同一坑，注释已留痕）。</p>
+<h3 id="416-orchestrationrequestbudgetjava-60-rec-01">4.16 <code>orchestration/RequestBudget.java</code> · 工具类 · 60 行（REC-01）<a class="headerlink" href="#416-orchestrationrequestbudgetjava-60-rec-01" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>职责</strong>：承载<strong>一次请求的总预算（deadline）</strong>，让调用链上<strong>每一跳</strong>都只能在剩余预算内发起。</li>
+<li><strong>为什么需要</strong>：若每一跳各用自己的档位超时，链路最坏耗时就是<strong>各跳超时之和</strong>，叠加重试后是<strong>乘积</strong>。
+  后果有两个：① 上游无论把预算调多大都可能不够（下游会自己膨胀）；
+  ② 「快速失败并降级」被变成「长时间等待后仍然降级」，既伤体验又掩盖故障。</li>
+<li><strong>核心 API</strong>：</li>
+</ul>
+<table>
+<thead>
+<tr>
+<th>方法</th>
+<th>语义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>of(totalMs)</code></td>
+<td>以总预算起算，<strong>计时从此刻开始</strong></td>
+</tr>
+<tr>
+<td><code>remainingMs()</code></td>
+<td>剩余预算；耗尽返回 <code>0</code>（<strong>不返回负数</strong>，避免被误当成"无限"）</td>
+</tr>
+<tr>
+<td><code>exhausted()</code></td>
+<td>剩余 ≤ 0</td>
+</tr>
+<tr>
+<td><code>clamp(ceilingMs)</code></td>
+<td>本跳实际可用读超时 = <code>min(档位上限, 剩余)</code>；<strong>返回 0 表示不应发起该跳调用</strong></td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>关键约束（写进类注释）</strong>：各跳档位上限之和必须 <code>≤</code> 总预算 —— 否则"总预算"只是装饰。
+  本类的存在使登记表里可以登记<strong>一个常量</strong>作为"下游最坏耗时"，而不是一串加法。</li>
+<li><strong>调用点</strong>：<code>SessionController</code> 的 ask 链路（<code>RequestBudget.of(ASK_TOTAL_BUDGET_MS)</code>），
+  经 <code>NlpClient</code> / <code>BodyClient</code> / <code>BrainClient</code> 逐跳 <code>clamp</code>。</li>
+<li><strong>相关</strong>：登记表 <code>contracts/timeout-budget.yaml</code> 的 TB-09 下游锚点即锚在 <code>ASK_TOTAL_BUDGET_MS</code>；
+  Python 侧的对等物是 <code>app/budget.py</code> 的 <code>Deadline</code>，两侧同一语义、各自实现。</li>
+</ul>
 <h2 id="5">5. 配置项<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <p>本模块的配置分散在三处，<strong>改配置时注意区分</strong>：</p>
 <table>

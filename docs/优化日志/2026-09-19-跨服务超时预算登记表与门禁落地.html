@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>跨服务超时预算：登记表 + 门禁 + 生成型链路修复</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 2026-09-19-跨服务超时预算登记表与门禁落地.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 结论摘要</a></li>
+<li><a href="#2">2. 开工侦察：倒挂不是未来风险，而是现在就成立</a></li>
+<li><a href="#3">3. 登记表：把「两个数字」放到同一行</a></li>
+<li><a href="#4-scriptstimeout-budget-checkpy">4. 门禁：三层校验（scripts/timeout-budget-check.py）</a></li>
+<li><a href="#5">5. 修复：生成型链路改用命名档位</a></li>
+<li><a href="#6">6. 验证</a><ul>
+<li><a href="#61-wp-bff6-87-0">6.1 新增回归用例（wp-bff，+6 条 → 87 / 0 失败）</a></li>
+<li><a href="#62">6.2 反向验证（门禁必须真能抓违规，否则只是绿着好看）</a></li>
+<li><a href="#63">6.3 门禁现状</a></li>
+<li><a href="#64">6.4 接入启动前自检</a></li>
+</ul>
+</li>
+<li><a href="#7">7. 遗留与建议</a></li>
+<li><a href="#8">8. 认知沉淀</a></li>
+<li><a href="#9">9. 附带收获：本轮自己踩了第五次同形状的坑</a><ul>
+<li><a href="#91">9.1 修正</a></li>
+<li><a href="#92-scriptsdoc-consistency-checkpy">9.2 补门禁：scripts/doc-consistency-check.py（新增）</a></li>
+</ul>
+</li>
+<li><a href="#10-rec-01">10. 后续（同日 REC-01 轮已处理）</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="_1">跨服务超时预算：登记表 + 门禁 + 生成型链路修复<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>项目</strong>: Agent-Lifeform | <strong>日期</strong>: 2026-09-19
+<strong>本轮范围</strong>: <code>contracts/timeout-budget.yaml</code>（新建）· <code>scripts/timeout-budget-check.py</code>（新建）· <code>services/node/wp-bff/server.js</code>（分档）· <code>services/node/wp-bff/test/server.test.js</code>（+6 用例）· <code>scripts/start.sh</code>（前置门禁）
+<strong>触发</strong>：上一轮交付时留下的第 2 条优化建议 —— <strong>「跨服务超时预算无人守：现在能看见是超时还是缺失，仍不能防新设的超时值再次小于对端最坏耗时」</strong>
+<strong>代码基线</strong>：<code>0921345</code>（开工前已核对远端三分支无新提交）</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 结论摘要<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>落地前</th>
+<th>落地后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>超时值管理</td>
+<td><strong>一个默认值打天下</strong>（<code>httpRequestJson</code> 默认 5000ms）+ 1 处写死的 30000</td>
+<td>按<strong>操作类型</strong>分 8 档，命名常量，<code>WP_BFF_*_TIMEOUT_MS</code> 可覆盖</td>
+</tr>
+<tr>
+<td>倒挂是否可发现</td>
+<td>不可发现（单测全绿、契约 0 FAIL）</td>
+<td>权威登记表 19 条边 + 三层门禁，<strong>倒挂即 FAIL</strong></td>
+</tr>
+<tr>
+<td>生成型链路预算</td>
+<td>5000ms（下游 LLM 级联最坏 <strong>22000ms</strong>）</td>
+<td><code>GENERATE</code> 档 45000ms</td>
+</tr>
+<tr>
+<td>数字与文档一致性</td>
+<td>靠人工核对（台账「数字级门禁未落地」长期欠账）</td>
+<td>锚点校验 + 魔法数字扫描，<strong>代码实值 ≠ 表中数字即 FAIL</strong></td>
+</tr>
+<tr>
+<td>检查时机</td>
+<td>运行期事后发现</td>
+<td>提交期门禁 + <code>./scripts/start.sh</code> 前置自检</td>
+</tr>
+</tbody>
+</table>
+<p><strong>一句话</strong>：本轮把一个「靠人记得住」的隐性约束，变成了「忘了就红」的显性门禁。</p>
+<hr />
+<h2 id="2">2. 开工侦察：倒挂不是未来风险，而是<strong>现在就成立</strong><a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<p>先扫全仓所有跨服务超时值，起点状态（<code>0921345</code>）：</p>
+<pre><code class="language-text">services/node/wp-bff/server.js
+  L55   function httpRequestJson(url, { ..., timeoutMs = 5000 })   ← 默认值，几乎所有调用点都用它
+  L1212 timeoutMs: 30000                                           ← 唯一一处显式值（知识入库）
+</code></pre>
+<p>即：<strong>BFF 的整个跨服务调用面，实质上只有两个数字</strong>。逐条比对下游最坏耗时后：</p>
+<table>
+<thead>
+<tr>
+<th>边</th>
+<th>调用点</th>
+<th style="text-align: right;">落地前预算</th>
+<th style="text-align: right;">下游最坏</th>
+<th style="text-align: right;">余量</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TB-04</td>
+<td><code>POST /api/body/knowledge</code>（入库）</td>
+<td style="text-align: right;">30000（写死）</td>
+<td style="text-align: right;">30000（嵌入读超时）</td>
+<td style="text-align: right;"><strong>1.00x</strong></td>
+<td>❌ 余量 0</td>
+</tr>
+<tr>
+<td>TB-05</td>
+<td><code>GET /knowledge/stats</code>、<code>POST /body/retrieve</code></td>
+<td style="text-align: right;">5000</td>
+<td style="text-align: right;">10000</td>
+<td style="text-align: right;"><strong>0.50x</strong></td>
+<td>❌ 小于下游</td>
+</tr>
+<tr>
+<td>TB-06</td>
+<td><code>POST /nlp/brain/ask</code></td>
+<td style="text-align: right;">5000</td>
+<td style="text-align: right;"><strong>22000</strong></td>
+<td style="text-align: right;"><strong>0.23x</strong></td>
+<td>❌ 严重倒挂</td>
+</tr>
+<tr>
+<td>TB-07</td>
+<td><code>memory/ingest</code>、<code>memory/compress</code></td>
+<td style="text-align: right;">5000</td>
+<td style="text-align: right;"><strong>22000</strong></td>
+<td style="text-align: right;"><strong>0.23x</strong></td>
+<td>❌ 严重倒挂</td>
+</tr>
+<tr>
+<td>TB-09</td>
+<td><code>POST /session/{id}/ask</code></td>
+<td style="text-align: right;">5000</td>
+<td style="text-align: right;">10000</td>
+<td style="text-align: right;"><strong>0.50x</strong></td>
+<td>❌ 小于下游</td>
+</tr>
+</tbody>
+</table>
+<p>下游 22000ms 的来源（<code>app/brain/llm_gateway.py</code>）：</p>
+<pre><code class="language-python">_FALLBACK_ORDER = (L1, L2)                 # 级联顺序
+_DEFAULT_TIMEOUTS = {L1: 3.0, L2: 8.0, L3: 20.0}
+# max_retries = 1 → 每级最多 2 次
+# 最坏 = L2 8s×2 + L1 3s×2 = 22s
+</code></pre>
+<p><strong>关键点</strong>：这不只是「接入真实 LLM 后才会出的事」。即使只跑 <code>TemplateEngine</code>（L1），
+最坏 <strong>3s × 2 次 = 6s &gt; 5000ms</strong> —— 也就是说，<strong>当前未配真实 LLM 的部署里，这条边已经倒挂</strong>，
+只是模板引擎实际毫秒级返回，所以从未触发。这类缺陷的特征是
+<strong>「纸面自洽、单测全绿，直到某次抖动才现形」</strong>。</p>
+<hr />
+<h2 id="3">3. 登记表：把「两个数字」放到同一行<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<p>新建 <code>contracts/timeout-budget.yaml</code>（<strong>权威副本</strong>），19 条边：</p>
+<pre><code>budget_tiers:            # wp-bff 按「操作类型」分档，不按端点硬编码
+  READ: 5000             # 纯查询
+  RETRIEVE: 15000        # 检索型（下游读超时 10s）
+  GENERATE: 45000        # LLM 生成型（下游级联最坏 22s）
+  WRITE: 60000           # 写入型
+  EXECUTE: 60000         # 工具执行（沙箱）
+  SANDBOX_PROBE: 9000    # 容器探测
+  MIDDLEWARE_START: 180000
+  MIDDLEWARE_STOP: 120000
+</code></pre>
+<p>每条边记录：调用方 / 被调方 / 操作 / 档位 / <strong>上游预算</strong> / <strong>下游最坏耗时</strong> / 耗时依据 /
+代码锚点（文件 + 正则 + 缩放）/ 状态。例：</p>
+<pre><code class="language-yaml">  - id: TB-06
+    caller: wp-bff
+    callee: nlp-service
+    operation: &quot;POST /api/nlp/brain/ask&quot;
+    tier: GENERATE
+    upstream_budget_ms: 45000
+    downstream_worst_case_ms: 22000
+    downstream_basis: &quot;LLM 级联最坏：L2 8s×2 次 + L1 3s×2 次（max_retries=1）&quot;
+    upstream_anchor_file: services/node/wp-bff/server.js
+    upstream_anchor_pattern: &quot;const GENERATE_TIMEOUT_MS = Number\(process\.env\.WP_BFF_GENERATE_TIMEOUT_MS \|\| (\d+)\)&quot;
+    status: ok
+</code></pre>
+<p>设计取舍（都在文件头部注释里写明）：</p>
+<ul>
+<li><strong>余量比 1.5</strong>，不是 1.2。理由：跨服务还叠加网络往返、序列化、调度抖动；
+  实测沙箱那条<strong>曾经 1.4x 仍出过事</strong>，1.2 太紧。</li>
+<li><strong>豁免两类边</strong>：docker 启停 watchdog（超时是解除中间态的兜底，不是失败）、
+  TCP 健康探针（超时 = 判定为 down，是<strong>预期结果</strong>）。豁免需显式写 <code>exempt_headroom: true</code>。</li>
+<li><strong>推导值不假装成常量</strong>：LLM 级联的 22s 在代码里没有对应常量，故用
+  <code>downstream_anchor_expected_ms: 3000</code> 声明「锚点指向的是 L1 单级 3s」，
+  与表里的 22000ms <strong>分开校验</strong> —— 既防漂移，也不假装能自动推导。</li>
+</ul>
+<hr />
+<h2 id="4-scriptstimeout-budget-checkpy">4. 门禁：三层校验（<code>scripts/timeout-budget-check.py</code>）<a class="headerlink" href="#4-scriptstimeout-budget-checkpy" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">python scripts/timeout-budget-check.py            # 默认：gap 仅列出，不算失败
+python scripts/timeout-budget-check.py --strict   # 修复期：gap 也算失败
+python scripts/timeout-budget-check.py --list     # 打印全表摘要（预算/余量/状态）
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>层</th>
+<th>校验内容</th>
+<th>防的是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 语义</td>
+<td>上游预算 ≥ 下游最坏 × 1.5</td>
+<td>预算不足（倒挂）</td>
+</tr>
+<tr>
+<td>② 锚点</td>
+<td>按登记表声明的正则从<strong>真实代码</strong>提取实值，与表中数字比对</td>
+<td>「表里写 A、代码是 B」的漂移</td>
+</tr>
+<tr>
+<td>③ 魔法数字</td>
+<td>扫调用点，禁止就地写数字</td>
+<td><strong>②的盲区补丁</strong>（见下）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>第 ③ 层的由来（本轮踩到的真实盲区）</strong>：②锚的是<strong>常量定义</strong>，
+而缺陷可以藏在<strong>调用点</strong>。实测：<code>POST /api/body/knowledge</code> 调用点写 <code>timeoutMs: 30000</code>
+（= 下游最坏，余量 0），而表里记的是常量 60000 —— <strong>门禁全绿，缺陷仍在</strong>。
+一个锚点写得再准，也管不住「有人绕过常量直接在调用点写数字」。</p>
+<p>配套约定：
+- 仓内<strong>不引入 PyYAML 依赖</strong>（与 <code>contract-check.py</code> 同一路线），脚本自带行式解析器；
+  解析约定（条目保持扁平、引号内反斜杠按字面保留）写在脚本 docstring 与登记表头部。
+- 一条坏正则<strong>不会让门禁崩溃</strong>，而是报 FAIL ——
+  避免重演「巡检脚本恰在故障时失效」（上一轮 healthcheck 的老毛病）。</p>
+<hr />
+<h2 id="5">5. 修复：生成型链路改用命名档位<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<p><code>services/node/wp-bff/server.js</code> 新增档位常量，并逐处应用：</p>
+<pre><code class="language-javascript">const READ_TIMEOUT_MS     = Number(process.env.WP_BFF_READ_TIMEOUT_MS     || 5000)
+const RETRIEVE_TIMEOUT_MS = Number(process.env.WP_BFF_RETRIEVE_TIMEOUT_MS || 15000)
+const GENERATE_TIMEOUT_MS = Number(process.env.WP_BFF_GENERATE_TIMEOUT_MS || 45000)
+const WRITE_TIMEOUT_MS    = Number(process.env.WP_BFF_WRITE_TIMEOUT_MS    || 60000)
+const EXECUTE_TIMEOUT_MS  = Number(process.env.WP_BFF_EXECUTE_TIMEOUT_MS  || 60000)
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>调用点</th>
+<th style="text-align: right;">落地前</th>
+<th style="text-align: right;">落地后</th>
+<th>余量变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>POST /nlp/brain/ask</code></td>
+<td style="text-align: right;">5000（默认）</td>
+<td style="text-align: right;"><code>GENERATE</code> 45000</td>
+<td>0.23x → <strong>2.05x</strong></td>
+</tr>
+<tr>
+<td><code>POST /session/{id}/ask</code></td>
+<td style="text-align: right;">5000（默认）</td>
+<td style="text-align: right;"><code>GENERATE</code> 45000</td>
+<td>0.50x → <strong>4.50x</strong></td>
+</tr>
+<tr>
+<td><code>POST /brain/memory/ingest</code></td>
+<td style="text-align: right;">5000（默认）</td>
+<td style="text-align: right;"><code>GENERATE</code> 45000</td>
+<td>0.23x → <strong>2.05x</strong></td>
+</tr>
+<tr>
+<td><code>GET /knowledge/stats</code>（第 2 处）</td>
+<td style="text-align: right;">5000（默认）</td>
+<td style="text-align: right;"><code>RETRIEVE</code> 15000</td>
+<td>0.50x → <strong>1.50x</strong></td>
+</tr>
+<tr>
+<td><code>POST /body/knowledge</code>（入库）</td>
+<td style="text-align: right;"><strong>30000 写死</strong></td>
+<td style="text-align: right;"><code>WRITE</code> 60000</td>
+<td>1.00x → <strong>2.00x</strong></td>
+</tr>
+</tbody>
+</table>
+<p><strong>同时刻意不做的两件事</strong>：</p>
+<ol>
+<li><strong>不把读型端点一起拉长</strong>。把 <code>session/stats</code> 这类 Redis 单次往返也提到 45s，
+   会让真实故障等 45s 才暴露降级 —— 那是把「快速失败并降级」换成「长时间等待后仍降级」。
+   用例 <code>读型端点必须保持短预算</code> 显式守住这条。</li>
+<li><strong>不给所有档位用同一个值</strong>。用例 <code>生成档与读型档必须真的分开</code> 断言
+   <code>gen.timeoutMs &gt; read.timeoutMs</code> —— 防的是「图省事把两档合并」。</li>
+</ol>
+<hr />
+<h2 id="6">6. 验证<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<h3 id="61-wp-bff6-87-0">6.1 新增回归用例（wp-bff，+6 条 → <strong>87 / 0 失败</strong>）<a class="headerlink" href="#61-wp-bff6-87-0" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>守的不变量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>生成型链路（brain/ask）使用生成档预算</td>
+<td>必须<strong>显式</strong>声明且 = GENERATE（不得依赖读型默认值）</td>
+</tr>
+<tr>
+<td>生成型链路（session/{id}/ask）同样使用生成档</td>
+<td>会话问答内部转调 LLM，同样受约束</td>
+</tr>
+<tr>
+<td>生成型链路（memory/ingest）使用生成档</td>
+<td>记忆抽取走 LLM</td>
+</tr>
+<tr>
+<td>检索型链路（body retrieve）预算覆盖下游读超时 10s</td>
+<td>RETRIEVE 档 ≥ 下游读超时</td>
+</tr>
+<tr>
+<td>读型端点必须保持短预算</td>
+<td><strong>防一刀切拉长</strong>（<code>explicit === false</code> 且 ≤ READ）</td>
+</tr>
+<tr>
+<td>生成档与读型档必须真的分开</td>
+<td>两档被合并立即失败</td>
+</tr>
+</tbody>
+</table>
+<p>与门禁脚本<strong>互补</strong>，缺任一方都有盲区：</p>
+<ul>
+<li>脚本守「<strong>登记表数字 ↔ 代码常量</strong>」→ 防的是「表里写 A、代码是 B」；</li>
+<li>用例守「<strong>代码行为 ↔ 操作类型</strong>」→ 防的是「改了行为却忘了常量 / 分档被合并」。</li>
+</ul>
+<p>用例断言一律用 <code>TIMEOUT_TIERS</code> 常量与下限/上限，<strong>不用精确字面值</strong> ——
+运维通过环境变量调档不会误伤用例。为此把档位以 <code>TIMEOUT_TIERS</code> 导出，
+测试替身<strong>镜像生产默认值</strong>（否则读型调用录到 <code>undefined</code>，用例就只能断言「有没有传」，
+而断言不了「档位对不对」—— 这正是首轮 5 条用例失败的原因）。</p>
+<h3 id="62">6.2 反向验证（门禁必须真能抓违规，否则只是绿着好看）<a class="headerlink" href="#62" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>实验</th>
+<th>构造</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 预算不足</td>
+<td>复制登记表，把 <code>GENERATE: 45000</code> 改成 <code>1000</code></td>
+<td><strong>fail=3、exit=1</strong> ✅</td>
+</tr>
+<tr>
+<td>② 锚点漂移</td>
+<td>表里把 <code>READ</code> 写 7000、代码仍是 5000</td>
+<td><strong>报「上游锚点漂移」</strong> ✅</td>
+</tr>
+<tr>
+<td>③ 魔法数字</td>
+<td>把调用点的 <code>WRITE_TIMEOUT_MS</code> 换回 <code>30000</code></td>
+<td><strong>FAIL MAGIC server.js:1321、exit=1</strong> ✅</td>
+</tr>
+<tr>
+<td>④ strict 模式</td>
+<td><code>--strict</code></td>
+<td>gap 计入失败 ✅</td>
+</tr>
+</tbody>
+</table>
+<p>实验 ③ 同时暴露了首版门禁的<strong>盲区</strong>（只锚常量），故补第 ③ 层扫描 —— 这是本轮
+「先验证门禁有效性、才发现门禁本身不够」的顺序价值。</p>
+<h3 id="63">6.3 门禁现状<a class="headerlink" href="#63" title="Permanent link">&para;</a></h3>
+<pre><code class="language-text">── 超时预算门禁：contracts\timeout-budget.yaml ──
+  GAP  TB-11 — 预算不足：上游 10000ms &lt; 下游最坏 22000ms x 1.5 = 33000ms（实际余量 0.45x）
+  GAP  TB-12 — 预算不足：上游 10000ms &lt; 下游最坏 10000ms x 1.5 = 15000ms（实际余量 1.00x）
+  GAP  TB-13 — 预算不足：上游 30000ms &lt; 下游最坏 30000ms x 1.5 = 45000ms（实际余量 1.00x）
+  GAP  TB-15 — 预算不足：上游 20000ms &lt; 下游最坏 20000ms x 1.5 = 30000ms（实际余量 1.00x）
+  GAP  TB-16 — 预算不足：上游 5000ms &lt; 下游最坏 10000ms x 1.5 = 15000ms（实际余量 0.50x）
+
+合计: ok=14 · gap=5 · fail=0
+</code></pre>
+<p><strong>5 条 gap 是「已声明、未修复」</strong>，其中 4 条不在 wp-bff 内（属 session-manager /
+body-service / sense-service / nlp-service）。门禁<strong>单独列出但不判失败</strong> ——
+目的是让它们可见、可追踪，而不是靠「门禁绿了」把问题掩盖成不存在。修复期用 <code>--strict</code>。</p>
+<h3 id="64">6.4 接入启动前自检<a class="headerlink" href="#64" title="Permanent link">&para;</a></h3>
+<p><code>scripts/start.sh</code> 新增 <code>gate</code> 模式与前置步骤（<code>[0/6]</code>）：</p>
+<pre><code class="language-bash">./scripts/start.sh gate        # 只跑门禁
+SKIP_BUDGET_GATE=1 ./scripts/start.sh all   # 显式跳过（会打印&quot;请勿把本次结果当作可信基线&quot;）
+</code></pre>
+<p>失败<strong>不静默忽略、也不硬拦</strong>：需要显式环境变量才能跳过，跳过时打印免责提示。</p>
+<hr />
+<h2 id="7">7. 遗留与建议<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>GAP-01</strong>：session-manager 问答读超时 10s &lt; LLM 级联 22s</td>
+<td>登记未修（跨服务，属 P6 编排预算命题）</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>GAP-02</strong>：session→body 检索上游 = 下游读超时（余量 0）</td>
+<td>登记未修</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>GAP-03 / GAP-04</strong>：body→nlp 嵌入、sense→nlp OCR <strong>下游无独立超时</strong></td>
+<td>登记未修（需 Python 侧加超时，否则「覆盖」无法证明）</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>GAP-05</strong>：nlp→body 检索 5s &lt; 下游 10s</td>
+<td>登记未修（跨语言）</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong>REC-01</strong>：LLM 级联缺总预算上限（deadline propagation）</td>
+<td>建议项，P6 决策</td>
+</tr>
+<tr>
+<td>6</td>
+<td><strong>REC-03</strong>：单服务内的线程池/队列等待同类错配未扫</td>
+<td>建议项</td>
+</tr>
+</tbody>
+</table>
+<p><strong>根本方向（REC-01）</strong>：当前 <code>max_retries=1</code> 且逐级放宽超时（L1 3s → L2 8s → L3 20s），
+最坏耗时是「各级超时 × 重试次数」的乘积，<strong>随层级与重试数增长而膨胀</strong>。
+正确做法是给一次 <code>generate()</code> 调用一个<strong>总 deadline</strong>，级联只在该 deadline 内调度 ——
+这样上游预算才能可靠覆盖下游。否则只能靠不断调大上游超时，
+而那会把「快速失败并降级」变成「长时间等待后仍降级」，损害体验且掩盖故障。</p>
+<hr />
+<h2 id="8">8. 认知沉淀<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<p><strong>同一形状的缺陷，这一天出现了第四次</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>场景</th>
+<th>表现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>沙箱探测慢</td>
+<td>5.7s 被写成「沙箱不可用」</td>
+</tr>
+<tr>
+<td>2</td>
+<td>BFF 四种失败</td>
+<td>塌缩成同一个 <code>null</code></td>
+</tr>
+<tr>
+<td>3</td>
+<td>healthcheck</td>
+<td>恰在「发现故障」这个动作上失败</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong>知识入库调用点</strong></td>
+<td>写死 30000 = 下游最坏，<strong>门禁看不见</strong></td>
+</tr>
+</tbody>
+</table>
+<p>共同点：<strong>下游只拿到一个空值 / 一个裸数字，就丢失了全部可行动信息</strong>。
+本轮的应对不是「再小心一点」，而是<strong>把约束搬到机器能检查的地方</strong>：
+登记表让两个数字必须同框，门禁让不一致必须变红。</p>
+<blockquote>
+<p>附带一条：门禁自身也会犯同样的错 —— 首版只锚常量定义，
+对调用点的魔法数字<strong>视而不见</strong>。所以「加门禁」之后必须<strong>反向验证门禁有效</strong>，
+否则只是多了一个绿着好看的东西。</p>
+</blockquote>
+<hr />
+<h2 id="9">9. 附带收获：本轮自己踩了第五次同形状的坑<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<p>本轮写文档时给 <code>docs/异常流程归纳.md</code> 追加异常条目，取了 <code>D-17</code>~<code>D-21</code> ——
+而这三个号（以及 17/18）在<strong>另一个章节早已被占用</strong>。结果：</p>
+<pre><code class="language-text">文档照常渲染 ✅   门禁全绿 ✅   撞号静默存在 ❌
+（§3.2 里是 D-17~D-21，§3.4 里也是 D-17~D-22）
+</code></pre>
+<p>发现方式：人工 <code>grep -o '^| D-[0-9]*' | sort | uniq -d</code>。
+<strong>又是"约束写在文档里、没人守"的同一形状</strong>（第 5 次）。</p>
+<h3 id="91">9.1 修正<a class="headerlink" href="#91" title="Permanent link">&para;</a></h3>
+<p>编号改为接续全局最大号：新增 5 条 → <code>D-31</code>~<code>D-35</code>；
+新增的「超时预算类」独立成 §3.3，其后章节顺延（原 3.3→3.4、3.4→3.5、3.5→3.6、3.6→3.7）；
+交叉引用 <code>docs/功能开发流程.md</code> 的 <code>§3.1 D-17</code> → <code>§3.2 D-31</code>。
+并在 §3 开头<strong>写明编号约定</strong>（按新增时间递增，与章节顺序不同步；唯一硬约束是全局唯一）。</p>
+<h3 id="92-scriptsdoc-consistency-checkpy">9.2 补门禁：<code>scripts/doc-consistency-check.py</code>（新增）<a class="headerlink" href="#92-scriptsdoc-consistency-checkpy" title="Permanent link">&para;</a></h3>
+<p>同一个坑不能靠"下次小心"。三类文档约束上机器：</p>
+<table>
+<thead>
+<tr>
+<th>检查</th>
+<th>防的是什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 异常编号唯一</td>
+<td><code>D-xx</code> 撞号（本轮实例）</td>
+</tr>
+<tr>
+<td>② 章节号唯一</td>
+<td><code>### 3.3</code> 出现两次（插入新章节忘记顺延）</td>
+</tr>
+<tr>
+<td>③ md/html 孪生同步</td>
+<td>改了 <code>.md</code> 忘了重生 <code>.html</code>（页面停在旧口径）</td>
+</tr>
+</tbody>
+</table>
+<p>反向验证（同样是"先证明门禁有效"）：</p>
+<table>
+<thead>
+<tr>
+<th>实验</th>
+<th>构造</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>① 植入撞号</td>
+<td>把 <code>D-35</code> 改成 <code>D-31</code></td>
+<td><strong>FAIL 异常编号撞号 D-31 出现 2 次、exit=1</strong> ✅</td>
+</tr>
+<tr>
+<td>② 植入重复章节</td>
+<td>把 <code>### 3.7</code> 改成 <code>### 3.3</code></td>
+<td><strong>FAIL 章节 §3.3 出现 2 次、exit=1</strong> ✅</td>
+</tr>
+<tr>
+<td>③ 孪生过期</td>
+<td>只改 md 不重生 html</td>
+<td><strong>FAIL 孪生过期</strong> ✅</td>
+</tr>
+</tbody>
+</table>
+<p>已接入 <code>./scripts/start.sh gate</code>（与超时预算门禁同批，<code>--no-twin</code> 跳过孪生以免 CI 误报）。</p>
+<blockquote>
+<p><strong>门禁自身的盲区也顺手修了一个</strong>：首版章节检查只取小数点后的位（<code>\d+\.(\d+)</code>），
+会把 <code>§1.1 / §2.1 / §3.1</code> 全判成同一个「1」→ 一上来就报 7 条假失败。
+改为取完整号（<code>\d+(?:\.\d+)+</code>）。<strong>"加门禁"之后必须跑一次看它报的是不是真问题</strong> —— 又一次印证。</p>
+</blockquote>
+<hr />
+<h2 id="10-rec-01">10. 后续（同日 REC-01 轮已处理）<a class="headerlink" href="#10-rec-01" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>本节为<strong>事后回填</strong>，用于避免读者把 §7 的遗留表当成现状。原文数字保留不改，历史即历史。</p>
+</blockquote>
+<p>同日稍后的 REC-01 轮实现了 deadline propagation（<code>nlp-service/app/budget.py</code>、
+<code>llm_gateway.generate(deadline_ms=…)</code>、<code>session-manager/RequestBudget</code>），并<strong>按本表第 23–27 行的约定</strong>
+同步了登记表：</p>
+<table>
+<thead>
+<tr>
+<th>§7 中的项</th>
+<th>现状（2026-09-19 REC-01 轮后）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GAP-02 / GAP-03 / GAP-04</td>
+<td>✅ <strong>已闭合</strong>（上游具名档 15s；Python <code>/embed</code>、<code>/ocr</code> 各接入 12s 预算）</td>
+</tr>
+<tr>
+<td>GAP-01 / GAP-05</td>
+<td>数值随代码上移，余量比 0.45x→0.91x、0.50x→0.80x，<strong>仍未达标</strong></td>
+</tr>
+<tr>
+<td>REC-01</td>
+<td>✅ 主体已落地（见上）；<code>BRAIN_TOTAL_BUDGET_MS</code> 25s 尚大于级联推导最坏 22s，上限未真正收紧</td>
+</tr>
+<tr>
+<td>—</td>
+<td>⚠️ <strong>新增 GAP-06</strong>：session ask 总预算 35s 把 wp-bff <code>GENERATE</code> 45s 的余量摊薄到 1.29x</td>
+</tr>
+<tr>
+<td>§3 的锚点机制</td>
+<td>⚠️ 发现<strong>子串命中</strong>缺陷：<code>READ_TIMEOUT = …</code> 会命中 <code>DEFAULT_READ_TIMEOUT</code>，已改为具名档锚点</td>
+</tr>
+</tbody>
+</table>
+<p>门禁状态：<strong><code>ok=14 · gap=5 · fail=0</code>（本轮）→ <code>ok=16 · gap=3 · fail=0</code>（REC-01 轮后）</strong>。
+详见 <code>docs/优化日志/2026-09-19-REC-01-LLM级联总预算与跨服务预算同步.md</code>。</p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

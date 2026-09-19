@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 22:42 · 源文件 异常流程归纳.md</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 异常流程归纳.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -139,10 +139,11 @@
 <li><a href="#3-d">3. 研发期异常流程（过程性，D 组）</a><ul>
 <li><a href="#31">3.1 环境与工具类</a></li>
 <li><a href="#32">3.2 构建与运行类</a></li>
-<li><a href="#33">3.3 测试与验收类</a></li>
-<li><a href="#34">3.4 门禁与一致性类</a></li>
-<li><a href="#35">3.5 文档与口径类</a></li>
-<li><a href="#36">3.6 安全类（最高优先，出现必查全仓）</a></li>
+<li><a href="#33">3.3 超时预算类</a></li>
+<li><a href="#34">3.4 测试与验收类</a></li>
+<li><a href="#35">3.5 门禁与一致性类</a></li>
+<li><a href="#36">3.6 文档与口径类</a></li>
+<li><a href="#37">3.7 安全类（最高优先，出现必查全仓）</a></li>
 </ul>
 </li>
 <li><a href="#4">4. 规范化动作清单</a><ul>
@@ -547,6 +548,92 @@ gateway-service (8080, Java WebFlux)
 <li><strong>写端点</strong>：一律走 <code>plannedEndpointError()</code> —— 登记降级 + 抛说明性错误，<strong>绝不伪造成功</strong></li>
 <li>视图层 retry/apply 类动作全部 <code>try/catch</code>，<strong>失败不改本地状态</strong></li>
 </ul>
+<p><strong>⑥ tool-executor —— 沙箱真隔离不可用时的显式降级（Phase 5）</strong></p>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>缺失/不可用时</th>
+<th>标记</th>
+<th>是否伪实现</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Docker 沙箱</td>
+<td>回落 <code>RestrictedProcessBackend</code>（受限子进程，非真隔离）</td>
+<td><code>active_backend=process-restricted</code> + <code>degraded=true</code> + <code>isolated=false</code></td>
+<td>❌ 否 —— 降级<strong>可见</strong>，<code>GET /api/tool/sandbox</code> 如实上报</td>
+</tr>
+<tr>
+<td>审计落 PG</td>
+<td>回落进程内审计</td>
+<td><code>audit_backend=in-memory</code> + <code>degraded=true</code></td>
+<td>❌ 否</td>
+</tr>
+<tr>
+<td>工具注册表</td>
+<td>进程内（重启丢失）</td>
+<td><code>registry_backend=in-memory</code>（DEBT-019）</td>
+<td>❌ 否</td>
+</tr>
+<tr>
+<td>工具决策（Python 侧）</td>
+<td>规则决策</td>
+<td><code>decider="rule"</code></td>
+<td>❌ 否</td>
+</tr>
+</tbody>
+</table>
+<p><strong>工具执行失败</strong>（超时 / 非零退出 / 沙箱拒绝）一律返回 <code>success:false</code> + 真实错误码（见 <code>07-运行时配置与横切约定.md</code> §5.2），
+信封 <code>details</code> 带 <code>call_id</code> / <code>audit_id</code>；<strong>连续失败 3 次触发熔断 30s</strong>（<code>AGENT_TOOL_CIRCUIT_OPEN</code>），不静默返回空结果。
+BFF <code>/api/wp/tools*</code> 在 tool-executor 不可达时回 <strong>200 + <code>available=false</code> + <code>gaps</code></strong>（与体层同一「可用性信封」约定）。</p>
+<p><strong>⑦ BFF 子请求失败：四类原因必须可区分（Phase 5 · 2026-09-19 加固）</strong></p>
+<p>BFF 聚合多分支时，子请求失败<strong>不再统一塌缩为 <code>null</code></strong>，而是携带原因码：</p>
+<table>
+<thead>
+<tr>
+<th><code>reason</code></th>
+<th>语义</th>
+<th>运维动作</th>
+<th>若曾合并会怎样</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>timeout</code></td>
+<td>对端在预算内未返回（冷启动 / 负载高）</td>
+<td><strong>重试通常即恢复</strong></td>
+<td>被读成"服务不可用" → 白重启服务</td>
+</tr>
+<tr>
+<td><code>unreachable</code></td>
+<td>连接被拒 / DNS 失败</td>
+<td>查进程与端口</td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>endpoint_missing</code>（HTTP 404）</td>
+<td><strong>端点不存在 —— 版本不匹配的强信号</strong></td>
+<td>升级对端服务</td>
+<td>被读成"不可用" → 白排查网络</td>
+</tr>
+<tr>
+<td><code>http_error</code> / <code>bad_json</code></td>
+<td>对端 5xx / 返回非 JSON</td>
+<td>查对端日志</td>
+<td>无区分度</td>
+</tr>
+</tbody>
+</table>
+<p>分片缺失码随之外带后缀：<code>sandbox_timeout</code>（慢）/ <code>sandbox_missing</code>（版本旧）/ <code>sandbox_unavailable</code>（真连不上）。
+响应同时给出 <code>partial_note</code>（人类可读解释）与 <code>probe_budget_ms</code>（各子请求预算，排查"慢 vs 没有"用）。
+<strong>前端 <code>ExecutionView.vue</code> 必须把码翻成人话</strong>，不得直接把 raw code 打到用户界面。</p>
+<blockquote>
+<p><strong>教训</strong>：沙箱冷探测 5.7s 超出 BFF 工具域 5.0s 预算（<strong>余量仅 0.7s</strong>）时，工具域曾把"慢"叙述成"沙箱不可用"——
+与服务侧真相恰好相反，且<strong>不影响任何功能断言</strong>，单测全绿、契约 0 FAIL，只表现为静默降级。
+<strong>凡返回 <code>null</code> / <code>false</code> / 空数组的位置，都要问一句「调用方还能区分出哪几种情况」。</strong></p>
+</blockquote>
 <h3 id="26-planned">2.6 planned 端点：三态判定<a class="headerlink" href="#26-planned" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -597,6 +684,12 @@ gateway-service (8080, Java WebFlux)
 <hr />
 <h2 id="3-d">3. 研发期异常流程（过程性，D 组）<a class="headerlink" href="#3-d" title="Permanent link">&para;</a></h2>
 <p><strong>编排原则</strong>：这一类异常不产生业务代码，却反复消耗时间。归纳成「现象 → 根因 → 规范动作」，可直接前置检查。</p>
+<blockquote>
+<p><strong>编号约定</strong>：<code>D-xx</code> 按<strong>新增时间</strong>递增，<strong>与章节顺序不同步</strong> ——
+后续轮次新增的条目挂到所属类目下、取当时的下一个空号。
+因此出现「3.2 里是 D-31/D-32、3.3 里是 D-33~D-35、3.4 里却是 D-13~D-16」这类顺序跳变是<strong>预期行为</strong>。
+<strong>唯一硬约束：编号全局唯一</strong>（新增条目前先 <code>grep -o '^| D-[0-9]*' | sort | uniq -d</code> 确认无撞号）。</p>
+</blockquote>
 <h3 id="31">3.1 环境与工具类<a class="headerlink" href="#31" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
@@ -693,9 +786,55 @@ gateway-service (8080, Java WebFlux)
 <td>运行态与代码不同步</td>
 <td>改动后<strong>必须重建 + 重启</strong>，并用 <code>netstat</code> 反查 PID 确认进程身份</td>
 </tr>
+<tr>
+<td>D-31</td>
+<td>健康检查脚本 <code>exit=7</code>，<code>[java services]</code> 之后一行都没输出</td>
+<td><code>set -e</code> + <code>code=$(curl ...)</code>：<strong>赋值语句的退出码 = curl 的退出码</strong>，服务不可达即终止脚本</td>
+<td>命令替换加 <code>\|\| true</code>；<strong>检查脚本必须在"被测对象挂掉"时仍能跑完并报告</strong>，否则它恰在最该工作时失效</td>
+</tr>
+<tr>
+<td>D-32</td>
+<td>页面「满屏演示数据 + 一堆降级」，看不出是环境问题</td>
+<td><code>WP_BFF_URL</code>（代理目标）与 <code>WP_BFF_PORT</code>（BFF 监听）<strong>互不校验</strong>，端口错则请求 500 被 <code>safe()</code> 兜住并逐域回落 Mock</td>
+<td><code>vite.config.ts</code> 的 <code>bffReachabilityGate()</code> 启动探活 + 终端告警；启动脚本里 <strong>URL 由 PORT 单点派生</strong></td>
+</tr>
 </tbody>
 </table>
-<h3 id="33">3.3 测试与验收类<a class="headerlink" href="#33" title="Permanent link">&para;</a></h3>
+<h3 id="33">3.3 超时预算类<a class="headerlink" href="#33" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>这一类的共同点：<strong>缺陷只存在于两个数字的差值里</strong>，两侧各自看都"没问题"，单测全绿、契约 0 FAIL。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>现象</th>
+<th>根因</th>
+<th>规范动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>D-33</td>
+<td>上游报「XX 不可用」，但直连该端点返回 200</td>
+<td><strong>跨服务超时预算差值</strong>：对端操作耗时 5.7s &gt; 上游子请求预算 <strong>5.0s</strong>（余量仅 0.7s），<code>timeout</code> 与「缺失」在上游被塌缩成同一个 <code>null</code></td>
+<td>失败原因分码返回（<code>timeout</code> / <code>unreachable</code> / <code>endpoint_missing</code> / …）；慢操作<strong>单独放宽预算</strong>；见 §2.5 ⑦</td>
+</tr>
+<tr>
+<td>D-34</td>
+<td>「预算倒挂」只存在于两个数字的<strong>差值</strong>里，单测全绿、契约 0 FAIL，直到抖动才现形</td>
+<td><strong>无权威登记表</strong>：上游预算与下游最坏耗时分散在各自代码/语言里，<strong>纸上自洽、相遇即错</strong>。实测 wp-bff 对 <code>brain/ask</code> 用默认 5000ms，而下游 LLM 级联最坏 <strong>22s</strong>（余量 <strong>0.23x</strong>）；即便只跑模板引擎，最坏 3s×2=6s <strong>也已超预算</strong> —— 倒挂是<strong>现在成立</strong>而非未来风险</td>
+<td>建 <code>contracts/timeout-budget.yaml</code> 登记表（两个数字必须同框）+ <code>scripts/timeout-budget-check.py</code> 门禁（语义/锚点/魔法数字三层）+ <code>start.sh gate</code> 前置自检；wp-bff 改按操作类型分档，<strong>生成型必须显式声明 <code>GENERATE</code> 档</strong></td>
+</tr>
+<tr>
+<td>D-35</td>
+<td>门禁全绿，但<strong>绕过常量的调用点</strong>仍写着 <code>timeoutMs: 30000</code>（= 下游最坏，余量 0）</td>
+<td><strong>门禁自身有盲区</strong>：锚点校验锚的是<strong>常量定义</strong>，看不见调用点就地写死的字面值</td>
+<td>加一层「魔法数字扫描」扫调用点；<strong>加门禁后必须反向验证门禁有效</strong>（植入违规应 FAIL），否则只是多了一个绿着好看的东西</td>
+</tr>
+</tbody>
+</table>
+<h3 id="34">3.4 测试与验收类<a class="headerlink" href="#34" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -732,7 +871,7 @@ gateway-service (8080, Java WebFlux)
 </tr>
 </tbody>
 </table>
-<h3 id="34">3.4 门禁与一致性类<a class="headerlink" href="#34" title="Permanent link">&para;</a></h3>
+<h3 id="35">3.5 门禁与一致性类<a class="headerlink" href="#35" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -781,7 +920,7 @@ gateway-service (8080, Java WebFlux)
 </tr>
 </tbody>
 </table>
-<h3 id="35">3.5 文档与口径类<a class="headerlink" href="#35" title="Permanent link">&para;</a></h3>
+<h3 id="36">3.6 文档与口径类<a class="headerlink" href="#36" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -830,7 +969,7 @@ gateway-service (8080, Java WebFlux)
 </tr>
 </tbody>
 </table>
-<h3 id="36">3.6 安全类（<strong>最高优先，出现必查全仓</strong>）<a class="headerlink" href="#36" title="Permanent link">&para;</a></h3>
+<h3 id="37">3.7 安全类（<strong>最高优先，出现必查全仓</strong>）<a class="headerlink" href="#37" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -974,8 +1113,45 @@ gateway-service (8080, Java WebFlux)
 </table>
 <p><strong>回归基线（本轮实测）</strong>：Java <strong>130/130</strong>（gateway 2 · session 15 · sense 53 · body 60）·
 Python <strong>62/62</strong> · wp-bff <strong>34/34</strong> · 契约 <strong>0 FAIL</strong> · 文档覆盖 <strong>106/106</strong> · 前端 <code>vue-tsc</code> + <code>vite build</code> 通过</p>
+<blockquote>
+<p><strong>上表为 2026-09-18 口径</strong>，按「历史归档不回改」约定保留原样。以下为后续轮次的追加记录。</p>
+</blockquote>
+<p><strong>2026-09-19 追加（超时语义与预算轮）</strong></p>
+<table>
+<thead>
+<tr>
+<th>改动</th>
+<th>文件</th>
+<th>验证</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>新增 §2.5 ⑦ 跨服务失败原因分码（<code>timeout</code>/<code>unreachable</code>/<code>endpoint_missing</code>/<code>http_error</code>/<code>bad_json</code>）</td>
+<td><code>docs/异常流程归纳.md</code></td>
+<td>6 探针实例实测三态分明</td>
+</tr>
+<tr>
+<td>新增本文档 §3.2 D-31 / D-32（healthcheck 自废武功、代理端口无校验）与 §3.3 D-33~D-35（超时预算三类）</td>
+<td><code>docs/异常流程归纳.md</code></td>
+<td>门禁反向验证 4 项</td>
+</tr>
+<tr>
+<td>BFF 调用点改命名档位；<code>knowledge</code> 入库去魔法数字</td>
+<td><code>services/node/wp-bff/server.js</code></td>
+<td>wp-bff 测试 <strong>87/87</strong></td>
+</tr>
+<tr>
+<td>超时预算登记表 + 门禁</td>
+<td><code>contracts/timeout-budget.yaml</code>、<code>scripts/timeout-budget-check.py</code></td>
+<td><code>ok=16 · gap=3 · fail=0</code></td>
+</tr>
+</tbody>
+</table>
+<p><strong>追加回归基线（2026-09-19 实测）</strong>：Java <strong>248/248</strong> · Python <strong>158/158</strong> ·
+wp-bff <strong>87/87</strong> · 契约 <strong>0 FAIL</strong> · 超时预算 <strong>0 FAIL</strong> · 文档覆盖 <strong>158/158</strong></p>
 <hr />
-<p><em>编制：WorkBuddy · 口径时间：2026-09-18 · 代码基线：<code>6616616</code></em></p></main>
+<p><em>编制：WorkBuddy · 口径时间：2026-09-18（含 2026-09-19 追加） · 代码基线：<code>6616616</code></em></p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

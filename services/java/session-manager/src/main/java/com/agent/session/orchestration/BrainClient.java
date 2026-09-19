@@ -10,6 +10,7 @@ import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
 import org.springframework.web.client.RestClientException;
 
+import java.time.Duration;
 import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -29,18 +30,22 @@ import java.util.Map;
  *   <li>{@code =false}：直接抛 {@code AGENT_UPSTREAM_UNAVAILABLE}。</li>
  * </ul>
  * **不伪造回答**：降级时 {@code answer} 为空字符串，由调用方决定显示什么。
+ *
+ * <p><b>读超时</b>：{@link OutboundHttp#BRAIN_TIMEOUT}（30s），覆盖 nlp-service
+ * {@code /brain/ask} 的端到端总预算 20s（`BRAIN_TOTAL_BUDGET_MS`）并留 1.5x 余量（登记表 TB-11 / GAP-01）。
+ * 原值 10s 小于下游最坏 22s，是「上游先把『慢』说成『不可用』」的又一实例。
  */
 @Component
 public class BrainClient {
 
     private static final Logger log = LoggerFactory.getLogger(BrainClient.class);
 
-    private final RestClient client;
+    private final String baseUrl;
     private final boolean degradeOnFailure;
 
     public BrainClient(@Value("${app.nlp.base-url:http://127.0.0.1:8000}") String baseUrl,
                        @Value("${app.brain.degrade-on-failure:true}") boolean degradeOnFailure) {
-        this.client = OutboundHttp.restClient(baseUrl);
+        this.baseUrl = baseUrl;
         this.degradeOnFailure = degradeOnFailure;
     }
 
@@ -51,6 +56,23 @@ public class BrainClient {
      */
     public BrainAnswer ask(String question, String sessionId, String tenantId,
                            String intent, double intentConfidence, List<Map<String, Object>> context) {
+        return ask(question, sessionId, tenantId, intent, intentConfidence, context, null);
+    }
+
+    /**
+     * @param budget 整条 ask 链的总预算；为 {@code null} 表示不参与预算传播（只用本档上限）
+     */
+    public BrainAnswer ask(String question, String sessionId, String tenantId,
+                           String intent, double intentConfidence, List<Map<String, Object>> context,
+                           RequestBudget budget) {
+        if (budget != null && budget.exhausted()) {
+            log.warn("大脑层降级：预算已耗尽（已用 {}ms / 总 {}ms）—— 不再发起调用，"
+                            + "由调用方走本地检索直出", budget.elapsedMs(), budget.totalMs());
+            return degraded("budget_exhausted: " + budget.elapsedMs() + "ms/" + budget.totalMs() + "ms");
+        }
+        Duration timeout = Duration.ofMillis(budget == null
+                ? OutboundHttp.BRAIN_TIMEOUT.toMillis()
+                : budget.clamp(OutboundHttp.BRAIN_TIMEOUT.toMillis()));
         Map<String, Object> payload = new LinkedHashMap<>();
         payload.put("question", question);
         payload.put("session_id", sessionId);
@@ -60,7 +82,8 @@ public class BrainClient {
         payload.put("context", context == null ? List.of() : context);
         payload.put("use_cache", true);
         try {
-            Map<String, Object> response = client.post().uri("/api/nlp/brain/ask")
+            Map<String, Object> response = OutboundHttp.restClient(baseUrl, timeout).post()
+                    .uri("/api/nlp/brain/ask")
                     .header("X-Tenant-Id", tenantId)
                     .body(payload)
                     .retrieve().body(new ParameterizedTypeReference<>() {});

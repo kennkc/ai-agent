@@ -116,14 +116,14 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:32 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#_1">一、当前状态一句话</a></li>
 <li><a href="#_2">二、阶段进度</a></li>
 <li><a href="#_3">三、功能交付矩阵</a><ul>
-<li><a href="#31-java106-81-25-90-proto">3.1 后端 Java（106 个手写源文件 = 81 主 + 25 测；另有 90 个 proto 生成文件）</a></li>
+<li><a href="#31-java157-116-41-90-proto">3.1 后端 Java（157 个手写源文件 = 116 主 + 41 测；另有 90 个 proto 生成文件）</a></li>
 <li><a href="#32-pythonservicespythonnlp-service10-py-12-proto">3.2 Python（services/python/nlp-service，10 个业务 py + 12 个 proto 生成文件）</a></li>
 <li><a href="#33-webwork-platformvue-3-vite-ts-element-plus9-vue-8-ts">3.3 前端（web/work-platform，Vue 3 + Vite + TS + Element Plus，9 vue + 8 ts）</a></li>
 <li><a href="#34-ops-bffservicesnodewp-bff-node-8090">3.4 Ops BFF（services/node/wp-bff，零依赖 Node，端口 8090）</a></li>
@@ -133,7 +133,6 @@
 <li><a href="#_4">四、测试与验证基线</a></li>
 <li><a href="#_5">五、分支与远端拓扑</a><ul>
 <li><a href="#51">5.1 分支</a></li>
-<li><a href="#52">5.2 远端地址（两台机器不同，别照抄）</a></li>
 <li><a href="#53">5.3 变更前置约定（强制）</a></li>
 </ul>
 </li>
@@ -150,17 +149,25 @@
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 项目进度总览<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-18（Phase 3 躯体期落地 + <strong>需求审核补全轮</strong>） · <strong>代码基线</strong>：<code>a5e0cd5</code>（Phase 3 代码收口）+ 审核补全轮（<code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> 同提交）
+<p><strong>口径时间</strong>：2026-09-19（Phase 5 四肢期落地 + Phase 5 复审收口） · <strong>代码基线</strong>：<code>dev</code>（Phase 5 代码收口）
 <strong>数据来源</strong>：仓库 <code>PROGRESS.md</code>、<code>docs/项目进度日志报告/</code>、<code>docs/优化日志/</code>、各服务源码实测统计
-<strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73/61 项测试）<strong>不回改</strong>，以本文件为准。</p>
+<strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73/61/106/162 项测试）<strong>不回改</strong>，以本文件为准。</p>
 </blockquote>
 <hr />
 <h2 id="_1">一、当前状态一句话<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
-<p><strong>Phase 0 / 1 / 2 / 3 / 4 已交付并验收</strong>，项目当前处于 <strong>Phase 4 大脑期收口后</strong>（下一步 Phase 5 四肢期）。
-<strong>Phase 3 躯体期</strong>把 body-service 从"内存检索"重写为<strong>持久化知识管道</strong>：格式解析 → 分块 → 嵌入 → 三层存储
-（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG，并打通<strong>感官→躯体闭环</strong>，
-<strong>DEBT-001 正式销项</strong>。</p>
+<p><strong>Phase 0 / 1 / 2 / 3 / 4 / 5 已交付并验收</strong>，项目当前处于 <strong>Phase 5 四肢期收口后</strong>（下一步 Phase 6 小脑期）。
+<strong>Phase 5 四肢期</strong>新增独立服务 <strong><code>tool-executor</code>（8084 / gRPC 9095）</strong>：工具注册表（R5-01）+ 执行引擎
+（R5-02，白名单 → 参数 Schema → 敏感参数 → 熔断 → 带超时执行 → 结果标准化 → 审计）+ 沙箱隔离
+（R5-03/R5-05，Docker 真隔离 + 受限子进程降级）+ 安全三闸（R5-07）+ 全量审计（R5-08，PG 真相源 +
+Kafka 旁路）+ <strong>IN-06 工具契约治理</strong>（semver + schema 指纹 + 变更影响分析 + 契约基线门禁），
+并在工作平台落地<strong>执行视图</strong>（工具卡片 / 试运行 / 沙箱状态灯 / 审计流水 / 熔断徽标 / <strong>影响面抽屉</strong>）。</p>
 <blockquote>
+<p><strong>2026-09-19 Phase 5 复审结论</strong>：<strong>未触碰伪实现红线</strong>。复审时唯一需留意的是<strong>沙箱降级被当作"沙箱验收通过"
+叙述的风险</strong> —— 当时实测 <code>docker_available=false</code>、<code>active_backend=process-restricted</code>、<code>degraded=true</code>。
+<strong>该缺口已于同日收口轮闭合</strong>：构建 <code>agent-sandbox:latest</code> 后重启服务，<code>GET /api/tool/sandbox</code> 回到
+<code>active_backend=docker / isolated=true / degraded=false</code>，逃逸样本取得<strong>内核级证据</strong>
+（出网 <code>Errno -3</code>、写盘 <code>Errno 30</code>）。详见《Phase5-测试验收报告》§5.2。
+逐条对账与缺口清单见 <a href="./优化日志/2026-09-19-Phase5四肢期进度复审与缺口清单.md"><code>docs/优化日志/2026-09-19-Phase5四肢期进度复审与缺口清单.md</code></a>。</p>
 <p><strong>2026-09-18 追加一轮需求审核与补全</strong>：逐条对账需求文档、扫描生产代码伪实现、核对 DEBT 记账、
 核查全链路可达性。结论：<strong>无伪代码实现</strong>，但发现 4 项阶段范围内缺失（工作平台入库链路断裂、
 格式解析步缺失、IN-05 参数未预留、对账能力缺失）—— <strong>已全部补全</strong>；另发现 <strong>IN-01 / WB-03 /
@@ -249,11 +256,18 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <td><code>docs/项目进度日志报告/Phase4-*</code> + <code>docs/demo/Phase4-DEMO.md</code> + <code>docs/优化日志/2026-09-19-*</code></td>
 </tr>
 <tr>
-<td>Phase 5-8</td>
-<td>四肢 / 小脑 / 免疫 / 生命期</td>
+<td>Phase 5</td>
+<td>四肢期</td>
+<td>✅ <strong>已验收（09-19）</strong>，同日复审收口</td>
+<td><strong>R5-01~R5-08 + R-C05(预) + IN-06</strong> 全覆盖：新增独立服务 <strong><code>tool-executor</code>（8084/9095）</strong> —— 工具注册表（注册/列表/详情/卸载/废弃）、执行引擎（回执标准化 + 连续失败熔断 3 次/30s）、沙箱隔离（Docker 真隔离主路径 + 受限子进程<strong>显式降级</strong>）、三内置工具（calculator 无 eval / http 域名白名单+SSRF 拦截 / code 沙箱执行）、安全三闸（白名单 / Draft-07 参数 Schema / 12 条敏感规则）、全量审计（PG <code>tool_audit_log</code> 真相源 + Kafka <code>lifeform.tool.invoked</code> 旁路 + 内存降级）、<strong>IN-06 契约治理（semver + schema 指纹 + 影响分析 + <code>contracts/tool-schema-baseline.json</code> 门禁）</strong>；wp-bff <code>/api/wp/tools*</code> 9 个方法 + work-platform <strong>执行视图（R-C05）</strong></td>
+<td><code>docs/项目进度日志报告/Phase5-*</code> + <code>docs/demo/Phase5-DEMO.md</code> + <code>docs/优化日志/2026-09-19-Phase5四肢期进度复审与缺口清单.md</code></td>
+</tr>
+<tr>
+<td>Phase 6-8</td>
+<td>小脑 / 免疫 / 生命期</td>
 <td>⏸ 冻结</td>
-<td>工具调用、编排、免疫、自进化</td>
-<td><code>AGENT_CONTEXT/Phase4~8-*/</code></td>
+<td>编排、免疫、自进化</td>
+<td><code>AGENT_CONTEXT/Phase5~8-*/</code></td>
 </tr>
 <tr>
 <td>V1</td>
@@ -266,7 +280,7 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 </table>
 <hr />
 <h2 id="_3">三、功能交付矩阵<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
-<h3 id="31-java106-81-25-90-proto">3.1 后端 Java（106 个手写源文件 = 81 主 + 25 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java106-81-25-90-proto" title="Permanent link">&para;</a></h3>
+<h3 id="31-java157-116-41-90-proto">3.1 后端 Java（157 个手写源文件 = 116 主 + 41 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java157-116-41-90-proto" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -282,7 +296,7 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td><code>gateway-service</code></td>
 <td>8080</td>
-<td>统一入口路由（<code>/api/{session,sense,nlp,body}/**</code>）、JWT 校验、<strong>网关注入 <code>X-Tenant-Id</code></strong>、跨租户访问防护、统一错误响应模型</td>
+<td>统一入口路由（<code>/api/{session,sense,nlp,body,tool}/**</code>）、JWT 校验、<strong>网关注入 <code>X-Tenant-Id</code></strong>、跨租户访问防护、统一错误响应模型</td>
 <td><code>GatewayApplication</code> · 路由见 <code>application.yml</code></td>
 <td>2</td>
 <td>✅</td>
@@ -290,9 +304,9 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td><code>session-manager</code></td>
 <td>8081</td>
-<td>会话 CRUD、<strong>VS1 追问闭环</strong>（session → intent → <strong>语义检索</strong> → 回答）、Redis 消息存储、Kafka 事件、<strong>HTTP/1.1 出站客户端 + 优雅降级</strong>、<strong>路由层错误语义（404/405/415）</strong></td>
-<td><code>SessionController</code> · <code>OutboundHttp</code> · <code>BodyClient</code></td>
-<td>15</td>
+<td>会话 CRUD、<strong>VS1 追问闭环</strong>（session → intent → <strong>语义检索</strong> → 回答）、Redis 消息存储、Kafka 事件、<strong>HTTP/1.1 出站客户端 + 优雅降级</strong>、<strong>路由层错误语义（404/405/415）</strong>、<strong>R4-01 会话 FSM + R4-02 Redis 持久化（重启可恢复）+ R-C04 会话统计</strong></td>
+<td><code>SessionController</code> · <code>SessionFsm</code> · <code>SessionStore</code> · <code>OutboundHttp</code> · <code>BrainClient</code></td>
+<td>43</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -306,15 +320,23 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td><code>body-service</code></td>
 <td>8083</td>
-<td><strong>躯体期知识管道</strong>：<strong>格式解析（md/text/html）</strong> → 分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG；知识管理 REST API（含<strong>三层一致性对账</strong>与 <strong>IN-05 迭代检索预留接口</strong>）；<strong>消费 <code>lifeform.sense.collected</code> 形成感官→躯体闭环</strong>；统一错误码 + OTLP 链路 + <strong>路由层错误语义（404/405/415）</strong></td>
+<td><strong>躯体期知识管道</strong>：<strong>格式解析（md/text/html）</strong> → 分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG；知识管理 REST API（含<strong>三层一致性对账</strong>与 <strong>IN-05 迭代检索预留接口</strong>）；<strong>消费 <code>lifeform.sense.collected</code> 形成感官→躯体闭环</strong>；<strong>写路径失效检索热缓存</strong>；统一错误码 + OTLP 链路 + <strong>路由层错误语义（404/405/415）</strong></td>
 <td><code>KnowledgeController</code> · <code>DocumentParser</code> · <code>ChunkProcessor</code> · <code>IngestService</code> · <code>RetrievalService</code> · <code>RagPipeline</code> · <code>StorageFacade</code> · <code>QdrantClient</code> · <code>SenseCollectedConsumer</code></td>
-<td>60</td>
+<td>64</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong><code>tool-executor</code></strong></td>
+<td><strong>8084</strong></td>
+<td><strong>四肢期工具执行</strong>：注册表（R5-01，注册/列表/详情/卸载/废弃 30 天期）、执行引擎（R5-02，白名单→Schema→敏感参数→熔断→带超时执行→标准化→审计）、沙箱（R5-03/05，Docker <code>--network none</code>/只读 rootfs/去能力 + 受限子进程<strong>显式降级</strong>）、三内置工具（R5-04/05：calculator 手写解析器<strong>无 eval</strong>、http 域名白名单+SSRF 拦截、code 沙箱执行）、安全三闸（R5-07）、全量审计（R5-08，PG 真相源 + Kafka 旁路 + 内存降级）、<strong>IN-06 契约治理（semver + schema 指纹 + 影响分析）</strong>、路由层错误语义（404/405/415）</td>
+<td><code>ToolController</code> · <code>ToolRegistry</code> · <code>ToolGuard</code> · <code>ToolExecutor</code> · <code>SandboxExecutor</code> · <code>ToolAuditLog</code> · <code>ToolBootstrap</code></td>
+<td><strong>82</strong></td>
 <td>✅</td>
 </tr>
 <tr>
 <td><code>proto-contracts</code></td>
 <td>—</td>
-<td>6 份 proto（session/sensor/brain/limb/body/common）→ <strong>90 个生成源文件已入库</strong>，默认生命周期不再调 protoc；<strong>6 份契约、15 个 RPC 当前均无运行时调用方</strong>（服务间走 HTTP + NATS/Kafka，9091-9094 用的是 grpc-services 自带健康服务）</td>
+<td>6 份 proto（session/sensor/brain/limb/body/common）→ <strong>90 个生成源文件已入库</strong>，默认生命周期不再调 protoc；<strong>6 份契约、15 个 RPC 当前均无运行时调用方</strong>（服务间走 HTTP + NATS/Kafka，9091-9095 用的是 grpc-services 自带健康服务）</td>
 <td><code>proto/</code> + <code>proto-contracts</code></td>
 <td>—</td>
 <td>✅ 仅编译期</td>
@@ -476,6 +498,30 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <td>✅</td>
 </tr>
 <tr>
+<td><strong><code>GET /api/wp/tools</code></strong> —— 执行视图聚合（工具卡片 + 沙箱状态，R-C05 预）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong><code>GET /api/wp/tools/registry</code></strong> —— 工具注册表摘要 + 变更历史（IN-06）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong><code>GET /api/wp/tools/{name}</code></strong> / <strong><code>/tools/{name}/impact</code></strong> —— 单工具详情 / <strong>变更影响分析（IN-06）</strong></td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong><code>GET /api/wp/tools/audit</code></strong> / <strong><code>/tools/audit/stats</code></strong> —— 审计明细与汇总（R5-08，租户隔离）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong><code>GET /api/wp/tools/metrics</code></strong> / <strong><code>/tools/sandbox</code></strong> —— 成功率·分位·熔断状态 / 沙箱状态</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong><code>POST /api/wp/tools/execute</code></strong> —— 工具执行（<strong>控制端点</strong>：来源白名单 + 控制令牌）</td>
+<td>✅</td>
+</tr>
+<tr>
 <td><strong>控制面鉴权</strong>：来源检查 + <code>X-WP-Control-Token</code>（<code>timingSafeEqual</code>）；无鉴权后门</td>
 <td>✅</td>
 </tr>
@@ -518,7 +564,7 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 </table>
 <hr />
 <h2 id="_4">四、测试与验证基线<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
-<p><strong>口径：2026-09-18 Phase 3 落地 + 审核补全轮 + 路由语义修正轮 + 全平台错误信封统一轮后的实测值</strong>（历史归档中的 54 / 73 / 61 / 114 / 174 项是当时口径）</p>
+<p><strong>口径：2026-09-19 Phase 5 四肢期落地 + 真实链路打通轮的实测值</strong>（历史归档中的 54 / 73 / 61 / 114 / 162 / 244 项是当时口径）</p>
 <table>
 <thead>
 <tr>
@@ -531,12 +577,12 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td>Java</td>
 <td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh test</code></td>
-<td><strong>162 测试 / 0 失败</strong>（proto 2 · session-manager <strong>43</strong> · sense-service 53 · body-service <strong>64</strong>）</td>
+<td><strong>251 测试 / 0 失败</strong>（gateway <strong>2</strong> · session-manager <strong>43</strong> · sense-service <strong>53</strong> · body-service <strong>67</strong> · <strong>tool-executor 86</strong>；body +3 来自 GAP 收尾轮）</td>
 </tr>
 <tr>
 <td>Python</td>
 <td><code>../venv/Scripts/python.exe -m pytest</code>（nlp-service 下）</td>
-<td><strong>124 通过</strong>（意图 15 + HTTP 层错误语义 10 + OCR 4 + 分块 12 + 嵌入 13 + 重排 8 + <strong>大脑层</strong> + <strong>记忆图谱</strong> + <strong>Phase4 评测集</strong>）</td>
+<td><strong>158 通过 / 1 跳过</strong>（意图 15 + HTTP 层错误语义 10 + OCR 4 + 分块 12 + 嵌入 13 + 重排 8 + <strong>函数调用</strong> + <strong>大脑层</strong> + <strong>记忆图谱</strong> + <strong>跨服务预算/预算传播 20</strong> + <strong>Phase4 评测集</strong>）</td>
 </tr>
 <tr>
 <td>契约（跨服务）</td>
@@ -546,12 +592,12 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td>契约（工作平台）</td>
 <td><code>python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml</code></td>
-<td>41 端点，implemented <strong>11 路径 / 12 方法</strong> / planned 30，<strong>0 FAIL</strong></td>
+<td>60 端点，implemented <strong>30 路径 / 31 方法</strong> / planned 30，<strong>0 FAIL</strong>；<strong>工具契约基线：3 个工具 ↔ <code>ToolBootstrap</code> 注册 3 个</strong></td>
 </tr>
 <tr>
 <td>wp-bff</td>
 <td><code>cd services/node/wp-bff &amp;&amp; node --test</code></td>
-<td><strong>55 通过</strong>（含 2 条写路径鉴权反向用例 + 3 条路由层错误语义用例 + <strong>大脑端点（含决策链 404 反向用例）</strong> + <strong>会话代理</strong> + <strong>驾驶舱指标</strong> + 2 条知识量口径）</td>
+<td><strong>87 通过</strong>（含写路径鉴权反向用例 + 路由层错误语义 + 大脑端点（含决策链 404 反向用例）+ 会话代理 + 驾驶舱指标 + <strong>工具代理（含 <code>POST /tools/execute</code> 控制令牌反向用例）</strong> + <strong>失败原因分类（timeout / unreachable / endpoint_missing / http_error / bad_json）</strong> + <strong>6 条跨服务超时预算不变量</strong>）</td>
 </tr>
 <tr>
 <td>前端</td>
@@ -559,9 +605,24 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <td>通过</td>
 </tr>
 <tr>
+<td><strong>超时预算（跨服务）</strong></td>
+<td><code>python scripts/timeout-budget-check.py</code></td>
+<td><strong>0 FAIL</strong>：19 条边 <code>ok=19 · gap=0</code> —— <strong>倒挂全部清零（2026-09-19 GAP 收尾轮）</strong>；三层校验（语义 / 代码锚点 / 调用点魔法数字），锚点漂移反向验证通过（植入 19999 → fail=1 / exit=1）；详见 §6.1-9</td>
+</tr>
+<tr>
+<td><strong>文档一致性</strong></td>
+<td><code>python scripts/doc-consistency-check.py</code></td>
+<td><strong>0 FAIL</strong>：异常编号 35 条无撞号 · 章节号 20 个无重复 · md↔html 孪生 54 组无过期（无需 <code>--no-twin</code>）</td>
+</tr>
+<tr>
 <td>端到端（Docker）</td>
 <td><code>.workbuddy/tmp/phase3-e2e.py</code>（入库→检索→缓存→隔离→RAG→指标→重入库/删除）</td>
-<td><strong>35 PASS / 0 FAIL</strong> · P99 <strong>366ms</strong> · 命中率 <strong>0.925</strong> · 缓存命中率 <strong>0.45</strong>（2026-09-18；本轮新增项<strong>未重跑</strong>，见 DEMO §三 口径说明）</td>
+<td><strong>35 PASS / 0 FAIL</strong> · P99 <strong>366ms</strong> · 命中率 <strong>0.925</strong> · 缓存命中率 <strong>0.45</strong>（2026-09-18 口径；<strong>未随 Phase 5 重跑</strong>）</td>
+</tr>
+<tr>
+<td>工具执行实测（8084）</td>
+<td>注册表 / 执行 / 沙箱 / 审计 / 指标 五组接口</td>
+<td>✅ 通过 —— calculator <code>sqrt(2)+pow(2,10)=1025.414…</code>；<code>code</code> 输出 <code>45</code>（<code>sandboxed=true, sandbox_backend=docker</code>）；出网样本 <strong>403 <code>AGENT_TOOL_ARGS_BLOCKED</code></strong>；写盘样本 <strong>400 + 内核 <code>Errno 30</code></strong>；<code>GET /sandbox</code> = <code>docker_available=true</code> / <code>active_backend=docker</code> / <code>isolated=true</code> / <code>degraded=false</code>（<strong>Docker 真隔离已复验通过</strong>，见 §6.1-8）；<strong>探测耗时 5.7s → 0.5s</strong>（非阻塞化后，见《2026-09-19-工作平台真实链路打通与沙箱探测非阻塞化》）</td>
 </tr>
 <tr>
 <td>感官→躯体闭环</td>
@@ -571,12 +632,12 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td>中间件/链路</td>
 <td><code>docker compose config</code> · <code>./scripts/healthcheck.sh</code></td>
-<td>通过（2026-09-13：16/16 OK）</td>
+<td><strong>已整体重跑（2026-09-19）</strong>：脚本补 8084 / 9095 / 8090 三探针后实测 <strong>19 OK / 6 BAD</strong>，BAD 全部是"本轮未启动"（<code>gateway</code> / <code>sense</code> 未起，<code>NATS</code> / <code>MinIO</code> 非 Phase 5 依赖）——<strong>不掩盖、不刷绿</strong></td>
 </tr>
 <tr>
 <td>文档覆盖率</td>
 <td><code>python scripts/java-doc-coverage.py</code></td>
-<td><strong>113/113</strong> 业务源文件已登记（body-service 37/37）</td>
+<td><strong>160/160</strong> 业务源文件已登记（GAP 收尾轮登记 <code>BudgetGuard.java</code>；tool-executor <strong>43/43</strong>）</td>
 </tr>
 </tbody>
 </table>
@@ -600,19 +661,9 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 </thead>
 <tbody>
 <tr>
-<td><code>codex/main</code></td>
-<td>本机（另一台开发机）主开发分支，2026-09-16 由 <code>codex/phase0-1-hardening</code> 更名</td>
-<td><code>998623a</code></td>
-</tr>
-<tr>
 <td><code>dev</code></td>
-<td>另一台远端开发机的工作分支</td>
-<td><code>998623a</code></td>
-</tr>
-<tr>
-<td><code>workbuddy/main</code></td>
-<td>WorkBuddy 侧主开发线（Phase 0/1/2/3 + 工作平台 + Java 服务文档集）</td>
-<td><code>998623a</code></td>
+<td><strong>本机（WorkBuddy 侧）工作分支</strong> —— Phase 0~5 全部代码与文档</td>
+<td><code>0921345</code>（Phase 4 端口修复提交）</td>
 </tr>
 <tr>
 <td><code>main</code></td>
@@ -622,43 +673,32 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 </tbody>
 </table>
 <blockquote>
-<p>表内为<strong>代码基线</strong> <code>998623a</code>；其后为纯文档轮提交，不改动代码。</p>
+<p>表内为<strong>代码基线</strong>；Phase 5 的改动（<code>tool-executor</code> 新服务 + 文档）<strong>尚未提交</strong>，见 <code>git status</code>。
+历史分支 <code>codex/main</code> / <code>workbuddy/main</code> 在本机已不存在（另一台开发机的历史线），本表不再登记。</p>
 </blockquote>
-<p><strong>约定</strong>：三支保持内容一致 —— 任一分支的改动，收口时 <code>git merge --ff-only</code> 同步到另两支；</p>
-<pre><code>git push origin codex/main
-git push origin codex/main:dev
-git push origin codex/main:workbuddy/main
-</code></pre>
-<p>跨分支吸收按「<strong>时间 + 语义</strong>逐项合并」，<strong>禁止整文件覆盖</strong>。</p>
-<h3 id="52">5.2 远端地址（<strong>两台机器不同，别照抄</strong>）<a class="headerlink" href="#52" title="Permanent link">&para;</a></h3>
+<p><strong>远端（本机）</strong>：</p>
 <table>
 <thead>
 <tr>
-<th>机器</th>
 <th>remote</th>
-<th>fetch</th>
-<th>push</th>
+<th>地址</th>
+<th>用途</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>另一台开发机（README §8.4.1 记录）</td>
 <td><code>origin</code></td>
-<td>本地镜像仓库 <code>&lt;repo&gt;\ai-agent</code>（快）</td>
-<td><code>git@github.com:kennkc/ai-agent.git</code>（直达）</td>
+<td><code>https://ghfast.top/https://github.com/kennkc/ai-agent.git</code></td>
+<td>加速镜像（拉取）</td>
 </tr>
 <tr>
-<td><strong>本机（WorkBuddy 侧）</strong></td>
-<td><code>origin</code></td>
-<td><code>git@github.com:kennkc/ai-agent.git</code>（SSH 直达）</td>
-<td>同左</td>
+<td><code>github</code></td>
+<td><code>git@github.com:kennkc/ai-agent.git</code></td>
+<td>SSH 直达</td>
 </tr>
 </tbody>
 </table>
-<blockquote>
-<p>本机原走 HTTPS，443 曾长期被阻断 → 现统一走 <strong>SSH(22)</strong>。
-<code>README.md</code> §8.4.1 描述的是<strong>另一台开发机</strong>的中转拓扑，本机是直连，两者不要混用。</p>
-</blockquote>
+<p><strong>约定</strong>：跨分支吸收按「<strong>时间 + 语义</strong>逐项合并」，<strong>禁止整文件覆盖</strong>。</p>
 <h3 id="53">5.3 变更前置约定（强制）<a class="headerlink" href="#53" title="Permanent link">&para;</a></h3>
 <p>任何仓库内容变更之前，先执行 <strong><code>README.md</code> §8.0</strong>：<code>git fetch</code> → 判落后/领先 → <strong>解读</strong>对方改动
 → 再决定集成 → 才开工。已登记为技能 <code>git-sync-before-change</code>
@@ -690,8 +730,8 @@ git push origin codex/main:workbuddy/main
 </tr>
 <tr>
 <td>3</td>
-<td><strong>BFF 契约 31 个 planned 端点</strong></td>
-<td>仅实现最小 Ops 子集 + 躯体视图</td>
+<td><strong>BFF 契约 30 个 planned 端点</strong></td>
+<td>仅实现 Ops 子集 + 躯体视图 + <strong>工具执行（9 方法）</strong></td>
 <td>未实现域回落 Mock（<strong>已非静默</strong>，有降级提示）</td>
 </tr>
 <tr>
@@ -702,9 +742,9 @@ git push origin codex/main:workbuddy/main
 </tr>
 <tr>
 <td>5</td>
-<td>Phase 5+</td>
+<td>Phase 6+</td>
 <td>团队节奏控制</td>
-<td>四肢期（工具调用）未开工；大脑期已验收但生成器仍为 <code>template</code>（DEBT-015/016）</td>
+<td>小脑期（编排）未开工；大脑期已验收但生成器仍为 <code>template</code>（DEBT-015/016）</td>
 </tr>
 <tr>
 <td>6</td>
@@ -717,6 +757,18 @@ git push origin codex/main:workbuddy/main
 <td><strong>Phase 3 阶段范围缺口：IN-01 / WB-03 / WB-05 / MC-01 未实现</strong></td>
 <td>Phase 3 需求文档 §8/§9 列有其需求与验收标准，但阶段报告「需求范围」只声明 <code>R3-01~R3-09 + R-C03</code></td>
 <td>技能包模型（MinIO+etcd）、专家中心、技能市场、NATS 协作总线服务化 —— <strong>各需独立服务</strong>，需规划侧确认归属阶段；已登记 <a href="./技术债台账.md">技术债台账 §6-12</a></td>
+</tr>
+<tr>
+<td>8</td>
+<td>~~<strong>R5-03 沙箱真隔离未验证</strong>~~ → <strong>已闭合</strong></td>
+<td>复审时 <code>docker_available=false</code>、<code>agent-sandbox:latest</code> 镜像未构建，走降级后端</td>
+<td>✅ <strong>2026-09-19 收口轮已复验</strong>：构建镜像后重启，<code>active_backend=docker</code> / <code>isolated=true</code> / <code>degraded=false</code>；逃逸样本取得内核级证据（出网 <code>Errno -3</code>、写盘 <code>Errno 30</code>），见《Phase5-测试验收报告》§5.2。<strong>唯一未做</strong>：<code>healthcheck.sh</code> 未整体重跑</td>
+</tr>
+<tr>
+<td>9</td>
+<td>~~<strong>跨服务超时预算 3 条倒挂未修复（GAP-01 / GAP-05 / GAP-06）</strong>~~ ✅ <strong>2026-09-19 GAP 收尾轮全部闭合</strong></td>
+<td><code>contracts/timeout-budget.yaml</code> 现为 <code>ok=19 · gap=0</code>，跨服务余量全部 ≥ 1.5x。闭合方式统一为<strong>内层收敛、外层覆盖</strong>：GAP-01 收紧 nlp 总预算 25s→20s（原上限从不构成约束，session 30s 恰 1.5x）；GAP-05 给 body 检索加端到端预算 10s（<code>BudgetGuard</code>，顺带修正登记表"出站读超时 10s"冒充端到端最坏的失真）+ 上游 8s→15s 并回收第二套口径；GAP-06 新增 wp-bff ASK 档 53s（GENERATE 45s 保持不动）。锚点漂移反向验证通过（植入 19999 → fail=1 / exit=1），见 <code>docs/优化日志/2026-09-19-GAP收尾-三条倒挂一次闭合与登记表失真修正.md</code></td>
+<td></td>
 </tr>
 </tbody>
 </table>
@@ -836,6 +888,70 @@ git push origin codex/main:workbuddy/main
 <td>🟡 未闭合</td>
 </tr>
 <tr>
+<td>DEBT-014</td>
+<td>session-manager（持久化）</td>
+<td>消息列表全量保留 + 读取时截断</td>
+<td>会话压缩 + 窗口上限落库</td>
+<td>单会话 &gt; 100 轮</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-015</td>
+<td>nlp-service（LLM）</td>
+<td>未接真实 LLM，走模板后端 <code>generator=template</code></td>
+<td>OpenAI 兼容 / 本地推理</td>
+<td>接入权重或 API Key</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-016</td>
+<td>nlp-service（Token 计量）</td>
+<td>字符估算（中文 1.5 char/token）</td>
+<td>tokenizer 精确计数</td>
+<td>接入真实模型后</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-017</td>
+<td>nlp-service（任务规划）</td>
+<td>规则模板映射 <code>planner=rule</code></td>
+<td>LLM 规划 / 多步规划器</td>
+<td>P6 多模型策略</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-018</td>
+<td>跨服务（gRPC 端口）</td>
+<td>session 已外移 19092；<strong>sense 9093 ↔ Alertmanager(P7) 9093</strong> 潜在重叠</td>
+<td>端口块迁出 90xx 基础设施区间</td>
+<td>P7 部署前</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-019</td>
+<td>tool-executor（注册表）</td>
+<td>注册表 + 版本历史<strong>仅进程内</strong>（内存）；影响分析只覆盖<strong>显式登记</strong>的消费方</td>
+<td>etcd/DB 持久化 + 跨实例共享 + 消费方自动发现</td>
+<td>多实例部署或需重启保留</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-020</td>
+<td>tool-executor（校验器选型）</td>
+<td>实装 <strong>networknt</strong>（Draft-07），设计写 everit</td>
+<td>与设计文档选型一致</td>
+<td>需严格对齐选型时</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
+<td>DEBT-021</td>
+<td>tool-executor（指标）</td>
+<td>进程内滑动窗口（500 样本），<strong>未接 Prometheus</strong></td>
+<td>Micrometer + Prometheus</td>
+<td>需跨实例聚合或告警时</td>
+<td>🟡 未闭合</td>
+</tr>
+<tr>
 <td>—</td>
 <td>body-service（口径）</td>
 <td>冷层为纯 PG 表（<strong>未用 pgvector</strong>）；缓存为<strong>精确指纹</strong>（非向量语义缓存）</td>
@@ -846,8 +962,8 @@ git push origin codex/main:workbuddy/main
 </tbody>
 </table>
 <blockquote>
-<p>上表为节选。<strong>2026-09-19 新增 DEBT-014~018</strong>（会话压缩 / LLM 引擎 / Token 计量 / 规则规划器 /
-<strong>gRPC 端口冲突</strong>），逐条见《技术债台账》§二与 §4.17。</p>
+<p>上表为节选。<strong>2026-09-19 Phase 5 新增 DEBT-019~021</strong>（注册表仅进程内 / 校验器选型差异 / 指标未接
+Prometheus），逐条见《技术债台账》§二与 §4.18。登记率保持 <strong>100%</strong>。</p>
 </blockquote>
 <p><strong>两条红线提醒</strong>（引《D5-1》§5.2「触发点到达后 2 个迭代内必须替换，否则升级为风险项」）：
 DEBT-006 与 DEBT-009 的触发点（P2）<strong>已到</strong>且未闭合 → 按红线应升级为风险项。
@@ -936,7 +1052,7 @@ DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<
 </tr>
 <tr>
 <td><code>docs/java-services/</code></td>
-<td>Java 逐文件说明（8 篇，覆盖 106 个手写源文件 + 90 个生成文件；08 篇为数据存储总纲）</td>
+<td>Java 逐文件说明（<strong>9 篇</strong>，覆盖 <strong>157 个手写源文件</strong> + 90 个生成文件；08 篇为数据存储总纲，<strong>09 篇为 tool-executor</strong>）</td>
 <td>增删 Java 文件后</td>
 </tr>
 <tr>
@@ -952,7 +1068,8 @@ DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<
 </tbody>
 </table>
 <hr />
-<p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em></p></main>
+<p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em>
+<em>2026-09-19 更新：Phase 5 四肢期落地 —— 新增 <code>tool-executor</code> 模块（Java 248 测）、执行视图、IN-06 契约基线门禁、DEBT-019~021；同日「真实链路打通轮」起 8090 最新 BFF + 8084 tool-executor，修复沙箱探测阻塞（<code>available()</code> 非阻塞化，+4 条探测性能契约），工具域由 <code>partial</code> 转 <code>partial:false</code>，详见《2026-09-19-工作平台真实链路打通与沙箱探测非阻塞化》。本节数字均取自 <code>mvn-dev.sh test</code> / <code>pytest</code> / <code>node --test</code> / <code>contract-check.py</code> / <code>java-doc-coverage.py</code> 的实测输出。</em></p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

@@ -7,6 +7,7 @@ export const modules: WorkModule[] = [
   { id: 'senses', path: '/senses', title: '五感矩阵', group: '生命体区', phase: 'P2', status: 'prototype', description: '视觉、听觉、触觉、嗅觉、味觉采集状态', icon: 'View' },
   { id: 'evolution', path: '/evolution', title: '进化视图', group: '生命体区', phase: 'P8', status: 'prototype', description: '反馈、自愈、幻觉率与满意度', icon: 'Refresh' },
   { id: 'collab', path: '/collab', title: '协作总线', group: '生命体区', phase: 'P3/P6', status: 'prototype', description: '多 Agent 协作域、心跳与 DAG 执行', icon: 'Share' },
+  { id: 'execution', path: '/execution', title: '执行视图', group: '生命体区', phase: 'P5', status: 'prototype', description: '工具调用流、拦截记录与沙箱隔离状态（R-C05 预）', icon: 'SetUp' },
   { id: 'tasks', path: '/tasks', title: '任务中心', group: '工作台区', phase: 'P1', status: 'ready', description: '任务生命周期、筛选与进度', icon: 'List' },
   { id: 'chat', path: '/chat', title: '任务对话', group: '工作台区', phase: 'P1', status: 'ready', description: '对话追问与结果工作区', icon: 'ChatDotRound' },
   { id: 'experts', path: '/experts', title: '专家团队', group: '工作台区', phase: 'P3', status: 'prototype', description: '专家档案、工具白名单与输出 Schema', icon: 'UserFilled' },

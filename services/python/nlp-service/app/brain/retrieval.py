@@ -19,10 +19,16 @@ import urllib.request
 from dataclasses import dataclass
 from typing import Any, Callable, Optional
 
+from app.budget import RETRIEVAL_BUDGET_MS  # 检索超时唯一口径（GAP-05 合一）
+
 logger = logging.getLogger("nlp-service.brain.retrieval")
 
 DEFAULT_BODY_BASE_URL = os.getenv("BODY_BASE_URL", "http://127.0.0.1:8083")
-DEFAULT_TIMEOUT = float(os.getenv("RETRIEVAL_TIMEOUT_SECONDS", "5"))
+# GAP-05 闭合（2026-09-19）：超时**唯一口径**是 budget.RETRIEVAL_BUDGET_MS（默认 15s）。
+# 历史：原 5s < body 读超时 10s（倒挂）；提到 8s 后曾与 RETRIEVAL_BUDGET_MS 形成
+# 「一个语义、两个常量」的潜在漂移源 —— 现已合一：这里只做毫秒→秒换算，不再独立设环境变量。
+# 下游最坏由 body 侧端到端预算 RETRIEVAL_TOTAL_BUDGET_MS（10s）收口，15s / 10s = 1.5x。
+DEFAULT_TIMEOUT = RETRIEVAL_BUDGET_MS / 1000.0
 
 
 class RetrievalUnavailable(RuntimeError):
@@ -60,11 +66,23 @@ class BodyRetriever:
         self.timeout = timeout
         self._transport = transport
 
-    def retrieve(self, query: str, tenant_id: str = "default", top_k: int = 5) -> RetrievalOutcome:
+    def retrieve(
+        self,
+        query: str,
+        tenant_id: str = "default",
+        top_k: int = 5,
+        timeout: Optional[float] = None,
+    ) -> RetrievalOutcome:
+        """检索。
+
+        `timeout`：本次调用的超时（秒）。调用方（RAG 管线）用**剩余总预算**收窄它 ——
+        这样检索不会吃掉本该留给生成的时间。传 None 用实例默认值。
+        """
         started = time.time()
+        effective = float(timeout) if timeout else self.timeout
         payload = {"query": query, "top_k": top_k, "use_cache": True}
         try:
-            rows = self._call(payload, tenant_id)
+            rows = self._call(payload, tenant_id, effective)
         except Exception as exc:  # noqa: BLE001 - 统一转为「检索不可用」
             logger.warning("retrieval failed: %s", exc)
             raise RetrievalUnavailable(str(exc)) from exc
@@ -76,9 +94,10 @@ class BodyRetriever:
             latency_ms=int((time.time() - started) * 1000),
         )
 
-    def _call(self, payload: dict, tenant_id: str) -> list:
+    def _call(self, payload: dict, tenant_id: str, timeout: Optional[float] = None) -> list:
+        effective = float(timeout) if timeout else self.timeout
         if self._transport is not None:
-            return self._transport("/api/body/retrieve", payload, {"X-Tenant-Id": tenant_id}, self.timeout)
+            return self._transport("/api/body/retrieve", payload, {"X-Tenant-Id": tenant_id}, effective)
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
         request = urllib.request.Request(  # noqa: S310 - 地址来自配置
             self.base_url + "/api/body/retrieve",
@@ -86,7 +105,7 @@ class BodyRetriever:
             headers={"Content-Type": "application/json", "X-Tenant-Id": tenant_id},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=self.timeout) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=effective) as response:  # noqa: S310
             raw = response.read().decode("utf-8")
         data = json.loads(raw)
         return data if isinstance(data, list) else []

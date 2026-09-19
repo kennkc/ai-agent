@@ -1,7 +1,7 @@
 # 06 · body-service 躯体服务（Phase 3 躯体期）
 
 > 模块路径：`services/java/body-service/`
-> 源文件：**27 个主代码（2721 行）+ 10 个测试（975 行）**
+> 源文件：**27 个主代码（2772 行）+ 11 个测试（1080 行 / 64 个用例）**
 > HTTP 端口：**8083** · gRPC 端口：**9094**
 > 外部依赖：PostgreSQL（冷层真相源）· Redis（热层缓存）· Qdrant（温层向量库）· Kafka（感官事件消费）· nlp-service（嵌入/重排）
 
@@ -58,7 +58,8 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 | `event/SenseCollectedConsumer.java` | 消费者 | 179 | R3-09 消费 `lifeform.sense.collected` |
 | `grpc/GrpcHealthServer.java` | 组件 | 24 | gRPC Health 探针 |
 | `service/IngestService.java` | 服务 | 172 | R3-02/03/04/09 入库管道与状态机 |
-| `service/RetrievalService.java` | 服务 | 183 | R3-05/06/08 检索链路 + IN-05 迭代检索预留 |
+| `common/BudgetGuard.java` | 工具 | 100 | 检索端到端预算执行器（GAP-05）：超预算抛 504 `AGENT_TIMEOUT`，与 Python `run_with_budget` 语义对齐 |
+| `service/RetrievalService.java` | 服务 | 183 | R3-05/06/08 检索链路 + IN-05 迭代检索预留；2026-09-19 起 warm 管线受端到端预算约束 |
 | `service/RagPipeline.java` | 服务 | 97 | R3-07 RAG 回答与引用 |
 | `service/KnowledgeMetrics.java` | 服务 | 104 | 检索/缓存/重排指标（采样口径） |
 | `store/MetadataStore.java` | 接口 | 33 | 冷层抽象（真相源） |
@@ -71,7 +72,7 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 | `store/StoredChunk.java` | record | 17 | 切片元数据 |
 | `store/DocumentStatus.java` | 枚举 | 9 | `PENDING / INDEXED / FAILED / DELETED` |
 
-### 3.2 测试（60 个用例，全绿）
+### 3.2 测试（64 个用例，全绿）
 
 | 文件 | 行数 | 覆盖验收点 |
 |---|---:|---|
@@ -79,6 +80,7 @@ DEBT-001 由此闭合。关键点是**对外契约保持兼容**：
 | `chunk/DocumentParserTest.java` | 91 | R3-02 格式解析：HTML 去标签不吞正文 / 实体解码 / **pdf 显式拒绝不静默分块** |
 | `client/QdrantClientTest.java` | 38 | R3-04 **point id 必须是 UUID**（E2E 缺陷回归） |
 | `common/GlobalExceptionHandlerTest.java` | 89 | 路由层错误语义：未映射路由 404 而非 500 / 405 / 415 / **真实故障仍 500**（§4.11） |
+| `controller/KnowledgeIngestInvalidationTest.java` | 105 | **写入必须失效热缓存**（一致性回归）：单篇入库 / 批量入库各失效一次 / 全失败不失效 / 删除也失效 |
 | `service/IngestServiceTest.java` | 128 | R3-09 状态机 / 失败置 FAILED / 重入库清理 |
 | `service/RetrievalServiceTest.java` | 193 | R3-05/06/08 缓存优先 / 重排降级不阻断 / 上游不可用不返回假结果 / **IN-05 预留参数** |
 | `store/HotCacheStoreTest.java` | 84 | R3-08 指纹归一化 / Redis 不可用时不伪造命中 |
@@ -189,6 +191,10 @@ Query → recordAccess（热度输入）
 | `GET` | `/api/body/knowledge/reconcile` | **三层一致性对账**（PG 真相源 vs Qdrant 点数，只读不改） |
 | `GET` | `/api/body/health` | 存活检查 |
 
+> **写路径的缓存失效**：`POST /knowledge`、`POST /knowledge/batch`（有成功项时）与
+> `DELETE /knowledge/{docId}` 都会调用 `HotCacheStore.invalidateTenant(tenant)`，
+> 否则新入库知识要等 TTL 到期才可见（见 §4.12）。
+
 **租户来源**：网关注入的 `X-Tenant-Id`，**不信任请求体里的租户字段**。
 `defaultValue="default"` 的便利性取舍仍在（缺头时落 default 而非报错），生产前需评估（见 §7）。
 
@@ -242,6 +248,25 @@ Query → recordAccess（热度输入）
 
 **修复的边界**：只把**路由层**异常分流，真实内部故障仍返回 500
 （`genuineServerFaultStillMapsTo500` 用例显式守住这条，防止"顺手把 500 也改成 4xx"）。
+
+### 4.12 写入失效热缓存（一致性回归，`controller` 层）
+
+热层缓存键是「租户 + 问题指纹」，一旦命中就**直接返回旧结果集**。删除路径一直有失效，
+但**写入路径此前漏了** —— 后果是「文档明明入库了、同一个问题还是检索不到」，
+新知识的可见性要等到缓存 TTL 到期才恢复。
+
+修复：`KnowledgeController.ingest()` / `ingestBatch()` 在**确有成功写入**后调用
+`storage.hot().invalidateTenant(tenantId)`：
+
+| 场景 | 失效次数 |
+|---|---|
+| 单篇入库成功 | 1 次 |
+| 批量入库（有成功项） | **1 次**（整批共享一次失效，不是逐篇） |
+| 批量全部失败 | **0 次**（不能因为失败而误伤他人缓存） |
+| 删除文档 | 1 次 |
+
+`KnowledgeIngestInvalidationTest` 4 项守住上表，其中"全失败不失效"是防止把失效调用
+放到 `finally` 里的"顺手修复"。
 
 ## 5. 降级清单（诚实上报，不虚构）
 

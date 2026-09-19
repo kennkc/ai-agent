@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:32 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -134,6 +134,9 @@
 <li><a href="#debt-011">DEBT-011 · 重排走词法覆盖率打分（非交叉编码器）</a></li>
 <li><a href="#debt-012">DEBT-012 · 采集事件携带正文（超限无回读路径）</a></li>
 <li><a href="#debt-013-pdf-docx">DEBT-013 · 不支持 PDF / DOCX 文档解析（本轮审核新开）</a></li>
+<li><a href="#debt-019-2026-09-19-phase-5">DEBT-019 · 工具注册表仅进程内 + 影响分析仅覆盖登记消费方（2026-09-19 Phase 5 新开）</a></li>
+<li><a href="#debt-020-networknt-everit2026-09-19-phase-5">DEBT-020 · 参数校验器实装 networknt（设计写 everit）（2026-09-19 Phase 5 新开）</a></li>
+<li><a href="#debt-021-prometheus2026-09-19-phase-5">DEBT-021 · 工具执行指标未接 Prometheus（2026-09-19 Phase 5 新开）</a></li>
 </ul>
 </li>
 <li><a href="#_4">三、关联未实现项（不属于技术债，但常被一起问到）</a></li>
@@ -155,6 +158,7 @@
 <li><a href="#415-phase-4-2026-09-19">4.15 Phase 4 运行态验证发现的缺陷（2026-09-19，均已修复）</a></li>
 <li><a href="#416-phase-4-2026-09-19">4.16 Phase 4 需求复审发现的伪实现与缺陷（2026-09-19，用户确认后均已修复）</a></li>
 <li><a href="#417-grpc-kafka-2026-09-19-debt-018">4.17 gRPC 默认端口与 Kafka 冲突（2026-09-19 发现并已修复，登记 DEBT-018）</a></li>
+<li><a href="#418-phase-5-2026-09-19">4.18 Phase 5 四肢期口径留痕（2026-09-19 复审）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -320,13 +324,40 @@
 <td>Alertmanager（P7）部署前</td>
 <td>🟡</td>
 </tr>
+<tr>
+<td><strong>DEBT-019</strong></td>
+<td>tool-executor（注册表 + 影响分析）</td>
+<td>注册表与版本历史<strong>仅进程内</strong>（设计写 "etcd/内存"，取内存一侧）；影响分析只覆盖 <code>registerConsumer</code> <strong>显式登记</strong>的消费方，硬编码调用方查不到</td>
+<td>持久化 / 跨实例共享的注册中心；消费方关系自动发现</td>
+<td>多实例部署或需要重启保留注册表时</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-020</strong></td>
+<td>tool-executor（参数校验器选型）</td>
+<td>实装 <strong>networknt json-schema-validator</strong>（Draft-07），设计文档写 "JSON Schema (everit)"</td>
+<td>everit-org/json-schema（或与设计文档口径统一）</td>
+<td>需要与设计文档选型严格一致时</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-021</strong></td>
+<td>tool-executor（执行指标）</td>
+<td>指标为<strong>进程内滑动窗口</strong>（最近 500 次），<strong>未接 Prometheus</strong>，仅对视图/报表供数</td>
+<td>接入 Micrometer / Prometheus 暴露 <code>/actuator/prometheus</code></td>
+<td>需要跨实例聚合或告警时</td>
+<td>🟡</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
 <p><code>DEBT-004</code> / <code>DEBT-008</code> <strong>从未被使用</strong>（编号跳号，见 §4.4）。
 <strong>2026-09-18 补记</strong>：DEBT-010 / 011 / 012 在代码里早已引用（<code>nlp-service</code> 两处 + <code>SenseEventPublisher</code> 一处），
 但此前<strong>未登记本表</strong> —— 与 §4.4「后续新债从 DEBT-010 起编」的约定直接冲突。本轮审核已补齐，
-并新开 DEBT-013（PDF 解析缺口）。</p>
+并新开 DEBT-013（PDF 解析缺口）。
+<strong>2026-09-19 Phase 5 补记</strong>：新增 <strong>DEBT-019 / 020 / 021</strong>（注册表仅进程内 / 校验器选型差异 / 指标未接 Prometheus）。
+三条均为<strong>显式降级或选型留痕</strong>：<code>registry_backend=in-memory</code>、<code>ImpactReport.note</code>、
+<code>ToolGuard</code> 类注释、<code>ToolMetrics</code> 类注释四处都能读到实况，不属伪实现。登记率保持 <strong>100%</strong>。</p>
 </blockquote>
 <hr />
 <h2 id="_3">二、逐条详情<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
@@ -456,6 +487,42 @@
   属于典型"看起来成功"的伪实现——本仓库红线是宁可报错也不产脏知识。</li>
 <li><strong>证据</strong>：<code>services/java/body-service/src/main/java/com/agent/body/chunk/DocumentParser.java:47-49,81-84</code>；
   回归用例 <code>chunk/DocumentParserTest.unsupportedFormatsAreRejectedWithGuidanceNotSilentlyChunked</code>。</li>
+</ul>
+<h3 id="debt-019-2026-09-19-phase-5">DEBT-019 · 工具注册表仅进程内 + 影响分析仅覆盖登记消费方（2026-09-19 Phase 5 新开）<a class="headerlink" href="#debt-019-2026-09-19-phase-5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：<code>ToolRegistry</code> 的 <code>definitions</code>（工具条目）与 <code>history</code>（版本/变更历史）都是
+  <code>ConcurrentHashMap</code> / <code>ArrayDeque</code> —— <strong>纯进程内</strong>，重启即清空，多实例之间不共享。
+  注册来源是 <code>ToolBootstrap</code> 在 <code>ApplicationReadyEvent</code> 时的内置工具自注册（三个内置工具硬编码在启动类里）。
+  影响分析的数据源是 <code>registerConsumer(tool, agentId, flowId)</code>，<strong>只反映声明过的调用方</strong>。</li>
+<li><strong>正式目标</strong>：注册表持久化（etcd 或 DB）+ 多实例共享；消费方关系从「手工登记」升级为可发现/可校验。</li>
+<li><strong>触发点</strong>：多实例部署，或需要「重启后注册表仍在」时。</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到）。</li>
+<li><strong>为什么如实标注</strong>：<code>GET /api/tool/list</code> 与 <code>/health</code> 都回传 <code>registry_backend=in-memory</code>，
+  <code>ImpactReport.note</code> 也明写「硬编码调用方不会出现在此列表中」—— 不把内存注册表描述成注册中心。</li>
+<li><strong>证据</strong>：<code>services/java/tool-executor/src/main/java/com/agent/tool/registry/ToolRegistry.java:30</code>；
+  <code>registry/ToolBootstrap.java:26</code>；<code>registry/ImpactReport.java:10</code>。</li>
+</ul>
+<h3 id="debt-020-networknt-everit2026-09-19-phase-5">DEBT-020 · 参数校验器实装 networknt（设计写 everit）（2026-09-19 Phase 5 新开）<a class="headerlink" href="#debt-020-networknt-everit2026-09-19-phase-5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现 / 选型留痕</strong>：<code>ToolGuard</code> 用 <code>JsonSchemaFactory.getInstance(SpecVersion.VersionFlag.V7)</code>
+  —— 即 <strong>networknt json-schema-validator</strong>；而开发设计文档写的是 <strong>everit-org/json-schema</strong>。</li>
+<li><strong>正式目标</strong>：与设计文档选型严格一致（或反向修订设计文档口径）。</li>
+<li><strong>性质</strong>：<strong>同为 Draft-07 校验器、能力等价</strong>，不构成验收阻塞；差异仅在依赖实现与错误消息格式。
+  校验失败时返回的是<strong>字段级 details</strong>（<code>instanceLocation → message</code>），不依赖某一实现的私有 API。</li>
+<li><strong>触发点</strong>：需要与设计文档选型严格一致时。</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到）。</li>
+<li><strong>证据</strong>：<code>services/java/tool-executor/src/main/java/com/agent/tool/guard/ToolGuard.java:41</code>。</li>
+</ul>
+<h3 id="debt-021-prometheus2026-09-19-phase-5">DEBT-021 · 工具执行指标未接 Prometheus（2026-09-19 Phase 5 新开）<a class="headerlink" href="#debt-021-prometheus2026-09-19-phase-5" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>简化实现</strong>：<code>ToolMetrics</code> 用 <code>ConcurrentLinkedDeque</code> 保留最近 <strong>500</strong> 次调用样本，
+  给出 <code>success_rate / p50 / p95 / p99 / blocked_calls / calls_by_tool</code>。<strong>纯进程内</strong>，
+  不暴露 <code>/actuator/prometheus</code>，不跨实例聚合。</li>
+<li><strong>正式目标</strong>：接入 Micrometer + Prometheus（跨实例聚合、可告警）。</li>
+<li><strong>触发点</strong>：需要跨实例聚合指标或据此配置告警时。</li>
+<li><strong>状态</strong>：🟡 未闭合（触发点未到）。<strong>不影响</strong> DoD「工具成功率 ≥ 90%」「执行 P99 &lt; 2s」的量化验收
+  —— 当前指标正是这两条验收的数据来源（视图 <code>/metrics</code> 可读）。</li>
+<li><strong>证据</strong>：<code>services/java/tool-executor/src/main/java/com/agent/tool/exec/ToolMetrics.java:17</code>。</li>
 </ul>
 <hr />
 <h2 id="_4">三、关联未实现项（<strong>不属于技术债</strong>，但常被一起问到）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
@@ -1075,6 +1142,126 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <p><strong>共性</strong>：与 §4.15/4.16 同源 —— 都是"<strong>跑运行态才暴露</strong>"。设计注册表把两套端口写在同一个区间，
 纸面自洽，直到 Kafka 先起、session-manager 后起才撞上。</p>
 </blockquote>
+<h3 id="418-phase-5-2026-09-19">4.18 Phase 5 四肢期口径留痕（2026-09-19 复审）<a class="headerlink" href="#418-phase-5-2026-09-19" title="Permanent link">&para;</a></h3>
+<p>Phase 5 新增 <code>tool-executor</code>，复审时逐条追问"这段代码真的在做它声称的事吗"。三处需要留痕，
+<strong>均不属于伪实现</strong>（区别见 §3.1「诚实降级 vs 伪实现的分野」）：</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>实况</th>
+<th>定性</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>Docker 沙箱未在本机验证</strong></td>
+<td>实测 <code>GET /api/tool/sandbox</code> 返回 <code>docker_available=false</code>、<code>degraded=true</code>、<code>active_backend=process-restricted</code>；<code>agent-sandbox:latest</code> 镜像<strong>未构建</strong>（<code>infra/docker/sandbox/Dockerfile</code> 已就位，但尚无 build 记录）</td>
+<td><strong>环境缺口</strong>，非伪实现：降级后端<strong>恒带 <code>degraded=true</code></strong>（<code>SandboxExecutor.execute()</code> 末尾强制补标），视图显示降级徽标，<code>status().note</code> 明写"未检测到可用沙箱镜像"。<strong>R5-03 的验收结论只能说"在降级后端验证过"</strong>，Docker 真隔离路径待镜像构建后补验</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>Nacos 注册默认关闭</strong></td>
+<td>各服务 <code>register-enabled: ${NACOS_ENABLED:false}</code></td>
+<td><strong>有意的场景化默认</strong>：单体本地开发/单测/CI 无需 Nacos；集成环境置 <code>NACOS_ENABLED=true</code>。部署文档 §3 的"Nacos 注册"指集成口径。已写入 <a href="java-services/09-tool-executor.md">09-tool-executor</a> §9</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>审计真相源是 PG，Kafka 是旁路</strong></td>
+<td><code>AuditEventPublisher</code> 失败即降级、<strong>绝不抛出</strong>；<code>health()</code> 自述 <code>role=event-sidecar</code> / <code>truth_source=postgres.tool_audit_log</code></td>
+<td><strong>有意的可用性取舍</strong>：总线抖动不能让一次已完成的工具调用在审计上"消失"。PG 不可达时审计降级内存环形缓冲并标 <code>degraded=true</code>（DEBT 未开：触发点为"审计需长期留存"，内存缓冲重启即失已如实上报）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>机制补记</strong>：§4.12 指出的"<strong>文档基线数字无人守</strong>"在 Phase 5 再次应验 ——
+本轮复跑 <code>java-doc-coverage.py</code> 时发现 <code>tool-executor</code> 在 <code>docs/</code> 全仓<strong>零提及</strong>（P0-03），
+且体层/session 各有一个测试文件漏登记。已补 <code>09-tool-executor.md</code> 并回填；门禁现 <strong>158/158 全绿</strong>
+（2026-09-19 真实链路轮再增 <code>DockerSandboxBackendTest</code> 后为 158/158）。
+待办 17 的"数字级门禁"<strong>已于 2026-09-19 落地</strong>（超时预算轮）：<code>contracts/timeout-budget.yaml</code>
+登记表 + <code>scripts/timeout-budget-check.py</code> 三层门禁（语义 / 锚点 / 魔法数字），
+且<strong>锚点校验本身就是"防表里写 A、代码是 B"的机器化形式</strong>；
+同轮另补 <code>scripts/doc-consistency-check.py</code>（异常编号唯一 / 章节号唯一 / md↔html 孪生同步），
+起因是本轮<strong>自己</strong>在 <code>docs/异常流程归纳.md</code> 里写出了一个撞号（<code>D-17</code>~<code>D-21</code> 与既有号重复，
+文档照常渲染、门禁全绿）—— 又是"约束写在文档里、没人守"的同一形状。
+但<strong>两道门禁都只覆盖各自的数字类型</strong> —— 用例数 / 行数 / 端点计数仍靠人工核对，
+待办 17 只算<strong>部分闭合</strong>。</p>
+<p><strong>新增观察（2026-09-19 真实链路轮）——"跨服务超时预算"是一类无人守的接缝</strong>：
+<code>DockerSandboxBackend.available()</code> 在请求线程内同步跑 docker CLI（冷探测 5.7s），
+超出上游 wp-bff 的工具域子请求预算（<code>httpRequestJson</code> 默认 <strong>5000ms</strong>；冷探测 5.7s，
+<strong>余量仅 0.7s</strong>），导致工具域把"慢"表达为 <code>sandbox_unavailable</code>。
+两侧各自看都"没问题"：服务侧端点确实返回 200，BFF 侧也确实守住了自己的超时预算；
+<strong>缺陷只存在于两个预算的差值里</strong>，且不影响任何功能断言。已修复（探测非阻塞化），
+详见 <code>docs/优化日志/2026-09-19-工作平台真实链路打通与沙箱探测非阻塞化.md</code>。
+<strong>建议</strong>：凡为跨服务调用设超时的位置，都应在文档里写清"对端该操作的最坏耗时"，
+否则超时值就是拍脑袋，而代价是静默降级而非报错。</p>
+<p><strong>2026-09-19 续记（优化建议落地轮）——上游表达层已修，"慢"不再被写成"没有"</strong>：
+wp-bff 新增 <code>httpRequestJsonMeta()</code>，失败原因分五类返回
+（<code>timeout</code> / <code>unreachable</code> / <code>endpoint_missing</code> / <code>http_error</code> / <code>bad_json</code>），
+工具域分片缺失码随之外带后缀（<code>sandbox_timeout</code> vs <code>sandbox_missing</code> vs <code>sandbox_unavailable</code>），
+并保证<strong>沙箱分片的预算单独放宽</strong>（它是唯一触发容器探测的子请求）。
+当时<strong>"预算乘积无人守"这条并未闭合</strong> —— 能<strong>看得见</strong>是超时还是缺失，
+但<strong>不能防</strong>新设的超时值再次小于对端最坏耗时。
+详见 <code>docs/优化日志/2026-09-19-优化建议落地-超时语义区分与启动链路自检.md</code> §6。</p>
+<p><strong>2026-09-19 闭合（超时预算登记表轮）—— 从"看得见"升级为"挡得住"</strong>：
+新增 <code>contracts/timeout-budget.yaml</code>（19 条跨服务调用边，逐条登记
+<code>from/to/operation/上游预算/下游最坏耗时/余量比/代码锚点</code>）+
+<code>scripts/timeout-budget-check.py</code> 三层校验：
+① <strong>语义层</strong> —— 上游预算 ≥ 下游最坏耗时 × 1.5 最小余量比；
+② <strong>锚点层</strong> —— 按表中声明的位置正则提取代码实值并与表中数字比对（防"表写 A、代码是 B"）；
+③ <strong>魔法数字层</strong> —— 扫描 <code>timeoutMs: &lt;数字&gt;</code> 形式的硬编码，逼调用点走命名档位
+   （本轮正是它抓出 <code>server.js</code> 里漏改的 <code>timeoutMs: 30000</code>）。
+首轮结果 <strong>ok=14 / gap=5 / fail=0</strong>：gap 为<strong>已声明但未修</strong>的倒挂（GAP-01~05，均在 wp-bff 之外），
+门禁<strong>列出但不判失败</strong>，避免"绿了就当不存在"。wp-bff 自身 5 处倒挂已修
+（<code>brain/ask</code> / <code>memory/*</code> 由默认 5000ms 提到 <code>GENERATE</code> 档 45000ms，
+而 LLM 级联最坏 22s —— <strong>修复前即已倒挂</strong>：只跑 TemplateEngine 时最坏 6s &gt; 5s）。
+反向验证已做：人为制造预算不足 → <code>fail=3 / exit=1</code>；植入魔法数字 → 立即 FAIL；还原即绿。
+详见 <code>docs/优化日志/2026-09-19-跨服务超时预算登记表与门禁落地.md</code>。</p>
+<p><strong>2026-09-19 续记（REC-01 轮）——「下游自己必须有上限」比「上游调大」更根本</strong>：
+首轮 5 条 gap 里有 2 条的本质是<strong>下游不可证明</strong>（Python 侧 <code>/embed</code>、<code>/ocr</code> 没有自己的超时，
+于是"下游最坏耗时"填多少都是猜）。本轮实现 <strong>deadline propagation</strong>：
+nlp-service 新增 <code>app/budget.py</code>（<code>run_with_budget</code> / <code>BudgetExceeded</code>），
+<code>BRAIN_TOTAL_BUDGET_MS</code> 25s、<code>EMBED_BUDGET_MS</code> / <code>OCR_BUDGET_MS</code> 12s、
+<code>RETRIEVAL_BUDGET_MS</code> 8s，超时统一返回 504 <code>AGENT_TIMEOUT</code>；
+LLM 级联每级取 <code>min(该级超时, 剩余总预算)</code>；session-manager 新增 <code>RequestBudget</code>
+（一次 ask 35s，逐跳 <code>clamp</code>）与具名档位（<code>INTENT</code> 5s / <code>RETRIEVE</code> 15s / <code>BRAIN</code> 30s）。
+结果 <strong>ok=16 / gap=3 / fail=0</strong>：<strong>GAP-02 / GAP-03 / GAP-04 闭合</strong>，
+GAP-01 / GAP-05 余量比改善但仍未达标（0.91x / 0.80x），
+并<strong>新登记 GAP-06</strong> —— session 总预算 35s 把 wp-bff <code>GENERATE</code> 45s 的余量摊薄到 1.29x。
+<strong>教训（本轮最重要的一条）</strong>：给下游加预算上限会让下游最坏耗时"从不可证明变为有界"，
+但同时<strong>改变了上游的余量比</strong> —— 闭合一个缺口可能制造另一个，两侧必须同轮复核。
+登记表锚点同步披露了一个门禁自身缺陷：原锚点正则 <code>READ_TIMEOUT = Duration\.ofSeconds\((\d+)\)</code>
+会<strong>子串命中</strong> <code>DEFAULT_READ_TIMEOUT</code>，导致 TB-11/TB-12 长期读到 10s 而<strong>不报漂移</strong>——
+已改为具名档锚点（<code>BRAIN_TIMEOUT</code> / <code>RETRIEVE_TIMEOUT</code>）并给下游补锚。
+同轮还由测试抓出并修掉一个<strong>真缺陷</strong>：<code>0 = 不限</code> 是 <code>Deadline</code> / <code>run_with_budget</code> 的既定约定
+（配置层合理），但管线把<strong>算出来的剩余 0</strong>（含义"时间到了"）原样传给网关，被同一条约定读成
+<strong>"不限"</strong> → <strong>检索吃光预算后生成无界运行</strong>，即「整条链路 ≤ 预算」在有检索的问答里并不成立。
+修法：<strong>约定不动</strong>，在管线层禁止"把耗尽表达成 0"（<code>_node_generate</code> 剩余 ≤0 直接不发起生成，
+标 <code>budget_exhausted_before_generation</code>）。反向验证已做：守卫短路 → 用例报红且输出
+<code>calls=[0]</code>，直指"以 0 调用网关"。<strong>认知：把两种语义压进同一个值的约定，必须额外规定
+"谁不得产生歧义值"，否则约定本身成为漏洞的载体。</strong>
+详见 <code>docs/优化日志/2026-09-19-REC-01-LLM级联总预算与跨服务预算同步.md</code>。</p>
+<p><strong>2026-09-19 续记（GAP 收尾轮）—— 三条遗留倒挂一次闭合，跨服务预算余量全部 ≥ 1.5x（ok=19 / gap=0 / fail=0）</strong>：
+- <strong>GAP-01 闭合（方向：收紧下游，而非调大上游）</strong>：<code>BRAIN_TOTAL_BUDGET_MS</code> 25s → <strong>20s</strong>
+  （原 25s &gt; 级联推导最坏 22s，上限从不构成约束）；session <code>BRAIN_TIMEOUT</code> 30s 对它恰好 1.5x。
+  不选"上游抬到 33s"——那会把 session 总预算顶到 38s，反把 GAP-06 恶化到需 ≥57s 才能盖住。
+- <strong>GAP-05 闭合（并修正一处登记表失真）</strong>：body <code>/retrieve</code> 真实管线 = 嵌入 12s + Qdrant 2s + 重排 10s，
+  表里登记的"下游最坏 10s"实为 body 出站读超时，<strong>把单个出站超时误当端到端最坏</strong>。
+  修法按 REC-01 同路线给 body 检索加端到端预算 <code>RETRIEVAL_TOTAL_BUDGET_MS</code> = 10s（新增
+  <code>BudgetGuard</code>，超时 504 <code>AGENT_TIMEOUT</code>，不返回空结果冒充"无结果"）；
+  上游 <code>RETRIEVAL_BUDGET_MS</code> 8s → 15s，并<strong>废除第二套口径</strong> <code>RETRIEVAL_TIMEOUT_SECONDS</code>
+  （retrieval.py 的 DEFAULT_TIMEOUT 改由 budget.py 派生）。
+- <strong>GAP-06 闭合（单列档位）</strong>：wp-bff 新增 ASK 档 <strong>53s</strong> 只服务 session /ask 边；
+  GENERATE 档保持 45s 不动（被 /brain/ask 等多条边共享，抬高会把那些"快速失败并降级"的边一起拖慢）。
+- <strong>REC-02 部分闭合</strong>：门禁已挂进 <code>scripts/start.sh</code> preflight（仓内无 CI 工作流，CI 部分待建）。
+- <strong>验证</strong>：Java <strong>251</strong> 全绿（body +3：预算用例与守卫）、Python 158 全绿、wp-bff 87 全绿（新增
+  ASK 档断言 + "ASK 必须严格大于 GENERATE"防退化断言）；登记表门禁反向验证（锚点漂移 → fail=1 / exit=1）。
+- <strong>测试揭出的写用例陷阱</strong>：mock 掉 <code>embedOne</code> 后，stub 其内部的 <code>embed</code> 会被<strong>静默跳过</strong>
+  （拦截层根本不会走到真实方法体）——stub 必须打在<strong>被调用的那一层</strong>，否则用例假绿。
+详见 <code>docs/优化日志/2026-09-19-GAP收尾-三条倒挂一次闭合与登记表失真修正.md</code>。</p>
+</blockquote>
 <hr />
 <h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1304,6 +1491,26 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td><code>services/java/session-manager/.../resources/application.yml</code>（<code>grpc.port</code> 注释）</td>
 <td>DEBT-018（<strong>配置项</strong>，非 Java 代码注释）</td>
 </tr>
+<tr>
+<td><code>services/java/tool-executor/.../registry/ToolRegistry.java:30</code></td>
+<td>DEBT-019</td>
+</tr>
+<tr>
+<td><code>services/java/tool-executor/.../registry/ToolBootstrap.java:26</code></td>
+<td>DEBT-019</td>
+</tr>
+<tr>
+<td><code>services/java/tool-executor/.../registry/ImpactReport.java:10</code></td>
+<td>DEBT-019</td>
+</tr>
+<tr>
+<td><code>services/java/tool-executor/.../guard/ToolGuard.java:41</code></td>
+<td>DEBT-020</td>
+</tr>
+<tr>
+<td><code>services/java/tool-executor/.../exec/ToolMetrics.java:17</code></td>
+<td>DEBT-021</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
@@ -1314,6 +1521,8 @@ DEBT-013 为本轮新开。<strong>登记率现已 100%</strong>：代码中出�
 不属伪实现；触发点已写明，登记率保持 100%。</p>
 <p><strong>2026-09-19 端口修复补记</strong>：新增 DEBT-018（gRPC 默认端口与 Kafka 冲突，见 §4.17）。
 与其余条目不同，它落在<strong>配置 + 设计注册表</strong>而非代码注释，故索引指向 <code>application.yml</code>。</p>
+<p><strong>2026-09-19 Phase 5 补记</strong>：新增 DEBT-019~021（均落在 <code>services/java/tool-executor/</code> 的类注释，
+见上表末三行）。三者触发点均未到，登记率保持 100%。</p>
 </blockquote>
 <hr />
 <p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em>

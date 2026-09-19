@@ -6,6 +6,7 @@ import com.agent.session.kafka.KafkaEventPublisher;
 import com.agent.session.bus.BusProxy;
 import com.agent.session.orchestration.BodyClient;
 import com.agent.session.orchestration.NlpClient;
+import com.agent.session.orchestration.RequestBudget;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.junit.jupiter.api.Test;
 import org.springframework.data.redis.core.HashOperations;
@@ -63,9 +64,12 @@ class SessionControllerTest {
         stored.put("tenant_id", "tenant-a");
         when(hash.entries("session:s1")).thenReturn(stored);
         NlpClient nlp = mock(NlpClient.class);
-        when(nlp.recognize(eq("hello"), eq("s1"), eq("tenant-a"))).thenReturn(Map.of("intent", "knowledge"));
+        // 三跳（意图 / 大脑 / 检索）现在共享同一个 RequestBudget，故签名多一个预算参数
+        when(nlp.recognize(eq("hello"), eq("s1"), eq("tenant-a"), any(RequestBudget.class)))
+                .thenReturn(Map.of("intent", "knowledge"));
         BodyClient body = mock(BodyClient.class);
-        when(body.retrieve("hello", "tenant-a")).thenReturn(List.of(Map.of("title", "Doc", "content", "hello world")));
+        when(body.retrieve(eq("hello"), eq("tenant-a"), any(RequestBudget.class)))
+                .thenReturn(List.of(Map.of("title", "Doc", "content", "hello world")));
         SessionController controller = new SessionController(redis, mock(BusProxy.class), mock(KafkaEventPublisher.class), nlp, body, new ObjectMapper());
         Map<String, Object> result = controller.ask("s1", "tenant-a", new SessionController.AskRequest("hello"));
         assertEquals("knowledge", result.get("intent"));

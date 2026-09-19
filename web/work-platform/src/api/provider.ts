@@ -5,12 +5,13 @@ import {
   metrics, getMiddlewareOverview, modelCallSeries, modelRoutes, modelRuntimeNodes, modelTokenTrend, notifications,
   onlineAgents, optimizationSuggestions, organs, remoteChannels, remoteFlow, resultArtifacts,
   searchIndex, senses, serviceHealth, skills, startMiddlewareMock, stopMiddlewareMock, buildSuggestionExecution, tasks, teamWorkflow, todaySummary, tracingSeed, vitalSigns,
+  executionSeed, executeToolMock, toolImpactMock,
 } from './mock'
 import { reportApiOk, reportDegrade } from './status'
 import type {
-  BrainAnswer, KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
+  BrainAnswer, ExecutionOverview, ExecutionTool, KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
   MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SessionContext, SessionInfo, SessionStats,
-  SuggestionExecution, TracingOverview,
+  SuggestionExecution, ToolExecutionResult, ToolImpactReport, TracingOverview,
 } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
 const api = axios.create({
@@ -429,6 +430,129 @@ export const dataProvider = {
     } catch (error) {
       reportDegrade('tracing', (error as Error)?.message || 'BFF /tracing 不可达')
       return fallback
+    }
+  },
+
+  /**
+   * R-C05(预) 执行视图：四肢层工具调用流 + 沙箱状态（BFF 代理 tool-executor）。
+   *
+   * 三条约定：
+   *   1. 四肢层不可用（BFF 200 + `available:false`）→ 回**演示数据**并登记降级，
+   *      界面据此打「演示数据」徽标 —— 不让"读不到"被渲染成"零次调用"。
+   *   2. `partial=true` 时保留真实分片、缺片为 `null`，界面逐片标注而不是补 0。
+   *   3. 工具清单/审计记录一律来自上游，前端**不本地编造**工具条目。
+   */
+  async getExecution(): Promise<ExecutionOverview> {
+    if (source === 'mock') return executionSeed
+    try {
+      const payload = unwrapBody(await api.get('/tools'))
+      if (!payload || typeof payload !== 'object' || !('available' in payload)) {
+        reportDegrade('execution', '响应缺少 available 字段')
+        return { ...executionSeed, available: false, reason: '响应结构不符合契约', data_source: 'mock' }
+      }
+      if (payload.available === false) {
+        reportDegrade('execution', String(payload.reason || '四肢层不可用（tool-executor 未启动）'))
+        return { ...(payload as ExecutionOverview), data_source: 'live' }
+      }
+      reportApiOk('execution')
+      if (payload.partial) {
+        reportDegrade('execution_partial', `分片缺失：${(payload.partial_reasons || []).join(', ') || '未知'}`)
+      }
+      return { ...(payload as ExecutionOverview), data_source: 'live' }
+    } catch (error) {
+      reportDegrade('execution', (error as Error)?.message || 'BFF /tools 不可达')
+      return {
+        ...executionSeed, available: false, data_source: 'mock',
+        reason: 'BFF /tools 不可达（wp-bff 未启动）：以下为演示回落数据',
+      }
+    }
+  },
+
+  /**
+   * R5-02 工具执行（写路径）。
+   *
+   * Mock 数据源下只做**本地守卫复演**（危险参数照样被拒），结果统一带
+   * `data_source:'mock'` + `reason`，界面打「演示」徽标 —— 绝不假装真跑过工具。
+   * 切到 api 后真正触达 tool-executor；工具被守卫/沙箱拒绝时 `success:false`
+   * 但 `available:true`（这是已落审计的真实调用结果，不是服务不可用）。
+   */
+  async executeTool(toolName: string, args: Record<string, unknown> = {}): Promise<ToolExecutionResult> {
+    if (source === 'mock') return executeToolMock(toolName, args)
+    try {
+      const payload = unwrapBody(await api.post('/tools/execute', { tool_name: toolName, arguments: args }))
+      if (!payload || typeof payload !== 'object' || !('available' in payload)) {
+        reportDegrade('tool_execute', '响应缺少 available 字段')
+        return { available: false, tool_name: toolName, reason: '响应结构不符合契约' }
+      }
+      if (payload.available === false) {
+        reportDegrade('tool_execute', String(payload.reason || '四肢层不可用'))
+      } else if (payload.success === false) {
+        reportDegrade('tool_execute', `工具被拒：${payload.error_code} ${payload.error_message || ''}`.trim())
+      } else {
+        reportApiOk('tool_execute')
+      }
+      return { data_source: 'live', ...(payload as ToolExecutionResult) }
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      const reason = status === 401 || status === 403
+        ? `写路径鉴权失败（HTTP ${status}）：控制令牌缺失或来源不在白名单`
+        : ((error as Error)?.message || 'BFF /tools/execute 不可达')
+      reportDegrade('tool_execute', reason)
+      return { available: false, tool_name: toolName, reason }
+    }
+  },
+
+  /**
+   * IN-06 单工具详情（BFF `GET /tools/{name}` → `{ tool: {...} }`）。
+   *
+   * 与 `getExecution()` 的工具清单同构，区别只是取单个。取不到返回 `null`，
+   * 由调用方决定展示"未登记"而非编造一个工具。
+   */
+  async getToolDetail(toolName: string): Promise<ExecutionTool | null> {
+    if (source === 'mock') {
+      return (executionSeed.tools || []).find((item) => item.name === toolName) || null
+    }
+    try {
+      const payload = unwrapBody(await api.get(`/tools/${encodeURIComponent(toolName)}`))
+      const tool = (payload && (payload.tool ?? payload)) as ExecutionTool
+      if (!tool || !tool.name) {
+        reportDegrade('tool_detail', '响应缺少工具字段')
+        return null
+      }
+      reportApiOk('tool_detail')
+      return tool
+    } catch (error) {
+      reportDegrade('tool_detail', (error as Error)?.message || `BFF /tools/${toolName} 不可达`)
+      return null
+    }
+  },
+
+  /**
+   * IN-06 变更影响分析（BFF `GET /tools/{name}/impact` → `{ impact: {...} }`）。
+   *
+   * **注意口径**：`affected_agents/flows` 只覆盖注册表**显式登记**过的消费方，
+   * 空列表 ≠ 无影响。界面必须把这句 note 一并展示，避免把"没登记"读成"很安全"。
+   */
+  async getToolImpact(toolName: string): Promise<ToolImpactReport> {
+    if (source === 'mock') return toolImpactMock(toolName)
+    try {
+      const payload = unwrapBody(await api.get(`/tools/${encodeURIComponent(toolName)}/impact`))
+      const impact = (payload && (payload.impact ?? payload)) as ToolImpactReport
+      if (!impact || !impact.tool_name) {
+        reportDegrade('tool_impact', '响应缺少影响分析字段')
+        return { ...toolImpactMock(toolName), data_source: 'mock', note: '响应结构不符合契约，以下为演示数据' }
+      }
+      reportApiOk('tool_impact')
+      return {
+        ...impact,
+        affected_agents: impact.affected_agents || [],
+        affected_flows: impact.affected_flows || [],
+        data_source: 'live',
+      }
+    } catch (error) {
+      const reason = (error as Error)?.message || `BFF /tools/${toolName}/impact 不可达`
+      reportDegrade('tool_impact', reason)
+      return { ...toolImpactMock(toolName), data_source: 'mock', note: `影响分析不可用（${reason}）：以下为演示数据` }
     }
   },
 

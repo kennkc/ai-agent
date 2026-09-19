@@ -25,11 +25,20 @@ from app.brain.pipeline import RagPipeline
 from app.brain.planner import PLANNER
 from app.brain.retrieval import RETRIEVER
 from app.brain.semantic_cache import SEMANTIC_CACHE
+from app.budget import (
+    BRAIN_TOTAL_BUDGET_MS,
+    BudgetExceeded,
+    EMBED_BUDGET_MS,
+    OCR_BUDGET_MS,
+    budget_status,
+    run_with_budget,
+)
 from app.chunking import chunk_text
 from app.embedding import EMBEDDING_SERVICE
 from app.intent import CASCADE, EVAL_CORPUS, CORE_SCENARIOS
 from app.ocr import OCR_SERVICE
 from app.reranker import RERANKER_SERVICE, RerankCandidate
+from app.tools import FUNCTION_CALLING
 
 app = FastAPI(
     title="agent-lifeform nlp-service",
@@ -116,7 +125,9 @@ def healthz():
             "embedding": EMBEDDING_SERVICE.status()["backend"],
             "reranker": RERANKER_SERVICE.status()["backend"],
             "planner": "rule(SimplePlanner)", "llm": BRAIN_PIPELINE.gateway.health()["engines"],
-            "semantic_cache": SEMANTIC_CACHE.backend}
+            "semantic_cache": SEMANTIC_CACHE.backend,
+            # 具名预算口径（REC-01）：运维一眼看到「这次请求最多能跑多久」
+            "budget": budget_status()}
 
 
 # ─────────── Phase 4 大脑层 ───────────
@@ -173,6 +184,7 @@ def brain_ask(req: BrainAskRequest, request: Request):
         intent_confidence=confidence,
         context=req.context,
         use_cache=req.use_cache,
+        deadline_ms=BRAIN_TOTAL_BUDGET_MS,
     )
     LATENCY_WINDOW.append(float(result.latency_ms))
     return result.to_dict()
@@ -292,6 +304,50 @@ def latency_percentiles() -> dict:
     }
 
 
+# ─────────── 四肢层：Function Calling（R5-06）───────────
+class ToolPlanRequest(BaseModel):
+    question: str
+    tenant_id: str = "default"
+
+
+class ToolRunRequest(BaseModel):
+    question: str
+    tenant_id: str = "default"
+
+
+@app.get("/api/nlp/tools/specs")
+def tool_specs():
+    """工具描述（**运行时从 tool-executor 注册表拉取**，Python 侧不另存一份工具真相）。"""
+    return FUNCTION_CALLING.specs()
+
+
+@app.get("/api/nlp/tools/health")
+def tool_health():
+    """四肢层连通性（含沙箱后端与是否降级），供工作平台执行视图探测。"""
+    return FUNCTION_CALLING.health()
+
+
+@app.post("/api/nlp/tools/plan")
+def tool_plan(req: ToolPlanRequest):
+    """工具决策（R5-06 前半段）。**决策器为规则实现，如实返回 decider=rule**。"""
+    if not (req.question or "").strip():
+        raise HTTPException(status_code=400, detail="question must not be blank")
+    return FUNCTION_CALLING.decide(req.question).to_dict()
+
+
+@app.post("/api/nlp/tools/run")
+def tool_run(req: ToolRunRequest):
+    """组合任务（R5-06 验收："计算+查询"）——决策 → 执行 → 回填 → 回答。
+
+    工具失败时**如实回填失败原因**，绝不编造一个看起来成功的答案。
+    """
+    if not (req.question or "").strip():
+        raise HTTPException(status_code=400, detail="question must not be blank")
+    outcome = FUNCTION_CALLING.run(req.question)
+    LATENCY_WINDOW.append(outcome.get("tool_count", 0) * 10 + 5)
+    return outcome
+
+
 # ─────────── 意图识别 ───────────
 class IntentRequest(BaseModel):
     text: str
@@ -393,8 +449,15 @@ def ocr_health():
 
 @app.post("/api/nlp/ocr", response_model=OcrResponseModel)
 def ocr(req: OcrRequest):
+    """图片识别。**有独立预算**（GAP-04）：OCR 引擎卡住时按 504 如实超时，
+    不再无穷等待后由调用方的读超时兜底 —— 那会把「慢」显示成「感官层不可用」。"""
     try:
-        result = OCR_SERVICE.recognize_base64(req.image_base64)
+        result = run_with_budget(
+            lambda: OCR_SERVICE.recognize_base64(req.image_base64),
+            OCR_BUDGET_MS, operation="nlp.ocr",
+        )
+    except BudgetExceeded as exc:
+        raise HTTPException(status_code=504, detail=f"OCR 超出预算 {exc.budget_ms}ms") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:
@@ -426,8 +489,15 @@ def embed_health():
 
 @app.post("/api/nlp/embed", response_model=EmbedResponseModel)
 def embed(req: EmbedRequest):
+    """向量化。**有独立预算**（GAP-03）：原实现无超时，挂起时只能靠 body-service 的
+    30s 读超时兜底，体层入库/检索会被一起拖死。超时按 504 如实返回。"""
     try:
-        result = EMBEDDING_SERVICE.encode([text or "" for text in req.texts])
+        result = run_with_budget(
+            lambda: EMBEDDING_SERVICE.encode([text or "" for text in req.texts]),
+            EMBED_BUDGET_MS, operation="nlp.embed",
+        )
+    except BudgetExceeded as exc:
+        raise HTTPException(status_code=504, detail=f"嵌入超出预算 {exc.budget_ms}ms") from exc
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
     except RuntimeError as exc:

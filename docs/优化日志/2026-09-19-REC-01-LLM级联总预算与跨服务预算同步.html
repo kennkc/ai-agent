@@ -1,0 +1,554 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>优化日志：REC-01 —— LLM 级联总预算与跨服务预算同步（2026-09-19）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 2026-09-19-REC-01-LLM级联总预算与跨服务预算同步.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 起点：两条缺口其实是同一个病</a></li>
+<li><a href="#2">2. 做了什么</a><ul>
+<li><a href="#21-python-nlp-service">2.1 Python 侧（nlp-service）：把"被赋予的超时"变成"自己持有的预算"</a></li>
+<li><a href="#22">2.2 级联内部：每一级都在"剩余预算"内调度</a></li>
+<li><a href="#23-java-session-manager">2.3 Java 侧（session-manager）：具名档位 + 请求级预算</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 本轮最重要的东西：一个被测试抓出来的真缺陷</a><ul>
+<li><a href="#31">3.1 现象</a></li>
+<li><a href="#32">3.2 根因：一个约定，把"耗尽"翻译成了"不限"</a></li>
+<li><a href="#33-0">3.3 修法：约定不动，改在"不得把耗尽表达成 0"这一层</a></li>
+<li><a href="#34-bug">3.4 反向验证（做门禁的那套规矩，同样适用于"修 bug"）</a></li>
+<li><a href="#35">3.5 顺手修掉一个"赌时序"的用例</a></li>
+</ul>
+</li>
+<li><a href="#4">4. 登记表同步：表头那条约定第一次被真正动用</a><ul>
+<li><a href="#41">4.1 表变了什么</a></li>
+<li><a href="#42-gap-06">4.2 GAP-06 不是回归，是"变可信"的代价</a></li>
+<li><a href="#43">4.3 门禁自身的缺陷也暴露了一个</a></li>
+</ul>
+</li>
+<li><a href="#5">5. 验证</a></li>
+<li><a href="#6">6. 遗留</a></li>
+<li><a href="#7">7. 认知沉淀</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="rec-01-llm-2026-09-19">优化日志：REC-01 —— LLM 级联总预算与跨服务预算同步（2026-09-19）<a class="headerlink" href="#rec-01-llm-2026-09-19" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>上游文档：<code>docs/优化日志/2026-09-19-跨服务超时预算登记表与门禁落地.md</code>（同日上一轮）
+登记表：<code>contracts/timeout-budget.yaml</code> · 门禁：<code>scripts/timeout-budget-check.py</code></p>
+</blockquote>
+<hr />
+<h2 id="1">1. 起点：两条缺口其实是同一个病<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>上一轮结束时留了 5 条 gap。翻回去看，「最根本」的两类其实是<strong>同一个根因的两种表现</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>缺口</th>
+<th>表述</th>
+<th>本质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>REC-01</strong></td>
+<td>LLM 级联最坏耗时 = 「各级超时 × 重试次数」的乘积</td>
+<td>下游<strong>没有</strong>自己的时间上限，所以它的最坏耗时<strong>不可控</strong></td>
+</tr>
+<tr>
+<td><strong>GAP-03 / GAP-04</strong></td>
+<td>Python 侧 <code>/embed</code>、<code>/ocr</code> 无独立超时</td>
+<td>下游<strong>没有</strong>自己的时间上限，所以它的最坏耗时<strong>不可证明</strong></td>
+</tr>
+</tbody>
+</table>
+<p>一句话：<strong>"下游最坏耗时"这个数字，在缺少下游自身上限时，要么是乘积（不可控），要么是猜（不可证明）。</strong>
+于是「上游预算 ≥ 下游最坏 × 1.5」这条不变量，在数据源头上就站不住。</p>
+<p><strong>结论：不能靠不断调大上游超时去"覆盖"一个会自己膨胀的下游。</strong>
+正确做法是给下游一个<strong>共享的总预算</strong>，让"最坏耗时"变成<strong>一个常量</strong>。这就是 deadline propagation。</p>
+<hr />
+<h2 id="2">2. 做了什么<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-python-nlp-service">2.1 Python 侧（nlp-service）：把"被赋予的超时"变成"自己持有的预算"<a class="headerlink" href="#21-python-nlp-service" title="Permanent link">&para;</a></h3>
+<p><strong>新增 <code>app/budget.py</code></strong>：</p>
+<table>
+<thead>
+<tr>
+<th>名字</th>
+<th style="text-align: right;">值</th>
+<th>作用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>run_with_budget(fn, budget_ms, operation=…)</code></td>
+<td style="text-align: right;">—</td>
+<td>在预算内执行；超时抛 <code>BudgetExceeded</code>，<strong>不返回空值冒充"没有数据"</strong></td>
+</tr>
+<tr>
+<td><code>BudgetExceeded</code></td>
+<td style="text-align: right;">—</td>
+<td>携带 <code>operation</code> / <code>budget_ms</code> / <code>elapsed_ms</code>，供上层如实转 504</td>
+</tr>
+<tr>
+<td><code>Deadline</code></td>
+<td style="text-align: right;">—</td>
+<td>级联/重试共享的预算对象，提供 <code>clamp(单步超时)</code> / <code>remaining_ms()</code> / <code>note_exhausted()</code></td>
+</tr>
+<tr>
+<td><code>deadline_at(ms)</code> / <code>remaining_from(ts)</code></td>
+<td style="text-align: right;">—</td>
+<td>把截止点放进 LangGraph 的 <code>state</code> 跨节点传递（放实例上会被并发调用互相缩短预算）</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>预算常量</th>
+<th style="text-align: right;">默认</th>
+<th>适用</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BRAIN_TOTAL_BUDGET_MS</code></td>
+<td style="text-align: right;">25000</td>
+<td><code>/brain/ask</code> 的<strong>检索 + 生成共享</strong>预算</td>
+</tr>
+<tr>
+<td><code>EMBED_BUDGET_MS</code></td>
+<td style="text-align: right;">12000</td>
+<td><code>/api/nlp/embed</code></td>
+</tr>
+<tr>
+<td><code>OCR_BUDGET_MS</code></td>
+<td style="text-align: right;">12000</td>
+<td><code>/api/nlp/ocr</code></td>
+</tr>
+<tr>
+<td><code>RETRIEVAL_BUDGET_MS</code></td>
+<td style="text-align: right;">8000</td>
+<td>RAG 检索段（并收窄 <code>RETRIEVAL_TIMEOUT_SECONDS</code>）</td>
+</tr>
+</tbody>
+</table>
+<p>超时统一按 <code>504 AGENT_TIMEOUT</code> 返回（<code>app/main.py</code> 的错误码映射），<strong>不塌缩成 500</strong>。</p>
+<h3 id="22">2.2 级联内部：每一级都在"剩余预算"内调度<a class="headerlink" href="#22" title="Permanent link">&para;</a></h3>
+<p><code>LlmGateway.generate(request, deadline_ms=…)</code>：级联每一级、每一次重试的可用超时取
+<code>min(该级超时, 剩余预算)</code>；预算耗尽的瞬间<strong>不再发起新的调用</strong>，并把这次失败计入
+<code>deadline_exceeded</code> 统计（与"引擎不可用"分开计数）—— 前者是"时间用完了"，后者是故障。</p>
+<p><code>RagPipeline.run(..., deadline_ms=…)</code>：<strong>检索与生成共享同一个 deadline</strong>。
+生成拿到的是"扣掉检索耗时后的余额"，于是「整条链路 ≤ 预算」由构造保证，
+而不是靠各级超时恰好加起来够用。</p>
+<h3 id="23-java-session-manager">2.3 Java 侧（session-manager）：具名档位 + 请求级预算<a class="headerlink" href="#23-java-session-manager" title="Permanent link">&para;</a></h3>
+<p><strong>新增 <code>orchestration/RequestBudget</code></strong>：入口处创建（一次 ask = <code>ASK_TOTAL_BUDGET_MS</code> 35s = 意图 5s + 生成 30s），
+每一跳读超时取 <code>min(该跳档位, 剩余预算)</code>；<strong>剩余为 0 时不再发起调用</strong>，如实降级并标注 <code>budget_exhausted</code>。</p>
+<table>
+<thead>
+<tr>
+<th>档位</th>
+<th style="text-align: right;">值</th>
+<th>用途</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INTENT_TIMEOUT</code></td>
+<td style="text-align: right;">5s</td>
+<td>nlp 意图识别（规则级联，毫秒级）</td>
+</tr>
+<tr>
+<td><code>RETRIEVE_TIMEOUT</code></td>
+<td style="text-align: right;">15s</td>
+<td>body 检索</td>
+</tr>
+<tr>
+<td><code>BRAIN_TIMEOUT</code></td>
+<td style="text-align: right;">30s</td>
+<td>nlp <code>/brain/ask</code> 生成</td>
+</tr>
+<tr>
+<td><code>DEFAULT_READ_TIMEOUT</code></td>
+<td style="text-align: right;">10s</td>
+<td>兜底（未声明用途的读）</td>
+</tr>
+</tbody>
+</table>
+<p>落点：<code>NlpClient</code> / <code>BodyClient</code> / <code>BrainClient</code> 分别改用对应档位（原先一律吃 <code>DEFAULT_READ_TIMEOUT</code>），
+<code>SessionController</code> 的 ask 链路接上 <code>RequestBudget</code>。</p>
+<hr />
+<h2 id="3">3. 本轮最重要的东西：一个被测试抓出来的真缺陷<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<h3 id="31">3.1 现象<a class="headerlink" href="#31" title="Permanent link">&para;</a></h3>
+<p>跑全量 pytest 时红了一条：</p>
+<pre><code class="language-text">tests/test_budget.py::test_budget_exhausted_before_retrieval_skips_downstream_and_reports_why
+E   AssertionError: assert 'template' == 'none'
+</code></pre>
+<p><strong>预算是 1ms，却仍然生成出了一个答案</strong>（<code>generator='template'</code>）。这不是测试写错，是真缺陷。</p>
+<h3 id="32">3.2 根因：一个约定，把"耗尽"翻译成了"不限"<a class="headerlink" href="#32" title="Permanent link">&para;</a></h3>
+<p><code>Deadline</code> / <code>run_with_budget</code> 有一条<strong>既定且有测试守着</strong>的约定：</p>
+<blockquote>
+<p><strong><code>None</code> / <code>0</code> 表示「不限」</strong> —— 这是显式选择，不是遗漏。
+（<code>test_budget_none_means_unlimited_not_zero</code> 就是守它的）</p>
+</blockquote>
+<p>这条约定在<strong>配置层</strong>是合理的：不能把"没配置"读成"0 秒内必须完成"。</p>
+<p>问题出在<strong>传播层</strong>：管线从 <code>remaining_from()</code> 拿到的是<strong>算出来的剩余</strong>，
+当它等于 <code>0</code> 时，含义是<strong>"时间到了"</strong>，可它被原样传给网关后，被同一条约定读成了
+<strong>"不限"</strong> —— 于是：</p>
+<pre><code class="language-text">检索吃光预算 → 剩余 = 0 → gateway.generate(deadline_ms=0)
+                              ↓ 被约定读成&quot;不限&quot;
+                          级联按各级超时全速跑（最长 22s+）
+</code></pre>
+<p><strong>后果</strong>：REC-01 宣称的「整条链路 ≤ 预算」，在<strong>任何有检索的问答</strong>里其实并不成立。
+更糟的是它<strong>不报错</strong>：答案还更"完整"了，只是慢得超出上游预算，最终由上游把"慢"判成"大脑层不可用" ——
+正是本轮要消灭的那个形状。</p>
+<h3 id="33-0">3.3 修法：约定不动，改在"不得把耗尽表达成 0"这一层<a class="headerlink" href="#33-0" title="Permanent link">&para;</a></h3>
+<p>这是本轮唯一需要判断力的地方。两条路：</p>
+<table>
+<thead>
+<tr>
+<th>选项</th>
+<th>评价</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>把 <code>0 = 不限</code> 改成 <code>0 = 耗尽</code></td>
+<td>❌ 会推翻一条有测试守的既定约定，且让"未配置"变成"立刻失败"</td>
+</tr>
+<tr>
+<td><strong>在管线层拦住：剩余为 0 时不发起生成</strong></td>
+<td>✅ 约定语义不变，只在<strong>表达</strong>处禁止歧义</td>
+</tr>
+</tbody>
+</table>
+<p>选择后者 —— 在 <code>_node_generate</code> 计算完 <code>remaining_ms</code> 后直接拦住：</p>
+<pre><code class="language-python">remaining_ms = remaining_from(state.get(&quot;deadline_at&quot;))
+if remaining_ms is not None and remaining_ms &lt;= 0:
+    reason = f&quot;budget_exhausted_before_generation (budget={state.get('deadline_ms')}ms)&quot;
+    ...  # 不发起生成，如实标注原因（不是「引擎不可用」）
+</code></pre>
+<blockquote>
+<p><strong>认知</strong>：<code>0 = 不限</code> 这种约定，<strong>必须配一条"上游不得把耗尽表达成 0"</strong>。
+否则约定本身就变成漏洞的载体 —— 它把"没有时间了"和"没有上限"合并成了同一个字节。</p>
+</blockquote>
+<h3 id="34-bug">3.4 反向验证（做门禁的那套规矩，同样适用于"修 bug"）<a class="headerlink" href="#34-bug" title="Permanent link">&para;</a></h3>
+<p>把守卫临时短路成 <code>if False and …</code> 后复跑：</p>
+<pre><code class="language-text">FAILED tests/test_budget.py::test_generation_is_stopped_when_retrieval_ate_the_whole_budget
+E   Left contains one more item: 0      ← 网关确实被以 deadline_ms=0（=不限）调用了
+</code></pre>
+<p>断言输出<strong>直指</strong>"以 0 调用了网关"，证明用例抓的是真行为而非巧合；还原后转绿。</p>
+<h3 id="35">3.5 顺手修掉一个"赌时序"的用例<a class="headerlink" href="#35" title="Permanent link">&para;</a></h3>
+<p>原用例用 <code>deadline_ms=1</code> 构造"预算已耗尽"，并在两次调用之间 <code>sleep(0.02)</code> ——
+这等于<strong>赌</strong>"这 1ms 内确实发生了工作量"，机器快时会变成"预算还没用完"，测试随时序时红时绿。
+改为直接把截止点设到<strong>过去</strong>（<code>monotonic() - 1</code>）：<strong>「已耗尽」是被构造出来的事实，不是概率。</strong></p>
+<p>同时把观测点从"整条管线"收到 <code>_node_generate</code>：整条跑的话，零 chunk 会先走 <code>insufficient</code> 分支、
+根本到不了生成步 —— 那样的断言会因为<strong>走错分支</strong>而变绿，等于没守。</p>
+<hr />
+<h2 id="4">4. 登记表同步：表头那条约定第一次被真正动用<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<p>登记表开头的「修改约定」写着：<strong>任何新增跨服务调用、或调整任一侧超时，都必须同步本表并跑门禁。</strong>
+本轮改了 session-manager 与 nlp-service 两侧的预算，所以这条约定第一次真正生效。</p>
+<h3 id="41">4.1 表变了什么<a class="headerlink" href="#41" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>边</th>
+<th>变更</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>TB-09 <code>wp-bff → session /ask</code></td>
+<td>下游最坏由「读超时 10s」改为<strong>「总预算 35s」</strong></td>
+<td>⚠️ 新增 <strong>GAP-06</strong></td>
+</tr>
+<tr>
+<td>TB-11 <code>session → nlp /brain</code></td>
+<td>上游 10000 → <strong>30000</strong>（<code>BRAIN_TIMEOUT</code> 具名档）</td>
+<td>余量 0.45x → 0.91x，仍 gap</td>
+</tr>
+<tr>
+<td>TB-12 <code>session → body 检索</code></td>
+<td>上游 10000 → <strong>15000</strong>（<code>RETRIEVE_TIMEOUT</code>）</td>
+<td>✅ <strong>GAP-02 闭合</strong>（1.50x）</td>
+</tr>
+<tr>
+<td>TB-13 <code>body → nlp 嵌入</code></td>
+<td>下游最坏 30000 → <strong>12000</strong>（<code>EMBED_BUDGET_MS</code>）</td>
+<td>✅ <strong>GAP-03 闭合</strong>（2.50x）</td>
+</tr>
+<tr>
+<td>TB-15 <code>sense → nlp OCR</code></td>
+<td>下游最坏 20000 → <strong>12000</strong>（<code>OCR_BUDGET_MS</code>）</td>
+<td>✅ <strong>GAP-04 闭合</strong>（1.67x）</td>
+</tr>
+<tr>
+<td>TB-16 <code>nlp → body 检索</code></td>
+<td>上游 5000 → <strong>8000</strong>（<code>RETRIEVAL_BUDGET_MS</code>）</td>
+<td>0.50x → 0.80x，仍 gap</td>
+</tr>
+</tbody>
+</table>
+<pre><code class="language-text">合计: ok=14 · gap=5 · fail=0      （上一轮）
+  ↓  本轮同步后
+合计: ok=16 · gap=3 · fail=0
+</code></pre>
+<h3 id="42-gap-06">4.2 GAP-06 不是回归，是"变可信"的代价<a class="headerlink" href="#42-gap-06" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>之前</th>
+<th>现在</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>session 一次 ask 的下游最坏</td>
+<td>只说得出"单体读超时 10s"</td>
+<td><strong>35s 总预算（硬上限）</strong></td>
+</tr>
+<tr>
+<td>wp-bff <code>GENERATE</code> 档 45s 的余量</td>
+<td>看起来很充足</td>
+<td>1.29x，<strong>薄于约定 1.5x</strong></td>
+</tr>
+</tbody>
+</table>
+<p>同一件事，两种读法：<strong>下游最坏从"说不清"变成"说得清"，代价是上游余量比被摊薄。</strong>
+这不该被藏起来 —— 所以登记为新 gap，而不是"反正没红"。</p>
+<blockquote>
+<p><strong>本轮最该记住的一条</strong>：给下游加预算上限会同时改变上游余量比。
+<strong>闭合一个缺口可能制造另一个</strong> —— 两侧必须同轮复核。</p>
+</blockquote>
+<h3 id="43">4.3 门禁自身的缺陷也暴露了一个<a class="headerlink" href="#43" title="Permanent link">&para;</a></h3>
+<p>同步过程中发现：原锚点正则</p>
+<pre><code class="language-text">READ_TIMEOUT = Duration\.ofSeconds\((\d+)\)
+</code></pre>
+<p>会<strong>子串命中</strong> <code>DEFAULT_READ_TIMEOUT</code>（<code>DEFAULT_</code> + 匹配）——
+于是 TB-11 / TB-12 长期读到的是<strong>兜底档的 10s</strong>，而不是它们真正的具名档，
+<strong>门禁不报漂移、全绿</strong>。这与上一轮"锚点看不见调用点魔法数字"是同一类盲区的不同表现：
+<strong>锚点锚得太松，等于没锚。</strong></p>
+<p>修法：锚点改为<strong>具名档位</strong>（<code>BRAIN_TIMEOUT</code> / <code>RETRIEVE_TIMEOUT</code>），
+并给 TB-09 / TB-13 / TB-15 补上<strong>下游锚点</strong>（<code>ASK_TOTAL_BUDGET_MS</code>、<code>EMBED_BUDGET_MS</code>、<code>OCR_BUDGET_MS</code>），
+让"下游最坏耗时"这个数字<strong>也</strong>有代码出处，而不只是一个声明。</p>
+<hr />
+<h2 id="5">5. 验证<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 全量</td>
+<td><strong>248 / 0 失败</strong>（BUILD SUCCESS · gateway 2 · session 43 · sense 53 · body 64 · tool-executor 86）</td>
+</tr>
+<tr>
+<td>Python <code>pytest</code></td>
+<td><strong>158 passed / 1 skipped</strong>（新增 <code>test_budget.py</code> 20 例）</td>
+</tr>
+<tr>
+<td>wp-bff <code>node --test</code></td>
+<td><strong>87 / 0 失败</strong></td>
+</tr>
+<tr>
+<td>超时预算门禁</td>
+<td><strong>ok=16 · gap=3 · fail=0</strong>（锚点零漂移）</td>
+</tr>
+<tr>
+<td>反向验证（守卫短路）</td>
+<td>✅ 报红，且断言输出直指 <code>calls=[0]</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="6">6. 遗留<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>项</th>
+<th>状态</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong>GAP-01</strong>：<code>BRAIN_TIMEOUT</code> 30s 对级联最坏 22s（0.91x）</td>
+<td>未达标。<strong>注意 <code>BRAIN_TOTAL_BUDGET_MS</code> 25s 仍大于推导最坏 22s，上限尚未真正收紧</strong></td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong>GAP-05</strong>：nlp → body 检索 8s &lt; 下游读超时 10s（0.80x）</td>
+<td>未达标；body 检索链路尚无端到端 deadline（同 REC-01 路线可解）</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong>GAP-06</strong>：wp-bff <code>GENERATE</code> 45s 对 session 总预算 35s（1.29x）</td>
+<td>未达标；<code>GENERATE</code> 档被多条边共享，不宜直接抬高</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>RETRIEVAL_TIMEOUT_SECONDS</code> 与 <code>RETRIEVAL_BUDGET_MS</code> 两套口径</td>
+<td>同值 8，但一个是秒一个是毫秒，属<strong>潜在漂移源</strong>，建议合一</td>
+</tr>
+<tr>
+<td>5</td>
+<td>body 侧 <code>RetrievalService</code> 无端到端 deadline</td>
+<td>未做</td>
+</tr>
+<tr>
+<td>6</td>
+<td>8090 BFF / 8084 tool-executor 仍是后台进程</td>
+<td>重启后需手动再起</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="7">7. 认知沉淀<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<ol>
+<li>
+<p><strong>"下游没有上限"是一个根因，不是一个参数没填。</strong>
+   它同时制造了"不可控"（乘积膨胀）和"不可证明"（算不出余量）两种缺口。
+   修法也只有一个：给下游一个共享的总预算，让最坏耗时变成常量。</p>
+</li>
+<li>
+<p><strong>约定会变成漏洞的载体。</strong> <code>0 = 不限</code> 本身没错，错在"上游把耗尽表达成 0"。
+   凡是把两种语义压进同一个值的约定，都要额外规定<strong>谁不得产生歧义值</strong>。</p>
+</li>
+<li>
+<p><strong>闭合一个缺口可能制造另一个。</strong> 余量比是<strong>两侧的函数</strong>：
+   把下游最坏从"说不清"改成"说得清"，上游那个原本够用的数字可能立刻不够了。</p>
+</li>
+<li>
+<p><strong>锚点锚得太松，等于没锚。</strong> 门禁两次栽在同一处：
+   先是"只看常量定义、看不见调用点魔法数字"，后是"子串命中兜底常量"。
+   ——<strong>门禁的价值取决于它锚的边界有多精确</strong>，不取决于它跑了多少条规则。</p>
+</li>
+<li>
+<p><strong>"极小值"不是"确定耗尽"。</strong> 用 <code>deadline_ms=1</code> 构造耗尽状态是在赌时序；
+   要么把截止点构造到过去，要么把观测点收到能确定观测的那一层。
+   <strong>测试的确定性要来自构造，而不是来自概率。</strong></p>
+</li>
+</ol></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

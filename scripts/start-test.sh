@@ -16,9 +16,14 @@ start_infra() {
 start_java() {
   cd "$ROOT/services/java"
   mvn clean package -DskipTests -q
-  for svc in gateway-service session-manager sense-service body-service; do
+  for svc in gateway-service session-manager sense-service body-service tool-executor; do
     (cd "$svc" && nohup java -jar target/*.jar > "/tmp/$svc.log" 2>&1 &)
   done
+}
+
+start_bff() {
+  cd "$ROOT/services/node/wp-bff"
+  nohup env WP_BFF_PORT="${WP_BFF_PORT:-8090}" node server.js > /tmp/wp-bff.log 2>&1 &
 }
 
 start_python() {
@@ -37,7 +42,8 @@ case "$MODE" in
   infra) start_infra ;;
   java) start_java ;;
   python) start_python ;;
+  bff) start_bff ;;
   verify) verify ;;
-  all) start_infra && start_java && start_python && verify ;;
-  *) echo "usage: $0 [all|infra|java|python|verify]"; exit 1 ;;
+  all) start_infra && start_java && start_python && start_bff && verify ;;
+  *) echo "usage: $0 [all|infra|java|python|bff|verify]"; exit 1 ;;
 esac

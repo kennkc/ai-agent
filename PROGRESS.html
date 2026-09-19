@@ -1,0 +1,993 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Agent-Lifeform Development Progress</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:41 · 源文件 PROGRESS.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#archived-stage-reports">Archived stage reports</a></li>
+<li><a href="#current-milestone">Current milestone</a></li>
+<li><a href="#phase-0">Phase 0</a></li>
+<li><a href="#phase-1">Phase 1</a></li>
+<li><a href="#phase-2-sensory-stage">Phase 2 (感官期 / Sensory Stage)</a><ul>
+<li><a href="#channels-collection">Channels &amp; collection</a></li>
+<li><a href="#scheduling-quality-and-staging">Scheduling, quality and staging</a></li>
+<li><a href="#intent-recognition">Intent recognition</a></li>
+<li><a href="#console-observability">Console &amp; observability</a></li>
+<li><a href="#build-hardening">Build hardening</a></li>
+</ul>
+</li>
+<li><a href="#phase-3-body-stage">Phase 3 (躯体期 / Body Stage)</a><ul>
+<li><a href="#storage-pipeline">Storage &amp; pipeline</a></li>
+<li><a href="#session-work-platform">Session &amp; work platform</a></li>
+<li><a href="#verification-2026-09-18">Verification (2026-09-18)</a></li>
+<li><a href="#phase-3-requirement-re-audit-2026-09-18-second-pass">Phase 3 requirement re-audit (2026-09-18, second pass)</a></li>
+</ul>
+</li>
+<li><a href="#phase-4-brain-stage-2026-09-19">Phase 4 (大脑期 / Brain Stage, 2026-09-19)</a><ul>
+<li><a href="#brain-layer-python-nlp-service-new-appbrain-1374-lines-399-lines-of-tests">Brain layer (Python nlp-service, new app/brain/, 1374 lines + 399 lines of tests)</a></li>
+<li><a href="#session-layer-java-session-manager">Session layer (Java session-manager)</a></li>
+<li><a href="#bff-terminal-line">BFF + terminal line</a></li>
+<li><a href="#two-calibrated-after-measurement-decisions-registered-not-silent">Two calibrated-after-measurement decisions (registered, not silent)</a></li>
+<li><a href="#runtime-only-defects-found-and-fixed-see-415">Runtime-only defects found and fixed (see 技术债台账 §4.15)</a></li>
+<li><a href="#verification-2026-09-19-real-redis-qdrant-postgresql">Verification (2026-09-19, real Redis / Qdrant / PostgreSQL)</a></li>
+<li><a href="#requirement-audit-gap-closure-2026-09-19">Requirement-audit gap-closure 补记 (2026-09-19)</a></li>
+<li><a href="#grpc-port-conflict-fixed-2026-09-19-debt-018">gRPC port conflict fixed (2026-09-19, DEBT-018)</a></li>
+</ul>
+</li>
+<li><a href="#phase-5-limb-stage-2026-09-19">Phase 5 (四肢期 / Limb Stage, 2026-09-19)</a><ul>
+<li><a href="#registry-execution-r5-01-r5-02">Registry &amp; execution (R5-01 / R5-02)</a></li>
+<li><a href="#sandbox-isolation-r5-03-r5-05">Sandbox isolation (R5-03 / R5-05)</a></li>
+<li><a href="#security-gates-audit-r5-07-r5-08">Security gates &amp; audit (R5-07 / R5-08)</a></li>
+<li><a href="#in-06-tool-contract-governance">IN-06 tool-contract governance</a></li>
+<li><a href="#terminal-line-r-c05-bff">Terminal line (R-C05 预) &amp; BFF</a></li>
+<li><a href="#verification-2026-09-19">Verification (2026-09-19)</a></li>
+</ul>
+</li>
+<li><a href="#frontend">Frontend</a></li>
+<li><a href="#verification-completed">Verification completed</a></li>
+<li><a href="#2026-09-15-work-platform-observability-update-dev-branch">2026-09-15 Work Platform Observability Update (dev branch)</a></li>
+<li><a href="#2026-09-16-engineering-hardening-optimization-pass">2026-09-16 Engineering Hardening (optimization pass)</a><ul>
+<li><a href="#p0-wp-bff-control-plane-hardening">P0 · wp-bff control-plane hardening</a></li>
+<li><a href="#p0-api-mode-no-longer-silently-falls-back-to-mock">P0 · API mode no longer silently falls back to Mock</a></li>
+<li><a href="#p1-observability-truthfulness">P1 · Observability truthfulness</a></li>
+<li><a href="#p1-ci-coverage">P1 · CI coverage</a></li>
+<li><a href="#p2-frontend-delivery">P2 · Frontend delivery</a></li>
+<li><a href="#verification-2026-09-16">Verification (2026-09-16)</a></li>
+</ul>
+</li>
+<li><a href="#2026-09-16-contract-alignment-overview-aggregation-optimization-pass-2">2026-09-16 Contract Alignment &amp; Overview Aggregation (optimization pass 2)</a><ul>
+<li><a href="#p0-contract-implementation-alignment">P0 · Contract &lt;-&gt; implementation alignment</a></li>
+<li><a href="#p1-bff-overview-aggregation">P1 · BFF overview aggregation</a></li>
+<li><a href="#p1-governance-and-ci">P1 · Governance and CI</a></li>
+<li><a href="#verification-2026-09-16-pass-2">Verification (2026-09-16, pass 2)</a></li>
+</ul>
+</li>
+<li><a href="#2026-09-17-documentation-consolidation">2026-09-17 Documentation Consolidation</a><ul>
+<li><a href="#verification-2026-09-17">Verification (2026-09-17)</a></li>
+</ul>
+</li>
+<li><a href="#phase-3-post-closure-hardening-2026-09-18">Phase 3 post-closure hardening (2026-09-18)</a><ul>
+<li><a href="#1-runtime-semantics-mockapi-alignment-bce7921">1 · Runtime semantics &amp; Mock/API alignment (bce7921)</a></li>
+<li><a href="#2-doc-figure-consistency-pass-8ba5544">2 · Doc-figure consistency pass (8ba5544)</a></li>
+<li><a href="#3-exception-flow-consolidation-unified-error-envelope-6616616-d4a114b">3 · Exception-flow consolidation &amp; unified error envelope (6616616 + d4a114b)</a></li>
+<li><a href="#verification-2026-09-18-post-closure">Verification (2026-09-18, post-closure)</a></li>
+</ul>
+</li>
+<li><a href="#remaining">Remaining</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="agent-lifeform-development-progress">Agent-Lifeform Development Progress<a class="headerlink" href="#agent-lifeform-development-progress" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>Last updated: 2026-09-19</p>
+</blockquote>
+<h2 id="archived-stage-reports">Archived stage reports<a class="headerlink" href="#archived-stage-reports" title="Permanent link">&para;</a></h2>
+<p>Phase 0 / Phase 1 / Phase 2 / Phase 3 stage reports (stage report + execution log + test &amp;
+acceptance report, each with an HTML twin) are archived in
+<code>docs/项目进度日志报告/</code>. Phase 0/1 reports were added retroactively on
+2026-09-15 (the three-doc convention was established at Phase 2).</p>
+<h2 id="current-milestone">Current milestone<a class="headerlink" href="#current-milestone" title="Permanent link">&para;</a></h2>
+<p>Phase 0, Phase 1, Phase 2 and Phase 3 development scope is implemented on the long-lived branches
+<code>workbuddy/main</code>, <code>codex/main</code> and <code>dev</code>, which since 2026-09-16 point at the
+same commit (all three kept in sync via fast-forward; the <code>workbuddy/main</code> line brought in the
+Java per-file documentation set <code>docs/java-services/</code> and the middleware real-state fixes, the
+<code>codex</code> line brought in the wp-bff control-plane hardening, data-source degradation surfacing
+and CI additions — merged on a semantic basis, no side was overwritten).
+Phase 2 (感官期 / sensory stage, R2-01~R2-10) landed on 2026-09-12; after the D-1 cross-service
+fix (2026-09-13) and the hardening pass below the suite stood at <strong>61 Java tests green</strong>.
+Phase 3 (躯体期 / body stage, R3-01~R3-09 + R-C03) landed on 2026-09-18 — body-service was
+rewritten into a persisted knowledge pipeline (parse -&gt; chunk -&gt; embed -&gt; three-tier store -&gt;
+semantic retrieve -&gt; rerank -&gt; RAG) and <strong>DEBT-001 closed</strong>.</p>
+<p>A <strong>requirement-audit &amp; gap-closure pass</strong> followed on 2026-09-18 (see
+<code>docs/优化日志/2026-09-18-Phase3需求审核与补全.md</code>): every Phase 3 requirement was reconciled
+against the code, the production tree was scanned for stub/placeholder implementations
+(<strong>none found</strong>), and the DEBT registry was cross-checked against the <code>DEBT-0xx</code> markers in code.
+Four in-scope gaps were found and closed — knowledge ingest was unreachable from the work
+platform (no BFF write path), the R3-02 "format parse" step was missing, the IN-05 iteration
+parameters did not exist, and the three-tier reconciliation task required by the design's risk
+section was absent. Four <strong>out-of-scope</strong> requirements from the Phase 3 requirement doc
+(IN-01 skill packages, WB-03 expert center, WB-05 skill marketplace, MC-01 collaboration-bus
+service) were never delivered and are now registered instead of silently dropped.</p>
+<p>Three further hardening passes then ran on 2026-09-18 without adding features — a Mock/API
+alignment pass, a doc-figure consistency pass, and an exception-flow consolidation pass
+(the last one is recorded in <code>docs/优化日志/2026-09-18-异常流程归纳与全平台错误信封统一.md</code>).
+All three are summarised in <a href="#phase-3-post-closure-hardening-2026-09-18">Phase 3 post-closure hardening</a>.</p>
+<p><strong>Phase 4 (大脑期 / brain stage, R4-01~R4-09 + R-C04) landed on 2026-09-19</strong> — see
+<a href="#phase-4-大脑期--brain-stage-2026-09-19">Phase 4</a> below for the full record.</p>
+<p>A <strong>requirement-audit &amp; gap-closure pass</strong> on Phase 4 followed on 2026-09-19 (see
+<code>docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md</code>): re-reading the implementation against
+the requirement doc surfaced five defects the unit tests and the acceptance report had both
+missed — two semantic-level pseudo-implementations (semantic cache claimed a Redis backend but
+only wrote an in-process dict; the decision-replay endpoint returned <code>200 + available:true</code> with
+an empty chain for <em>any</em> id), one cross-service tenant-resolution inconsistency, one cross-pipeline
+consistency defect (knowledge ingest did not invalidate the retrieval hot cache) and one
+extraction-caliber gap (memory-graph edges were written without their endpoint nodes). All five
+are fixed with added regression tests, and the previously-undelivered items (IN-02 memory graph,
+the X4 self-verify/annotate steps, the three decision cards, the overview <code>model_calls</code> /
+<code>model_runtime</code> metrics, the 50-case intent evaluation set, P50/P95/P99 latency) are landed.</p>
+<p>The suite now stands at <strong>162 Java + 124 Python + 55 wp-bff tests green</strong> (341 total), contract
+check 0 FAIL (implemented 11 paths / 12 methods), Java doc coverage 113/113; the work platform
+and the Console both run against the real brain chain.
+The Java split is gateway 2 · session-manager 43 · sense-service 53 · body-service 64.</p>
+<h2 id="phase-0">Phase 0<a class="headerlink" href="#phase-0" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[x] Monorepo structure</li>
+<li>[x] Maven multi-module build</li>
+<li>[x] Python FastAPI skeleton</li>
+<li>[x] docker-compose infrastructure skeleton</li>
+<li>[x] Nacos registration configuration</li>
+<li>[x] gRPC health service on ports 9091-9094</li>
+<li>[x] Java and Python proto/gRPC generation</li>
+<li>[x] CI build/test/package skeleton</li>
+<li>[x] contract-check integrated into CI</li>
+<li>[x] startup and health-check scripts</li>
+</ul>
+<h2 id="phase-1">Phase 1<a class="headerlink" href="#phase-1" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[x] Gateway routes for session, sense, nlp and body services</li>
+<li>[x] JWT authentication with verified tenant propagation</li>
+<li>[x] BusProxy abstraction over NATS</li>
+<li>[x] NATS request/reply baseline</li>
+<li>[x] Kafka producer and consumer baseline</li>
+<li>[x] OpenTelemetry OTLP configuration</li>
+<li>[x] Jaeger service in docker-compose</li>
+<li>[x] uniform error response model and HTTP status mapping</li>
+<li>[x] cross-tenant access protection</li>
+<li>[x] SSRF guard for URL collection</li>
+<li>[x] VS1: session -&gt; intent -&gt; local retrieval -&gt; template answer</li>
+</ul>
+<h2 id="phase-2-sensory-stage">Phase 2 (感官期 / Sensory Stage)<a class="headerlink" href="#phase-2-sensory-stage" title="Permanent link">&para;</a></h2>
+<p>Requirement coverage R2-01 ~ R2-10. All source under <code>services/java/sense-service</code>,
+<code>services/python/nlp-service</code> and <code>web/console</code>.</p>
+<h3 id="channels-collection">Channels &amp; collection<a class="headerlink" href="#channels-collection" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] R2-01 <code>SenseChannel</code> pluggable abstraction (<code>Register/Collect/Healthy/Close</code>), <code>ChannelRegistry</code> auto-discovers Spring beans</li>
+<li>[x] R2-02 <code>TouchChannel</code>: URL fetch + local file read + raw text; HTML body extraction via jsoup; encoding detection</li>
+<li>[x] R2-03 <code>VisualChannel</code> + <code>NoseChannel</code> + <code>AudioChannel</code> + <code>TasteChannel</code> reserved channels with truthful <code>available()</code> reporting</li>
+<li>[x] R2-03 image OCR delegated to nlp-service <code>/api/nlp/ocr</code> (PaddleOCR / Tesseract), reports <code>available=false</code> when no engine installed</li>
+<li>[x] R2-04 <code>DataNormalizer</code>: five-field tagging (<code>source_channel/tenant_id/timestamp/freshness/confidence</code>)</li>
+</ul>
+<h3 id="scheduling-quality-and-staging">Scheduling, quality and staging<a class="headerlink" href="#scheduling-quality-and-staging" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] R2-05 <code>R0Scheduler</code>: Spring <code>@Scheduled</code> rule-driven polling with per-rule intervals, log and manual <code>runNow</code></li>
+<li>[x] R2-06 <code>R1DynamicHandler</code> + <code>SenseCommand</code>: instruction -&gt; channel routing -&gt; collect -&gt; response, per-round channel cap</li>
+<li>[x] R2-09 <code>ChannelHealthMonitor</code>: probe + DEGRADED/DOWN thresholds + auto-isolation + recovery tracking; exponential backoff retry (resilience4j) + <code>DeadLetterStore</code></li>
+<li>[x] R2-10 <code>StagingStore</code> with MinIO/local dual backend, quality gate before staging, batch rollback</li>
+</ul>
+<h3 id="intent-recognition">Intent recognition<a class="headerlink" href="#intent-recognition" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] R2-07 <code>rules.py</code>: keyword/regex/scenario rule engine covering 12 scenarios (required &gt;= 10)</li>
+<li>[x] R2-08 <code>l0_model.py</code>: lightweight L0 classifier; <code>cascade.py</code> rule-first -&gt; L0 fallback cascade</li>
+<li>[x] Measured: holdout accuracy <strong>90.0%</strong> (target &gt;= 85%), P99 latency <strong>0.052 ms</strong> (target &lt; 50 ms)</li>
+</ul>
+<h3 id="console-observability">Console &amp; observability<a class="headerlink" href="#console-observability" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] R-C02 Console sensory view: five-sense matrix, channel drill-down (recent batches with score/attempts/degraded/reject_reason)</li>
+<li>[x] R-C09 <code>ConsoleDataProvider</code> mock/api dual data source, zero UI change switch via <code>?ds=api</code> / <code>?ds=mock</code></li>
+<li>[x] <code>SenseAdminController</code> exposes <code>/api/sense/channels</code>, <code>/channels/{type}</code>, <code>/channels-health</code>, <code>/stats</code>, <code>/batches</code>, <code>/batches/{id}/rollback</code>, <code>/rules</code>, <code>/deadletters</code></li>
+<li>[x] Gateway route <code>/api/sense/**</code> -&gt; <code>lb://sense-service</code></li>
+</ul>
+<h3 id="build-hardening">Build hardening<a class="headerlink" href="#build-hardening" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] protobuf plugin deadlock fixed: generated Java sources (90 files, 6 proto) committed into <code>proto-contracts/src/main/java</code>; <code>protobuf-maven-plugin</code> removed from default lifecycle, kept behind the <code>proto-gen</code> profile</li>
+<li>[x] Audit hardening: lazy OCR engine initialization, redirect-safe SSRF validation, MinIO credentials required from environment</li>
+<li>[x] <code>scripts/mvn-dev.sh</code> wrapper (direct Maven launcher) works around broken <code>mvn.cmd</code> on this host</li>
+</ul>
+<h2 id="phase-3-body-stage">Phase 3 (躯体期 / Body Stage)<a class="headerlink" href="#phase-3-body-stage" title="Permanent link">&para;</a></h2>
+<p>Requirement coverage R3-01 ~ R3-09 plus terminal-line R-C03. Source under
+<code>services/java/body-service</code> (rewritten), <code>services/python/nlp-service</code>, <code>services/node/wp-bff</code>
+and <code>web/work-platform</code>. Closes <strong>DEBT-001</strong> (in-memory retrieval -&gt; Qdrant vector search).</p>
+<h3 id="storage-pipeline">Storage &amp; pipeline<a class="headerlink" href="#storage-pipeline" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] R3-01 three-tier storage facade: <code>StorageFacade</code> + <code>MetadataStore</code> (<code>PgMetadataStore</code> cold /
+      <code>InMemoryMetadataStore</code> graceful fallback) + <code>HotCacheStore</code> (Redis hot, tenant-prefixed
+      fingerprints) + <code>TierRouter</code> (configurable heat-based tiering)</li>
+<li>[x] R3-02 <code>ChunkProcessor</code>: heading/paragraph boundaries, 800-char blocks, 50-char overlap,
+      heading kept inside the block, merge only within the same heading; Python <code>chunking.py</code>
+      mirrors the same algorithm for cross-language consistency checks</li>
+<li>[x] R3-03 embedding via nlp-service <code>/api/nlp/embed</code> (BGE-M3 when available, otherwise a
+      deterministic hash n-gram 768-dim backend that reports <code>degraded=true</code> — honest degradation,
+      never faked); <code>EmbeddingClient</code> over HTTP/1.1</li>
+<li>[x] R3-04 <code>QdrantClient</code>: collection bootstrap, vector-size reconciliation, batch upsert,
+      tenant-filtered search; point ids are name-based UUIDs (<code>docId#index</code>) so re-ingest is
+      idempotent</li>
+<li>[x] R3-05 <code>RetrievalService</code>: cache-first -&gt; vector recall -&gt; rerank, with per-stage latency
+      sampling</li>
+<li>[x] R3-06 <code>RerankClient</code> + nlp-service <code>/api/nlp/rerank</code> (cross-encoder when available, otherwise
+      lexical-overlap rerank); real health probe; degrades to recall order without blocking</li>
+<li>[x] R3-07 <code>RagPipeline</code>: retrieve -&gt; compose answer + traceable citations; reports
+      <code>generator=template</code> truthfully (DEBT-002 still open, Phase 4)</li>
+<li>[x] R3-08 cache-first strategy: normalized query fingerprint, documented hit rate</li>
+<li>[x] R3-09 <code>KnowledgeController</code>: <code>POST/GET /api/body/knowledge</code>, <code>POST /api/body/knowledge/batch</code>,
+      <code>POST /api/body/retrieve</code>, <code>POST /api/body/retrieve/plan</code>, <code>POST /api/body/rag/answer</code>,
+      <code>GET /api/body/knowledge/stats</code>, <code>GET /api/body/knowledge/reconcile</code>,
+      <code>DELETE /api/body/knowledge/{docId}</code>, <code>GET /api/body/health</code></li>
+<li>[x] Sense -&gt; body closed loop: <code>SenseCollectedConsumer</code> subscribes <code>lifeform.sense.collected</code>;
+      <code>SenseEventPublisher</code> payload extended with <code>title</code>/<code>content</code> so events are self-contained</li>
+<li>[x] Removed the superseded in-memory implementation (<code>BodyStore</code>, <code>BodyController</code>,
+      <code>BodyStoreTest</code>) - the DEBT-001 write-off</li>
+</ul>
+<h3 id="session-work-platform">Session &amp; work platform<a class="headerlink" href="#session-work-platform" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] session-manager <code>BodyClient.retrieve()</code> declares explicit <code>top_k</code> + cache-first semantics and
+      degrades to an empty result set when body-service is unavailable</li>
+<li>[x] wp-bff new proxy endpoints <code>GET /api/wp/knowledge</code> and <code>POST /api/wp/knowledge/search</code>
+      (query-term parsing + <code>buildSnippet</code> hit highlighting); implemented-endpoint registry 6 -&gt; 8</li>
+<li>[x] Contract: both endpoints + <code>KnowledgeStats</code> / <code>KnowledgeSearchResult</code> schemas registered with
+      <code>x-wp-status: implemented</code></li>
+<li>[x] R-C03 work-platform body view (<code>KnowledgeView.vue</code>): knowledge totals, retrieval quality
+      (P99 / hit rate / cache hit rate), three-tier storage health, and a retrieval test panel with
+      highlighted snippets and recall-vs-rerank scores</li>
+</ul>
+<h3 id="verification-2026-09-18">Verification (2026-09-18)<a class="headerlink" href="#verification-2026-09-18" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Java full suite <code>scripts/mvn-dev.sh test</code>: <strong>114 passed / 0 failed</strong> (gateway 2 · session 10 ·
+  sense 48 · body 54; body-service grew from 1 test to 54 across 9 classes)</li>
+<li><code>nlp-service</code> pytest: <strong>52 passed</strong> (intent 15 + OCR 4 + chunking 12 + embedding 13 + rerank 8)</li>
+<li>wp-bff <code>node --test</code>: <strong>27 passed</strong></li>
+<li><code>contract-check.py --work-platform</code>: implemented 8 paths &lt;-&gt; BFF 8 paths (9 methods), <strong>0 FAIL</strong></li>
+<li><code>java-doc-coverage.py</code>: body-service 36/36, repo-wide <strong>103/103</strong> hand-written sources</li>
+<li>Frontend <code>vue-tsc --noEmit</code> + <code>vite build</code>: passed</li>
+<li>End-to-end (Docker: qdrant/redis/postgres/kafka/jaeger + 3 services):
+  <strong>35 PASS / 0 FAIL</strong> — retrieval P99 <strong>366 ms</strong>, hit rate <strong>0.925</strong>, cache hit rate <strong>0.45</strong>,
+  ingest failures 0, tenant isolation enforced, re-ingest idempotent, delete purges vectors
+  (no orphans), Kafka sense event ingested and recalled</li>
+</ul>
+<h3 id="phase-3-requirement-re-audit-2026-09-18-second-pass">Phase 3 requirement re-audit (2026-09-18, second pass)<a class="headerlink" href="#phase-3-requirement-re-audit-2026-09-18-second-pass" title="Permanent link">&para;</a></h3>
+<p>An independent audit re-read the Phase 3 requirement spec against the actual source instead of
+trusting the phase reports. Outcome: <strong>no fake/placeholder implementation found</strong> (4 honest
+degradations, 2 real gaps, 0 pseudo-implementations), but one functional break and several
+stale doc figures were fixed:</p>
+<ul>
+<li>[x] <strong>Gap — R3-02 format parsing step was missing</strong>: added <code>chunk/DocumentParser.java</code>
+  (md / html / text normalisation + heading extraction); PDF is explicitly rejected with a
+  unified error code instead of being silently chunked as text (DEBT-013)</li>
+<li>[x] <strong>Gap — work platform could not ingest at all</strong> (biggest find): added BFF
+  <code>POST /api/wp/knowledge</code> ingest proxy + <code>KnowledgeView.vue</code> ingest panel (upload/paste,
+  format selector, honest <code>degraded</code> reporting)</li>
+<li>[x] <code>IngestService</code> now surfaces <code>format / parser / degraded</code> in <code>IngestOutcome</code></li>
+<li>[x] Contract: <code>/knowledge</code> POST documented with <code>KnowledgeIngestResult</code> schema; <code>contract-check.py</code>
+  count semantics aligned (path-level vs method-level no longer look contradictory)</li>
+<li>[x] Tests added: <code>DocumentParserTest</code> (7) · <code>StorageFacadeTest</code> (5) · wp-bff ingest cases (+5)</li>
+<li>[x] <strong>Security gap closed on the write path</strong>: the new <code>POST /api/wp/knowledge</code> initially bypassed
+  auth (it reused the read-only <code>/knowledge</code> exemption), i.e. an unauthenticated write path into the
+  knowledge base. It now passes the same <code>origin-allowlist + X-WP-Control-Token</code> check as
+  <code>/middleware/{key}/start|stop</code>; 2 negative cases added (401 without token / 403 off-allowlist,
+  neither may reach body-service). The Vite dev proxy already injects the token for <code>/api/wp/*</code>,
+  so the front end is unaffected — direct access to :8090 is now rejected.</li>
+<li>[x] Doc truthfulness fixes: removed non-existent <code>status: READY</code> and non-runnable curl examples
+  from the DEMO; corrected source/test counts across module docs</li>
+<li>[x] Registered dangling <code>DEBT-010/011/012</code> that code referenced but the registry did not list</li>
+</ul>
+<h2 id="phase-4-brain-stage-2026-09-19">Phase 4 (大脑期 / Brain Stage, 2026-09-19)<a class="headerlink" href="#phase-4-brain-stage-2026-09-19" title="Permanent link">&para;</a></h2>
+<p>Scope: R4-01~R4-09 plus the terminal line R-C04 (Console brain view + interaction terminal).
+Baseline <code>19c5347</code> — 39 files changed, +3839/-83.</p>
+<h3 id="brain-layer-python-nlp-service-new-appbrain-1374-lines-399-lines-of-tests">Brain layer (Python nlp-service, new <code>app/brain/</code>, 1374 lines + 399 lines of tests)<a class="headerlink" href="#brain-layer-python-nlp-service-new-appbrain-1374-lines-399-lines-of-tests" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] <strong>R4-03</strong> <code>llm_gateway.py</code> — L1/L2/L3 routing, timeout + retry, token accounting; with no
+  engine configured it uses the deterministic template backend and <strong>truthfully reports</strong>
+  <code>degraded=true</code> / <code>generator=template</code> (DEBT-015/016)</li>
+<li>[x] <strong>R4-04</strong> <code>semantic_cache.py</code> — Redis vector similarity @0.95 with in-process fallback
+  (marked <code>degraded</code>); <strong>measured hit rate 57.1%~66.7%</strong> against DoD &gt;= 20%</li>
+<li>[x] <strong>R4-05</strong> <code>planner.py</code> — intent -&gt; task template (qa / summarize / retrieve / chat);
+  reports <code>planner=rule</code> honestly (DEBT-017)</li>
+<li>[x] <strong>R4-06</strong> <code>pipeline.py</code> — LangGraph <code>StateGraph</code> chain <code>plan -&gt; retrieve -&gt; gap -&gt; generate</code>
+  emitting the <code>chain[]</code> decision trace used by the D5 replay view</li>
+<li>[x] <strong>R4-07 / R4-08</strong> <code>gap.py</code> — coverage-based gap detection + source annotation
+  (title / score / rerank_score / snippet)</li>
+<li>[x] Endpoints <code>/api/nlp/brain/{ask,plan,health,cache/stats}</code></li>
+</ul>
+<h3 id="session-layer-java-session-manager">Session layer (Java session-manager)<a class="headerlink" href="#session-layer-java-session-manager" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] <strong>R4-01</strong> <code>fsm/SessionFsm</code> — <code>NEW -&gt; ACTIVE &lt;-&gt; IDLE -&gt; TIMEOUT/CLOSED</code>, terminal-state
+  rejection, timeout recoverable</li>
+<li>[x] <strong>R4-02</strong> <code>fsm/SessionStore</code> — Redis Hash + TTL 2h + last-K-turn context;
+  <strong>verified live</strong>: kill + restart the process, the session comes back <code>ACTIVE</code> with its messages</li>
+<li>[x] <strong>R4-06</strong> <code>orchestration/BrainClient</code> — <code>/ask</code> goes through the brain layer and falls back to
+  local retrieval with <code>generator=local-retrieval</code> (never a fabricated answer)</li>
+</ul>
+<h3 id="bff-terminal-line">BFF + terminal line<a class="headerlink" href="#bff-terminal-line" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] wp-bff <code>GET /api/wp/brain</code>, <code>POST /api/wp/brain/ask</code>, <code>GET /api/wp/brain/{decision_id}</code>;
+  contract flipped <code>planned -&gt; implemented</code>, errors carry the unified envelope</li>
+<li>[x] <strong>R4-09</strong> work-platform chat view sources, gap hint, degradation badge, cache-hit marker and
+  decision-chain replay panel, all from the real brain response</li>
+<li>[x] <strong>R-C04</strong> Console brain view renders real model/cache/retrieval metrics and the interaction
+  terminal completes multi-turn dialogue (Mock/Api parity preserved, R-C09)</li>
+</ul>
+<h3 id="two-calibrated-after-measurement-decisions-registered-not-silent">Two calibrated-after-measurement decisions (registered, not silent)<a class="headerlink" href="#two-calibrated-after-measurement-decisions-registered-not-silent" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Coverage threshold: the design's 0.85 assumes semantic embeddings + cross-encoder reranking;
+  the current backends score 0.10~0.28, so the default is <strong>0.35</strong> (<code>GAP_COVERAGE_THRESHOLD</code>,
+  tunable) with a usable-score floor of 0.15 — documented in <code>docs/技术债台账.md</code> §4.14</li>
+<li>Usability scoring keys on <code>score</code> (vector recall); <code>rerank_score</code> is display/ordering only
+  because the lexical reranker compresses it into 0.10~0.12</li>
+</ul>
+<h3 id="runtime-only-defects-found-and-fixed-see-415">Runtime-only defects found and fixed (see 技术债台账 §4.15)<a class="headerlink" href="#runtime-only-defects-found-and-fixed-see-415" title="Permanent link">&para;</a></h3>
+<ol>
+<li>Spring constructor-injection ambiguity — session-manager <strong>failed to boot</strong>
+   (<code>No default constructor found</code>); fixed with <code>@Autowired</code> on the primary constructor plus
+   <code>@Component</code> on <code>SessionStore</code>, guarded by the new <code>SessionWiringTest</code></li>
+<li>BFF read the knowledge counts from the wrong nesting level (<code>knowledge.knowledge.chunks</code>) so
+   <code>GET /api/wp/brain</code> always reported <code>chunks: 0</code></li>
+<li>The "information gap" notice hard-coded <code>threshold 0.85</code> while the effective value is 0.35</li>
+</ol>
+<h3 id="verification-2026-09-19-real-redis-qdrant-postgresql">Verification (2026-09-19, real Redis / Qdrant / PostgreSQL)<a class="headerlink" href="#verification-2026-09-19-real-redis-qdrant-postgresql" title="Permanent link">&para;</a></h3>
+<ul>
+<li>session-manager 8081 -&gt; nlp 8000 -&gt; body 8083: create (ACTIVE), ask#1 186ms (5 sources,
+  coverage 0.509, <code>template</code> degradation marker), ask#2 104ms (multi-turn), context 4 turns,
+  close (CLOSED), asking on a closed session -&gt; <strong>409 AGENT_CONFLICT</strong>, restart -&gt; session restored</li>
+<li>Vite 3001 -&gt; BFF 8090: <code>POST /api/wp/brain/ask</code> 200 with 5 sources; <code>GET /api/wp/brain</code> 200 with
+  three healthy model-runtime nodes; blank question -&gt; 400 <code>AGENT_BAD_REQUEST</code></li>
+<li>Console (vm smoke harness): metrics render from the live BFF; two real dialogue turns; <code>ds=mock</code>
+  falls back to labelled demo data; BFF down renders a failure notice instead of a fake reply</li>
+</ul>
+<p>Known gap carried forward: <strong>no real LLM engine is attached</strong>, so generation stays on the template
+backend and is labelled as such (DEBT-015/016). The Console's intent-distribution and
+session-trend charts have no backend statistics endpoint yet and are explicitly labelled demo.</p>
+<h3 id="requirement-audit-gap-closure-2026-09-19">Requirement-audit gap-closure 补记 (2026-09-19)<a class="headerlink" href="#requirement-audit-gap-closure-2026-09-19" title="Permanent link">&para;</a></h3>
+<p>Re-reading the Phase 4 implementation against the requirement doc surfaced five defects that the
+unit suite and the acceptance report had both missed (registered in <code>docs/技术债台账.md</code> §4.16,
+evidence in <code>docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md</code>):</p>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>Defect</th>
+<th>Nature</th>
+<th>Fix</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>Semantic cache claimed Redis but only wrote an in-process dict</td>
+<td><strong>pseudo-implementation (red line)</strong></td>
+<td>read/write split by backend; Redis Hash + TTL + tenant prefix + capacity trim; memory only as degraded fallback; real-Redis cases added</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>Decision replay returned <code>200 + available:true + chain:[]</code> for any id</td>
+<td><strong>pseudo-implementation (red line)</strong></td>
+<td>real IN3 AuditLog (PG <code>brain_decision_log</code>, JSONB payload); replay by <code>decision_id</code> + tenant; <strong>miss -&gt; 404</strong>; negative cases added</td>
+</tr>
+<tr>
+<td>A3</td>
+<td>QA read the tenant from the <strong>body</strong> but replay from the <strong>header</strong></td>
+<td>cross-service caliber mismatch</td>
+<td>unified <code>resolve_tenant()</code> (header first, body fallback) across brain/memory endpoints</td>
+</tr>
+<tr>
+<td>A4</td>
+<td>Knowledge ingest did <strong>not</strong> invalidate the retrieval hot cache</td>
+<td>cross-pipeline consistency</td>
+<td>single/batch ingest both call <code>invalidateTenant</code>; 4 regression cases</td>
+</tr>
+<tr>
+<td>A5</td>
+<td>Memory-graph relation endpoint wrote edges without registering endpoint nodes</td>
+<td>extraction-caliber gap</td>
+<td>relation endpoint upserts nodes before edges; <code>_clean_name</code> splits on relation verbs</td>
+</tr>
+</tbody>
+</table>
+<p>Undelivered items landed in the same pass: <strong>IN-02 memory graph</strong> (entity/relation extraction +
+PG adjacency list + recursive-CTE subgraph + context compression, compression ratio <strong>0.883</strong>,
+load <strong>35ms</strong>), the <strong>X4 self-verify + annotate</strong> steps (chain now
+<code>intent→plan→retrieve→generate→verify→annotate</code>), the three decision cards (confidence / audit /
+provenance), the overview cockpit <code>model_calls</code> / <code>model_runtime</code> aggregation (BFF
+<code>GET /api/wp/brain</code>), the <strong>50-case intent evaluation set</strong> (<code>tests/evalset_phase4.json</code>, cascaded
+<strong>98.33%</strong> / L0 fallback 90.0%), and P50/P95/P99 latency via <code>latency_percentiles()</code>.</p>
+<p>Console's <strong>intent distribution</strong> is now switched to live session-manager statistics
+(<code>GET /api/wp/session/stats</code>); only <strong>session trend (last 7 days)</strong> remains a labelled demo value.
+Contract gate fixed: <code>normalize_frontend_path</code> now strips <code>?...</code> before comparison (a query string
+is a path's input, not its identity), so <code>contract-check.py</code> is 0 FAIL again.</p>
+<p>Two e2e harnesses (<code>.workbuddy/tmp/e2e_phase4.py</code>, <code>e2e_session_phase4.py</code>) run green against real
+Redis / PG / Kafka: semantic cache <code>backend=redis degraded=false</code>, cache-hit <code>similarity=1.0</code> at 3ms;
+6-step replay with <code>404</code> on unknown/cross-tenant id; memory graph <code>backend=postgres</code>, 3 entities /
+2 relations; session FSM create→ask→close→<strong>409</strong>→Redis-restored context; BFF session proxy passthrough.</p>
+<h3 id="grpc-port-conflict-fixed-2026-09-19-debt-018">gRPC port conflict fixed (2026-09-19, DEBT-018)<a class="headerlink" href="#grpc-port-conflict-fixed-2026-09-19-debt-018" title="Permanent link">&para;</a></h3>
+<p><code>session-manager</code>'s gRPC health default port was <code>9092</code> — the same host port Kafka binds — so the
+service only started when <code>GRPC_PORT=19092</code> was passed manually (and <code>healthcheck.sh</code>'s
+<code>check_port session-grpc 9092</code> was silently probing Kafka). The default is now <strong>19092</strong> in
+<code>application.yml</code>, <code>healthcheck.sh</code> probes 19092, and the service registry §5 documents the move.
+Verified by starting the jar with <strong>no <code>GRPC_PORT</code> override</strong>: <code>Started SessionManagerApplication in
+6.482s</code>, 19092 listening (session-manager) with 9092 still Kafka, <code>/actuator/health</code> = <code>UP</code>.
+The latent <code>sense-service 9093 ↔ Alertmanager (P7) 9093</code> overlap is registered, not silently
+changed. Docs updated in step: <code>docs/java-services/*</code>, <code>docs/proto契约使用说明.md</code>, <code>docs/demo/Phase*</code>,
+<code>docs/技术债台账.md</code> (§4.17), <code>docs/项目进度总览.md</code>.</p>
+<h2 id="phase-5-limb-stage-2026-09-19">Phase 5 (四肢期 / Limb Stage, 2026-09-19)<a class="headerlink" href="#phase-5-limb-stage-2026-09-19" title="Permanent link">&para;</a></h2>
+<p>Scope: R5-01~R5-08 plus the terminal-line R-C05 (pre) and the innovation item IN-06
+(tool-contract governance). Delivered as a <strong>new independent Maven module</strong> <code>tool-executor</code>
+(HTTP 8084 / gRPC 9095) — no existing service was rewritten, so there is no compatibility debt.</p>
+<h3 id="registry-execution-r5-01-r5-02">Registry &amp; execution (R5-01 / R5-02)<a class="headerlink" href="#registry-execution-r5-01-r5-02" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] <code>registry/ToolRegistry</code> — register / list / detail / unregister / deprecate (30-day window);
+      semver versioning with a <strong>SHA-256 schema fingerprint</strong> (first 16 hex chars) as the stable
+      "did the schema change" criterion; action classification <code>REGISTER</code> / <code>VERSION_UPGRADE</code> /
+      <code>SCHEMA_CHANGE</code> / <code>REREGISTER</code> / <code>DEPRECATE</code> / <code>UNREGISTER</code></li>
+<li>[x] <code>registry/ToolBootstrap</code> — the three built-ins self-register on <code>ApplicationReadyEvent</code>;
+      consumer declarations (<code>brain-planner</code> / <code>combo-task</code> / <code>code-assist</code>) feed the impact analysis</li>
+<li>[x] <code>exec/ToolExecutor</code> — fixed order whitelist -&gt; schema -&gt; sensitive-args -&gt; circuit-breaker -&gt;
+      timed execution -&gt; normalisation -&gt; audit, with two invariants: <strong>audit is never lost</strong>
+      (the method never throws; failures return a normalised result and the controller picks the
+      HTTP semantics) and <strong>a timeout never hangs</strong> (dedicated daemon pool, hard timeout,
+      <code>cancel(true)</code>, consecutive-failure breaker at 3 / 30 s)</li>
+<li>[x] Failure paths return the sandbox facts (<code>exit_code</code> / <code>sandbox_backend</code> / <code>stdout</code> /
+      <code>stderr</code>, clipped to 2000 chars) so "non-zero exit code 1" is no longer the only clue</li>
+</ul>
+<h3 id="sandbox-isolation-r5-03-r5-05">Sandbox isolation (R5-03 / R5-05)<a class="headerlink" href="#sandbox-isolation-r5-03-r5-05" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] <code>sandbox/SandboxExecutor</code> is the single entry point: static pre-check first (<strong>12 dangerous-code
+      rules</strong> hit -&gt; rejected before any backend is touched), then Docker (isolated) else the
+      restricted-process fallback</li>
+<li>[x] <code>sandbox/DockerSandboxBackend</code> — <code>--network none</code>, <code>--memory/--memory-swap</code> 256m, <code>--cpus 0.5</code>,
+      <code>--pids-limit 64</code>, <code>--read-only</code> + 16m tmpfs, <code>--user 1000:1000</code>, <code>--cap-drop ALL</code>,
+      <code>--security-opt no-new-privileges</code>; <code>available()</code> probes both the daemon <strong>and</strong> the image,
+      cached 15 s</li>
+<li>[x] <code>sandbox/RestrictedProcessBackend</code> — <strong>honest degradation, not an isolation boundary</strong>:
+      results always carry <code>degraded=true</code>, and <code>SandboxExecutor.execute()</code> forcibly re-stamps the
+      flag so a fallback result can never be presented as a sandbox result</li>
+<li>[x] <code>tools/CalculatorTool</code> — hand-written recursive-descent parser, <strong>no <code>eval</code> / no script
+      engine</strong> (a calculator is the tool an LLM triggers most; <code>eval</code> would bypass the whole
+      validation gate)</li>
+<li>[x] <code>tools/HttpTool</code> — SSRF check first, then the domain allow-list (<code>*.suffix</code> supported),
+      response body clipped to <code>HTTP_MAX_BODY_BYTES</code></li>
+<li>[x] <code>tools/CodeTool</code> — always via <code>SandboxExecutor</code>; pipes <code>sandbox_backend</code> / <code>sandbox_degraded</code> /
+      <code>rejected</code> through so "where did this actually run" stays observable</li>
+</ul>
+<h3 id="security-gates-audit-r5-07-r5-08">Security gates &amp; audit (R5-07 / R5-08)<a class="headerlink" href="#security-gates-audit-r5-07-r5-08" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] <code>guard/ToolGuard</code> — whitelist (not listed -&gt; rejected <strong>without reaching the executor</strong>),
+      JSON-Schema <strong>Draft-07</strong> argument validation returning field-level <code>details</code>, and sensitive-arg
+      scanning (12 global rules + per-tool patterns) covering file deletion, disk destruction,
+      privilege escalation, sensitive files, reverse shells, path traversal, download-and-execute,
+      dynamic execution and raw network access</li>
+<li>[x] <code>audit/ToolAuditLog</code> — <strong>PG <code>tool_audit_log</code> is the truth source</strong>, Kafka
+      (<code>lifeform.tool.invoked</code>) is an event sidecar only (a bus hiccup must not lose an audit);
+      PG unavailable -&gt; in-process ring buffer with <code>degraded=true</code> and an honest <code>dropped</code> count;
+      argument summaries redact <code>token</code> / <code>secret</code> / <code>password</code> / <code>key</code> / <code>credential</code></li>
+<li>[x] Blocked-counting caliber is shared between the SQL and the in-memory path: only whitelist /
+      sensitive-arg / sandbox rejections count as <strong>security blocks</strong> — an argument-format error
+      (<code>AGENT_TOOL_ARGS_INVALID</code>) does not</li>
+</ul>
+<h3 id="in-06-tool-contract-governance">IN-06 tool-contract governance<a class="headerlink" href="#in-06-tool-contract-governance" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] Impact analysis over <strong>explicitly registered</strong> consumers; <code>ImpactReport.note</code> states that
+      hard-coded callers will not appear (registered as DEBT-019)</li>
+<li>[x] <strong>The gate now reads the schema hash</strong>: <code>contracts/tool-schema-baseline.json</code> is compared by
+      both <code>registry/ToolSchemaBaselineTest</code> and <code>scripts/contract-check.py</code>, so "changed a tool
+      schema but forgot the baseline" fails instead of relying on the <code>contract_test_required</code> flag
+      being noticed by a human</li>
+</ul>
+<h3 id="terminal-line-r-c05-bff">Terminal line (R-C05 预) &amp; BFF<a class="headerlink" href="#terminal-line-r-c05-bff" title="Permanent link">&para;</a></h3>
+<ul>
+<li>[x] wp-bff proxies 9 methods under <code>/api/wp/tools*</code> (<code>POST /tools/execute</code> is a control endpoint:
+      origin allow-list + <code>X-WP-Control-Token</code>); contract flipped to <code>implemented</code> with the
+      <code>ErrorEnvelope.code.enum</code> extended by the seven tool-domain codes</li>
+<li>[x] work-platform <strong>ExecutionView</strong>: tool cards (version / <code>schema_hash</code> / timeout / sandbox flag /
+      breaker badge), a real trial-run drawer, sandbox status lamp, audit stream, success rate and
+      P50/P95/P99, plus the <strong>IN-06 impact drawer</strong> driven by <code>getToolImpact(name)</code></li>
+<li>[x] <code>scripts/healthcheck.sh</code> now also probes <strong>8084 / 9095 / 8090</strong></li>
+</ul>
+<h3 id="verification-2026-09-19">Verification (2026-09-19)<a class="headerlink" href="#verification-2026-09-19" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>scripts/mvn-dev.sh test</code>: <strong>251 passed / 0 failed</strong> (gateway 2 · session 43 · sense 53 ·
+  body <strong>67</strong> · <strong>tool-executor 86</strong>; body +3 from the GAP-closing round)</li>
+<li><code>pytest</code>: <strong>158 passed / 1 skipped</strong> · wp-bff <code>node --test</code>: <strong>87 passed</strong></li>
+<li><code>contract-check.py --work-platform</code>: 60 endpoints, implemented 30 paths / 31 methods, <strong>0 FAIL</strong>;
+  tool baseline 3 tools &lt;-&gt; 3 registered</li>
+<li><code>timeout-budget-check.py</code>: 19 cross-service edges, <strong>ok=19 / gap=0 / fail=0</strong> — <strong>all inversions
+  cleared</strong> on 2026-09-19 (GAP-closing round, direction: <em>tighten the inner layer, cover from the
+  outer layer</em>):</li>
+<li><strong>GAP-01 closed by tightening the downstream</strong>: <code>BRAIN_TOTAL_BUDGET_MS</code> 25000 -&gt; <strong>20000</strong> (the
+    old 25 s cap exceeded the cascade worst case of 22 s and never bound); session <code>BRAIN_TIMEOUT</code>
+    30 s is now exactly 1.5x. Raising the upstream to 33 s instead would have pushed the session
+    total budget to 38 s and worsened GAP-06 to require &gt;= 57 s — headroom is a function of <em>both</em>
+    sides.</li>
+<li><strong>GAP-05 closed by giving the downstream an end-to-end budget (and fixing a registry lie)</strong>:
+    body <code>/retrieve</code> pipeline = embed (12 s) + Qdrant (2 s) + rerank (10 s); the registered "10 s"
+    was merely body's outbound read timeout. New <code>common/BudgetGuard.java</code> wraps the warm pipeline
+    in <code>RETRIEVAL_TOTAL_BUDGET_MS = 10 s</code> (504 <code>AGENT_TIMEOUT</code>, never an empty result disguised as
+    "no data"); upstream <code>RETRIEVAL_BUDGET_MS</code> 8000 -&gt; <strong>15000</strong>, and the second caliber
+    <code>RETRIEVAL_TIMEOUT_SECONDS</code> was retired (retrieval.py derives its timeout from budget.py).</li>
+<li><strong>GAP-06 closed with a dedicated tier</strong>: new <code>ASK_TIMEOUT_MS = 53000</code> serves only the
+    session <code>/ask</code> edge; <code>GENERATE</code> stays 45000 (shared by <code>/brain/ask</code> and memory edges). A guard
+    assertion enforces <code>ASK &gt; GENERATE</code> so the two tiers cannot silently merge back.</li>
+<li>Earlier round for context: <strong>wp-bff's own 5 inversions were cleared</strong> (<code>brain/ask</code> + <code>memory/*</code>
+    5000 -&gt; 45000 against an LLM-cascade worst case of 22000 ms; knowledge ingest <code>30000</code> hard-coded
+    -&gt; <code>WRITE</code> 60000). The inversions were <em>already live</em>, not a future risk: even with only
+    <code>TemplateEngine</code>, worst case <code>3 s x 2 = 6 s</code> exceeded the old 5000 ms default.</li>
+<li><strong>REC-01 — deadline propagation (2026-09-19)</strong>: <code>nlp-service</code> gained <code>app/budget.py</code>
+  (<code>run_with_budget</code> / <code>BudgetExceeded</code>), all budgets returning <code>504 AGENT_TIMEOUT</code>; the LLM cascade
+  uses <code>min(level timeout, remaining budget)</code> per level and reports <code>deadline_exceeded</code>;
+  <code>session-manager</code> gained <code>RequestBudget</code> (35 s per ask, per-hop <code>clamp</code>, no call is issued once
+  the budget is spent) plus named tiers (<code>INTENT</code> 5 s / <code>RETRIEVE</code> 15 s / <code>BRAIN</code> 30 s).
+  Lesson recorded in the registry header: capping a downstream budget makes its worst case
+  <em>provable</em> <strong>and</strong> changes the upstream headroom ratio — both sides must be reconciled in the
+  same round.</li>
+<li><strong>Gate blind spot found and fixed while reconciling the table</strong>: the original anchor regex
+  <code>READ_TIMEOUT = Duration\.ofSeconds\((\d+)\)</code> <strong>substring-matched</strong> <code>DEFAULT_READ_TIMEOUT</code>, so TB-11 /
+  TB-12 silently kept reading the stale 10 s default instead of their real tier. Anchors were tightened
+  to named tiers and downstream anchors added for TB-06 / TB-09 / TB-11 / TB-12 / TB-13 / TB-15 / TB-16.
+  Reverse-verified in the GAP-closing round: a planted anchor drift (19999 vs 20000) → <code>fail=1 / exit=1</code>.</li>
+<li><strong>Test-writing pitfall caught by a red test</strong>: stubbing <code>embed</code> does nothing because the pipeline
+  calls the mocked <code>embedOne</code> (the interception layer never reaches the real body); stubs must target
+  the layer that is actually invoked, otherwise the test is fake-green.</li>
+<li><code>doc-consistency-check.py</code>: <strong>0 FAIL</strong> — anomaly IDs unique, section numbers unique,
+  md/html twins in sync</li>
+<li><code>java-doc-coverage.py</code>: <strong>160/160</strong> (<code>BudgetGuard.java</code> registered; tool-executor 43/43)</li>
+<li>Runtime probes on :8084 — <code>calculator</code> <code>sqrt(2)+pow(2,10)</code> OK; <code>code</code> <code>print(128*17)</code> OK
+  (<code>sandboxed=true, sandbox_backend=docker, degraded=false</code>);
+  <code>rm -rf</code> and outbound-network samples both <strong>403 + audited</strong>;
+  <code>GET /api/tool/sandbox</code> reports <code>docker_available=true</code> / <code>active_backend=docker</code> /
+  <code>isolated=true</code> / <code>degraded=false</code></li>
+</ul>
+<blockquote>
+<p><strong>Closed (2026-09-19, real-link round)</strong>: <code>agent-sandbox:latest</code> <strong>is</strong> built on this host
+(124 MB) and <strong>R5-03 is now verified on the real Docker isolation path</strong>, not only the degraded
+backend — kernel-level evidence: outbound → <code>Errno -3 Temporary failure in name resolution</code>,
+rootfs write → <code>OSError: Errno 30 Read-only file system</code>. The earlier <code>docker_available=false</code>
+was a <em>timing</em> artifact (the image was not yet built when the JVM probed), and a second defect
+was found behind it: <code>DockerSandboxBackend.available()</code> ran <code>docker info</code> + <code>image inspect</code>
+<strong>synchronously on the request thread</strong> (5.7 s cold on Windows), which exceeded wp-bff's 2.5 s
+sub-request budget (<code>server.js:46</code>) and made <code>/api/wp/tools</code> report
+<code>sandbox:null + partial:["sandbox_unavailable"]</code> — <em>a slow answer expressed upstream as a
+missing one</em>. Fixed by making <code>available()</code> <strong>O(1) and non-blocking</strong> (probe once at startup,
+refresh on a daemon thread behind a 15 s TTL, single-flight latch); endpoint latency
+5.7 s → 0.5 s, <code>partial:false</code>. Guarded by 4 new assertions in
+<code>sandbox/DockerSandboxBackendTest</code> (slow probe must not block the caller, no probe storm within
+TTL, zero probe cost when disabled). See
+<code>docs/优化日志/2026-09-19-工作平台真实链路打通与沙箱探测非阻塞化.md</code>.
+DEBT-019~021 (in-process registry, networknt-vs-everit choice, metrics not on Prometheus) are
+registered with triggers rather than silently carried.</p>
+</blockquote>
+<h2 id="frontend">Frontend<a class="headerlink" href="#frontend" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[x] Vue 3 + Vite + TypeScript + Element Plus work-platform scaffold</li>
+<li>[x] Vue Router + Pinia + ConsoleDataProvider Mock/API switch</li>
+<li>[x] Global search, notification center and persisted preferences</li>
+<li>[x] Overview enhanced cockpit: life-colony concurrency topology, model call trend, model runtime topology and optimization suggestions</li>
+<li>[x] Overview vitals summary, service health and growth timeline drill-down</li>
+<li>[x] Tasks create/retry/archive/reorder and chat result workspace (artifacts/files/diff/preview)</li>
+<li>[x] Vitals realtime status, organ report, brain trace, senses drill-down and evolution trend</li>
+<li>[x] Multi-agent bus topology with mode cards, agent message rails, non-flickering MC-P stream, stacked artifacts and gates</li>
+<li>[x] Automation cron validation, case assembly and L3/L4 approval workflow displays</li>
+<li>[x] Chat view against the real brain chain: sources with similarity, gap hint, degradation
+  badge, cache-hit marker and decision-chain replay (R4-09)</li>
+<li>[x] Console brain view + interaction terminal on real data with Mock/Api parity (R-C04)</li>
+<li>[x] npm run typecheck passed</li>
+<li>[x] npm run build passed</li>
+</ul>
+<h2 id="verification-completed">Verification completed<a class="headerlink" href="#verification-completed" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>D-1 fixed (2026-09-13)</strong>: cross-service calls were failing because the JDK <code>HttpClient</code> default
+  (HTTP/2) sends an h2c upgrade handshake that uvicorn/h11 rejects, which dropped the request body
+  (FastAPI replied 422, Java surfaced 503). All outbound clients now go through a shared HTTP/1.1
+  factory (<code>OutboundHttp</code> in session-manager, <code>HttpClients</code> in sense-service) with connect/read
+  timeouts, graceful degradation (intent -&gt; FALLBACK, retrieval -&gt; empty) and a dedicated
+  <code>AGENT_UPSTREAM_UNAVAILABLE</code> error code. Regression guards: <code>OutboundHttpTest</code>,
+  <code>UpstreamDegradeTest</code>, <code>HttpClientsTest</code>.
+  End-to-end re-verified: <code>POST /api/session/{id}/ask</code> -&gt; 200 in 875 ms, Redis
+  <code>session:{id}:messages</code> LLEN=2, and <code>ask</code> still returns 200 (FALLBACK) with nlp-service stopped.</li>
+<li><code>mvn clean package</code>: passed, <strong>61 tests / 0 failures / 0 errors</strong></li>
+<li>gateway-service 2 | session-manager 10 | <strong>sense-service 48</strong> | body-service 1</li>
+<li>(was 54 before the D-1 fix; +7 regression cases)</li>
+<li>Python <code>tests/test_intent.py</code>: 15 passed (L0 holdout 90.0%, P99 0.052 ms)</li>
+<li>Python <code>tests/test_ocr.py</code>: 4 passed</li>
+<li><code>python -m pytest</code>: 19 passed</li>
+<li><code>docker compose config</code>: passed with required MinIO environment variables</li>
+<li>OCR module import no longer initializes PaddleOCR at import time</li>
+<li><code>node --check web/console/js/provider.js</code>: passed</li>
+<li><code>contract-check.py</code>: 0 FAIL</li>
+<li><code>work-platform</code> contract check: passed</li>
+<li>gRPC Java generation: 6 proto files, 90 generated Java sources</li>
+<li>Python proto generation: 12 generated files in services/python/nlp-service/generated</li>
+<li>Phase demo scripts: <code>docs/demo/Phase0-DEMO.md</code>, <code>docs/demo/Phase1-DEMO.md</code>, <code>docs/demo/Phase2-DEMO.md</code></li>
+<li>Phase 2 stage reports archived in <code>docs/项目进度日志报告/</code> (stage report, execution log, test &amp; acceptance report; each with a generated HTML twin)</li>
+<li><strong>Java source documentation</strong> in <code>docs/java-services/</code>: per-file description of all 72 hand-written
+  Java sources (6 gateway / 13 session-manager / 35 sense-service / 4 body-service main + 14 test classes)
+  plus the 90 generated proto sources described by contract; 7 documents with HTML twins</li>
+<li><code>scripts/md2html-report.py</code> renders reports/docs to self-contained HTML. <strong>Must run with anaconda Python</strong>
+  (<code>E:/software/anaconda3/python.exe</code>); the managed Python has no <code>markdown</code> package.
+  Usage: <code>E:/software/anaconda3/python.exe scripts/md2html-report.py --all "&lt;dir&gt;"</code> (<code>--all</code> skips <code>README.md</code>)</li>
+</ul>
+<h2 id="2026-09-15-work-platform-observability-update-dev-branch">2026-09-15 Work Platform Observability Update (dev branch)<a class="headerlink" href="#2026-09-15-work-platform-observability-update-dev-branch" title="Permanent link">&para;</a></h2>
+<ul>
+<li>New "观测区" group in work-platform: <strong>MiddlewareView</strong> + <strong>TracingView</strong>, backed by a minimal
+  Ops BFF (<code>services/node/wp-bff</code>, zero-dependency Node, port 8090):</li>
+<li><code>GET /api/wp/middleware</code> — live TCP probes of all 8 middleware containers (state/latency/metrics)</li>
+<li><code>POST /api/wp/middleware/:key/start|stop</code> — real <code>docker compose up -d / stop</code> behind a strict
+    8-key whitelist, fixed command shapes, in-memory ops tracking (starting/stopping) with watchdog,
+    audit log at <code>logs/wp-bff-audit.log</code>. Unlisted keys -&gt; 403.</li>
+<li><code>GET /api/wp/tracing</code> — real Jaeger data: registered services + per-service aggregation of the
+    latest 20 traces (traces/spans/error rate/P99) + 12 most recent traces overall.</li>
+<li>Middleware page: per-card start/stop (down -&gt; starting/stopping -&gt; up, polled), plus <strong>one-click
+  serial start/stop</strong> buttons — each middleware is confirmed healthy/stopped before moving to the
+  next, with a progress banner. Full cycle verified on real containers: serial stop 8/8 down,
+  serial start 8/8 up.</li>
+<li>Overview page: optimization suggestions now run a real execution loop (queued -&gt; step progress +
+  live log -&gt; receipt) instead of flipping status; API contract <code>POST /suggestions/:id/apply</code> reserved.</li>
+<li>Dev environment: <code>.env</code> switched to <code>VITE_DATA_SOURCE=api</code>; vite dev server dual-stack listening
+  (localhost / 127.0.0.1 / LAN IP all reachable, <code>host: true</code> + <code>allowedHosts: true</code> in config —
+  note the dev script previously overrode config via <code>--host 0.0.0.0</code>).</li>
+</ul>
+<h2 id="2026-09-16-engineering-hardening-optimization-pass">2026-09-16 Engineering Hardening (optimization pass)<a class="headerlink" href="#2026-09-16-engineering-hardening-optimization-pass" title="Permanent link">&para;</a></h2>
+<p>Scope: the P0/P1/P2 items from the progress review, <strong>excluding Phase 3</strong>.</p>
+<h3 id="p0-wp-bff-control-plane-hardening">P0 · wp-bff control-plane hardening<a class="headerlink" href="#p0-wp-bff-control-plane-hardening" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Control endpoints (<code>POST /api/wp/middleware/:key/start|stop</code>) now require <strong>both</strong> an origin
+  check (Origin/Referer against <code>WP_BFF_ALLOWED_ORIGINS</code>) and a control token
+  (<code>X-WP-Control-Token</code>, compared with <code>timingSafeEqual</code>). Missing/invalid token -&gt; 401,
+  foreign origin -&gt; 403; both cases are audit-logged as <code>REJECT_AUTH</code>.</li>
+<li>Token resolution: <code>WP_BFF_CONTROL_TOKEN</code> env var, otherwise a random token generated at boot,
+  written to <code>services/node/wp-bff/logs/wp-bff-control-token</code> (mode 0600) and printed once to
+  stdout. There is <strong>no</strong> unauthenticated fallback mode.</li>
+<li>CORS: <code>Access-Control-Allow-Origin: *</code> removed; the header is echoed only for allow-listed
+  origins and <code>Vary: Origin</code> is always set. Preflight from a foreign origin returns 403.</li>
+<li>New read-only <code>GET /api/wp/healthz</code> reports token source, origin allow-list and key inventory
+  without leaking the token.</li>
+<li><code>server.js</code> refactored into <code>createServer(options)</code> with injectable spawn/probe/fetch, so the
+  control plane is testable. <code>services/node/wp-bff/test/server.test.js</code> adds <strong>14 regression
+  cases</strong> (auth, CSRF, allow-list, fixed command shape, idempotency, CORS, tracing fallback,
+  sampling metadata).</li>
+<li>Dev wiring: the Vite proxy reads the token file <strong>server-side</strong> and injects the header, so the
+  token never reaches the browser bundle. The proxy deliberately does <strong>not</strong> rewrite <code>Origin</code>,
+  keeping the CSRF check effective through the proxy.</li>
+</ul>
+<h3 id="p0-api-mode-no-longer-silently-falls-back-to-mock">P0 · API mode no longer silently falls back to Mock<a class="headerlink" href="#p0-api-mode-no-longer-silently-falls-back-to-mock" title="Permanent link">&para;</a></h3>
+<ul>
+<li>New <code>web/work-platform/src/api/status.ts</code> tracks degradation per data scope (overview, vitals,
+  organs, brain, senses, evolution, collaboration, experts, skills, connectors, automations,
+  cases, approvals, models, remote_channels, online_agents, middleware, tracing).</li>
+<li><code>provider.ts</code>'s <code>safe()</code> records a degradation entry on failure / clears it on success;
+  <code>getMiddleware</code> and <code>getTracing</code> register degradation when the payload lacks <code>enabled</code>.</li>
+<li>UI: the header shows an <code>API · 降级 N</code> badge, a warning banner sits above the routed view with a
+  drill-down dialog (scope + reason + time), and each module page shows its own degradation alert
+  when its data domain is still served from Mock.</li>
+</ul>
+<h3 id="p1-observability-truthfulness">P1 · Observability truthfulness<a class="headerlink" href="#p1-observability-truthfulness" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Trace aggregation now returns <code>sample_size</code>, <code>sample_limit</code> and <code>p99_basis</code>
+  (<code>sampled_recent_traces</code>); the tracing page states that P99/spans come from the most recent 20
+  traces per service and are <strong>not</strong> full 24h metrics.</li>
+<li>Recent-trace ordering switched from local time-string comparison to the absolute
+  <code>start_time_ms</code> value, removing a cross-midnight ordering bug.</li>
+<li>Middleware cards now expose the probe type (<code>TCP 端口可达性</code>) and the indicator formerly labelled
+  "进程：健康" is renamed to "端口状态：可达/不可达", so a green card is not mistaken for deep
+  process health.</li>
+</ul>
+<h3 id="p1-ci-coverage">P1 · CI coverage<a class="headerlink" href="#p1-ci-coverage" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>.gitlab-ci.yml</code> gains <code>python-test</code> (pytest, 19 cases) and <code>wp-bff-test</code>
+  (<code>node --check</code> + <code>node --test</code>, 14 cases); <code>java-test</code>, <code>frontend-build</code> (typecheck + build)
+  and <code>contract-check</code> were already present.</li>
+</ul>
+<h3 id="p2-frontend-delivery">P2 · Frontend delivery<a class="headerlink" href="#p2-frontend-delivery" title="Permanent link">&para;</a></h3>
+<ul>
+<li>All routes use dynamic <code>import()</code> now: overview, tasks, chat, the 13 module pages, middleware
+  and tracing are separate chunks instead of one initial bundle.</li>
+<li>Added <code>@types/node</code> plus <code>"types": ["vite/client", "node"]</code> so <code>vite.config.ts</code> is type-checked.</li>
+<li>Build output: <code>element</code> vendor chunk 952 kB (still a full import — on-demand import is deferred
+  until a visual regression baseline exists), <code>ModuleView</code> 51 kB, <code>vue</code> 111 kB.</li>
+<li><code>ModuleView.vue</code> (~85 kB, 13 module branches) is still one component; splitting it into
+  per-module panels is queued behind the same visual-regression prerequisite.</li>
+</ul>
+<h3 id="verification-2026-09-16">Verification (2026-09-16)<a class="headerlink" href="#verification-2026-09-16" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>services/node/wp-bff</code> -&gt; <code>node --test</code>: <strong>14 passed</strong></li>
+<li><code>services/python/nlp-service</code> -&gt; <code>python -m pytest</code>: <strong>19 passed</strong></li>
+<li><code>web/work-platform</code> -&gt; <code>npm run typecheck</code> passed, <code>npm run build</code> passed</li>
+<li>Manual API-mode degradation check: header badge + banner + per-module alert render when the
+  BFF does not implement a data domain</li>
+</ul>
+<h2 id="2026-09-16-contract-alignment-overview-aggregation-optimization-pass-2">2026-09-16 Contract Alignment &amp; Overview Aggregation (optimization pass 2)<a class="headerlink" href="#2026-09-16-contract-alignment-overview-aggregation-optimization-pass-2" title="Permanent link">&para;</a></h2>
+<p>Follow-up to the progress review: this pass fixes the structural gap between the BFF contract and the
+implementation, and gives the overview page its first real data. Phase 3 stays frozen (the team is
+consolidating Phase 0-2 material). Branch decisions recorded in README 8.4: <code>workbuddy/main</code> remains
+an independent line (no merge) and <code>dev</code> belongs to another developer machine.</p>
+<h3 id="p0-contract-implementation-alignment">P0 · Contract &lt;-&gt; implementation alignment<a class="headerlink" href="#p0-contract-implementation-alignment" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Contract grew from 31 to <strong>37 endpoints</strong>, each path carrying an <code>x-wp-status</code> marker:
+  <strong>implemented 6 | planned 31</strong>.</li>
+<li>Registered the five observability/Ops endpoints (<code>/healthz</code>, <code>/overview</code>, <code>/middleware</code>,
+  <code>/middleware/{key}/start</code>, <code>/middleware/{key}/stop</code>, <code>/tracing</code>) plus
+  <code>/suggestions/{suggestion_id}/apply</code>, which the front end was already calling but the contract
+  never declared.</li>
+<li><code>scripts/contract-check.py</code> gained three rules: implemented endpoints must be registered and marked
+  <code>implemented</code>; every path called from <code>provider.ts</code> must match a contract template; every endpoint
+  must carry <code>x-wp-status</code>.</li>
+<li>Negative tests prove the gate bites: removing <code>/tracing</code> from the contract -&gt; exit 1
+  (<code>FAIL 实现端点未登记契约: /tracing</code>); marking <code>/middleware</code> as planned -&gt; exit 1
+  (<code>FAIL 实现端点状态不符: /middleware</code>).</li>
+</ul>
+<h3 id="p1-bff-overview-aggregation">P1 · BFF overview aggregation<a class="headerlink" href="#p1-bff-overview-aggregation" title="Permanent link">&para;</a></h3>
+<ul>
+<li>New <code>GET /api/wp/overview</code> aggregates only what has a real source: <code>observability.middleware</code>
+  (8 TCP probes with up/down/pending) and <code>observability.tracing</code> (services, sampled spans, recent
+  errors, sampled P99). The 15 still-unimplemented domains are returned in <code>gaps</code> and surfaced as
+  degradation by the front end - no silent filling.</li>
+<li>Front end: <code>provider.getOverview()</code> calls the aggregate endpoint, and <code>OverviewView</code> gained an
+  "OPS 观测区实时摘要" strip with four cards (port reachability / registered services / recent error
+  traces / pending data domains).</li>
+</ul>
+<h3 id="p1-governance-and-ci">P1 · Governance and CI<a class="headerlink" href="#p1-governance-and-ci" title="Permanent link">&para;</a></h3>
+<ul>
+<li>README 8.4 records the branch decisions: <code>git fetch</code> before pushing to <code>dev</code> (another machine's
+  branch); <code>workbuddy/main</code> stays independent.</li>
+<li>CI gained a <code>docker-smoke</code> job (compose up + <code>healthcheck.sh</code>; requires a dind runner, currently
+  <code>allow_failure: true</code>).</li>
+</ul>
+<h3 id="verification-2026-09-16-pass-2">Verification (2026-09-16, pass 2)<a class="headerlink" href="#verification-2026-09-16-pass-2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>wp-bff <code>node --test</code>: <strong>14 passed</strong></li>
+<li><code>scripts/contract-check.py --work-platform</code>: 37 endpoints, implemented 6 / planned 31, <strong>0 FAIL</strong></li>
+<li>Vue <code>npm run typecheck</code> and <code>npm run build</code>: passed</li>
+<li>Live check: started wp-bff on :8091 and called <code>GET /api/wp/overview</code> - returned real probe data
+  (Docker not running -&gt; up=0/8, Jaeger <code>enabled=false</code>)</li>
+<li>Optimization log archived at <code>docs/优化日志/2026-09-16-契约对齐与总览聚合.md</code> (plus generated HTML)</li>
+</ul>
+<h2 id="2026-09-17-documentation-consolidation">2026-09-17 Documentation Consolidation<a class="headerlink" href="#2026-09-17-documentation-consolidation" title="Permanent link">&para;</a></h2>
+<p>Goal: make the archived documentation answer two questions on its own — "where are we now?" and
+"how is each feature developed?" — without reading the commit history.</p>
+<ul>
+<li>Added <strong><code>docs/项目进度总览.md</code></strong> (+ HTML): stage status table (Phase 0/1/2 accepted, hardening
+  period in progress, Phase 3+ frozen, V1 design-ready), per-service feature matrix
+  (Java 58 main + 14 test = 72 sources / 90 generated proto sources; nlp-service intent + OCR;
+  work-platform; wp-bff), the 2026-09-16 test baseline, branch &amp; remote topology, remaining items
+  and the 6 registered engineering gaps. Stale figures from older archives are explicitly marked
+  as such rather than edited in place.</li>
+<li>Added <strong><code>docs/功能开发流程.md</code></strong> (+ HTML): the shared 8-step pipeline (§8.0-8.5) plus a
+  per-feature development flow for gateway / session+VS1 / sense pipeline / intent / OCR / body /
+  work-platform / wp-bff / infrastructure / contract governance / docs toolchain, each with
+  requirement source, code entry points, contracts, tests and acceptance criteria; ends with an
+  add-a-feature checklist and this host's specific pitfalls.</li>
+<li>Added <strong><code>docs/README.md</code></strong>: docs map, reading order and the two supported HTML-generation
+  environments (anaconda here, managed Python + <code>PYTHONPATH</code> on the other machine).</li>
+<li>Updated <strong><code>docs/项目进度日志报告/README.md</code></strong>: registered the hardening period (2026-09-15~16),
+  refreshed reproduction commands (Java baseline <strong>61</strong>, not the archived 54), and documented both
+  HTML generation environments.</li>
+<li>Branch naming recorded: the long-lived line is now <strong><code>codex/main</code></strong> (<code>codex/phase0-1-hardening</code>
+  archived and removed on 2026-09-16); <code>codex/main</code> = <code>dev</code> = <code>workbuddy/main</code> = <code>ab2ad29</code>.
+  <code>main</code> remains the untouched initial commit and is intentionally not maintained.</li>
+</ul>
+<h3 id="verification-2026-09-17">Verification (2026-09-17)<a class="headerlink" href="#verification-2026-09-17" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>scripts/md2html-report.py --all</code> regenerated the new + touched documents' HTML twins
+  (anaconda Python 3.10.9, markdown 3.4.1)</li>
+<li>Doc coverage self-check: <code>python scripts/java-doc-coverage.py</code></li>
+<li>No source code changed in this pass; Java/Python/contract/wp-bff baselines carry over from
+  the 2026-09-16 figures above.</li>
+</ul>
+<h2 id="phase-3-post-closure-hardening-2026-09-18">Phase 3 post-closure hardening (2026-09-18)<a class="headerlink" href="#phase-3-post-closure-hardening-2026-09-18" title="Permanent link">&para;</a></h2>
+<p>After the requirement re-audit, three independent passes ran without adding new features.
+Each is recorded in detail under <code>docs/优化日志/</code>.</p>
+<h3 id="1-runtime-semantics-mockapi-alignment-bce7921">1 · Runtime semantics &amp; Mock/API alignment (<code>bce7921</code>)<a class="headerlink" href="#1-runtime-semantics-mockapi-alignment-bce7921" title="Permanent link">&para;</a></h3>
+<p>A front-to-back connectivity pass: making the running services, the contract and the front end
+tell the same story.</p>
+<ul>
+<li>[x] <strong>Route semantics corrected</strong>: unmapped routes answered 500 instead of 404 across the three
+      Java services, because Spring route-layer exceptions fell through to the catch-all handler —
+      "endpoint missing" was indistinguishable from "service broken". Now mapped to
+      <code>AGENT_NOT_FOUND</code> / <code>AGENT_METHOD_NOT_ALLOWED</code> / <code>AGENT_UNSUPPORTED_MEDIA_TYPE</code>, each with a
+      test (see <code>docs/java-services/07 §5.1</code>)</li>
+<li>[x] <strong>Mock &lt;-&gt; real response reconciled in both directions</strong> — the forward check alone had been
+      silently dropping fields the real API returns and Mock does not declare</li>
+<li>[x] Proxy targets / ports externalised (<code>WP_BFF_URL</code> / <code>WP_GATEWAY_URL</code> / <code>WP_DEV_PORT</code>);
+      <code>.env.example</code> template aligned with the accepted state</li>
+</ul>
+<h3 id="2-doc-figure-consistency-pass-8ba5544">2 · Doc-figure consistency pass (<code>8ba5544</code>)<a class="headerlink" href="#2-doc-figure-consistency-pass-8ba5544" title="Permanent link">&para;</a></h3>
+<p>Doc figures had drifted <strong>while every gate was green</strong> — the gates check existence, not accuracy.</p>
+<ul>
+<li>[x] Test counts, source-line counts and endpoint counts re-checked against actual command output
+      across <code>docs/java-services/04~07</code>, <code>docs/项目进度总览</code>, <code>docs/功能开发流程</code> and both READMEs</li>
+<li>[x] Latest cross-cutting behaviour written into the human-facing docs (§5.1 route-layer dispatch,
+      §5.2 unified exception egress)</li>
+<li>[x] Corrected an interface example that 404s if copy-pasted (<code>POST /api/body/rag</code> -&gt; <code>/rag/answer</code>)</li>
+<li>[x] Doc coverage gate restored to green (<strong>103/103 -&gt; 106/106</strong>)</li>
+</ul>
+<h3 id="3-exception-flow-consolidation-unified-error-envelope-6616616-d4a114b">3 · Exception-flow consolidation &amp; unified error envelope (<code>6616616</code> + <code>d4a114b</code>)<a class="headerlink" href="#3-exception-flow-consolidation-unified-error-envelope-6616616-d4a114b" title="Permanent link">&para;</a></h3>
+<p>Progress and quality were re-audited against the running code rather than against the phase
+reports' conclusions. Three real gaps surfaced — <strong>all of them in failure paths that every green
+gate had missed</strong>:</p>
+<ul>
+<li>[x] Error responses came in <strong>three different shapes</strong> (Java <code>{code,message,details}</code> ·
+      wp-bff <code>{error}</code> · nlp-service leaking the FastAPI default body). One shape everywhere now,
+      with an <code>ErrorEnvelope</code> schema added to the contract</li>
+<li>[x] wp-bff answered <strong>404</strong> for an unsupported method where the Java services answer <strong>405</strong> —
+      opposite semantics for the same situation, which disguises "wrong method" as "endpoint does
+      not exist". Now 405 + <code>Allow</code> header, driven by a <code>ROUTE_GUARD</code> derived from the single
+      <code>IMPLEMENTED_ENDPOINTS</code> registry so that no third source of truth is introduced</li>
+<li>[x] nlp-service had <strong>zero</strong> HTTP-layer tests; <code>tests/test_http_errors.py</code> added (+10)</li>
+<li>[x] Added <strong><code>docs/异常流程归纳.md</code></strong>: runtime dispatch, degradation visibility, the planned-endpoint
+      3-state rule (404 = not implemented · 4xx = misused · 5xx = broken) and a <strong>D-01~D-30</strong>
+      catalogue of development-process exceptions</li>
+</ul>
+<p>Three remainders are <strong>registered rather than glossed over</strong> (待办 18/19/20):
+gateway (8080) is still unverified at runtime because <strong>Spring WebFlux does not use
+<code>@ControllerAdvice</code></strong>; the BFF body-layer unavailable case deliberately answers
+<code>200 + available=false</code>; and the unified error envelope still has <strong>no gate guarding it</strong>.</p>
+<h3 id="verification-2026-09-18-post-closure">Verification (2026-09-18, post-closure)<a class="headerlink" href="#verification-2026-09-18-post-closure" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Java <code>scripts/mvn-dev.sh test</code>: <strong>130 passed / 0 failed</strong> (gateway 2 · session 15 · sense 53 · body 60)</li>
+<li><code>nlp-service</code> pytest: <strong>62 passed</strong> · wp-bff <code>node --test</code>: <strong>34 pass / 0 fail</strong></li>
+<li><code>contract-check.py --work-platform</code>: implemented 8 paths &lt;-&gt; BFF 8 paths (9 methods), <strong>0 FAIL</strong></li>
+<li><code>java-doc-coverage.py</code>: <strong>106/106</strong> hand-written sources</li>
+<li>HTML twins regenerated, <code>STALE</code> check empty; the three long-lived branches are all at <code>d4a114b</code></li>
+</ul>
+<blockquote>
+<p>Java counts are taken from the Maven log, <strong>not</strong> by summing surefire reports: a stale
+<code>body-service/target/surefire-reports/com.agent.body.store.BodyStoreTest.txt</code> from 2026-09-13
+(its test class was removed long ago) inflates the sum to 131.</p>
+</blockquote>
+<h2 id="remaining">Remaining<a class="headerlink" href="#remaining" title="Permanent link">&para;</a></h2>
+<ul>
+<li>~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:
+  8 infrastructure containers + 4 Java services + nlp-service + work-platform all running,
+  <code>healthcheck.sh</code> 16/16 OK, business chain (token -&gt; session -&gt; ask -&gt; Redis/Kafka) green.</li>
+<li>OCR end-to-end acceptance requires installing PaddleOCR or Tesseract; until then the
+  visual channel stays <code>DEGRADED</code> and the API truthfully reports <code>available=false</code>.</li>
+<li>~~Phase 3+ still pending (body-service knowledge ingest / semantic retrieval integration).~~
+  Done on 2026-09-18: Phase 3 (R3-01~R3-09 + R-C03) delivered the full knowledge pipeline,
+  three-tier storage, semantic retrieval, reranking, RAG and the sense-&gt;body closed loop;
+  DEBT-001 closed. <strong>Phase 4 (大脑期 / brain stage, R4-01~R4-09 + R-C04) landed on 2026-09-19</strong>;
+  <strong>Phase 5 (四肢期 / limb stage, R5-01~R5-08 + R-C05 预 + IN-06) landed on 2026-09-19</strong>.
+  Phase 6 (小脑期 / orchestration) is next.</li>
+<li><strong>Sandbox true isolation is unverified on this host</strong>: <code>agent-sandbox:latest</code> is not built, so
+  <code>docker_available=false</code> and execution goes through the restricted-process fallback
+  (<code>degraded=true</code>). Build the image and re-run the escape-sample set before R5-03 is written up
+  as verified.</li>
+<li>Tool registry is in-process only (no etcd) and tool metrics are not on Prometheus — DEBT-019/021.</li>
+<li>Real embedding (BGE-M3) and cross-encoder reranker weights are not installed on this host;
+  the services fall back to deterministic backends and report <code>degraded=true</code> (honest degradation,
+  never faked). Installing the models switches them automatically.</li>
+<li>Large-document ingest currently relies on the event payload carrying the body text; reading
+  back from staging storage for oversized documents is a registered follow-up debt.</li>
+<li>Work Platform BFF/API mode: <strong>minimal Ops subset done</strong> (2026-09-15) — middleware
+  observe/start/stop + tracing observe are real; 2026-09-18 added real knowledge stats/search.
+  Remaining endpoints (tasks/approvals/models/vitals, WebSocket events) are still pending and fall
+  back to Mock; since 2026-09-16 that fallback is no longer silent (header badge + banner +
+  per-module alert).</li>
+<li><code>ModuleView.vue</code> split and Element Plus on-demand import: assessed, but both need a visual
+  regression baseline before execution (see 2026-09-16 section).</li>
+</ul></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

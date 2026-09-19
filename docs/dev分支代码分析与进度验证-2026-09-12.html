@@ -1,0 +1,676 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>dev 分支代码分析与开发进度验证</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 dev分支代码分析与进度验证-2026-09-12.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">一、分支操作记录</a></li>
+<li><a href="#_2">二、代码规模与结构</a></li>
+<li><a href="#_3">三、开发进度验证（按阶段）</a><ul>
+<li><a href="#phase-0">Phase 0 胚胎期 — ✅ 完成</a></li>
+<li><a href="#phase-1">Phase 1 神经期 — ✅ 完成</a></li>
+<li><a href="#phase-2-1">Phase 2 感官期 — ✅ 完成（1 项受外部依赖降级）</a></li>
+<li><a href="#_4">静态校验补充</a></li>
+</ul>
+</li>
+<li><a href="#2026-09-12">四、测试与验收证据（文档记载；2026-09-12 起已在本机复跑）</a></li>
+<li><a href="#_5">五、风险与后续开发注意项</a></li>
+<li><a href="#phase-3">六、Phase 3 下一步（躯体期）</a></li>
+<li><a href="#_6">七、验证结论</a></li>
+<li><a href="#2026-09-13">八、端到端动态验证（2026-09-13 追加）</a><ul>
+<li><a href="#81">8.1 环境</a></li>
+<li><a href="#82-vs1">8.2 容器级联调（VS1）</a></li>
+<li><a href="#83-dev-token-kafka">8.3 业务链路冒烟（dev token → 建会话 → 发消息 → 落库 → Kafka）</a></li>
+<li><a href="#84-d-1jdk-httpclient-h2c-python-2026-09-13">8.4 缺陷 D-1：JDK HttpClient 的 h2c 升级打挂 Python 服务调用（已于 2026-09-13 修复）</a></li>
+<li><a href="#85">8.5 本机环境注意项（复用）</a></li>
+<li><a href="#86-d-1-2026-09-13">8.6 D-1 修复记录（2026-09-13）</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="dev">dev 分支代码分析与开发进度验证<a class="headerlink" href="#dev" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>项目</td>
+<td>Agent-Lifeform · AI Agent 生命体架构（<code>E:\AI\ai-agent</code>）</td>
+</tr>
+<tr>
+<td>分析日期</td>
+<td>2026-09-12</td>
+</tr>
+<tr>
+<td>新分支</td>
+<td><code>dev</code>（基于 <code>origin/workbuddy/main</code>）</td>
+</tr>
+<tr>
+<td>基线提交</td>
+<td><code>9385f23 docs(phase2): 新增项目进度日志报告目录…</code></td>
+</tr>
+<tr>
+<td>分析方式</td>
+<td>git 分支/提交核对 + 全量文件清单 + 关键源码走查 + 交付文档比对；<strong>2026-09-13 追加动态验证</strong>（本机工具链已装齐，重跑构建、VS1 联调与业务链路冒烟）</td>
+</tr>
+<tr>
+<td>结论</td>
+<td>Phase 0/1/2 均已落地，代码为真实实现（非占位）；本机已可完整编译与容器级联调；冒烟发现 <strong>1 个真实集成缺陷</strong>（D-1，<strong>已于 2026-09-13 修复并通过冒烟复测</strong>，见 §八）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_1">一、分支操作记录<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<pre><code>git fetch --all
+git checkout -b dev origin/workbuddy/main
+# Switched to a new branch 'dev'
+# branch 'dev' set up to track 'origin/workbuddy/main'.
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>分支</th>
+<th>HEAD</th>
+<th>定位</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>main</code></td>
+<td><code>a305c5e</code></td>
+<td>仅初始 README（近乎空壳），非开发主线</td>
+</tr>
+<tr>
+<td><strong><code>dev</code>（新建）</strong></td>
+<td><strong><code>9385f23</code></strong></td>
+<td><strong>基于 <code>workbuddy/main</code>，后端主线，用于后续开发</strong></td>
+</tr>
+<tr>
+<td><code>origin/workbuddy/main</code></td>
+<td><code>9385f23</code></td>
+<td>实际开发主线（Phase 0→2）</td>
+</tr>
+<tr>
+<td><code>origin/codex/phase0-1-hardening</code></td>
+<td><code>1df6651</code></td>
+<td>前端 Vue3 工作台线（含 7 个提交，未并入主线）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><code>dev</code> 本地领先 <code>main</code> 共 <strong>10 个提交</strong>；相对 <code>codex</code> 分支为 <strong>领先 3 / 落后 7</strong>（两条线已分叉，详见 §五）。</p>
+</blockquote>
+<hr />
+<h2 id="_2">二、代码规模与结构<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<p>仓库共 <strong>219 个文件</strong>（不含 <code>.git</code>）。</p>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th>模块</th>
+<th style="text-align: right;">文件</th>
+<th style="text-align: right;">行数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java</td>
+<td>gateway-service（路由/JWT/租户透传）</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">224</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>session-manager（会话/总线/VS1 问答）</td>
+<td style="text-align: right;">13</td>
+<td style="text-align: right;">696</td>
+</tr>
+<tr>
+<td>Java</td>
+<td><strong>sense-service（五感采集，Phase 2 主体）</strong></td>
+<td style="text-align: right;"><strong>43</strong></td>
+<td style="text-align: right;"><strong>4070</strong>（主 3322 + 测 748）</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>body-service（本地检索 MVP）</td>
+<td style="text-align: right;">5</td>
+<td style="text-align: right;">136</td>
+</tr>
+<tr>
+<td>Java</td>
+<td>proto-contracts（<strong>生成源码，已入库</strong>）</td>
+<td style="text-align: right;">90</td>
+<td style="text-align: right;">41 900</td>
+</tr>
+<tr>
+<td>Python</td>
+<td>nlp-service（规则+L0 级联、OCR 代理）</td>
+<td style="text-align: right;">12</td>
+<td style="text-align: right;">1183</td>
+</tr>
+<tr>
+<td>前端</td>
+<td>web/console + web/work-platform（静态原型）</td>
+<td style="text-align: right;">3</td>
+<td style="text-align: right;">1659</td>
+</tr>
+<tr>
+<td>契约</td>
+<td>proto/*.proto（6 个）</td>
+<td style="text-align: right;">6</td>
+<td style="text-align: right;">367</td>
+</tr>
+</tbody>
+</table>
+<p>sense-service 主代码按包分布（36 个业务类）：<code>channel</code> 7、<code>staging</code> 4、<code>controller</code> 2、<code>dynamic</code> 2、<code>nats</code> 2，其余 <code>collect/normalize/quality/schedule/health/deadletter/event/metrics/model/security/util/config/common/grpc</code> 各 1。</p>
+<p>顶层结构：<code>proto/</code> <code>contracts/</code> <code>services/java|python</code> <code>web/</code> <code>infra/</code> <code>scripts/</code> <code>docs/</code>，配 <code>docker-compose.yml</code>（redis / postgres / qdrant / nats / nacos / minio / jaeger / kafka 共 8 个中间件）与 <code>.gitlab-ci.yml</code>（build → test → package 三段流水线）。</p>
+<hr />
+<h2 id="_3">三、开发进度验证（按阶段）<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<h3 id="phase-0">Phase 0 胚胎期 — ✅ 完成<a class="headerlink" href="#phase-0" title="Permanent link">&para;</a></h3>
+<p>Monorepo + Maven 多模块 + Python FastAPI 骨架 + docker-compose 基础设施 + Nacos 注册 + gRPC 健康服务（端口 9091–9094）+ proto 生成 + CI 骨架 + 启动/健康检查脚本。</p>
+<h3 id="phase-1">Phase 1 神经期 — ✅ 完成<a class="headerlink" href="#phase-1" title="Permanent link">&para;</a></h3>
+<p>网关路由（session/sense/nlp/body）+ JWT 鉴权与租户透传 + BusProxy（NATS）+ Kafka 生产/消费基线 + OTLP 链路追踪 + Jaeger + 统一错误码 + 跨租户保护 + SSRF 防护 + <strong>VS1 主链路</strong>（session → intent → 本地检索 → 模板回答）。</p>
+<h3 id="phase-2-1">Phase 2 感官期 — ✅ 完成（1 项受外部依赖降级）<a class="headerlink" href="#phase-2-1" title="Permanent link">&para;</a></h3>
+<p>需求 <strong>R2-01 ~ R2-10</strong>：Must 6/6 = 100%，Should 3/4 完成 + R2-03（OCR）因本机未装引擎待补测。</p>
+<p>代码走查确认「真实现、非骨架」：</p>
+<ul>
+<li><strong>渠道可插拔（R2-01）</strong>：<code>SenseChannel</code> 接口 + <code>ChannelRegistry</code> 经 Spring 容器自动发现 Bean；<code>TouchChannel</code>（URL/文件/纯文本，jsoup 正文提取 + 编码探测）、<code>VisualChannel</code>、<code>AudioChannel</code>、<code>NoseChannel</code>、<code>TasteChannel</code> 五渠道齐备。</li>
+<li><strong>采集主链路（R2-02/04/09/10）</strong>：<code>CollectPipeline</code> 串起 渠道路由（隔离降级）→ resilience4j 指数退避重试（max-attempts=3）→ 五字段标准化 → 质检 → 隔离暂存 → 事件 <code>lifeform.sense.collected</code> → 指标；重试耗尽落 <code>DeadLetterStore</code>。失败出口完整。</li>
+<li><strong>质检（R2-10）</strong>：<code>QualityGate</code> 分硬规则 <code>rejectReason()</code>（EMPTY_CONTENT / ENCODING_GARBLED / REPETITIVE_GARBAGE / BELOW_QUALITY_THRESHOLD）与加权评分（0.45 内容 + 0.20 长度 + 0.20 可打印 + 0.15 密度），且 <code>pass()</code> 委托 <code>rejectReason()</code> 实现<strong>单一事实来源</strong>——与阶段报告 §6-B1 记录的问题修复一致，代码中已落实。</li>
+<li><strong>渠道韧性（R2-09）</strong>：<code>ChannelHealthMonitor</code> 周期探针 + DEGRADED/DOWN 阈值 + 自动隔离 + 恢复计数。</li>
+<li><strong>意图双级级联（R2-07/08）</strong>：<code>rules.py</code>（关键词+正则+句尾位置权重，12 场景，阈值 0.35）→ <code>l0_model.py</code> 兜底 → 不可判归「情感闲聊」，结果带 <code>engine</code> 字段（RULE/L0/FALLBACK），与文档描述一致。</li>
+</ul>
+<h3 id="_4">静态校验补充<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h3>
+<ul>
+<li>全仓库 grep <code>TODO / FIXME / not implemented</code>：<strong>无遗留占位标记</strong>（仅命中错误码注释中的格式示例）。</li>
+<li>生成产物（90 个 Java stub）已入库，<code>protobuf-maven-plugin</code> 移出默认生命周期（与 A-1 卡死修复方案一致）。</li>
+</ul>
+<hr />
+<h2 id="2026-09-12">四、测试与验收证据（文档记载；2026-09-12 起已在本机复跑）<a class="headerlink" href="#2026-09-12" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>层次</th>
+<th style="text-align: right;">用例</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 单测</td>
+<td style="text-align: right;">52（sense 45 / session 4 / gateway 2 / body 1）</td>
+<td>0 失败 0 错误</td>
+</tr>
+<tr>
+<td>Python 单测</td>
+<td style="text-align: right;">19（意图 15 / OCR 4）</td>
+<td>全通过</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>71</strong></td>
+<td><strong>100% 通过</strong></td>
+</tr>
+</tbody>
+</table>
+<p>硬指标：L0 留出集准确率 <strong>90.0%</strong>（目标 ≥85%）、P99 延迟 <strong>0.052 ms</strong>（目标 &lt;50ms）、场景覆盖 <strong>12</strong>（要求 ≥10）、<code>contract-check.py</code> <strong>0 FAIL</strong>。</p>
+<blockquote>
+<p>⚠️ <strong>重要说明</strong>：上述数据出自 <code>docs/项目进度日志报告/Phase2-测试验收报告.md</code>（验收日期 2026-09-12，源机环境 JDK 21 + Maven 3.9.11 + Python 3.12.13）。
+本文初稿（2026-09-12）为静态验证，当时本机尚无 JDK/Maven/Node/Docker。<strong>该前提已于 2026-09-12 晚解除</strong>：本机已安装 JDK 21.0.12.1、Maven 3.9.11、Node 22.23.2、Git 2.55、Docker Desktop 4.4.4（含 WSL2 后端、8 容器基础设施），并已重跑构建（Java <code>mvn clean package</code> → BUILD SUCCESS，54 测试全绿；前端 <code>npm ci &amp;&amp; typecheck &amp;&amp; build</code> 通过）。
+2026-09-13 进一步完成容器级联调与业务链路冒烟，结果见 <strong>§八</strong>。</p>
+</blockquote>
+<hr />
+<h2 id="_5">五、风险与后续开发注意项<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>事项</th>
+<th>影响</th>
+<th>建议</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>~~<strong>本机缺工具链</strong>（JDK/Maven/Node/Docker）~~</td>
+<td><strong>已解除</strong>：JDK 21.0.12.1 / Maven 3.9.11 / Node 22.23.2 / Docker Desktop 4.4.4 均已装好，构建与容器联调通过</td>
+<td>保留 <code>E:\software</code> 下的工具链以便复用</td>
+</tr>
+<tr>
+<td>2</td>
+<td><code>dev</code> 与 <code>codex/phase0-1-hardening</code> 已分叉</td>
+<td>前端 <strong>Vue3 工作台</strong>（含 Vite/TS，约 +6454 行：OverviewView/TasksView/ChatView/ModuleView 等）只在 codex 线；本分支 <code>web/</code> 仍是静态原型</td>
+<td>规划合并：先定前端归属，再决定 rebase/merge 策略</td>
+</tr>
+<tr>
+<td>3</td>
+<td>~~Docker 端到端冒烟未做~~</td>
+<td><strong>已做</strong>：8 容器 + 4 Java + Python + 前端全部起通，<code>healthcheck.sh</code> 16/16 OK（见 §八）；原 <code>POST /api/session/{id}/ask</code> 因缺陷 <strong>D-1</strong> 返回 503，<strong>已修复并通过冒烟复测（200 / LLEN=2）</strong></td>
+<td>无（后续新增跨服务调用请统一走 <code>OutboundHttp</code> / <code>HttpClients</code>）</td>
+</tr>
+<tr>
+<td>4</td>
+<td>OCR 引擎未装（PaddleOCR/Tesseract）</td>
+<td>R2-03 端到端未验收，视觉渠道恒 <code>DEGRADED</code></td>
+<td>需要视觉能力时安装引擎，无需改代码</td>
+</tr>
+<tr>
+<td>5</td>
+<td>protobuf 生成源码入库</td>
+<td><code>.proto</code> 变更需手工同步产物，易漏</td>
+<td>后续加 CI：<code>-Pproto-gen</code> 重生成后 <code>git diff --exit-code</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td>本地领先远程 1 个提交</td>
+<td><code>850f49d</code> 当时仅本地</td>
+<td>如多人协作再推送</td>
+</tr>
+<tr>
+<td>7</td>
+<td>L0 为轻量实现（非 BERT 级）</td>
+<td>「日程提醒」类场景留出集仅 60%</td>
+<td>Phase 7 按设计升级模型，当前满足总体 ≥85%</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="phase-3">六、Phase 3 下一步（躯体期）<a class="headerlink" href="#phase-3" title="Permanent link">&para;</a></h2>
+<p>Phase 2 已预留事件出口（<code>lifeform.sense.collected</code>）。Phase 3 目标是打通「感官 → 躯体」闭环：</p>
+<ol>
+<li>消费暂存事件，实现 ACCEPTED 批次入库通道（暂存 → 正式库）；</li>
+<li>文档切分 + 向量化 + Qdrant 索引，替换 body-service 的本地检索 MVP；</li>
+<li>语义检索 P99 &lt; 500ms 与召回率指标，对接 Console 躯体视图；</li>
+<li>补齐 OCR 端到端验收与 CI proto 同步校验。</li>
+</ol>
+<hr />
+<h2 id="_6">七、验证结论<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>分支操作</strong>：<code>dev</code> 已基于 <code>workbuddy/main</code> 创建并建立跟踪，工作区干净，可直接开发。</li>
+<li><strong>代码真实性</strong>：核心链路（采集编排/质检/健康隔离/意图级联）均为可用实现，无 TODO 占位。</li>
+<li><strong>进度</strong>：Phase 0/1/2 <strong>已完成</strong>（Phase 2 文档记为通过），Phase 3–8 待开发；总进度约 <strong>3/9 阶段</strong>。</li>
+<li><strong>本机可复现性</strong>：工具链已就绪，构建 / 单元测试 / 容器级联调均可在本机重跑（§八）。</li>
+<li><strong>当前唯一功能性阻碍</strong>：缺陷 <strong>D-1</strong>（Java 侧 HTTP 客户端 h2c 升级导致调用 Python 服务失败），阻塞「问答」链路；修法明确、改动极小。
+  → <strong>2026-09-13 已修复</strong>：统一锁定 HTTP/1.1 + 补齐超时 / 降级 / 错误码语义 / 回归用例，<code>ask</code> 与消息落库冒烟复测通过（§8.6）。</li>
+</ul>
+<hr />
+<h2 id="2026-09-13">八、端到端动态验证（2026-09-13 追加）<a class="headerlink" href="#2026-09-13" title="Permanent link">&para;</a></h2>
+<h3 id="81">8.1 环境<a class="headerlink" href="#81" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>组件</th>
+<th>版本 / 位置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>JDK</td>
+<td>21.0.12.1（<code>E:\software\java\jdk-21</code>）</td>
+</tr>
+<tr>
+<td>Maven</td>
+<td>3.9.11</td>
+</tr>
+<tr>
+<td>Node / npm</td>
+<td>22.23.2</td>
+</tr>
+<tr>
+<td>Git</td>
+<td>2.55.0.windows.5</td>
+</tr>
+<tr>
+<td>Docker Desktop</td>
+<td><strong>4.4.4 (build 73704)</strong>，client/server 20.10.12，compose v2.2.3</td>
+</tr>
+<tr>
+<td>Python venv</td>
+<td><code>services/python/venv</code>（FastAPI 0.141.1 / uvicorn 0.52.4 / pydantic 2.13.5）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>Docker 版本说明：本机为 Windows 10 <strong>Build 19041</strong>，Docker Desktop 4.50+ 要求 19045、4.49 起要求 19044，均无法安装；<strong>4.4.4 是仍支持 19041 的最后版本线</strong>。请勿把 Docker Desktop 升级到 19045 门槛以上的版本。</p>
+</blockquote>
+<h3 id="82-vs1">8.2 容器级联调（VS1）<a class="headerlink" href="#82-vs1" title="Permanent link">&para;</a></h3>
+<p>8 个基础设施容器（redis / postgres-pgvector / qdrant / nats / nacos / minio / jaeger / kafka）+ 4 个 Java 服务 + nlp-service + 前端 work-platform 全部启动，<code>scripts/healthcheck.sh</code> <strong>16 项全 OK</strong>：</p>
+<pre><code>[infrastructure]   redis 6379 / postgres 5432 / qdrant 6333 / nats 4222 /
+                   nacos 8848 / minio 9000 / kafka 9092 / jaeger 16686    8/8 OK
+[java services]    gateway 8080 / session 8081 / sense 8082 / body 8083    4/4 HTTP 200
+[grpc health]      9091 / 19092 / 9093 / 9094
+[python+frontend]  nlp-service 8000 / work-platform 3001
+</code></pre>
+<p>Nacos 服务发现正常（4 个服务互相可见）；<code>scripts/contract-check.py</code> → <strong>FAIL 0 / WARN 3</strong>；<code>--work-platform</code> 全部通过。</p>
+<h3 id="83-dev-token-kafka">8.3 业务链路冒烟（dev token → 建会话 → 发消息 → 落库 → Kafka）<a class="headerlink" href="#83-dev-token-kafka" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>步骤</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><code>POST /api/auth/token?tenantId=default</code>（网关 dev 端点）</td>
+<td>✅ 200，签发 HS384 JWT（193 字符，loopback-only 校验生效）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>无 token 调 <code>POST /api/session</code></td>
+<td>✅ 401 <code>AGENT_UNAUTHORIZED</code>（鉴权与租户透传生效）</td>
+</tr>
+<tr>
+<td>3</td>
+<td><code>POST /api/session</code>（带 token）</td>
+<td>✅ 200，返回 <code>session_id</code>；Redis <code>session:{id}</code> 哈希写入 6 个字段、TTL 2h</td>
+</tr>
+<tr>
+<td>4</td>
+<td><code>GET /api/session/{id}</code></td>
+<td>✅ 200，<code>status=ACTIVE</code>、<code>message_count=0</code>，租户归属校验生效</td>
+</tr>
+<tr>
+<td>5</td>
+<td>NATS 总线（<code>lifeform.rpc.sense.ping</code>）</td>
+<td>✅ 起 sense-service 时 <code>bus_channel=nats</code>，<code>bus_reply={"service":"sense-service","status":"pong","channel":"TOUCH"}</code>；不起则优雅降级为 <code>direct</code></td>
+</tr>
+<tr>
+<td>6</td>
+<td>Kafka 事件 <code>lifeform.session.created</code></td>
+<td>✅ 生产成功（offset=0），同服务 KafkaEventConsumer 成功消费到同一条 payload</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>POST /api/body/ingest</code>（知识入库）</td>
+<td>✅ 200，<code>chunk_count=3</code>（直连与经网关均通过）</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>POST /api/body/retrieve</code>（检索）</td>
+<td>✅ 200，命中 2 个 chunk（打分检索可用）</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>POST /api/session/{id}/ask</code>（问答主链路）</td>
+<td>✅ 200 / 875ms，<code>intent=闲聊</code>、返回模板回答 + 1 条 citations（<strong>修复 D-1 前为 503</strong>）</td>
+</tr>
+<tr>
+<td>10</td>
+<td>消息落库 <code>session:{id}:messages</code></td>
+<td>✅ <code>LLEN=2</code>、<code>message_count=2</code>（user + assistant 各 1 条，latency_ms=171）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>结论：会话生命周期、租户隔离、JWT 鉴权、NATS 同步总线、Kafka 生产/消费、知识入库与检索、</strong>意图识别与问答主链路<strong>、消息落库共 8 条链路全部实测通过（D-1 修复后）。</strong></p>
+<h3 id="84-d-1jdk-httpclient-h2c-python-2026-09-13">8.4 缺陷 D-1：JDK HttpClient 的 h2c 升级打挂 Python 服务调用（<strong>已于 2026-09-13 修复</strong>）<a class="headerlink" href="#84-d-1jdk-httpclient-h2c-python-2026-09-13" title="Permanent link">&para;</a></h3>
+<p><strong>现象</strong>：同一 URL，<code>curl</code> 直连 nlp-service 返回 200，但 session-manager 调用恒 503；nlp-service 侧日志为：</p>
+<pre><code>POST /api/nlp/intent HTTP/1.1&quot; 422 Unprocessable Entity
+WARNING:  Unsupported upgrade request.
+WARNING:  Invalid HTTP request received.
+</code></pre>
+<p><strong>定位</strong>（最小复现，无需改任何源码）：用 JDK 21 单文件程序对同一 URL、同一 JSON 分别以 HTTP/2 与 HTTP/1.1 发送：</p>
+<pre><code>HTTP_2   -&gt; HTTP 422  {&quot;detail&quot;:[{&quot;type&quot;:&quot;missing&quot;,&quot;loc&quot;:[&quot;body&quot;],&quot;msg&quot;:&quot;Field required&quot;,&quot;input&quot;:null}]}
+HTTP_1_1 -&gt; HTTP 200  {&quot;intent&quot;:&quot;闲聊&quot;,&quot;confidence&quot;:0.5,&quot;engine&quot;:&quot;FALLBACK&quot;,...}
+</code></pre>
+<p><strong>根因</strong>：<code>session-manager</code> 的 <code>NlpClient</code> / <code>BodyClient</code> 使用 <code>RestClient.builder().baseUrl(...).build()</code>，底层默认是 <code>JdkClientHttpRequestFactory</code> → <code>java.net.http.HttpClient</code>，其默认 <code>version = HTTP_2</code>。对<strong>明文</strong>连接，JDK 客户端会先发 <code>Connection: Upgrade, HTTP2-Settings</code> / <code>Upgrade: h2c</code> 做协议升级握手；uvicorn(h11) 不支持 h2c，直接把请求体吞掉 → FastAPI 报 <code>422 Field required(body)</code> → Java 侧抛 <code>RestClientException</code> → 包装成 503。</p>
+<p><strong>影响面</strong>：<code>NlpClient</code>（意图识别）与 <code>BodyClient</code>（知识检索）同一写法，即 <strong>VS1 问答链路的两步外部调用在真实运行时都不可用</strong>。此前的健康检查只探端口/actuator，不触发跨服务调用，因此该缺陷被全绿的 healthcheck 掩盖。</p>
+<p><strong>建议修法</strong>（2 个文件、各 2 行，强制 HTTP/1.1）：</p>
+<pre><code class="language-java">HttpClient http = HttpClient.newBuilder().version(HttpClient.Version.HTTP_1_1).build();
+this.client = RestClient.builder().baseUrl(baseUrl)
+        .requestFactory(new JdkClientHttpRequestFactory(http))
+        .build();
+</code></pre>
+<p>备选：改用 Apache HttpClient 5 连接工厂；或在 nlp-service 前置一个支持 h2c 的网关。修复后应重跑 §8.3 的步骤 9–10，并补一条「跨语言服务调用」的契约用例防回归。</p>
+<h3 id="85">8.5 本机环境注意项（复用）<a class="headerlink" href="#85" title="Permanent link">&para;</a></h3>
+<ol>
+<li><strong><code>docker-compose.yml</code> 缺 <code>.env</code></strong>：<code>MINIO_ROOT_USER</code> 等 4 个变量未定义会让 <code>up -d</code> 直接失败；已从 <code>.env.example</code> 生成 <code>E:\AI\ai-agent\.env</code>。</li>
+<li><strong>端口冲突</strong>：Kafka 容器占用宿主 <code>9092</code>，而 session-manager 的 gRPC 默认也是 <code>9092</code> → 启动失败。启动时需设 <code>GRPC_PORT=19092</code>（配置本身支持 <code>${GRPC_PORT:9092}</code>）；<code>healthcheck.sh</code> 里 <code>check_port session-grpc 9092</code> 探的其实是 Kafka，建议改探 19092。</li>
+<li><strong>宿主环境变量污染</strong>：本机工具进程设了 <code>SERVER__PORT=51007</code>，Spring 宽松绑定会把它当成 <code>server.port</code>，4 个服务会一起去抢 51007。启动脚本必须先清除 <code>SERVER__PORT</code> / <code>SERVER__*</code>。</li>
+<li><strong>服务常驻</strong>：由助手工具调用拉起的子进程会在调用结束时被回收，长期运行请自行执行 <code>scripts\start-dev.bat all</code>。</li>
+<li><strong>网络</strong>：本机直连 <code>github.com</code> 不通，clone/fetch 走镜像；<code>git push</code> 需真实 GitHub 凭据，尚未验证。</li>
+</ol>
+<h3 id="86-d-1-2026-09-13">8.6 D-1 修复记录（2026-09-13）<a class="headerlink" href="#86-d-1-2026-09-13" title="Permanent link">&para;</a></h3>
+<p><strong>根因再校准</strong>：准确表述不是「JDK 默认 HTTP/2 必然出错」，而是 <strong>uvicorn(h11) 不兼容 h2c 升级握手</strong>。两组对照实验：</p>
+<table>
+<thead>
+<tr>
+<th>实验</th>
+<th>对端</th>
+<th>HTTP_2</th>
+<th>HTTP_1_1</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>宽松 HTTP/1.1 服务端（Python 标准库）</td>
+<td>200，body 完好</td>
+<td>200，body 完好</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Tomcat（body-service）</td>
+<td>200</td>
+<td>200</td>
+</tr>
+</tbody>
+</table>
+<p>→ 实验 1 证明 JDK 发送 <code>Upgrade: h2c</code> 属合规行为，宽松服务端照常接收 body；<strong>只有 uvicorn 会把请求判为非法并丢弃 body</strong>。
+→ 实验 2 修正此前的过度推断：<code>BodyClient</code> 打的是 Tomcat，<strong>从未受影响</strong>；受影响的是 <code>NlpClient</code> 与 <code>VisualChannel</code> 的 OCR POST（两者都打 uvicorn）。</p>
+<p><strong>改动清单</strong></p>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>改动</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>session-manager <code>orchestration/OutboundHttp.java</code>（新增）</td>
+<td>统一出口：HTTP/1.1 + connect 3s / read 10s 的 HttpClient 与 RestClient 工厂</td>
+</tr>
+<tr>
+<td>session-manager <code>NlpClient</code> · <code>BodyClient</code></td>
+<td>改用 <code>OutboundHttp.restClient(...)</code>；失败默认降级（意图→FALLBACK 闲聊、检索→空结果）并输出保留 cause 的 WARN；<code>app.*.degrade-on-failure=false</code> 时抛 502</td>
+</tr>
+<tr>
+<td>session-manager <code>ErrorCode</code> · <code>GlobalExceptionHandler</code> · <code>BizException</code></td>
+<td>新增 <code>AGENT_UPSTREAM_UNAVAILABLE</code>（映射 502）与携带 cause 的构造</td>
+</tr>
+<tr>
+<td>session-manager <code>application.yml</code></td>
+<td>新增 <code>app.nlp/body.degrade-on-failure</code>（默认 true）</td>
+</tr>
+<tr>
+<td>sense-service <code>util/HttpClients.java</code>（新增）</td>
+<td>渠道侧统一 HTTP/1.1 客户端构建器</td>
+</tr>
+<tr>
+<td>sense-service <code>TouchChannel</code> · <code>VisualChannel</code></td>
+<td>改用 <code>HttpClients.builder(...)</code>，顺带消除 OCR POST 的同类隐患</td>
+</tr>
+<tr>
+<td>新增测试 3 个（7 用例）</td>
+<td><code>OutboundHttpTest</code>（裸 socket 断言请求行为 HTTP/1.1 且无 <code>h2c</code> / <code>HTTP2-Settings</code>）、<code>UpstreamDegradeTest</code>（降级与 502 语义）、<code>HttpClientsTest</code>（版本 + 超时断言）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>验证结果</strong></p>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>修复前</th>
+<th>修复后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 测试</td>
+<td>54 通过</td>
+<td><strong>61 通过</strong>（+7 回归用例）</td>
+</tr>
+<tr>
+<td><code>POST /api/session/{id}/ask</code></td>
+<td>503 <code>AGENT_BUS_UNAVAILABLE</code></td>
+<td><strong>200 / 875 ms</strong>，返回模板回答 + 1 条 citations</td>
+</tr>
+<tr>
+<td>Redis <code>session:{id}:messages</code></td>
+<td><code>LLEN=0</code></td>
+<td><strong><code>LLEN=2</code></strong>、<code>message_count=2</code></td>
+</tr>
+<tr>
+<td>nlp-service 日志</td>
+<td><code>422 Unprocessable Entity</code> + <code>Unsupported upgrade request</code></td>
+<td><code>POST /api/nlp/intent HTTP/1.1 200 OK</code></td>
+</tr>
+<tr>
+<td>杀掉 nlp-service 后再 ask</td>
+<td>503</td>
+<td><strong>200（降级 FALLBACK）</strong> + <code>WARN 意图识别降级为 FALLBACK</code></td>
+</tr>
+<tr>
+<td>契约校验</td>
+<td>FAIL 0 / WARN 3</td>
+<td>FAIL 0 / WARN 3（未漂移）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>遗留（未做，非本次范围）：<code>VisualChannel</code> 的 OCR 端到端仍需安装 PaddleOCR/Tesseract 才能验收；OCR 路径已随本次改动一并锁定 HTTP/1.1。</p>
+</blockquote>
+<hr />
+<p><em>编制：WorkBuddy · 2026-09-12 · 基线 <code>9385f23</code></em>
+<em>补充：WorkBuddy · 2026-09-13 · 追加 §八（端到端动态验证 + 缺陷 D-1 的分析与修复）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

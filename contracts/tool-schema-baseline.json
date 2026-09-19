@@ -1,0 +1,11 @@
+{
+  "generated_from": "ToolBootstrap.registerBuiltins() · tool-executor",
+  "fingerprint_algorithm": "SHA-256(parametersSchema) 前 8 字节 → 16 位十六进制（ToolRegistry.fingerprint）",
+  "note": "工具参数 JSON Schema 的契约基线。IN-06 验收第 3 条要求「schema 变更触发 L1 契约测试」——本文件就是那条触发线：任何 schema 改动都会让指纹变化，ToolSchemaBaselineTest 立即变红，必须重跑契约测试并更新本基线后才能通过。",
+  "generated_at": "2026-09-19",
+  "tools": {
+    "calculator": { "version": "1.0.0", "schema_hash": "97836bb2787ca2b0" },
+    "code": { "version": "1.0.0", "schema_hash": "335bafd3d28c861a" },
+    "http": { "version": "1.0.0", "schema_hash": "900f82a69608fde8" }
+  }
+}

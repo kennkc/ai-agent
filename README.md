@@ -1,11 +1,14 @@
 # Agent-Lifeform · AI Agent 生命体架构
 
-> 当前基线：Phase 0 / Phase 1 / Phase 2 / Phase 3 / **Phase 4（大脑期）** 均已交付并通过验收；
-> VS1 垂直切片、Phase 3 知识闭环与 Phase 4 大脑问答链路均已打通
-> （**162 Java + 124 Python + 55 wp-bff tests green**，契约校验 0 FAIL，Java 文档覆盖 113/113）。
+> 当前基线：Phase 0 / Phase 1 / Phase 2 / Phase 3 / **Phase 4（大脑期）** / **Phase 5（四肢期）** 均已交付并通过验收；
+> VS1 垂直切片、Phase 3 知识闭环、Phase 4 大脑问答链路与 Phase 5 工具执行链路均已打通
+> （**251 Java + 158 Python + 87 wp-bff tests green**，契约校验 0 FAIL，超时预算 0 FAIL（ok=19 · gap=0），
+> 文档一致性 0 FAIL，Java 文档覆盖 160/160）。
 > 另：Phase 4 交付后于 **2026-09-19 完成需求复审与补全**（2 项语义级伪实现已修复 + 3 项跨链路
 > 一致性缺陷已闭合 + 未落地项补齐），详见三件套补记与 `docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md`。
-> 下一阶段为 **Phase 5（四肢期 / 工具调用与执行视图）**。
+> **Phase 5（四肢期）同日落地并复审收口**：新增独立服务 `tool-executor`（8084/9095）、wp-bff 工具域 9 端点、
+> 工作平台执行视图（R-C05）、IN-06 契约基线门禁；沙箱真隔离（Docker 路径）尚未实测，如实登记。
+> 下一阶段为 **Phase 6（小脑期 / 编排）**。
 > 技术栈：Java 21 + Spring Cloud Alibaba + Python 3.12 + FastAPI + Vue 3 + Vite + Element Plus。
 
 ---
@@ -444,7 +447,9 @@ git push origin codex/main:workbuddy/main
 - [x] Phase 3 收口三轮加固：Mock/API 对齐、文档口径同步、全平台错误信封统一与异常流程归档（2026-09-18）
 - [x] Phase 4：大脑期 —— 会话 FSM/持久化、LLM Gateway、语义缓存、任务规划、RAG 决策链、
       缺口检测与来源标注、wp-bff 大脑端点、工作平台对话界面与 Console 大脑视图（2026-09-19）
-- [ ] Phase 5-8：工具、编排、免疫、自进化
+- [x] Phase 5：四肢期 —— 新增 `tool-executor`（工具注册表 / 执行引擎 / 沙箱隔离 / 安全三闸 /
+      全量审计 / IN-06 契约治理）、wp-bff 工具域 9 端点、工作平台执行视图、Python Function Calling（2026-09-19）
+- [ ] Phase 6-8：编排（小脑）、免疫、自进化
 
 详细进度见：`PROGRESS.md` · 当前状态总览与功能矩阵见 `docs/项目进度总览.md` ·
 各功能开发流程见 `docs/功能开发流程.md` · 文档地图见 `docs/README.md`

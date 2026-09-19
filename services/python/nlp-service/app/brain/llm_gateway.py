@@ -8,6 +8,10 @@
   返回值必须带 `degraded=True` 与 `generator="template"` ——
   **降级是可接受的工程取舍，伪造"模型生成"才是红线**（见 `docs/异常流程归纳.md` §2.5）。
 * **Token 统计**：无分词器时用字符估算（中文 ≈ 1.5 char/token），用于成本监控口径统一。
+* **总预算（REC-01）**：`generate(request, deadline_ms=...)` 给出**共享上限**，
+  级联与重试只在预算内调度。没有它时最坏耗时 = 各级超时 × 重试次数的**乘积**
+  （L2 8s×2 + L1 3s×2 = 22s），随层级增长而膨胀，上游只能靠不断调大超时追赶 ——
+  而那会把「快速失败并降级」变成「长时间等待后仍降级」。见 `app/budget.py`。
 
 后续接入真实引擎时实现 `LlmEngine.available()` + `generate()` 即可，路由/重试/统计无需改动。
 """
@@ -20,6 +24,8 @@ import urllib.error
 import urllib.request
 from dataclasses import dataclass, field
 from typing import Any, Callable, Optional
+
+from app.budget import Deadline
 
 logger = logging.getLogger("nlp-service.brain.llm")
 
@@ -76,6 +82,8 @@ class GatewayStats:
     retries: int = 0
     degraded_calls: int = 0
     cache_hits: int = 0
+    # REC-01：因**总预算耗尽**而未发起的调用次数（区别于「发起了但超时」的 timeouts）
+    deadline_exceeded: int = 0
 
 
 class LlmEngine:
@@ -158,6 +166,15 @@ class LlmGateway:
 
     路由顺序：按请求 level 找**可用**引擎 → 不可用或超时则降一级重试 →
     仍失败则抛 `LlmUnavailable`，由上层（RagPipeline）走降级链路。
+
+    **两种失败必须区分**（这是本类的核心不变量）：
+
+    | 情形 | 含义 | 计数 |
+    |---|---|---|
+    | 发起调用但引擎超时/报错 | 「下游慢或坏了」 | `timeouts` |
+    | 总预算耗尽，不再发起 | **「时间用完了」** | `deadline_exceeded` |
+
+    把后者混进前者，会把预算配置问题诊断成下游故障，进而去关掉一个其实正常的引擎。
     """
 
     def __init__(
@@ -188,8 +205,20 @@ class LlmGateway:
             "available": any(e.available() for e in self.engines),
             "engines": [{"name": e.name, "level": e.level, "available": e.available()} for e in self.engines],
             "timeouts": dict(self.timeouts),
+            # 级联最坏耗时（推导值）= 各级超时 × 每级尝试次数之和。
+            # 这个数字**不在代码里**，只能算出来 —— 上游给它配预算时就是靠它。
+            "cascade_worst_case_ms": self.cascade_worst_case_ms(),
             "stats": self.stats_dict(),
         }
+
+    def cascade_worst_case_ms(self, level: str = L2) -> int:
+        """级联最坏耗时（毫秒）—— 无 deadline 时的理论上限。
+
+        它是 :meth:`generate` 逐级 `break` 的路径上所有超时之和，
+        登进 `contracts/timeout-budget.yaml` 让上游知道该给多少预算。
+        """
+        attempts = self.max_retries + 1
+        return int(sum(self.timeouts.get(lv, 8.0) for lv in _fallback_chain(level)) * attempts * 1000)
 
     def stats_dict(self) -> dict:
         s = self.stats
@@ -203,20 +232,43 @@ class LlmGateway:
             "retries": s.retries,
             "degraded_calls": s.degraded_calls,
             "cache_hits": s.cache_hits,
+            "deadline_exceeded": s.deadline_exceeded,
         }
 
     # ── 生成 ──
-    def generate(self, request: LlmRequest) -> LlmResponse:
+    def generate(self, request: LlmRequest, deadline_ms: Optional[int] = None) -> LlmResponse:
+        """按请求层级生成；`deadline_ms` 为**整次级联共享**的总预算。
+
+        有 deadline 时，每一级、每一次重试的可用超时都收进「剩余预算」内
+        （`min(级超时, 剩余)`）；预算耗尽的瞬间**不再发起新的调用**，
+        直接抛 `LlmUnavailable` 让上层走降级链路 —— 这样最坏耗时是**一个常量**，
+        而不是随层级/重试数膨胀的乘积。
+        """
         started = time.time()
+        budget = Deadline(deadline_ms, operation="llm.generate") if deadline_ms else None
         prompt_tokens = estimate_tokens(request.system) + estimate_tokens(request.prompt)
         attempts = 0
+        deadline_hit = False
         last_error = ""
         for level in _fallback_chain(request.level):
             engine = self.route(level)
             if engine is None:
                 continue
-            timeout = self.timeouts.get(level, 8.0)
+            level_timeout = self.timeouts.get(level, 8.0)
             for attempt in range(1, self.max_retries + 2):
+                timeout: Optional[float] = level_timeout
+                if budget is not None:
+                    timeout = budget.clamp(level_timeout)
+                    if timeout is None or timeout <= 0:
+                        # 预算已耗尽：**不再发起调用**。这不是「引擎不可用」，
+                        # 而是「时间用完了」—— 两者必须区分，否则会把预算问题诊断成下游故障。
+                        deadline_hit = True
+                        budget.note_exhausted()
+                        logger.warning(
+                            "llm budget exhausted, stop cascade (level=%s elapsed=%sms budget=%sms)",
+                            level, budget.elapsed_ms(), budget.budget_ms,
+                        )
+                        break
                 attempts += 1
                 try:
                     text = engine.generate(request, timeout)
@@ -252,6 +304,14 @@ class LlmGateway:
                         logger.warning("llm call failed (level=%s attempt=%s): %s", level, attempt, last_error)
                         continue
                     break
+            if deadline_hit:
+                break
+        if deadline_hit:
+            self.stats.deadline_exceeded += 1
+            raise LlmUnavailable(
+                f"llm total budget exhausted (budget={deadline_ms}ms, level={request.level}, "
+                f"attempts={attempts}): {last_error or 'no attempt issued'}"
+            )
         raise LlmUnavailable(f"no available llm engine (level={request.level}): {last_error}")
 
 

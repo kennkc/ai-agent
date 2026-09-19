@@ -4,6 +4,7 @@ import com.agent.body.client.EmbeddingClient;
 import com.agent.body.client.QdrantClient;
 import com.agent.body.client.RerankClient;
 import com.agent.body.common.BizException;
+import com.agent.body.common.BudgetGuard;
 import com.agent.body.common.ErrorCode;
 import com.agent.body.store.StorageFacade;
 import com.agent.body.store.TierRouter;
@@ -31,6 +32,8 @@ import java.util.Optional;
  *   <li>重排不可用 → 按召回分返回并标记 {@code rerank_degraded}（Should 项不阻断主链路）</li>
  *   <li>缓存不可用 → 直接走 Qdrant，{@code cache_backend=unavailable}，命中率不虚增</li>
  *   <li>Qdrant / 嵌入不可用 → 抛 {@code AGENT_UPSTREAM_UNAVAILABLE}（检索是 Must 项，不返回假结果）</li>
+ *   <li>warm 管线超出端到端预算（{@code app.body.retrieval.total-budget-ms}，默认 10s）→
+ *       抛 {@code AGENT_TIMEOUT}（504）—— 「慢」必须如实上报，不塌缩成「无结果」（GAP-05）</li>
  * </ul>
  */
 @Service
@@ -47,16 +50,20 @@ public class RetrievalService {
     private final StorageFacade storage;
     private final KnowledgeMetrics metrics;
     private final int candidateTopK;
+    /** 检索端到端预算（登记表 TB-16 的 downstream 口径）：向量化 + Qdrant + 重排共享。<=0 显式不限。 */
+    private final long totalBudgetMs;
 
     public RetrievalService(EmbeddingClient embeddingClient, QdrantClient qdrant, RerankClient rerankClient,
                             StorageFacade storage, KnowledgeMetrics metrics,
-                            @Value("${app.body.retrieval.candidate-top-k:50}") int candidateTopK) {
+                            @Value("${app.body.retrieval.candidate-top-k:50}") int candidateTopK,
+                            @Value("${app.body.retrieval.total-budget-ms:10000}") long totalBudgetMs) {
         this.embeddingClient = embeddingClient;
         this.qdrant = qdrant;
         this.rerankClient = rerankClient;
         this.storage = storage;
         this.metrics = metrics;
         this.candidateTopK = Math.max(1, candidateTopK);
+        this.totalBudgetMs = Math.max(0, totalBudgetMs);
     }
 
     public RetrievalOutcome retrieve(String tenantId, String query, int topK, boolean useCache) {
@@ -77,6 +84,22 @@ public class RetrievalService {
             }
         }
 
+        // 未命中缓存 → warm 管线（向量化 + Qdrant + 重排）在**端到端预算**内执行。
+        // TB-16 的下游最坏耗时因此是一个常量（默认 10s），而不是「各段超时之和」（≈24s）；
+        // 超预算 → 504 AGENT_TIMEOUT，绝不返回空结果冒充「没有数据」（检索是 Must 项）。
+        // 缓存命中路径是 Redis 单次往返（毫秒级），不包预算。
+        RetrievalOutcome outcome = BudgetGuard.runWithBudget(
+                () -> retrieveWarm(tenantId, query, effectiveTopK, useCache, started),
+                totalBudgetMs, "retrieve");
+
+        metrics.recordSearch(outcome.latencyMs(), !outcome.hits().isEmpty(), false,
+                outcome.candidateCount() > 0, outcome.rerankCalled());
+        return outcome;
+    }
+
+    /** warm 检索管线（缓存未命中）：向量化 → Qdrant TOP-50 → 重排 TOP-K → 写缓存。 */
+    private RetrievalOutcome retrieveWarm(String tenantId, String query, int effectiveTopK,
+                                          boolean useCache, long started) {
         double[] vector = embeddingClient.embedOne(query);
         List<QdrantClient.ScoredPoint> candidates = qdrant.search(tenantId, vector, candidateTopK);
         RerankOutcome reranked = rerank(query, candidates, effectiveTopK);
@@ -85,7 +108,6 @@ public class RetrievalService {
         if (useCache) {
             storage.hot().put(tenantId, query, reranked.hits());
         }
-        metrics.recordSearch(latency, !reranked.hits().isEmpty(), false, !candidates.isEmpty(), reranked.degraded());
         if (log.isDebugEnabled()) {
             log.debug("检索完成 tenant={} candidates={} hits={} latency={}ms rerankDegraded={}",
                     tenantId, candidates.size(), reranked.hits().size(), latency, reranked.degraded());

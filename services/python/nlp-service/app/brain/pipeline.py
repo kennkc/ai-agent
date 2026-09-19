@@ -11,6 +11,10 @@
 * **缓存优先**：进入管线前查 `SemanticCache`（相似 ≥0.95）→ 命中直接返回，带 `cache_hit=True`。
 * **降级可见**：检索不可用 / LLM 不可用 / 模板生成 / 低依据度，分别在
   `degraded_reasons`（数组）与 `generator` 字段如实标注，**不静默填充**。
+* **总预算（REC-01）**：`run(..., deadline_ms=...)` 给出端到端上限，**检索与生成共享**。
+  截止点放在 state 里跨节点传递（不能挂 `self`：管线会被并发调用，
+  挂实例上会让并发问答互相缩短预算）。检索步先按剩余预算收窄自己的超时，
+  生成步拿到扣掉检索耗时后的余额 —— 于是「整条链路最坏多久」是一个可承诺的常量。
 * **决策链落账**：每步记录 `{step, model, latency_ms, confidence, io}`，
   整条链写入 IN3 AuditLog（见 `app/brain/audit.py`）后可按 `decision_id` 回放 ——
   **X4 明确要求接真实审计，不做 Mock 过渡**。
@@ -35,6 +39,7 @@ from app.brain.llm_gateway import L1, L2, L3, LlmGateway, LlmUnavailable
 from app.brain.planner import PLANNER, CHAT, NEEDS_RETRIEVAL, SUMMARIZE, TEMPLATE_LABELS
 from app.brain.retrieval import RetrievalUnavailable
 from app.brain.semantic_cache import SEMANTIC_CACHE
+from app.budget import BRAIN_TOTAL_BUDGET_MS, deadline_at, remaining_from
 
 logger = logging.getLogger("nlp-service.brain.pipeline")
 
@@ -60,6 +65,10 @@ class RagState(TypedDict, total=False):
     context: list[dict[str, Any]]
     use_cache: bool
     decision_id: str
+    # 端到端截止点（time.monotonic 时间轴）—— 检索与生成共享；
+    # 放在 state 里而非实例上：同一条管线会被并发调用，实例字段会串预算。
+    deadline_at: float
+    deadline_ms: int
     chain: list[dict[str, Any]]
     degraded_reasons: list[str]
     plan: dict[str, Any]
@@ -98,6 +107,10 @@ class RagResult:
     tokens: dict[str, int] = field(default_factory=dict)
     retrieval: dict[str, Any] = field(default_factory=dict)
     attribution: dict[str, Any] = field(default_factory=dict)
+    # REC-01：本次问答的总预算与剩余量 —— 让「慢」在响应体里就可见，
+    # 而不是等到上游超时后由别人猜成「大脑层不可用」。
+    budget_ms: int = 0
+    budget_remaining_ms: int = 0
 
     def to_dict(self) -> dict:
         return {
@@ -122,6 +135,8 @@ class RagResult:
             "tokens": dict(self.tokens),
             "retrieval": dict(self.retrieval),
             "attribution": dict(self.attribution),
+            "budget_ms": self.budget_ms,
+            "budget_remaining_ms": self.budget_remaining_ms,
         }
 
 
@@ -159,8 +174,16 @@ class RagPipeline:
         intent_confidence: float = 1.0,
         context: Optional[list[dict[str, Any]]] = None,
         use_cache: bool = True,
+        deadline_ms: Optional[int] = None,
     ) -> RagResult:
+        """跑完整条 RAG 决策链。
+
+        `deadline_ms`：**整条链路**（检索 + 生成）的总预算，缺省用
+        `BRAIN_TOTAL_BUDGET_MS`。传 0 / None 会退回缺省 —— 不设上限的问答
+        在 LLM 慢时会把上游连接拖死，而「拖死上游」比「降级并说明」更糟。
+        """
         started = time.time()
+        budget_ms = int(deadline_ms or BRAIN_TOTAL_BUDGET_MS)
         decision_id = uuid.uuid4().hex
         state: dict[str, Any] = {
             "question": question or "",
@@ -171,6 +194,8 @@ class RagPipeline:
             "context": list(context or []),
             "use_cache": use_cache,
             "decision_id": decision_id,
+            "deadline_at": deadline_at(budget_ms),
+            "deadline_ms": budget_ms,
             "chain": [],
             "degraded_reasons": [],
         }
@@ -285,9 +310,24 @@ class RagPipeline:
             from app.brain.retrieval import RETRIEVER  # 延迟导入
             retriever = RETRIEVER
             self.retriever = retriever
+        # 检索不能吃掉留给生成的时间：把本次调用收进「剩余总预算」内。
+        # 预算已耗尽则**不发请求**，如实标注为预算问题（不是「检索服务不可用」）。
+        remaining_ms = remaining_from(state.get("deadline_at"))
+        if remaining_ms is not None and remaining_ms <= 0:
+            reason = f"budget_exhausted_before_retrieval (budget={state.get('deadline_ms')}ms)"
+            return {
+                "chunks": [],
+                "retrieval": {"backend": "skipped", "error": reason, "latency_ms": _ms(started)},
+                "degraded_reasons": list(state.get("degraded_reasons", [])) + [reason],
+                "chain": _step(state, "retrieve", model="skipped", latency_ms=_ms(started),
+                               confidence=0.0, io={"reason": reason}),
+            }
         try:
-            outcome = retriever.retrieve(state["question"], state.get("tenant_id", "default"),
-                                         int(plan.get("top_k", 5) or 5))
+            outcome = retriever.retrieve(
+                state["question"], state.get("tenant_id", "default"),
+                int(plan.get("top_k", 5) or 5),
+                timeout=(remaining_ms / 1000.0) if remaining_ms is not None else None,
+            )
             degraded_reasons = list(state.get("degraded_reasons", []))
             return {
                 "chunks": outcome.chunks,
@@ -295,7 +335,8 @@ class RagPipeline:
                 "degraded_reasons": degraded_reasons,
                 "chain": _step(state, "retrieve", model="body-service", latency_ms=_ms(started),
                                confidence=min(1.0, 0.5 + 0.1 * len(outcome.chunks)),
-                               io={"top_k": plan.get("top_k"), "hits": len(outcome.chunks)}),
+                               io={"top_k": plan.get("top_k"), "hits": len(outcome.chunks),
+                                   "budget_ms": remaining_ms}),
             }
         except RetrievalUnavailable as exc:
             reasons = list(state.get("degraded_reasons", [])) + [f"retrieval_unavailable: {exc}"]
@@ -327,10 +368,36 @@ class RagPipeline:
         level = _level_for(state.get("plan", {}), len(chunks))
         degraded_reasons = list(state.get("degraded_reasons", []))
         generator, model, answer_text, tokens = "none", "", "", {}
+        # 生成拿到的是**扣掉检索耗时后的余额** —— 这就是 deadline 的传播：
+        # 「整条链路 ≤ 预算」由构造保证，而不是靠各级超时恰好加起来够用。
+        remaining_ms = remaining_from(state.get("deadline_at"))
+        # 预算已耗尽 → **不发起生成**。
+        #
+        # 注意 `remaining_from` 返回 0（“时间到了”）与返回 None（“本就没有截止”）是**两件事**。
+        # 而 `Deadline` / `run_with_budget` 的既定约定是「0 = 不限」（显式选择，有测试守着），
+        # 于是把“算出来的 0”原样传下去，会被下游读成“不限” ——
+        # 后果是**检索吃光预算后生成照常无界运行**，「整条链路 ≤ 预算」的保证随即失效。
+        # 所以必须在这一层拦住：约定不动，但绝不把「耗尽」表达成「不限」。
+        if remaining_ms is not None and remaining_ms <= 0:
+            reason = f"budget_exhausted_before_generation (budget={state.get('deadline_ms')}ms)"
+            degraded_reasons.append(reason)
+            notice = state.get("gap", {}).get("notice", "")
+            answer_text = _retrieval_only_answer(chunks)
+            if notice:
+                answer_text = f"{notice}\n\n{answer_text}" if answer_text else notice
+            return {
+                "answer": answer_text, "sources": sources, "generator": "none", "model": "unavailable",
+                "tokens": {}, "degraded_reasons": degraded_reasons,
+                "chain": _step(state, "generate", model="skipped", latency_ms=_ms(started),
+                               confidence=0.0, io={"reason": reason, "budget_ms": remaining_ms}),
+            }
         try:
             from app.brain.llm_gateway import LlmRequest
 
-            response = self.gateway.generate(LlmRequest(prompt=prompt, system=self.system_prompt, level=level))
+            response = self.gateway.generate(
+                LlmRequest(prompt=prompt, system=self.system_prompt, level=level),
+                deadline_ms=remaining_ms,
+            )
             answer_text = response.text
             generator = response.generator
             model = response.model
@@ -339,7 +406,10 @@ class RagPipeline:
                 degraded_reasons.append("llm_template_backend")
         except LlmUnavailable as exc:
             # 降级链路：检索结果直出（纯检索回答）+ 标注「未生成」
-            degraded_reasons.append(f"llm_unavailable: {exc}")
+            # 预算耗尽与引擎不可用**分开标注** —— 前者是配置问题，后者是故障，
+            # 混成一个 reason 会让排障方向从「调预算」跑偏到「查引擎」。
+            reason = "llm_budget_exhausted" if "budget exhausted" in str(exc) else "llm_unavailable"
+            degraded_reasons.append(f"{reason}: {exc}")
             generator = "none"
             model = "unavailable"
             answer_text = _retrieval_only_answer(chunks)
@@ -351,7 +421,8 @@ class RagPipeline:
             "tokens": tokens, "degraded_reasons": degraded_reasons,
             "chain": _step(state, "generate", model=model or "none", latency_ms=_ms(started),
                            confidence=0.6 if generator == "template" else 0.9,
-                           io={"level": level, "prompt_chars": len(prompt), "sources": len(sources)}),
+                           io={"level": level, "prompt_chars": len(prompt), "sources": len(sources),
+                               "budget_ms": remaining_ms}),
         }
 
     def _node_insufficient(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -501,11 +572,15 @@ class RagPipeline:
             cache_similarity=float(cached.get("cache_similarity", 0) or 0),
             tokens=dict(cached.get("tokens", {})),
             retrieval=dict(cached.get("retrieval", {})),
+            budget_ms=int(state.get("deadline_ms", 0) or 0),
+            budget_remaining_ms=int(remaining_from(state.get("deadline_at")) or 0),
         )
         return result
 
     def _to_result(self, state: dict[str, Any]) -> RagResult:
         reasons = list(state.get("degraded_reasons", []))
+        budget_ms = int(state.get("deadline_ms", 0) or 0)
+        remaining = remaining_from(state.get("deadline_at"))
         return RagResult(
             answer=str(state.get("answer", "")),
             question=state.get("question", ""),
@@ -525,6 +600,8 @@ class RagPipeline:
             tokens=dict(state.get("tokens", {})),
             retrieval=dict(state.get("retrieval", {})),
             attribution=dict(state.get("attribution", {})),
+            budget_ms=budget_ms,
+            budget_remaining_ms=int(remaining or 0),
         )
 
 

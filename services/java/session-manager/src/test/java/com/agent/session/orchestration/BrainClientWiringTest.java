@@ -54,11 +54,12 @@ class BrainClientWiringTest {
                 "{\"role\":\"user\",\"content\":\"上一轮\"}"));
 
         NlpClient nlp = mock(NlpClient.class);
-        when(nlp.recognize(anyString(), anyString(), anyString()))
+        when(nlp.recognize(anyString(), anyString(), anyString(), any(RequestBudget.class)))
                 .thenReturn(Map.of("intent", "知识问答", "confidence", 0.9));
 
         BrainClient brain = mock(BrainClient.class);
-        when(brain.ask(eq("你好"), eq("s1"), eq("tenant-a"), eq("知识问答"), anyDouble(), anyList()))
+        when(brain.ask(eq("你好"), eq("s1"), eq("tenant-a"), eq("知识问答"), anyDouble(), anyList(),
+                any(RequestBudget.class)))
                 .thenReturn(new BrainClient.BrainAnswer(true, "大脑层回答",
                         List.of(Map.of("title", "设计文档", "chunk_id", "c1")),
                         Map.of("coverage", 0.93, "sufficient", true),
@@ -80,7 +81,8 @@ class BrainClientWiringTest {
         assertEquals(1, ((List<?>) result.get("sources")).size());
         assertEquals(2, ((List<?>) result.get("chain")).size());
         assertEquals(true, ((Map<?, ?>) result.get("gap")).get("sufficient"));
-        verify(brain).ask(eq("你好"), eq("s1"), eq("tenant-a"), eq("知识问答"), anyDouble(), anyList());
+        verify(brain).ask(eq("你好"), eq("s1"), eq("tenant-a"), eq("知识问答"), anyDouble(), anyList(),
+                any(RequestBudget.class));
     }
 
     @Test
@@ -95,7 +97,8 @@ class BrainClientWiringTest {
                 "{\"role\":\"user\",\"content\":\"第一轮问题\"}"));
 
         BrainClient brain = mock(BrainClient.class);
-        when(brain.ask(anyString(), anyString(), anyString(), anyString(), anyDouble(), anyList()))
+        when(brain.ask(anyString(), anyString(), anyString(), anyString(), anyDouble(), anyList(),
+                any(RequestBudget.class)))
                 .thenReturn(new BrainClient.BrainAnswer(true, "答", List.of(), Map.of(), List.of(),
                         "template", true, List.of(), "d"));
 
@@ -106,7 +109,8 @@ class BrainClientWiringTest {
 
         @SuppressWarnings("unchecked") org.mockito.ArgumentCaptor<List<Map<String, Object>>> captor =
                 org.mockito.ArgumentCaptor.forClass(List.class);
-        verify(brain).ask(anyString(), anyString(), anyString(), anyString(), anyDouble(), captor.capture());
+        verify(brain).ask(anyString(), anyString(), anyString(), anyString(), anyDouble(), captor.capture(),
+                any(RequestBudget.class));
         assertEquals(1, captor.getValue().size());                     // 上下文真的传了
         assertEquals("第一轮问题", captor.getValue().get(0).get("content"));
     }
@@ -122,13 +126,14 @@ class BrainClientWiringTest {
         when(list.range(anyString(), anyLong(), anyLong())).thenReturn(List.of());
 
         NlpClient nlp = mock(NlpClient.class);
-        when(nlp.recognize(anyString(), anyString(), anyString()))
+        when(nlp.recognize(anyString(), anyString(), anyString(), any(RequestBudget.class)))
                 .thenReturn(Map.of("intent", "知识问答", "confidence", 0.8));
         BodyClient body = mock(BodyClient.class);
-        when(body.retrieve("问题", "tenant-a"))
+        when(body.retrieve(eq("问题"), eq("tenant-a"), any(RequestBudget.class)))
                 .thenReturn(List.of(Map.of("title", "Doc", "content", "本地命中片段")));
         BrainClient brain = mock(BrainClient.class);
-        when(brain.ask(anyString(), anyString(), anyString(), anyString(), anyDouble(), anyList()))
+        when(brain.ask(anyString(), anyString(), anyString(), anyString(), anyDouble(), anyList(),
+                any(RequestBudget.class)))
                 .thenReturn(new BrainClient.BrainAnswer(false, "", List.of(), Map.of(), List.of(),
                         "", false, List.of("brain_unavailable: connection refused"), ""));
 
@@ -153,7 +158,8 @@ class BrainClientWiringTest {
         when(redis.opsForList()).thenReturn(list);
         when(hash.entries("session:s1")).thenReturn(sessionRecord());
         BodyClient body = mock(BodyClient.class);
-        when(body.retrieve(anyString(), anyString())).thenReturn(List.of(Map.of("content", "片段")));
+        when(body.retrieve(anyString(), anyString(), any(RequestBudget.class)))
+                .thenReturn(List.of(Map.of("content", "片段")));
 
         // 走「无大脑层客户端」的兼容构造
         SessionController controller = new SessionController(redis, mock(BusProxy.class),

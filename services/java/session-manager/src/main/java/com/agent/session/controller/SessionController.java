@@ -9,6 +9,8 @@ import com.agent.session.bus.BusProxy;
 import com.agent.session.orchestration.BodyClient;
 import com.agent.session.orchestration.BrainClient;
 import com.agent.session.orchestration.NlpClient;
+import com.agent.session.orchestration.OutboundHttp;
+import com.agent.session.orchestration.RequestBudget;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -128,14 +130,19 @@ public class SessionController {
             throw new BizException(ErrorCode.AGENT_CONFLICT, "session is closed: " + sessionId);
         }
         long started = System.currentTimeMillis();
-        Map<String, Object> intentResult = nlpClient.recognize(request.question(), sessionId, tenantId);
+        // 一次 ask 的总预算：意图 → 大脑（→ 兜底检索）三跳共享同一个 deadline，
+        // 使本端点的最坏耗时收敛为**一个常量**（35s），而不是各档超时之和/乘积。
+        // 该常量同时是登记表 TB-09 的 downstream 口径 —— 上游 wp-bff 须以专用的 ASK 档（53s）覆盖它
+        // （GAP-06 闭合：GENERATE 档被 /brain/ask 等多条边共享，不随本边抬高）。
+        RequestBudget budget = RequestBudget.of(OutboundHttp.ASK_TOTAL_BUDGET_MS);
+        Map<String, Object> intentResult = nlpClient.recognize(request.question(), sessionId, tenantId, budget);
         String intent = String.valueOf(intentResult.getOrDefault("intent", "闲聊"));
         double confidence = intentResult.get("confidence") instanceof Number n ? n.doubleValue() : 0.5;
 
         // R4-06：优先走大脑层（规划→检索→生成→来源标注），不可用时降级本地检索直出
         BrainClient.BrainAnswer brain = brainClient == null ? null
                 : brainClient.ask(request.question(), sessionId, tenantId, intent, confidence,
-                        sessionStore.context(sessionId));
+                        sessionStore.context(sessionId), budget);
         List<String> degradedReasons = new ArrayList<>();
         String answer;
         List<Map<String, Object>> citations;
@@ -145,7 +152,8 @@ public class SessionController {
         String decisionId = "";
         if (brain != null && brain.available()) {
             answer = brain.answer();
-            citations = brain.sources().isEmpty() ? bodyClient.retrieve(request.question(), tenantId) : brain.sources();
+            citations = brain.sources().isEmpty()
+                    ? bodyClient.retrieve(request.question(), tenantId, budget) : brain.sources();
             gap = brain.gap();
             chain = brain.chain();
             generator = brain.generator();
@@ -157,7 +165,7 @@ public class SessionController {
             } else {
                 degradedReasons.add("brain_client_not_configured");
             }
-            List<Map<String, Object>> chunks = bodyClient.retrieve(request.question(), tenantId);
+            List<Map<String, Object>> chunks = bodyClient.retrieve(request.question(), tenantId, budget);
             answer = buildAnswer(chunks);
             citations = chunks;
             generator = "local-retrieval";
@@ -178,6 +186,14 @@ public class SessionController {
         result.put("degraded", !degradedReasons.isEmpty());
         result.put("degraded_reasons", degradedReasons);
         result.put("latency_ms", latency);
+        // 预算口径：让「是超时放弃、还是真不可用」在响应里就能分辨（与 wp-bff 的 reason_code 同一意图）
+        result.put("budget_ms", budget.totalMs());
+        result.put("budget_used_ms", budget.elapsedMs());
+        if (budget.exhausted()) {
+            result.put("degraded_reasons", degradedReasons.isEmpty()
+                    ? List.of("budget_exhausted") : degradedReasons);
+            result.put("degraded", true);
+        }
         return result;
     }
 

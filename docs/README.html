@@ -1,0 +1,308 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>docs · 目录地图</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 15:39 · 源文件 README.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">阅读顺序（新人接手 / 阶段汇报都适用）</a></li>
+<li><a href="#_2">目录清单</a></li>
+<li><a href="#html">生成 HTML 镜像</a></li>
+<li><a href="#_3">归档维护要求</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="docs">docs · 目录地图<a class="headerlink" href="#docs" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>Agent-Lifeform 项目文档归档总入口
+<strong>口径时间</strong>：2026-09-18 · <strong>代码基线</strong>：<code>6616616</code></p>
+</blockquote>
+<p>本目录是<strong>项目过程资产</strong>的归档地。代码回答"怎么做"，这里回答"做到哪了、凭什么算做完"。</p>
+<hr />
+<h2 id="_1">阅读顺序（新人接手 / 阶段汇报都适用）<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>顺序</th>
+<th>文档</th>
+<th>回答什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td><strong><code>项目进度总览.md</code></strong></td>
+<td>现在做到哪了？哪些功能可用？测试基线是多少？还差什么？</td>
+</tr>
+<tr>
+<td>2</td>
+<td><strong><code>功能开发流程.md</code></strong></td>
+<td>每个功能从需求到验收的完整链路怎么走？新增功能要动哪些文件？</td>
+</tr>
+<tr>
+<td>3</td>
+<td><strong><code>技术债台账.md</code></strong></td>
+<td>哪些是"先用简化版顶着"的？<code>// DEBT-00X</code> 到底指什么？到点该换什么？</td>
+</tr>
+<tr>
+<td>4</td>
+<td><strong><code>异常流程归纳.md</code></strong></td>
+<td>出错了该看哪一层？404 / 405 / 401 / 降级分别是什么意思？研发期踩过的坑有没有清单？</td>
+</tr>
+<tr>
+<td>5</td>
+<td><strong><code>proto契约使用说明.md</code></strong></td>
+<td>6 份 proto 怎么用？现在到底有没有被调用？改了契约要动哪几步？</td>
+</tr>
+<tr>
+<td>6</td>
+<td><code>java-services/</code></td>
+<td>每个 Java 源文件是干什么的？改这里要注意什么？</td>
+</tr>
+<tr>
+<td>7</td>
+<td><code>项目进度日志报告/</code></td>
+<td>每个阶段具体做了哪些事、遇到什么问题、怎么解决的？</td>
+</tr>
+<tr>
+<td>8</td>
+<td><code>demo/</code></td>
+<td>怎么把系统跑起来、怎么亲眼看到效果？</td>
+</tr>
+<tr>
+<td>9</td>
+<td><code>优化日志/</code></td>
+<td>每轮工程化加固改了什么、为什么改？</td>
+</tr>
+<tr>
+<td>10</td>
+<td><code>../db/</code></td>
+<td>数据存在哪？表/键/向量集合结构是什么？怎么备份恢复？</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_2">目录清单<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>定位</th>
+<th>何时维护</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>项目进度总览.md</code> · <code>.html</code></td>
+<td><strong>当前进度总览</strong>：阶段状态、功能矩阵、测试基线、分支与远端拓扑、剩余项与已知缺口</td>
+<td>每次收口</td>
+</tr>
+<tr>
+<td><code>功能开发流程.md</code> · <code>.html</code></td>
+<td><strong>功能开发流程</strong>：通用 8 步流水线、按技术栈的差异、逐功能开发步骤与验收标准、新增功能清单、本机特有坑</td>
+<td>流程或功能变化时</td>
+</tr>
+<tr>
+<td><code>技术债台账.md</code> · <code>.html</code></td>
+<td><strong>技术债权威台账</strong>：<code>DEBT-00X</code> 全量清单（简化实现 / 正式目标 / 触发点 / 当前状态 + 源码证据）、关联未实现项、一致性问题登记、代码标记索引</td>
+<td>创建或关闭任何债务时</td>
+</tr>
+<tr>
+<td><code>异常流程归纳.md</code> · <code>.html</code></td>
+<td><strong>异常流程总图</strong>：运行期异常流程（统一错误信封 / 路由层 404·405·415 分流 / 鉴权不变量 / 逐服务降级 / planned 三态判定 / 排障决策树）+ 研发期过程异常 30 条 + 规范动作清单</td>
+<td>发现新异常模式或调整错误语义时</td>
+</tr>
+<tr>
+<td><code>proto契约使用说明.md</code> · <code>.html</code></td>
+<td><strong>proto 契约使用说明与现状</strong>：6 份契约清单、gRPC 引用矩阵（实证）、Java/Python 双侧生成链路与本机坑、变更 6 步流程、<code>contract-check.py</code> 覆盖范围、<strong>产物同步门禁 <code>proto-sync-check.sh</code></strong>、与 OpenAPI 分工、10 项缺口登记</td>
+<td>契约增删改或接入方变化时</td>
+</tr>
+<tr>
+<td><code>项目进度日志报告/</code></td>
+<td><strong>分阶段过程留痕</strong>：每阶段三件套（阶段性报告 / 开发执行日志 / 测试验收报告），各含 HTML；含目录索引 <code>README.md</code></td>
+<td>每阶段收口</td>
+</tr>
+<tr>
+<td><code>java-services/</code></td>
+<td><strong>Java 逐文件说明</strong>：8 篇文档覆盖 106 个手写源文件（81 主 + 25 测），90 个 proto 生成文件按契约维度说明；08 篇为数据存储总纲</td>
+<td>增删 Java 文件后（配 <code>scripts/java-doc-coverage.py</code> 自查）</td>
+</tr>
+<tr>
+<td><code>../db/</code></td>
+<td><strong>数据存储归档</strong>：PG/Redis/Qdrant/暂存 4 份结构文档 + 运行态快照（<code>snapshots/</code>，只增不改）与恢复指引</td>
+<td>存储结构变更时同步结构文档；需要新快照时带时间戳追加</td>
+</tr>
+<tr>
+<td><code>demo/</code></td>
+<td><strong>端到端演示脚本</strong>：<code>Phase0-DEMO.md</code> / <code>Phase1-DEMO.md</code> / <code>Phase2-DEMO.md</code></td>
+<td>每阶段收口</td>
+</tr>
+<tr>
+<td><code>优化日志/</code></td>
+<td><strong>工程化加固日志</strong>：按日期命名，记录 P0/P1/P2 项的处理与验证</td>
+<td>每轮加固后</td>
+</tr>
+</tbody>
+</table>
+<p>其余（<code>dev分支代码分析与进度验证-2026-09-12.md</code> 等）为<strong>当期分析快照</strong>，属历史留痕，<strong>不回改口径</strong>。</p>
+<hr />
+<h2 id="html">生成 HTML 镜像<a class="headerlink" href="#html" title="Permanent link">&para;</a></h2>
+<p><code>.md</code> 改动后<strong>必须重新生成对应 <code>.html</code> 并一并提交</strong>，否则版本漂移。</p>
+<pre><code class="language-bash"># 批量（处理目标目录「当层」的 .md，自动排除 README.md；不递归子目录）
+PYTHONPATH=&quot;E:\AI\核心知识\.workbuddy\tmp\pylibs&quot; \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py --all &quot;docs/项目进度日志报告&quot;
+
+# 单文件
+PYTHONPATH=&quot;E:\AI\核心知识\.workbuddy\tmp\pylibs&quot; \
+  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
+  scripts/md2html-report.py &quot;docs/项目进度总览.md&quot;
+
+# 覆盖标题 / 指定输出路径（仅单文件模式）
+... scripts/md2html-report.py &quot;docs/项目进度总览.md&quot; -t &quot;标题&quot; -o &quot;docs/out.html&quot;
+</code></pre>
+<blockquote>
+<p><strong>本机环境变更（2026-09-18）</strong>：原先用的 anaconda（<code>E:/software/anaconda3/python.exe</code>）<strong>已卸载</strong>，
+本机现只有 <code>E:/software/python/python312</code>（无 <code>markdown</code> 包）。
+因此 HTML 生成统一走 <strong>托管 Python + <code>PYTHONPATH</code> 指向 <code>pylibs</code></strong>（内含 markdown 3.10.3）：
+<code>pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown</code>（不污染系统环境）。
+中文路径需加引号。</p>
+<p><strong>脚本没有 <code>--dry-run</code></strong>，重新生成是<strong>幂等覆盖</strong>（直接重写目标 <code>.html</code>）：
+改完 <code>.md</code> 就重跑一次，再用 <code>git status --short</code> 看哪些 <code>.html</code> 被改动即可确认同步范围。
+<code>--all</code> <strong>只扫当层目录</strong>，<code>docs/java-services/</code>、<code>docs/demo/</code> 这类子目录需各自传参。</p>
+</blockquote>
+<hr />
+<h2 id="_3">归档维护要求<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[ ] Markdown 更新后同步生成 HTML 镜像</li>
+<li>[ ] 新增文档在本 README 与 <code>项目进度总览.md</code> 的索引中登记</li>
+<li>[ ] 新增 / 关闭技术债时同步更新 <code>技术债台账.md</code>（状态 + 关闭依据 + 日期），代码里用 <code>// DEBT-00X</code> 标注</li>
+<li>[ ] 增删改 <code>proto/</code> 契约或出现新的接入方时，同步更新 <code>proto契约使用说明.md</code> 的契约清单与引用矩阵</li>
+<li>[ ] 改动 <code>proto/</code> 后运行 <code>bash scripts/proto-sync-check.sh all</code> 确认生成物已同步（CI 亦有 <code>proto-check-python</code> / <code>proto-check-java</code> 门禁）</li>
+<li>[ ] 单文件命名保持简洁（阶段文档用 <code>Phase&lt;N&gt;-*.md</code>，日期型用 <code>YYYY-MM-DD-*.md</code>）</li>
+<li>[ ] 未通过项 / 待补验证项<strong>必须显式登记</strong>，不得省略 —— <strong>诚实留痕优先于好看</strong></li>
+<li>[ ] 新增服务或写路径后，核对错误响应是否为统一信封 <code>{code,message,details}</code>；
+      安全边界按<strong>方法</strong>判定（见 <code>异常流程归纳.md</code> §4.2），并复核该文档 §5 未闭合项</li>
+<li>[ ] 历史归档不回改口径；旧数据保留原样，新口径写在当期文档并标注时间</li>
+</ul>
+<hr />
+<p><em>本目录索引建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

@@ -1,0 +1,526 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 5 开发执行日志（归档）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 Phase5-开发执行日志.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">一、执行流程总览</a></li>
+<li><a href="#_2">二、分阶段执行记录</a><ul>
+<li><a href="#phase-a">Phase A｜前置同步与需求对账</a></li>
+<li><a href="#phase-bjava-tool-executorr5-01-r5-08-in-06">Phase B｜Java 新服务 tool-executor（R5-01 ~ R5-08 + IN-06）</a></li>
+<li><a href="#phase-cpython-function-callingr5-06">Phase C｜Python Function Calling（R5-06）</a></li>
+<li><a href="#phase-dbff">Phase D｜BFF 工具域代理 + 契约</a></li>
+<li><a href="#phase-er-c05">Phase E｜终端线（R-C05 执行视图）</a></li>
+<li><a href="#phase-f-in-06">Phase F｜契约治理 IN-06</a></li>
+<li><a href="#phase-g">Phase G｜运行态验证与缺陷修复</a></li>
+<li><a href="#phase-h">Phase H｜阶段收口</a></li>
+</ul>
+</li>
+<li><a href="#_3">三、提交台账</a></li>
+<li><a href="#_4">四、命令台账（关键命令）</a></li>
+<li><a href="#_5">五、环境侧记录</a></li>
+<li><a href="#_6">六、经验沉淀</a></li>
+<li><a href="#2026-09-19">补记（2026-09-19 · 复审收口轮）</a><ul>
+<li><a href="#a">补记 A · 本轮补齐的交付物</a></li>
+<li><a href="#b">补记 B · 本轮修复的验证/联通缺口</a></li>
+</ul>
+</li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-5">Phase 5 开发执行日志（归档）<a class="headerlink" href="#phase-5" title="Permanent link">&para;</a></h1>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>阶段</td>
+<td>Phase 5 · 四肢期（Limb Stage）</td>
+</tr>
+<tr>
+<td>项目</td>
+<td>Agent-Lifeform · AI Agent 生命体架构</td>
+</tr>
+<tr>
+<td>仓库</td>
+<td><code>E:\AI\ai-agent</code>（开发分支 <code>dev</code>，跟踪 <code>origin/workbuddy/main</code>）</td>
+</tr>
+<tr>
+<td>分支</td>
+<td><code>dev</code> / <code>codex/main</code> / <code>workbuddy/main</code>（三分支同内容对齐）</td>
+</tr>
+<tr>
+<td>执行日期</td>
+<td>2026-09-19</td>
+</tr>
+<tr>
+<td>代码基线</td>
+<td><code>0921345</code>（四肢期代码收口）→ 复审收尾轮（文档 + 门禁 + 沙箱复验）</td>
+</tr>
+<tr>
+<td>需求范围</td>
+<td>R5-01 ~ R5-08（《阶段性需求拆解分析》Phase 5 表）+ 终端线 <strong>R-C05(预)</strong> + <strong>IN-06</strong></td>
+</tr>
+<tr>
+<td>执行结论</td>
+<td><strong>完成</strong>：Must 7/7、Should 1/1、终端线达标；沙箱 Docker 真隔离已复验通过；超范围缺口（WB/RE）如实登记待决策</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_1">一、执行流程总览<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<pre><code>Phase A 前置同步与需求对账
+   └─ 拉远端 → 解读提交链 → 确认 Phase 4 已收口、Phase 5 需求表处于冻结/未开工
+Phase B Java 新服务 tool-executor（R5-01/R5-02/R5-03/R5-04/R5-05/R5-07/R5-08 + IN-06）
+   └─ 注册表 → 安全三闸 → 执行引擎 → 沙箱双后端 → 三内置工具 → 审计 → 控制层
+Phase C Python Function Calling 适配（R5-06）
+   └─ app/tools/function_calling.py → 转 schema → 调 tool-executor → 诚实标注 decider
+Phase D BFF 工具域代理（R-C05 预）+ 契约落标
+     └─ /api/wp/tools* 9 方法 · 契约 7 路径 planned → implemented · 工具域错误码枚举
+Phase E 终端线：work-platform 执行视图（R-C05）
+Phase F 契约治理（IN-06）：schema 基线 + 指纹 + 影响面 + 门禁
+Phase G 运行态验证与缺陷修复（真起 8084 + 真调 Docker）
+Phase H 阶段收口：三件套 + HTML 孪生 + 进度文档对齐（本轮）
+</code></pre>
+<p>设计文档定义的链路（<code>AI-Agent生命体架构-阶段性需求拆解分析.md</code> Phase 5）：</p>
+<pre><code>意图 → 规划 → 工具选择 → 白名单 → 参数 Schema → 敏感参数扫描 → 沙箱执行 → 结果标准化 → 审计 → 回执
+</code></pre>
+<hr />
+<h2 id="_2">二、分阶段执行记录<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<h3 id="phase-a">Phase A｜前置同步与需求对账<a class="headerlink" href="#phase-a" title="Permanent link">&para;</a></h3>
+<ul>
+<li>拉取远端并解读提交链，确认 Phase 4 已交付并复审补全、Phase 5 需求表未开工。</li>
+<li>逐条抄录 R5-01 ~ R5-08 的 DoD 作为验收基线；确认终端线 R-C05(预) 与 IN-06 属本阶段。</li>
+<li>确认依赖：Docker Desktop 4.4.4 可用（<strong>注意：本机 Build 19041，Docker 不得升级</strong>）。</li>
+</ul>
+<h3 id="phase-bjava-tool-executorr5-01-r5-08-in-06">Phase B｜Java 新服务 <code>tool-executor</code>（R5-01 ~ R5-08 + IN-06）<a class="headerlink" href="#phase-bjava-tool-executorr5-01-r5-08-in-06" title="Permanent link">&para;</a></h3>
+<p>新增独立 Maven 模块 <code>services/java/tool-executor</code>（32 主 / 10 测，2952 + 1311 行）：</p>
+<table>
+<thead>
+<tr>
+<th>包</th>
+<th>关键类</th>
+<th>对应需求</th>
+<th>关键决策</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>registry/</code></td>
+<td><code>ToolRegistry</code> / <code>ToolBootstrap</code> / <code>ToolVersionRecord</code> / <code>ImpactReport</code></td>
+<td>R5-01 · IN-06</td>
+<td>注册表 + 版本 <code>change_log</code> + semver + <code>schema_hash</code> 指纹；影响分析只覆盖<strong>显式登记</strong>的消费方（DEBT-019）</td>
+</tr>
+<tr>
+<td><code>guard/</code></td>
+<td><code>ToolGuard</code></td>
+<td>R5-07</td>
+<td>三闸严格有序：白名单 → Draft-07 Schema（networknt）→ 12 条敏感正则；顺序不可换</td>
+</tr>
+<tr>
+<td><code>exec/</code></td>
+<td><code>ToolExecutor</code> / <code>ToolMetrics</code></td>
+<td>R5-02</td>
+<td>带超时执行 + 失败归类 + 回执标准化；连续失败 3 次熔断 30s</td>
+</tr>
+<tr>
+<td><code>sandbox/</code></td>
+<td><code>SandboxExecutor</code> / <code>DockerSandboxBackend</code> / <code>RestrictedProcessBackend</code> / <code>ProcessRunner</code></td>
+<td>R5-03 / R5-05</td>
+<td>Docker 主路径（<code>--network none</code> / <code>--read-only</code> / <code>--cap-drop ALL</code> / 非 root / 资源限）；不可用时<strong>显式</strong>回落受限子进程并标 <code>degraded=true</code></td>
+</tr>
+<tr>
+<td><code>tools/</code></td>
+<td><code>CalculatorTool</code> / <code>HttpTool</code> / <code>CodeTool</code></td>
+<td>R5-04 / R5-05</td>
+<td>calculator 手写解析器<strong>无 eval</strong>；http 域名白名单 + SSRF 双闸；code 一律经沙箱</td>
+</tr>
+<tr>
+<td><code>audit/</code></td>
+<td><code>ToolAuditLog</code> / <code>AuditEventPublisher</code></td>
+<td>R5-08</td>
+<td>PG <code>tool_audit_log</code> 为真相源，Kafka <code>lifeform.tool.invoked</code> 为旁路，PG 不可用时内存降级</td>
+</tr>
+<tr>
+<td><code>controller/</code></td>
+<td><code>ToolController</code></td>
+<td>对外</td>
+<td>12 端点；错误走统一信封 + 路由层 404/405/415 分流</td>
+</tr>
+</tbody>
+</table>
+<p><strong>关键技术坑（记录备查）</strong>：<code>SandboxExecutor</code> 必须在<strong>任何后端返回结果</strong>上强制补 <code>degraded</code> 标记——
+否则降级后端会"看起来和真隔离一样成功"，这是本阶段最容易踩的红线。</p>
+<h3 id="phase-cpython-function-callingr5-06">Phase C｜Python Function Calling（R5-06）<a class="headerlink" href="#phase-cpython-function-callingr5-06" title="Permanent link">&para;</a></h3>
+<ul>
+<li>新增 <code>services/python/nlp-service/app/tools/function_calling.py</code>（351 行）：把 tool-executor 的工具
+  schema 转成 LLM function-calling 描述；组合任务（计算 + 查询）走规则决策并<strong>如实标注 <code>decider="rule"</code></strong>。</li>
+<li><code>main.py</code> 新增 4 个工具相关端点。</li>
+<li>测试 <code>tests/test_function_calling.py</code>（148 行 / 15 项）。</li>
+</ul>
+<h3 id="phase-dbff">Phase D｜BFF 工具域代理 + 契约<a class="headerlink" href="#phase-dbff" title="Permanent link">&para;</a></h3>
+<p><code>wp-bff/server.js</code> 新增 9 个方法并登记 <code>IMPLEMENTED_ENDPOINTS</code>（ROUTE_GUARD 自动派生 405/Allow）：</p>
+<ul>
+<li>只读：<code>GET /api/wp/tools</code>、<code>/tools/registry</code>、<code>/tools/audit</code>、<code>/tools/audit/stats</code>、<code>/tools/metrics</code>、<code>/tools/sandbox</code></li>
+<li><strong>写路径</strong>：<code>POST /api/wp/tools/execute</code> —— 与 <code>middleware/{key}/start|stop</code> 同级校验（来源白名单 + <code>X-WP-Control-Token</code>）</li>
+<li>tool-executor 不可达时回 <strong>200 + <code>available=false</code> + <code>gaps</code></strong>（与体层同一「可用性信封」约定）</li>
+</ul>
+<p>契约 <code>contracts/work-platform-bff-openapi.yaml</code>：7 路径 <code>planned → implemented</code>，补 <code>ErrorEnvelope.code.enum</code>
+的 6 个工具域码与工具域端点 404/405 声明。</p>
+<h3 id="phase-er-c05">Phase E｜终端线（R-C05 执行视图）<a class="headerlink" href="#phase-er-c05" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>views/ExecutionView.vue</code>（495 行）：工具清单 / 注册表变更史 / 指标（P50/P95/P99 + 熔断器）/ 沙箱状态 /
+  审计记录 / <strong>IN-06 影响面抽屉</strong> / 工具试执行。</li>
+<li><code>provider.ts</code> 新增 <code>getExecution()</code> / <code>executeTool()</code> / <code>getToolImpact()</code>；<code>config/modules.ts</code>、路由、
+  图标、<code>types/index.ts</code> 同步登记。</li>
+<li>Mock 与真实 API <strong>同构</strong>：<code>registered_at</code> 校正为 epoch 毫秒、<code>change_log[].action</code> 大写、<code>impact</code> 数组、
+  <code>success_rate</code> 无样本为 <code>null</code>、参数名按真实 <code>expr</code> / <code>code</code> / <code>url</code>。</li>
+</ul>
+<h3 id="phase-f-in-06">Phase F｜契约治理 IN-06<a class="headerlink" href="#phase-f-in-06" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>contracts/tool-schema-baseline.json</code>：3 个内置工具的 schema 基线。</li>
+<li><code>scripts/contract-check.py</code> 增加"基线条数 = <code>ToolBootstrap</code> 注册条数"断言；<strong>改工具 schema 未同步基线即 FAIL</strong>。</li>
+<li><code>ToolSchemaBaselineTest</code>（2 项）固化该约束。</li>
+</ul>
+<h3 id="phase-g">Phase G｜运行态验证与缺陷修复<a class="headerlink" href="#phase-g" title="Permanent link">&para;</a></h3>
+<p>坚持"真起进程 + 真数据"，抓到的问题：</p>
+<ol>
+<li>沙箱后端选型判定：<strong>服务进程启动时镜像尚未构建</strong> → 运行期报 <code>docker_available=false</code>；
+   本轮镜像就绪后重启，启动日志 <code>Docker 沙箱探测：available=true</code>，<code>/api/tool/sandbox</code> 回到 <code>docker / isolated=true</code>。</li>
+<li>前端 <code>parameters_schema</code> 类型错位（声明对象、真实为 JSON 字符串）→ 类型放宽（P1-12）。</li>
+<li>契约错误码枚举缺工具域 6 码 → 补齐（P1-09）。</li>
+</ol>
+<h3 id="phase-h">Phase H｜阶段收口<a class="headerlink" href="#phase-h" title="Permanent link">&para;</a></h3>
+<p>三件套文档 + DEMO + HTML 孪生 + 进度文档对齐 + 三分支推送。</p>
+<hr />
+<h2 id="_3">三、提交台账<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>说明</th>
+<th>测试基线变化</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>Java <code>tool-executor</code> 主体（R5-01~R5-05/R5-07/R5-08 + IN-06）</td>
+<td>Java 162 → 240</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Python Function Calling（R5-06）</td>
+<td>Python 124 → 139</td>
+</tr>
+<tr>
+<td>3</td>
+<td>BFF 工具域 9 端点 + 契约落标</td>
+<td>wp-bff 55 → 73</td>
+</tr>
+<tr>
+<td>4</td>
+<td>work-platform 执行视图（R-C05）+ Mock 对齐</td>
+<td>前端 typecheck/build 通过</td>
+</tr>
+<tr>
+<td>5</td>
+<td>复审收尾轮：IN-06 前端入口 + 错误码 + 文档 + 门禁</td>
+<td>Java 240 → <strong>244</strong>；文档覆盖 118/156 → <strong>157/157</strong></td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>具体 commit 哈希以 <code>git log</code> 为准（Phase 5 代码与文档为<strong>同一开发线连续提交</strong>）。</p>
+</blockquote>
+<hr />
+<h2 id="_4">四、命令台账（关键命令）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># Java 全模块测试
+cd services/java &amp;&amp; bash ../../scripts/mvn-dev.sh test
+
+# 单独构建/启动 tool-executor（本机环境变量 SERVER__PORT 会顶掉 server.port）
+cd services/java &amp;&amp; bash ../../scripts/mvn-dev.sh -pl tool-executor -am install -DskipTests
+java -jar services/java/tool-executor/target/tool-executor-0.1.0-SNAPSHOT.jar \
+  --spring.cloud.nacos.discovery.enabled=false --spring.cloud.nacos.config.enabled=false --server.port=8084
+
+# Python
+cd services/python/nlp-service &amp;&amp; ../venv/Scripts/python.exe -m pytest -q
+
+# wp-bff
+cd services/node/wp-bff &amp;&amp; node --test
+
+# 契约与文档覆盖门禁
+python scripts/contract-check.py --work-platform
+python scripts/java-doc-coverage.py
+
+# 前端
+cd web/work-platform &amp;&amp; npx vue-tsc --noEmit &amp;&amp; npx vite build
+
+# 沙箱镜像构建 + 真隔离探测
+docker build -t agent-sandbox:latest infra/docker/sandbox/
+python .workbuddy/tmp/sbx-e2e.py        # 服务侧沙箱端到端（含逃逸样本）
+</code></pre>
+<hr />
+<h2 id="_5">五、环境侧记录<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>根因</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>运行期 <code>GET /api/tool/sandbox</code> 报 <code>docker_available=false</code></td>
+<td>服务启动时 <code>agent-sandbox:latest</code> 镜像尚未构建</td>
+<td><code>docker build -t agent-sandbox:latest infra/docker/sandbox/</code> 后重启服务，探测回到 <code>true</code></td>
+</tr>
+<tr>
+<td>沙箱容器内 python 报 <code>Temporary failure in name resolution</code></td>
+<td><code>--network none</code> 生效（预期行为）</td>
+<td>作为"出网被拦"的<strong>正向证据</strong>记录</td>
+</tr>
+<tr>
+<td>Git Bash 下 <code>docker run</code> 报 <code>/usr/bin/env: 'sh': No such file</code></td>
+<td>受限 shell 环境缺 <code>sh</code> 包装</td>
+<td>改用 PowerShell / Java 服务侧调用执行 docker</td>
+</tr>
+<tr>
+<td><code>tool-executor</code> 未接 Nacos 也能起</td>
+<td>本地单体开发约定 <code>NACOS_ENABLED=false</code></td>
+<td>启动显式 <code>--spring.cloud.nacos.*.enabled=false</code>（P1-11 口径）</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_6">六、经验沉淀<a class="headerlink" href="#_6" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>隔离要用内核级证据说话</strong>：<code>403 守卫拦截</code> 只能证明"没放行"，<code>Errno 30 Read-only file system</code> /
+   <code>Errno -3 name resolution</code> 才能证明"沙箱真的关住了"。</li>
+<li><strong>降级标记必须是硬约束</strong>：沙箱降级、审计降级、注册表降级、决策降级——任何"次优路径"都要带 <code>degraded</code>
+   字段，否则就是把降级伪装成成功。</li>
+<li><strong>契约门禁要能拦住 schema 漂移</strong>：IN-06 的关键不是"有影响面接口"，而是<strong>基线比对进 CI</strong>。</li>
+<li><strong>超范围缺口要如实登记</strong>：WB-06 / WB-10 / RE-01~RE-04 有验收标准但不在 R5 主线，
+   登记待决策比塞进阶段尾巴仓促实现更负责任。</li>
+</ol>
+<hr />
+<h2 id="2026-09-19">补记（2026-09-19 · 复审收口轮）<a class="headerlink" href="#2026-09-19" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>本轮由<strong>阶段交付复审</strong>触发（详见 <code>docs/优化日志/2026-09-19-Phase5四肢期进度复审与缺口清单.md</code>）。
+复审结论：<strong>代码质量可交付，交付物不完整</strong>。本轮补齐全部 P0 档案缺口与 P1 验证闭环，
+并完成<strong>沙箱 Docker 真隔离复验</strong>（服务侧证据见《测试验收报告》§5.2）。</p>
+</blockquote>
+<h3 id="a">补记 A · 本轮补齐的交付物<a class="headerlink" href="#a" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>补齐前</th>
+<th>补齐后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>tool-executor</code> 文档</td>
+<td>全仓 <code>docs/</code> 零提及</td>
+<td><code>docs/java-services/09-tool-executor.md</code> + 登记 <code>01-模块总览</code> / <code>README</code></td>
+</tr>
+<tr>
+<td>文档覆盖门禁</td>
+<td>❌ 118/156（tool-executor 5/41）</td>
+<td>✅ <strong>157/157</strong></td>
+</tr>
+<tr>
+<td>技术债登记</td>
+<td>代码引用 DEBT-019~021，台账未登记</td>
+<td>✅ 台账补 3 条 + §7 标记索引</td>
+</tr>
+<tr>
+<td>全局文档</td>
+<td><code>PROGRESS</code> 写 "Phase 5 is next"；README 写"下一阶段为 Phase 5"</td>
+<td>✅ 全部改为"Phase 5 已交付"口径</td>
+</tr>
+<tr>
+<td>阶段三件套</td>
+<td>全缺</td>
+<td>✅ 本文件 + 阶段性报告 + 测试验收报告 + DEMO</td>
+</tr>
+</tbody>
+</table>
+<h3 id="b">补记 B · 本轮修复的验证/联通缺口<a class="headerlink" href="#b" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>缺口</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>P1-06</td>
+<td>沙箱真隔离未验证</td>
+<td>✅ 构建镜像 + 重启服务 → <code>active_backend=docker, isolated=true, degraded=false</code>；逃逸样本实测</td>
+</tr>
+<tr>
+<td>P1-07</td>
+<td>IN-06 影响分析前端无入口</td>
+<td>✅ 执行视图「影响面」抽屉 + <code>getToolImpact()</code></td>
+</tr>
+<tr>
+<td>P1-08</td>
+<td>schema 变更未触发契约测试</td>
+<td>✅ <code>tool-schema-baseline.json</code> 纳入门禁</td>
+</tr>
+<tr>
+<td>P1-09</td>
+<td>契约错误码枚举缺工具域码</td>
+<td>✅ 补 6 码</td>
+</tr>
+<tr>
+<td>P1-10</td>
+<td><code>healthcheck.sh</code> 未纳入新服务</td>
+<td>✅ 补 <code>8084</code> / <code>9095</code> / <code>8090</code>（<strong>未重跑</strong>，如实标注）</td>
+</tr>
+<tr>
+<td>P1-11</td>
+<td>Nacos 注册口径不明</td>
+<td>✅ 写明「本地单体关、集成环境开」</td>
+</tr>
+<tr>
+<td>P1-12</td>
+<td><code>parameters_schema</code> 类型错位</td>
+<td>✅ 放宽为 <code>string \| Record&lt;string, unknown&gt;</code></td>
+</tr>
+<tr>
+<td>P1-13</td>
+<td>工具域错误码未进横切文档</td>
+<td>✅ <code>07-运行时配置与横切约定</code> §5.2 + <code>异常流程归纳</code> §2.5⑥</td>
+</tr>
+</tbody>
+</table></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

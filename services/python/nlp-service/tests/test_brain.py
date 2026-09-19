@@ -670,13 +670,16 @@ def _chunk(score: float) -> dict:
 class _FakeRetriever:
     def __init__(self, chunks):
         self._chunks = chunks
+        self.last_timeout = None
 
-    def retrieve(self, query, tenant_id="default", top_k=5):
+    def retrieve(self, query, tenant_id="default", top_k=5, timeout=None):
+        # 记录管线传下来的超时 —— 用于断言「检索被收进剩余总预算内」
+        self.last_timeout = timeout
         return RetrievalOutcome(chunks=self._chunks, backend="fake")
 
 
 class _DeadRetriever:
-    def retrieve(self, query, tenant_id="default", top_k=5):
+    def retrieve(self, query, tenant_id="default", top_k=5, timeout=None):
         raise RetrievalUnavailable("connection refused")
 
 

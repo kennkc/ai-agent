@@ -17,6 +17,7 @@ Contract Checker · 数据字典 ↔ proto 双向校验 + work-platform 契约�
   4. 校验结果输出报告，exit code 0=通过 1=有漂移（CI 门禁用）
 """
 import argparse
+import json
 import os
 import re
 import sys
@@ -192,6 +193,50 @@ def check_model(messages, model, spec):
     return issues
 
 
+def check_tool_schema_baseline():
+    """IN-06：工具 schema 契约基线的存在性与「工具名集合」比对。
+
+    指纹真值只能由 JVM 算出（`ToolRegistry.fingerprint`：SHA-256 前 8 字节），
+    所以这里**刻意不复制哈希实现**——复制一份就等于制造第二份真相。
+    本函数只做跨语言可做的两件事：
+
+      1. 基线文件存在且结构合法；
+      2. 基线登记的工具名 与 `ToolBootstrap` 注册的工具名 **双向一致**
+         （新增/改名工具却忘记登记基线 → 红灯）。
+
+    指纹与版本的一致性由 tool-executor 的 `ToolSchemaBaselineTest` 强制
+    （schema 一改就红，逼出「重跑 L1 契约测试 + 更新基线」的动作）。
+    """
+    baseline_path = REPO_ROOT / "contracts" / "tool-schema-baseline.json"
+    bootstrap_path = (REPO_ROOT / "services" / "java" / "tool-executor" / "src" / "main"
+                      / "java" / "com" / "agent" / "tool" / "registry" / "ToolBootstrap.java")
+    if not baseline_path.exists():
+        return ["FAIL 工具 schema 契约基线缺失: contracts/tool-schema-baseline.json（IN-06）」"]
+    try:
+        data = json.loads(baseline_path.read_text(encoding="utf-8"))
+    except Exception as exc:  # noqa: BLE001 - 门禁脚本，任何解析失败都算 FAIL
+        return [f"FAIL 工具 schema 契约基线不是合法 JSON: {exc}"]
+
+    issues = []
+    baseline_tools = set((data.get("tools") or {}).keys())
+    if not baseline_tools:
+        issues.append("FAIL 工具 schema 契约基线未登记任何工具")
+    if not bootstrap_path.exists():
+        issues.append("FAIL 未找到 ToolBootstrap.java，无法比对内置工具集合")
+        return issues
+
+    text = bootstrap_path.read_text(encoding="utf-8")
+    declared = set(re.findall(r'new ToolMeta\("([a-z0-9_-]+)"', text))
+    for name in sorted(declared - baseline_tools):
+        issues.append(f"FAIL 内置工具未登记契约基线: {name}"
+                      "（IN-06：请更新 contracts/tool-schema-baseline.json）")
+    for name in sorted(baseline_tools - declared):
+        issues.append(f"FAIL 契约基线登记了已不存在的工具: {name}"
+                      "（ToolBootstrap 不再注册，基线过期）")
+    print(f"工具契约基线: {len(baseline_tools)} 个工具 | ToolBootstrap 注册 {len(declared)} 个")
+    return issues
+
+
 def check_work_platform(openapi_path):
     """X3 · work-platform 契约分层校验"""
     if not os.path.exists(openapi_path):
@@ -236,6 +281,9 @@ def check_work_platform(openapi_path):
     unmarked = sorted(p for p, v in wp_status.items() if v == "unmarked")
     if unmarked:
         issues.append(f"WARN 端点缺少 x-wp-status 标记: {len(unmarked)} 个（{', '.join(unmarked[:3])} …）")
+
+    # 8) IN-06 工具 schema 契约基线
+    issues += check_tool_schema_baseline()
 
     impl_n = sum(1 for v in wp_status.values() if v == "implemented")
     impl_methods = count_js_implemented_methods(

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 08:54 · 源文件 06-body-service.md</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 06-body-service.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -124,7 +124,7 @@
 <li><a href="#2-phase-12">2. 与 Phase 1/2 的关系（替换点已生效）</a></li>
 <li><a href="#3">3. 文件清单</a><ul>
 <li><a href="#31">3.1 主代码</a></li>
-<li><a href="#32-60">3.2 测试（60 个用例，全绿）</a></li>
+<li><a href="#32-64">3.2 测试（64 个用例，全绿）</a></li>
 </ul>
 </li>
 <li><a href="#4">4. 逐文件说明（关键实现）</a><ul>
@@ -139,6 +139,7 @@
 <li><a href="#49-serviceknowledgemetricsjava-104">4.9 service/KnowledgeMetrics.java · 指标 · 104 行</a></li>
 <li><a href="#410-chunkdocumentparserjava-146">4.10 chunk/DocumentParser.java · 格式解析 · 146 行</a></li>
 <li><a href="#411-commonglobalexceptionhandlerjava-90">4.11 common/GlobalExceptionHandler.java · 统一异常出口 · 90 行</a></li>
+<li><a href="#412-controller">4.12 写入失效热缓存（一致性回归，controller 层）</a></li>
 </ul>
 </li>
 <li><a href="#5">5. 降级清单（诚实上报，不虚构）</a></li>
@@ -151,7 +152,7 @@
   <main class="doc"><h1 id="06-body-service-phase-3">06 · body-service 躯体服务（Phase 3 躯体期）<a class="headerlink" href="#06-body-service-phase-3" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>模块路径：<code>services/java/body-service/</code>
-源文件：<strong>27 个主代码（2721 行）+ 10 个测试（975 行）</strong>
+源文件：<strong>27 个主代码（2772 行）+ 11 个测试（1080 行 / 64 个用例）</strong>
 HTTP 端口：<strong>8083</strong> · gRPC 端口：<strong>9094</strong>
 外部依赖：PostgreSQL（冷层真相源）· Redis（热层缓存）· Qdrant（温层向量库）· Kafka（感官事件消费）· nlp-service（嵌入/重排）</p>
 </blockquote>
@@ -314,10 +315,16 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <td>R3-02/03/04/09 入库管道与状态机</td>
 </tr>
 <tr>
+<td><code>common/BudgetGuard.java</code></td>
+<td>工具</td>
+<td style="text-align: right;">100</td>
+<td>检索端到端预算执行器（GAP-05）：超预算抛 504 <code>AGENT_TIMEOUT</code>，与 Python <code>run_with_budget</code> 语义对齐</td>
+</tr>
+<tr>
 <td><code>service/RetrievalService.java</code></td>
 <td>服务</td>
 <td style="text-align: right;">183</td>
-<td>R3-05/06/08 检索链路 + IN-05 迭代检索预留</td>
+<td>R3-05/06/08 检索链路 + IN-05 迭代检索预留；2026-09-19 起 warm 管线受端到端预算约束</td>
 </tr>
 <tr>
 <td><code>service/RagPipeline.java</code></td>
@@ -387,7 +394,7 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </tr>
 </tbody>
 </table>
-<h3 id="32-60">3.2 测试（60 个用例，全绿）<a class="headerlink" href="#32-60" title="Permanent link">&para;</a></h3>
+<h3 id="32-64">3.2 测试（64 个用例，全绿）<a class="headerlink" href="#32-64" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -416,6 +423,11 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 <td><code>common/GlobalExceptionHandlerTest.java</code></td>
 <td style="text-align: right;">89</td>
 <td>路由层错误语义：未映射路由 404 而非 500 / 405 / 415 / <strong>真实故障仍 500</strong>（§4.11）</td>
+</tr>
+<tr>
+<td><code>controller/KnowledgeIngestInvalidationTest.java</code></td>
+<td style="text-align: right;">105</td>
+<td><strong>写入必须失效热缓存</strong>（一致性回归）：单篇入库 / 批量入库各失效一次 / 全失败不失效 / 删除也失效</td>
 </tr>
 <tr>
 <td><code>service/IngestServiceTest.java</code></td>
@@ -600,6 +612,11 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong>写路径的缓存失效</strong>：<code>POST /knowledge</code>、<code>POST /knowledge/batch</code>（有成功项时）与
+<code>DELETE /knowledge/{docId}</code> 都会调用 <code>HotCacheStore.invalidateTenant(tenant)</code>，
+否则新入库知识要等 TTL 到期才可见（见 §4.12）。</p>
+</blockquote>
 <p><strong>租户来源</strong>：网关注入的 <code>X-Tenant-Id</code>，<strong>不信任请求体里的租户字段</strong>。
 <code>defaultValue="default"</code> 的便利性取舍仍在（缺头时落 default 而非报错），生产前需评估（见 §7）。</p>
 <h3 id="49-serviceknowledgemetricsjava-104">4.9 <code>service/KnowledgeMetrics.java</code> · 指标 · 104 行<a class="headerlink" href="#49-serviceknowledgemetricsjava-104" title="Permanent link">&para;</a></h3>
@@ -714,6 +731,40 @@ DEBT-001 由此闭合。关键点是<strong>对外契约保持兼容</strong>：
    切换数据源时曾把旧进程上的 <code>GET /api/body/knowledge/reconcile</code> 404 误判为服务故障。</p>
 <p><strong>修复的边界</strong>：只把<strong>路由层</strong>异常分流，真实内部故障仍返回 500
 （<code>genuineServerFaultStillMapsTo500</code> 用例显式守住这条，防止"顺手把 500 也改成 4xx"）。</p>
+<h3 id="412-controller">4.12 写入失效热缓存（一致性回归，<code>controller</code> 层）<a class="headerlink" href="#412-controller" title="Permanent link">&para;</a></h3>
+<p>热层缓存键是「租户 + 问题指纹」，一旦命中就<strong>直接返回旧结果集</strong>。删除路径一直有失效，
+但<strong>写入路径此前漏了</strong> —— 后果是「文档明明入库了、同一个问题还是检索不到」，
+新知识的可见性要等到缓存 TTL 到期才恢复。</p>
+<p>修复：<code>KnowledgeController.ingest()</code> / <code>ingestBatch()</code> 在<strong>确有成功写入</strong>后调用
+<code>storage.hot().invalidateTenant(tenantId)</code>：</p>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>失效次数</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>单篇入库成功</td>
+<td>1 次</td>
+</tr>
+<tr>
+<td>批量入库（有成功项）</td>
+<td><strong>1 次</strong>（整批共享一次失效，不是逐篇）</td>
+</tr>
+<tr>
+<td>批量全部失败</td>
+<td><strong>0 次</strong>（不能因为失败而误伤他人缓存）</td>
+</tr>
+<tr>
+<td>删除文档</td>
+<td>1 次</td>
+</tr>
+</tbody>
+</table>
+<p><code>KnowledgeIngestInvalidationTest</code> 4 项守住上表，其中"全失败不失效"是防止把失效调用
+放到 <code>finally</code> 里的"顺手修复"。</p>
 <h2 id="5">5. 降级清单（诚实上报，不虚构）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

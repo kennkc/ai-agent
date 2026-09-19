@@ -11,8 +11,9 @@ const http = require('node:http')
 const { EventEmitter } = require('node:events')
 
 const {
-  createServer, MIDDLEWARE, IMPLEMENTED_ENDPOINTS, ROUTE_GUARD,
+  createServer, MIDDLEWARE, IMPLEMENTED_ENDPOINTS, ROUTE_GUARD, TOOL_RESERVED_SEGMENTS,
   resolveAllowedOrigins, queryTerms, buildSnippet,
+  httpRequestJson, httpRequestJsonMeta, TIMEOUT_TIERS,
 } = require('../server')
 
 const TOKEN = 'test-control-token-0123456789'
@@ -858,4 +859,549 @@ test('GET /api/wp/brain 体层不可用时 retrieval 为 null（不伪造知识�
     jsonRequest: async url => (String(url).includes('/cache/stats') ? cacheStats
       : String(url).includes('/knowledge/stats') ? null : brainHealth),
   })
+})
+
+// ─────────── Phase 5 四肢层执行视图（R-C05 预 / R5-08 / IN-06 代理） ───────────
+
+const TOOL_LIST = {
+  total: 3,
+  registry_backend: 'in-memory',
+  tools: [
+    { name: 'calculator', version: '1.0.0', sandbox_required: false, timeout_ms: 3000, deprecated: false },
+    { name: 'http', version: '1.0.0', sandbox_required: false, timeout_ms: 8000, deprecated: false },
+    { name: 'code', version: '1.0.0', sandbox_required: true, timeout_ms: 10000, deprecated: false },
+  ],
+}
+const TOOL_REGISTRY = {
+  summary: { tool_count: 3, deprecated_count: 0, change_count: 3 },
+  change_log: [{ tool_name: 'http', version: '1.0.0', action: 'register' }],
+  semver_policy: 'schema 变更即触发 L1 契约测试',
+  deprecation_policy: '废弃期 30 天',
+}
+const TOOL_METRICS = {
+  metrics: { total_calls: 12, total_failures: 2, blocked_calls: 1, success_rate: 0.8333, p50_ms: 7, p95_ms: 40, p99_ms: 61, calls_by_tool: { calculator: 9 } },
+  circuit_breakers: [{ tool_name: 'http', state: 'closed', consecutive_failures: 0 }],
+}
+const TOOL_SANDBOX = {
+  enabled: true, active_backend: 'docker', isolated: true, degraded: false,
+  docker_available: true, process_fallback_available: true, timeout_ms: 10000, memory_mb: 256,
+}
+const TOOL_AUDIT = {
+  total: 1, audit_backend: 'postgres', degraded: false,
+  items: [{ audit_id: 'a1', tool_name: 'calculator', success: true, latency_ms: 5, sandboxed: false }],
+}
+const TOOL_AUDIT_STATS = { audit: { backend: 'postgres', total: 12, success: 9, blocked: 1, sandboxed: 3 }, kafka: { available: true } }
+
+/** 按 URL 分派假上游：未列出的路径返回 null（模拟不可达） */
+function fakeToolsUpstream(overrides = {}) {
+  const table = {
+    '/api/tool/list': TOOL_LIST,
+    '/api/tool/registry': TOOL_REGISTRY,
+    '/api/tool/metrics': TOOL_METRICS,
+    '/api/tool/sandbox': TOOL_SANDBOX,
+    '/api/tool/audit/stats': TOOL_AUDIT_STATS,
+    '/api/tool/audit?limit=50': TOOL_AUDIT,
+    '/api/tool/audit?limit=20': TOOL_AUDIT,
+    ...overrides,
+  }
+  return async url => table[String(url).split('8084').pop()] ?? null
+}
+
+test('GET /api/wp/tools 四肢层全不可用时降级可见（不伪造工具清单）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools', headers: { 'x-tenant-id': 'default' } })
+    assert.equal(res.status, 200, '四肢层不可用是降级，不是 5xx 故障')
+    const data = res.json.data
+    assert.equal(data.available, false)
+    assert.ok(data.reason.includes('四肢层不可用'))
+    assert.equal(data.tools, undefined, '不可用时不得凭空给出工具清单')
+    assert.deepEqual(data.gaps, ['tools', 'registry', 'metrics', 'sandbox', 'audit'])
+    assert.ok(data.tool_url.includes('8084'))
+  }, { jsonRequest: async () => null })
+})
+
+test('GET /api/wp/tools 四肢层可用时聚合工具/注册表/指标/沙箱/审计', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools', headers: { 'x-tenant-id': 'default' } })
+    const data = res.json.data
+    assert.equal(data.available, true)
+    assert.equal(data.total, 3)
+    assert.equal(data.tools.length, 3)
+    assert.equal(data.partial, false, '分片全取到时不标 partial')
+    assert.deepEqual(data.partial_reasons, [])
+    assert.equal(data.metrics.metrics.success_rate, 0.8333)
+    assert.equal(data.sandbox.isolated, true)
+    assert.equal(data.audit.items.length, 1)
+    assert.equal(data.audit_stats.audit.blocked, 1)
+    assert.equal(data.registry.summary.tool_count, 3)
+  }, { jsonRequest: fakeToolsUpstream() })
+})
+
+test('GET /api/wp/tools 分片缺失时标 partial 而非把缺失读成零', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools', headers: { 'x-tenant-id': 'default' } })
+    const data = res.json.data
+    assert.equal(data.available, true)
+    assert.equal(data.partial, true)
+    assert.ok(data.partial_reasons.includes('metrics_unavailable'))
+    assert.equal(data.metrics, null, '取不到就是 null，不能给 {} 让前端渲染成 0')
+  }, { jsonRequest: fakeToolsUpstream({ '/api/tool/metrics': null }) })
+})
+
+test('GET /api/wp/tools/sandbox 透传沙箱状态并标注隔离边界', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools/sandbox' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.sandbox.active_backend, 'docker')
+    assert.equal(res.json.data.sandbox.degraded, false)
+  }, { jsonRequest: fakeToolsUpstream() })
+})
+
+test('GET /api/wp/tools/audit 返回真实调用记录（含沙箱与耗时）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools/audit?limit=50' })
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.items[0].tool_name, 'calculator')
+    assert.equal(res.json.data.audit_backend, 'postgres')
+  }, { jsonRequest: fakeToolsUpstream() })
+})
+
+test('GET /api/wp/tools/metrics 回传分位耗时与熔断状态', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools/metrics' })
+    assert.equal(res.json.data.metrics.p99_ms, 61)
+    assert.equal(res.json.data.circuit_breakers[0].state, 'closed')
+  }, { jsonRequest: fakeToolsUpstream() })
+})
+
+test('GET /api/wp/tools/registry 回传注册表摘要与变更历史（IN-06）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools/registry' })
+    assert.equal(res.json.data.summary.tool_count, 3)
+    assert.equal(res.json.data.change_log.length, 1)
+    assert.ok(res.json.data.deprecation_policy.includes('30 天'))
+  }, { jsonRequest: fakeToolsUpstream() })
+})
+
+test('GET /api/wp/tools/{name} 与 /impact 走参数路由而不被固定子路径吞掉', async () => {
+  await withServer(async ({ server }) => {
+    const detail = await request(server, { path: '/api/wp/tools/http' })
+    assert.equal(detail.json.data.tool.name, 'http')
+    const impact = await request(server, { path: '/api/wp/tools/http/impact' })
+    assert.equal(impact.json.data.impact.tool_name, 'http')
+  }, {
+    jsonRequest: async url => {
+      const path = String(url).split('8084').pop()
+      if (path === '/api/tool/http') return { name: 'http', version: '1.0.0' }
+      if (path === '/api/tool/http/impact') return { tool_name: 'http', affected_agents: ['agent-a'] }
+      return null
+    },
+  })
+})
+
+test('POST /api/wp/tools/execute 未带控制令牌 → 401 且绝不触达四肢层', async () => {
+  let called = false
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/tools/execute',
+      headers: { origin: ALLOWED_ORIGIN }, body: { tool_name: 'calculator' },
+    })
+    assert.equal(res.status, 401)
+    assert.equal(res.json.code, 'AGENT_UNAUTHORIZED')
+  }, { jsonRequest: async () => { called = true; return null } })
+  assert.equal(called, false, '鉴权失败时绝不能触达四肢层 — 否则即为免令牌执行后门')
+})
+
+test('POST /api/wp/tools/execute 缺少 tool_name → 400', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/tools/execute',
+      headers: CONTROL_HEADERS, body: { arguments: {} },
+    })
+    assert.equal(res.status, 400)
+    assert.equal(res.json.code, 'AGENT_BAD_REQUEST')
+  }, { jsonRequest: async () => TOOL_LIST })
+})
+
+test('POST /api/wp/tools/execute 成功 → 回执行结果与审计号', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/tools/execute',
+      headers: CONTROL_HEADERS, body: { tool_name: 'calculator', arguments: { expression: '1+1' } },
+    })
+    assert.equal(res.status, 200)
+    const data = res.json.data
+    assert.equal(data.available, true)
+    assert.equal(data.success, true)
+    assert.equal(data.audit_id, 'a-100')
+    assert.equal(data.call_id, 'call-1')
+    assert.equal(data.tenant_id, 'default')
+  }, {
+    jsonRequest: async () => ({
+      call_id: 'call-1', tool_name: 'calculator', success: true, output: { result: 2 },
+      latency_ms: 5, sandboxed: false, degraded: false, audit_id: 'a-100',
+    }),
+  })
+})
+
+test('POST /api/wp/tools/execute 工具被守卫拒绝 → available:true + success:false（真实记录，非服务不可用）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/tools/execute',
+      headers: CONTROL_HEADERS, body: { tool_name: 'code', arguments: { source: 'os.system("rm -rf /")' } },
+    })
+    assert.equal(res.status, 200)
+    const data = res.json.data
+    assert.equal(data.available, true, '工具被拦是已落审计的真实结果，不能混同为「四肢层不可用」')
+    assert.equal(data.success, false)
+    assert.equal(data.error_code, 'AGENT_TOOL_ARGS_BLOCKED')
+    assert.equal(data.audit_id, 'a-101')
+  }, {
+    jsonRequest: async () => ({
+      code: 'AGENT_TOOL_ARGS_BLOCKED', message: '参数命中危险模式',
+      details: { audit_id: 'a-101', call_id: 'call-2' },
+    }),
+  })
+})
+
+test('POST /api/wp/tools/execute 四肢层不可达 → available:false 且明示本次调用未生效', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/tools/execute',
+      headers: CONTROL_HEADERS, body: { tool_name: 'calculator', arguments: {} },
+    })
+    assert.equal(res.status, 200)
+    const data = res.json.data
+    assert.equal(data.available, false)
+    assert.ok(data.reason.includes('本次调用未生效'))
+  }, { jsonRequest: async () => null })
+})
+
+// ─────────── 「慢」不得写成「没有」：失败原因细分回归 ───────────
+//
+// 背景（Phase 5 实测缺陷）：传输层把「超时 / 连接拒绝 / 404 / 非 JSON」折叠成一个 null，
+// 上游只能表达成「不可用」。`/api/tool/sandbox` 冷探测 5.7s 超过 5s 预算后，
+// `/api/wp/tools` 长期宣称「沙箱不可用」——与服务侧真相相反，且单测/契约都拦不住。
+// 以下用例把「超时 ≠ 缺失」这条不变量钉住。
+
+const okOutcome = data => ({ ok: true, data, reason: null })
+const failOutcome = reason => ({ ok: false, data: null, reason })
+
+/** 按 URL 分派带原因的假上游；未列出的路径 = 连接被拒 */
+function fakeToolsUpstreamMeta(overrides = {}) {
+  const table = {
+    '/api/tool/list': okOutcome(TOOL_LIST),
+    '/api/tool/registry': okOutcome(TOOL_REGISTRY),
+    '/api/tool/metrics': okOutcome(TOOL_METRICS),
+    '/api/tool/sandbox': okOutcome(TOOL_SANDBOX),
+    '/api/tool/audit/stats': okOutcome(TOOL_AUDIT_STATS),
+    '/api/tool/audit?limit=20': okOutcome(TOOL_AUDIT),
+    ...overrides,
+  }
+  return async url => table[String(url).split('8084').pop()] ?? failOutcome('unreachable')
+}
+
+test('GET /api/wp/tools 沙箱分片超时 → 降级码是 *_timeout，不写成「沙箱不可用」', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools' })
+    const data = res.json.data
+    assert.equal(data.available, true, '只是分片慢，整体仍是可用')
+    assert.equal(data.partial, true)
+    assert.deepEqual(data.partial_reasons, ['sandbox_timeout'])
+    assert.equal(data.sandbox, null, '超时取不到就是 null，不能给 {} 让前端渲染成 0')
+    assert.ok(data.partial_note && data.partial_note.includes('超时'), 'partial_note 必须把「超时」说出口')
+    assert.ok(data.partial_note.includes('不代表该能力缺失'))
+    assert.deepEqual(data.probe_budget_ms, { default: 5000, sandbox: 9000 },
+      '预算按域而定：沙箱要走 docker 探测，预算必须比其余分片宽')
+  }, { jsonRequestMeta: fakeToolsUpstreamMeta({ '/api/tool/sandbox': failOutcome('timeout') }) })
+})
+
+test('GET /api/wp/tools 分片 404 → 降级码是 *_missing（对端版本旧于 BFF，而非服务不可用）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools' })
+    const data = res.json.data
+    assert.deepEqual(data.partial_reasons, ['registry_missing'])
+    assert.ok(data.partial_note.includes('端点不存在'))
+    assert.ok(data.partial_note.includes('版本可能旧于本 BFF'))
+  }, { jsonRequestMeta: fakeToolsUpstreamMeta({ '/api/tool/registry': failOutcome('endpoint_missing') }) })
+})
+
+test('GET /api/wp/tools 工具清单超时 → available:false 且 reason_code=timeout、文案明说「慢」', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools' })
+    assert.equal(res.status, 200, '超时也是降级，不是 5xx')
+    const data = res.json.data
+    assert.equal(data.available, false)
+    assert.equal(data.reason_code, 'timeout')
+    assert.ok(data.reason.includes('四肢层不可用'), '保留既有降级信封词根')
+    assert.ok(data.reason.includes('超时'))
+    assert.ok(data.reason.includes('不是「没有」'), '不能把慢说成没有')
+    assert.ok(!data.reason.includes('未启动'), '超时不得被笼统说成未启动')
+    assert.deepEqual(data.gaps, ['tools', 'registry', 'metrics', 'sandbox', 'audit'])
+  }, { jsonRequestMeta: async () => failOutcome('timeout') })
+})
+
+test('GET /api/wp/tools/sandbox 超时 → 单端点代理同样标注 reason_code（不合并语义）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools/sandbox' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, false)
+    assert.equal(res.json.data.reason_code, 'timeout')
+    assert.ok(res.json.data.reason.includes('超时'))
+  }, { jsonRequestMeta: async () => failOutcome('timeout') })
+})
+
+test('注入式假传输不假装知道原因 → 退回通用降级码词根（既有契约不被改写）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools' })
+    const data = res.json.data
+    assert.deepEqual(data.partial_reasons, ['metrics_unavailable'],
+      '假传输只能给「有/没有」，不得凭空捏造 timeout/missing')
+    assert.equal(data.partial_note, null, '没有超时证据就不产出超时说明')
+  }, { jsonRequest: fakeToolsUpstream({ '/api/tool/metrics': null }) })
+})
+
+test('httpRequestJsonMeta：上游不响应 → reason=timeout（不是笼统的不可用）', async () => {
+  const hang = http.createServer(() => { /* 故意永不响应 */ })
+  await new Promise(resolve => hang.listen(0, '127.0.0.1', resolve))
+  try {
+    const url = `http://127.0.0.1:${hang.address().port}/api/tool/sandbox`
+    const outcome = await httpRequestJsonMeta(url, { timeoutMs: 150 })
+    assert.equal(outcome.ok, false)
+    assert.equal(outcome.reason, 'timeout')
+    assert.equal(outcome.data, null)
+  } finally {
+    await new Promise(resolve => hang.close(resolve))
+  }
+})
+
+test('httpRequestJsonMeta：404 → endpoint_missing；500 → http_error；非 JSON → bad_json', async () => {
+  const fake = http.createServer((req, res) => {
+    if (req.url === '/missing') { res.writeHead(404, { 'Content-Type': 'application/json' }); return res.end('{"code":"NOT_FOUND"}') }
+    if (req.url === '/boom') { res.writeHead(500); return res.end('') }
+    res.writeHead(200, { 'Content-Type': 'text/plain' }); res.end('not json at all')
+  })
+  await new Promise(resolve => fake.listen(0, '127.0.0.1', resolve))
+  try {
+    const base = `http://127.0.0.1:${fake.address().port}`
+    assert.equal((await httpRequestJsonMeta(`${base}/missing`)).reason, 'endpoint_missing')
+    assert.equal((await httpRequestJsonMeta(`${base}/boom`)).reason, 'http_error')
+    assert.equal((await httpRequestJsonMeta(`${base}/plain`)).reason, 'bad_json')
+    assert.equal((await httpRequestJsonMeta('http://127.0.0.1:1/none')).reason, 'unreachable')
+  } finally {
+    await new Promise(resolve => fake.close(resolve))
+  }
+})
+
+test('httpRequestJsonMeta 成功路径与 httpRequestJson 行为一致（同一套传输，无口径分叉）', async () => {
+  const upstream = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'application/json' }); res.end('{"total":3}')
+  })
+  await new Promise(resolve => upstream.listen(0, '127.0.0.1', resolve))
+  try {
+    const url = `http://127.0.0.1:${upstream.address().port}/api/tool/list`
+    assert.deepEqual(await httpRequestJson(url), { total: 3 })
+    assert.deepEqual((await httpRequestJsonMeta(url)).data, { total: 3 })
+    assert.deepEqual(await httpRequestJson('http://127.0.0.1:1/none'), null, '薄封装仍以 null 表达失败')
+  } finally {
+    await new Promise(resolve => upstream.close(resolve))
+  }
+})
+
+test('执行视图端点已登记进 IMPLEMENTED_ENDPOINTS（契约对账用）', () => {
+  const registered = IMPLEMENTED_ENDPOINTS.map(item => `${item.method} ${item.path}`)
+  for (const expected of [
+    'GET /tools', 'GET /tools/registry', 'GET /tools/audit', 'GET /tools/audit/stats',
+    'GET /tools/metrics', 'GET /tools/sandbox', 'POST /tools/execute',
+    'GET /tools/{name}', 'GET /tools/{name}/impact',
+  ]) {
+    assert.ok(registered.includes(expected), `缺少端点登记：${expected}`)
+  }
+})
+
+test('路由守卫把 /tools 固定子路径与参数路径分成两条（405 需可区分）', () => {
+  assert.deepEqual(ROUTE_GUARD.allowedMethods('/api/wp/tools/registry'), ['GET'])
+  assert.deepEqual(ROUTE_GUARD.allowedMethods('/api/wp/tools/execute'), ['POST'])
+  assert.deepEqual(ROUTE_GUARD.allowedMethods('/api/wp/tools/http'), ['GET'])
+  assert.equal(ROUTE_GUARD.allowedMethods('/api/wp/tools/nope/nope'), null)
+})
+
+// 语义回归：固定子路径不得被参数路由吃掉，否则 GET /tools/execute 会返回 200 而非 405
+test('GET /api/wp/tools/execute → 405 且带 Allow 头（不被 /tools/{name} 参数路由吞掉）', async () => {
+  let called = false
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools/execute' })
+    assert.equal(res.status, 405, '路径存在但方法不对必须是 405，不能被当成工具详情返回 200')
+    assert.equal(res.json.code, 'AGENT_METHOD_NOT_ALLOWED')
+    assert.equal(res.headers.allow, 'POST')
+  }, { jsonRequest: async () => { called = true; return { name: 'execute' } } })
+  assert.equal(called, false, '不得把 execute 当作工具名去代理上游（那正是本用例要防的静默语义改写）')
+})
+
+test('固定子路径段集合由 IMPLEMENTED_ENDPOINTS 派生（无第三份端点真相）', () => {
+  for (const seg of ['registry', 'audit', 'metrics', 'sandbox', 'execute']) {
+    assert.ok(TOOL_RESERVED_SEGMENTS.has(seg), '缺少固定段：' + seg)
+  }
+  assert.ok(!TOOL_RESERVED_SEGMENTS.has('http'), '参数段不应被当成固定段')
+  assert.ok(!TOOL_RESERVED_SEGMENTS.has('{name}'))
+})
+
+test('真实工具名仍走参数路由（calculator / code 不受固定段影响）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/tools/code' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.tool.name, 'code')
+  }, { jsonRequest: async () => ({ name: 'code', version: '1.0.0' }) })
+})
+
+// ─────────── 跨服务超时预算不变量（权威登记表：contracts/timeout-budget.yaml）───────────
+//
+// 为什么单独守这组不变量：
+//   超时错配**不触发任何功能断言** —— 单测全绿、契约 0 FAIL，只在运行期表现为
+//   「把一个只是慢的接口叙述成不可用」。2026-09-19 沙箱探测那条正是此形状：
+//   冷探测 5.7s 撞上 5s 统一预算，视图长期宣称「沙箱不可用」，而直连该端点是 200。
+//
+// 本组用例与 `scripts/timeout-budget-check.py` 互补，缺任一方都有盲区：
+//   · 脚本校验「登记表数字 ↔ 代码常量」—— 防的是「表里写 A、代码是 B」；
+//   · 用例校验「代码行为 ↔ 操作类型」—— 防的是「改行为却忘了常量/分档被合并」。
+//
+// 断言一律用下限/上限而非精确值，这样运维通过环境变量调档不会误伤用例。
+
+/**
+ * 记录下游调用实参的 jsonRequest 替身。
+ *
+ * 关键点：**必须镜像生产默认值**（`httpRequestJson` 的默认 `timeoutMs = READ_TIMEOUT_MS`）。
+ * 否则未显式传超时的读型调用会被录成 `undefined`，用例只能断言「有没有传」，
+ * 断言不了「档位对不对」—— 而这组用例的全部意义就在于后者。
+ */
+function recordingJsonRequest(payloads = {}) {
+  const calls = []
+  const jsonRequest = async (url, opts = {}) => {
+    calls.push({
+      url: String(url),
+      timeoutMs: opts.timeoutMs === undefined ? TIMEOUT_TIERS.READ : opts.timeoutMs,
+      explicit: opts.timeoutMs !== undefined,
+      method: opts.method || 'GET',
+    })
+    for (const key of Object.keys(payloads)) {
+      if (String(url).includes(key)) return payloads[key]
+    }
+    return { ok: true }
+  }
+  return { calls, jsonRequest }
+}
+
+test('生成型链路（brain/ask）使用生成档预算，不落到读型默认值', async () => {
+  const rec = recordingJsonRequest({ '/brain/ask': { answer: 'ok', generator: 'template' } })
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/brain/ask',
+      headers: CONTROL_HEADERS, body: { question: 'ping' },
+    })
+    assert.equal(res.status, 200)
+  }, { jsonRequest: rec.jsonRequest })
+
+  const call = rec.calls.find(c => c.url.includes('/brain/ask'))
+  assert.ok(call, '应代理到 nlp-service /brain/ask')
+  assert.ok(
+    call.timeoutMs >= 30000,
+    `生成型预算应 >= 30000ms（下游 LLM 级联最坏 22s），实际 ${call.timeoutMs}ms —— ` +
+    '退化成读型默认值时，LLM 稍慢就会被误报为「大脑层不可用」',
+  )
+})
+
+test('生成型链路（session/{id}/ask）使用专用 ASK 档预算 —— 覆盖 session 35s 总预算（TB-09 / GAP-06）', async () => {
+  const rec = recordingJsonRequest({ '/ask': { answer: 'ok' } })
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/session/sess-12345678/ask',
+      headers: CONTROL_HEADERS, body: { question: 'ping' },
+    })
+    assert.equal(res.status, 200)
+  }, { jsonRequest: rec.jsonRequest })
+
+  const call = rec.calls.find(c => c.url.includes('/ask'))
+  assert.ok(call, '应代理到 session-manager /ask')
+  assert.equal(call.explicit, true, '会话问答必须显式声明预算档')
+  assert.ok(
+    call.timeoutMs >= TIMEOUT_TIERS.ASK,
+    `会话问答预算应 >= ASK 档 ${TIMEOUT_TIERS.ASK}ms（下游 ASK_TOTAL_BUDGET_MS=35s 的 1.5x），实际 ${call.timeoutMs}ms`,
+  )
+  // ASK 档必须严格大于 GENERATE 档 —— 它的存在意义就是比共享生成档更宽；
+  // 若被改回 GENERATE，53s 与 45s 合并，TB-09 的余量比会跌回 1.29x。
+  assert.ok(
+    TIMEOUT_TIERS.ASK > TIMEOUT_TIERS.GENERATE,
+    `ASK 档 ${TIMEOUT_TIERS.ASK}ms 必须大于 GENERATE 档 ${TIMEOUT_TIERS.GENERATE}ms —— 两档合并即 GAP-06 复发`,
+  )
+})
+
+test('生成型链路（memory/ingest）使用生成档预算 —— 记忆抽取同样走 LLM', async () => {
+  const rec = recordingJsonRequest({ '/memory/ingest': { entities: [], relations: [] } })
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/brain/memory/ingest',
+      headers: CONTROL_HEADERS, body: { text: 'some text' },
+    })
+    assert.equal(res.status, 200)
+  }, { jsonRequest: rec.jsonRequest })
+
+  const call = rec.calls.find(c => c.url.includes('/memory/ingest'))
+  assert.ok(call, '应代理到 nlp-service memory/ingest')
+  assert.ok(call.timeoutMs >= 30000, `生成型预算应 >= 30000ms，实际 ${call.timeoutMs}ms`)
+})
+
+test('检索型链路（body retrieve）预算覆盖下游读超时 10s', async () => {
+  const rec = recordingJsonRequest({ '/body/retrieve': [] })
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/knowledge/search',
+      headers: CONTROL_HEADERS, body: { query: 'docker' },
+    })
+    assert.equal(res.status, 200)
+  }, { jsonRequest: rec.jsonRequest })
+
+  const call = rec.calls.find(c => c.url.includes('/body/retrieve'))
+  assert.ok(call, '应代理到 body-service /api/body/retrieve')
+  assert.ok(
+    call.timeoutMs >= 15000,
+    `检索型预算应 >= 15000ms（下游 body 读超时 10s 的 1.5 倍），实际 ${call.timeoutMs}ms —— ` +
+    '上游预算等于下游读超时时余量为 0，下游一走到边界上游必然先放弃',
+  )
+})
+
+test('读型端点必须保持短预算 —— 不得为修「慢」把所有超时一刀切拉长', async () => {
+  const rec = recordingJsonRequest({})
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/session/stats', headers: CONTROL_HEADERS })
+    assert.equal(res.status, 200)
+  }, { jsonRequest: rec.jsonRequest })
+
+  const call = rec.calls.find(c => c.url.includes('/session/stats'))
+  assert.ok(call, '应代理到 session-manager /session/stats')
+  assert.equal(call.explicit, false, '读型端点不应显式传预算（走 READ 默认档即可）')
+  assert.ok(
+    call.timeoutMs <= TIMEOUT_TIERS.READ,
+    `读型预算必须保持 <= READ 档 ${TIMEOUT_TIERS.READ}ms，实际 ${call.timeoutMs}ms —— ` +
+    '把读型也拉到生成档会让真实故障等 45s 才暴露降级',
+  )
+})
+
+test('生成档与读型档必须真的分开（防止两档被合并成同一个值）', async () => {
+  const rec = recordingJsonRequest({ '/brain/ask': { answer: 'ok' } })
+  await withServer(async ({ server }) => {
+    await request(server, { path: '/api/wp/session/stats', headers: CONTROL_HEADERS })
+    await request(server, {
+      method: 'POST', path: '/api/wp/brain/ask',
+      headers: CONTROL_HEADERS, body: { question: 'ping' },
+    })
+  }, { jsonRequest: rec.jsonRequest })
+
+  const read = rec.calls.find(c => c.url.includes('/session/stats'))
+  const gen = rec.calls.find(c => c.url.includes('/brain/ask'))
+  assert.ok(read && gen, '两类调用都应发生')
+  assert.ok(
+    gen.timeoutMs > read.timeoutMs,
+    `生成档 ${gen.timeoutMs}ms 必须大于读型档 ${read.timeoutMs}ms —— 两者相等意味着分档已失效`,
+  )
 })

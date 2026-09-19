@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:32 · 源文件 07-运行时配置与横切约定.md</span>
+  <span class="meta">生成于 2026-09-19 22:40 · 源文件 07-运行时配置与横切约定.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -126,6 +126,7 @@
 <li><a href="#22-session-manager">2.2 session-manager</a></li>
 <li><a href="#23-sense-service">2.3 sense-service</a></li>
 <li><a href="#24-body-service">2.4 body-service</a></li>
+<li><a href="#25-tool-executorphase-5">2.5 tool-executor（Phase 5 四肢期）</a></li>
 </ul>
 </li>
 <li><a href="#3">3. 环境变量总表</a><ul>
@@ -135,6 +136,7 @@
 <li><a href="#4">4. 多租户契约（最关键的横切约定）</a></li>
 <li><a href="#5">5. 统一响应与错误码</a><ul>
 <li><a href="#51-2026-09-18">5.1 路由层异常分流（2026-09-18 新增，三服务同源）</a></li>
+<li><a href="#52-tool-executor2026-09-19">5.2 工具域专属错误码（tool-executor，2026-09-19 新增）</a></li>
 <li><a href="#52">5.2 重复定义的维护成本</a></li>
 </ul>
 </li>
@@ -146,7 +148,10 @@
 <li><a href="#83">8.3 业务侧可观测</a></li>
 </ul>
 </li>
-<li><a href="#9-http-d-1">9. HTTP 客户端约定（缺陷 D-1）</a></li>
+<li><a href="#9-http-d-1">9. HTTP 客户端约定（缺陷 D-1）</a><ul>
+<li><a href="#91-2026-09-19">9.1 跨服务超时预算（2026-09-19 新增）</a></li>
+</ul>
+</li>
 <li><a href="#10">10. 已知缺口与待办</a></li>
 <li><a href="#11">11. 本地启动顺序</a></li>
 </ul>
@@ -154,7 +159,7 @@
 </nav>
   <main class="doc"><h1 id="07">07 · 运行时配置与横切约定<a class="headerlink" href="#07" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p>本文汇总四个 Java 服务的<strong>配置、端口、环境变量</strong>，以及跨模块的<strong>横切约定</strong>
+<p>本文汇总五个 Java 服务的<strong>配置、端口、环境变量</strong>，以及跨模块的<strong>横切约定</strong>
 （多租户、错误码、观测、消息主题、HTTP 客户端）。部署、联调、排障时看这一篇。</p>
 </blockquote>
 <h2 id="1">1. 端口与实例对照<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
@@ -198,6 +203,13 @@
 <td>同上</td>
 </tr>
 <tr>
+<td><code>tool-executor</code></td>
+<td style="text-align: right;">8084</td>
+<td style="text-align: right;">9095</td>
+<td><code>tool-executor</code></td>
+<td>同上（<strong>Phase 5 新增</strong>）</td>
+</tr>
+<tr>
 <td><code>nlp-service</code>（Python）</td>
 <td style="text-align: right;">8000</td>
 <td style="text-align: right;">—</td>
@@ -205,7 +217,7 @@
 <td>FastAPI 配置</td>
 </tr>
 <tr>
-<td><code>wp-bff</code>（Node，中间件观测）</td>
+<td><code>wp-bff</code>（Node，中间件观测 + 工作平台 BFF）</td>
 <td style="text-align: right;">8090</td>
 <td style="text-align: right;">—</td>
 <td>未注册 Nacos</td>
@@ -397,6 +409,95 @@ Phase 3 已补齐 OTLP（原为缺口）。</p>
 <p><strong>重要</strong>：本模块 PG 默认凭据已对齐 <code>docker-compose.yml</code>（<code>agent</code> / <code>agent123</code>）。
 另因本机环境会注入被 Spring 松散绑定误读为 <code>server.port</code> 的路由变量，
 <strong>启动时务必显式指定端口</strong>：<code>--server.port=8083</code>。</p>
+<h3 id="25-tool-executorphase-5">2.5 <code>tool-executor</code>（Phase 5 四肢期）<a class="headerlink" href="#25-tool-executorphase-5" title="Permanent link">&para;</a></h3>
+<p>端口 8084 / gRPC 9095；<code>app.tool.*</code> 前缀共 5 组配置。</p>
+<table>
+<thead>
+<tr>
+<th>配置</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>app.tool.whitelist</code></td>
+<td><code>calculator,http,code</code></td>
+<td><strong>R5-07 白名单</strong>：不在名单内的工具一律拒绝（含未注册工具），且<strong>不触达执行器</strong></td>
+</tr>
+<tr>
+<td><code>app.tool.circuit.failure-threshold</code></td>
+<td><code>3</code></td>
+<td>连续失败达阈值即打开熔断</td>
+</tr>
+<tr>
+<td><code>app.tool.circuit.open-ms</code></td>
+<td><code>30000</code></td>
+<td>熔断打开时长（快速失败窗口）</td>
+</tr>
+<tr>
+<td><code>app.tool.http.allow-domains</code></td>
+<td><code>api.open-meteo.com,httpbin.org,api.github.com</code></td>
+<td><strong>R5-04</strong> HTTP 工具域名白名单（SSRF 第一道闸）</td>
+</tr>
+<tr>
+<td><code>app.tool.http.max-body-bytes</code></td>
+<td><code>8192</code></td>
+<td>响应体截断上限</td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.enabled</code></td>
+<td><code>true</code></td>
+<td><strong>R5-03</strong> 沙箱总开关</td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.timeout-ms</code> / <code>memory-mb</code></td>
+<td><code>10000</code> / <code>256</code></td>
+<td>单次执行硬超时 / 内存硬限（对齐部署文档 §2）</td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.docker.enabled</code></td>
+<td><code>true</code></td>
+<td>Docker 后端开关；<code>available()</code> 同时探测 <code>docker info</code> 与 <code>docker image inspect</code></td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.docker.image</code></td>
+<td><code>agent-sandbox:latest</code></td>
+<td>沙箱镜像（构建见 <code>infra/docker/sandbox/README.md</code>）</td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.docker.python</code></td>
+<td><code>python3</code></td>
+<td>镜像内的解释器入口</td>
+</tr>
+<tr>
+<td><code>app.tool.sandbox.process.fallback-enabled</code></td>
+<td><code>true</code></td>
+<td>镜像/Docker 不可用时的<strong>降级</strong>后端（<strong>不是隔离边界</strong>，结果恒带 <code>degraded=true</code>）</td>
+</tr>
+<tr>
+<td><code>app.tool.audit.memory-capacity</code></td>
+<td><code>500</code></td>
+<td>审计内存兜底容量（PG 不可达时）</td>
+</tr>
+<tr>
+<td><code>app.tool.audit.kafka-enabled</code> / <code>kafka-bootstrap</code> / <code>kafka-topic</code></td>
+<td><code>true</code> / <code>127.0.0.1:9092</code> / <code>lifeform.tool.invoked</code></td>
+<td><strong>R5-08</strong> Kafka 仅事件旁路，真相源是 PG <code>tool_audit_log</code></td>
+</tr>
+<tr>
+<td><code>spring.datasource.url</code> 等</td>
+<td><code>jdbc:postgresql://127.0.0.1:5432/lifeform</code>（<code>agent</code>/<code>agent123</code>）</td>
+<td>审计落库；<code>initialization-fail-timeout: -1</code> 允许 PG 不可达时启动并降级</td>
+</tr>
+</tbody>
+</table>
+<p><strong>Nacos 注册口径（易误判）</strong>：<code>spring.cloud.nacos.discovery.register-enabled</code> 默认 <strong><code>false</code></strong>
+（<code>NACOS_ENABLED</code> 可覆盖）——<strong>单体本地开发不注册、集成环境置 <code>true</code></strong>。
+部署文档 §3 写「Nacos 注册 (8084)」指的是集成环境口径，不是本机默认值。</p>
+<p><strong>镜像缺失时的行为</strong>：<code>agent-sandbox:latest</code> 不存在 → 后端落到 <code>RestrictedProcessBackend</code>，
+<code>/api/tool/sandbox</code> 如实回 <code>active_backend=process-restricted, isolated=false, degraded=true</code>，
+执行视图显示「已降级 · 非隔离边界」。<strong>这条降级必须在报告与界面里说清，不能当作"沙箱验收通过"。</strong></p>
 <h2 id="3">3. 环境变量总表<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -514,6 +615,54 @@ Phase 3 已补齐 OTLP（原为缺口）。</p>
 <td><code>R0_ENABLED</code> / <code>R0_TICK_MS</code></td>
 <td>sense</td>
 <td><code>true</code> / <code>60000</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>TOOL_WHITELIST</code></td>
+<td>tool-executor</td>
+<td><code>calculator,http,code</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>TOOL_FAILURE_THRESHOLD</code> / <code>TOOL_CIRCUIT_OPEN_MS</code></td>
+<td>tool-executor</td>
+<td><code>3</code> / <code>30000</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>HTTP_ALLOW_DOMAINS</code> / <code>HTTP_MAX_BODY_BYTES</code></td>
+<td>tool-executor</td>
+<td>见 §2.5</td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>SANDBOX_ENABLED</code> / <code>SANDBOX_TIMEOUT_MS</code> / <code>SANDBOX_MEMORY_MB</code></td>
+<td>tool-executor</td>
+<td><code>true</code> / <code>10000</code> / <code>256</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>SANDBOX_DOCKER_ENABLED</code> / <code>SANDBOX_IMAGE</code> / <code>SANDBOX_PROCESS_FALLBACK</code></td>
+<td>tool-executor</td>
+<td><code>true</code> / <code>agent-sandbox:latest</code> / <code>true</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>TOOL_AUDIT_MEMORY_CAPACITY</code> / <code>TOOL_AUDIT_KAFKA_ENABLED</code> / <code>KAFKA_TOOL_TOPIC</code></td>
+<td>tool-executor</td>
+<td><code>500</code> / <code>true</code> / <code>lifeform.tool.invoked</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>PG_URL</code> / <code>PG_USER</code> / <code>PG_PASSWORD</code></td>
+<td>tool-executor</td>
+<td><code>jdbc:postgresql://127.0.0.1:5432/lifeform</code> / <code>agent</code> / <code>agent123</code></td>
+<td>可选</td>
+</tr>
+<tr>
+<td><code>NACOS_ENABLED</code></td>
+<td>tool-executor</td>
+<td><code>false</code>（本地单体不注册）</td>
 <td>可选</td>
 </tr>
 </tbody>
@@ -703,6 +852,61 @@ Phase 3 已补齐 OTLP（原为缺口）。</p>
 <code>404</code> 说明<strong>该端点尚未实现</strong>（契约里 <code>x-wp-status: planned</code>），应走「演示数据 + 降级标注」路径；
 <code>5xx</code> 说明<strong>服务故障</strong>，应走「降级横幅」路径。二者混在一起前端只能猜。
 实测曾因此在未部署新端点的进程上把 <code>GET /api/body/knowledge/reconcile</code> 的 404 误判为服务故障。</p>
+<h3 id="52-tool-executor2026-09-19">5.2 工具域专属错误码（<code>tool-executor</code>，2026-09-19 新增）<a class="headerlink" href="#52-tool-executor2026-09-19" title="Permanent link">&para;</a></h3>
+<p><code>tool-executor</code>（8084）的 <code>ErrorCode</code> 在<strong>上述 11 个通用码之上</strong>额外定义 6 个工具域码
+（与 <code>contracts/work-platform-bff-openapi.yaml</code> 的 <code>ErrorEnvelope.code.enum</code> 同源副本）：</p>
+<table>
+<thead>
+<tr>
+<th>错误码</th>
+<th style="text-align: right;">HTTP</th>
+<th>默认消息</th>
+<th>触发场景</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AGENT_TOOL_NOT_ALLOWED</code></td>
+<td style="text-align: right;">403</td>
+<td>工具不在白名单或被禁用</td>
+<td><code>ToolGuard</code> 白名单闸拒绝 / 工具已 <code>deprecated</code></td>
+</tr>
+<tr>
+<td><code>AGENT_TOOL_ARGS_INVALID</code></td>
+<td style="text-align: right;">400</td>
+<td>工具参数校验失败</td>
+<td>Draft-07 JSON Schema 校验不通过</td>
+</tr>
+<tr>
+<td><code>AGENT_TOOL_ARGS_BLOCKED</code></td>
+<td style="text-align: right;">403</td>
+<td>参数命中安全拦截规则</td>
+<td><code>staticCodeScan</code> 命中 12 条敏感规则（<code>rm -rf</code>、提权、出网等）</td>
+</tr>
+<tr>
+<td><code>AGENT_SANDBOX_REJECTED</code></td>
+<td style="text-align: right;">403</td>
+<td>沙箱拒绝执行</td>
+<td><code>SandboxExecutor</code> 判定载荷不可执行</td>
+</tr>
+<tr>
+<td><code>AGENT_TOOL_CIRCUIT_OPEN</code></td>
+<td style="text-align: right;">503</td>
+<td>工具熔断中，暂不可用</td>
+<td>连续失败 3 次 → 熔断窗口 30s</td>
+</tr>
+<tr>
+<td><code>AGENT_TOOL_EXEC_FAILED</code></td>
+<td style="text-align: right;">500</td>
+<td>工具执行失败</td>
+<td>沙箱内进程非零退出 / 超时</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>工具调用失败时仍返回统一错误信封，<code>details</code> 携带 <code>call_id</code> / <code>audit_id</code> 便于回查审计。
+完整异常语义另见 <code>docs/异常流程归纳.md</code>。</p>
+</blockquote>
 <p><strong>回归守卫</strong>：三个模块各有一个 <code>common/GlobalExceptionHandlerTest</code>（session 5 / sense 5 / body 6 项），
 其中 <code>genuineServerFaultStillMapsTo500</code> 是<strong>必需的边界用例</strong>——防止为了修 404 而把兜底分支整体改掉。
 新增 HTTP 服务模块时请照抄这套用例。</p>
@@ -953,6 +1157,260 @@ Java 侧只看到"上游不可用"。</p>
 只有请求体丢了。因此两侧都有专门的回归守卫测试（<code>OutboundHttpTest</code>、<code>HttpClientsTest</code>），
 用裸 <code>ServerSocket</code> 抓原始报文断言请求行是 <code>HTTP/1.1</code> 且无升级头。</p>
 <p><strong>新增跨服务调用时</strong>：一律经上述收口类构建客户端，并确认目标服务是 HTTP/1.1 兼容的。</p>
+<h3 id="91-2026-09-19">9.1 跨服务超时预算（2026-09-19 新增）<a class="headerlink" href="#91-2026-09-19" title="Permanent link">&para;</a></h3>
+<p><strong>设超时值时，必须同时写下「对端该操作的最坏耗时」</strong> —— 两个数字分开看各自都合理，
+放在一起才可能错。这一节是那类缺陷的权威口径。</p>
+<p><strong>权威登记表</strong>：<code>contracts/timeout-budget.yaml</code>（19 条边，逐条记录调用方/被调方/操作/
+上游预算/下游最坏耗时/耗时依据/代码锚点/状态）。<strong>门禁</strong>：</p>
+<pre><code class="language-bash">python scripts/timeout-budget-check.py            # 语义 + 锚点 + 魔法数字三层校验
+python scripts/timeout-budget-check.py --strict   # 修复期：已登记的 gap 也算失败
+python scripts/timeout-budget-check.py --list     # 打印全表摘要（预算/余量/状态）
+</code></pre>
+<p><strong>不变量</strong>：<code>上游预算 ≥ 下游最坏耗时 × 1.5</code>（余量比 1.5 而非 1.2 —— 实测 1.4x 仍出过事）。
+两类边豁免余量校验但需显式声明 <code>exempt_headroom: true</code>：docker 启停 watchdog、
+TCP 健康探针（其超时是<strong>预期结果</strong>而非失败）。</p>
+<p><strong>wp-bff 侧档位</strong>（按「操作类型」分档，不按端点硬编码；均可用 <code>WP_BFF_*_TIMEOUT_MS</code> 覆盖）：</p>
+<table>
+<thead>
+<tr>
+<th>档位</th>
+<th style="text-align: right;">默认</th>
+<th>适用</th>
+<th>下游最坏依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>READ</code></td>
+<td style="text-align: right;">5000</td>
+<td>纯查询（Redis / 进程内 / PG 索引）</td>
+<td>毫秒~1s</td>
+</tr>
+<tr>
+<td><code>RETRIEVE</code></td>
+<td style="text-align: right;">15000</td>
+<td>检索型</td>
+<td>body-service 读超时 10s</td>
+</tr>
+<tr>
+<td><code>GENERATE</code></td>
+<td style="text-align: right;">45000</td>
+<td><strong>LLM 生成型</strong></td>
+<td>LLM 级联最坏 22s（L2 8s×2 + L1 3s×2）</td>
+</tr>
+<tr>
+<td><code>WRITE</code></td>
+<td style="text-align: right;">60000</td>
+<td>写入型（入库含嵌入）</td>
+<td>嵌入读超时 30s</td>
+</tr>
+<tr>
+<td><code>EXECUTE</code></td>
+<td style="text-align: right;">60000</td>
+<td>工具执行</td>
+<td>沙箱超时 10s / HTTP 工具读超时 15s</td>
+</tr>
+<tr>
+<td><code>SANDBOX_PROBE</code></td>
+<td style="text-align: right;">9000</td>
+<td>容器探测</td>
+<td>docker CLI 冷探测 5.7s</td>
+</tr>
+<tr>
+<td><code>MIDDLEWARE_START</code> / <code>_STOP</code></td>
+<td style="text-align: right;">180000 / 120000</td>
+<td>容器启停 watchdog</td>
+<td>启动实测 10~30s（豁免余量）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>三条纪律</strong>：</p>
+<ol>
+<li><strong>生成型链路必须显式声明 <code>GENERATE</code> 档</strong>，不得依赖默认值 ——
+   落到 <code>READ</code> 默认会「把 LLM 稍慢误报为大脑层不可用」。</li>
+<li><strong>读型端点必须保持短预算</strong> —— 为修「慢」把读型也拉到 45s，
+   会让真实故障等 45s 才暴露降级。两条不变量都有 wp-bff 用例守着。</li>
+<li><strong>调用点不得就地写数字</strong>（如 <code>timeoutMs: 30000</code>）—— 锚点校验锚的是常量定义，
+   看不见调用点的字面值；故门禁另有一层魔法数字扫描。</li>
+</ol>
+<p><strong>session-manager 侧档位</strong>（2026-09-19 新增，同一理念：按用途具名，不共用默认读超时）：</p>
+<table>
+<thead>
+<tr>
+<th>档位</th>
+<th style="text-align: right;">默认</th>
+<th>适用</th>
+<th>下游最坏依据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>INTENT_TIMEOUT</code></td>
+<td style="text-align: right;">5000</td>
+<td>nlp 意图识别（规则级联，毫秒级）</td>
+<td>毫秒级</td>
+</tr>
+<tr>
+<td><code>RETRIEVE_TIMEOUT</code></td>
+<td style="text-align: right;">15000</td>
+<td>body 检索（问答上下文）</td>
+<td>body 端到端预算 10s（余量 1.5x）</td>
+</tr>
+<tr>
+<td><code>BRAIN_TIMEOUT</code></td>
+<td style="text-align: right;">30000</td>
+<td>nlp <code>/brain/ask</code> 生成</td>
+<td>nlp 总预算 20s（余量 1.5x，GAP-01 已闭合）</td>
+</tr>
+<tr>
+<td><code>DEFAULT_READ_TIMEOUT</code></td>
+<td style="text-align: right;">10000</td>
+<td>兜底（未声明用途的读）</td>
+<td>——</td>
+</tr>
+<tr>
+<td><code>ASK_TOTAL_BUDGET_MS</code></td>
+<td style="text-align: right;">35000</td>
+<td><strong>一次 ask 的总预算</strong>（意图 5s + 生成 30s）</td>
+<td><code>RequestBudget</code> 硬性收口</td>
+</tr>
+</tbody>
+</table>
+<p><strong>nlp-service 侧预算</strong>（<code>app/budget.py</code>，统一由 <code>run_with_budget()</code> 包裹）：</p>
+<table>
+<thead>
+<tr>
+<th>预算</th>
+<th style="text-align: right;">默认</th>
+<th>适用</th>
+<th>超时行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>BRAIN_TOTAL_BUDGET_MS</code></td>
+<td style="text-align: right;"><strong>20000</strong></td>
+<td><code>/brain/ask</code> 的<strong>检索 + 生成共享</strong>预算（GAP-01 闭合：25s→20s，级联在预算内被截断）</td>
+<td>504 <code>AGENT_TIMEOUT</code></td>
+</tr>
+<tr>
+<td><code>EMBED_BUDGET_MS</code></td>
+<td style="text-align: right;">12000</td>
+<td><code>/api/nlp/embed</code></td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>OCR_BUDGET_MS</code></td>
+<td style="text-align: right;">12000</td>
+<td><code>/api/nlp/ocr</code></td>
+<td>同上</td>
+</tr>
+<tr>
+<td><code>RETRIEVAL_BUDGET_MS</code></td>
+<td style="text-align: right;"><strong>15000</strong></td>
+<td>RAG 检索段 —— <strong>唯一口径</strong>（retrieval.py 的 DEFAULT_TIMEOUT 由它派生，<code>RETRIEVAL_TIMEOUT_SECONDS</code> 已废除）</td>
+<td>同上</td>
+</tr>
+</tbody>
+</table>
+<p><strong>body-service 侧预算</strong>（2026-09-19 GAP-05 闭合新增）：</p>
+<table>
+<thead>
+<tr>
+<th>预算</th>
+<th style="text-align: right;">默认</th>
+<th>适用</th>
+<th>超时行为</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>RETRIEVAL_TOTAL_BUDGET_MS</code></td>
+<td style="text-align: right;">10000</td>
+<td><code>/retrieve</code> warm 管线（嵌入 + Qdrant + 重排共享，<code>BudgetGuard</code> 执行）</td>
+<td>504 <code>AGENT_TIMEOUT</code>（绝不返回空结果冒充"无结果"）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>为什么必须给下游自己一个上限</strong>：Python 侧原先的"超时"完全由调用方决定，自己<strong>没有上限</strong>，
+于是「下游最坏耗时」<strong>不可证明</strong>，上游余量比根本算不出来（旧 GAP-03 / GAP-04 即此）。
+加上预算后，下游最坏从"不可证明"变成"有界"，两条缺口随之闭合。</p>
+</blockquote>
+<p><strong>当前门禁状态</strong>：<code>ok=19 · gap=0 · fail=0</code>（2026-09-19 GAP 收尾轮后<strong>全部倒挂清零</strong>）。</p>
+<p><strong>本轮闭合的 gap</strong>（2026-09-19，REC-01 轮）：</p>
+<table>
+<thead>
+<tr>
+<th>已闭合</th>
+<th>边</th>
+<th>闭合方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GAP-02</td>
+<td>session-manager → body 检索</td>
+<td>上游改用具名档 <code>RETRIEVE_TIMEOUT</code> = 15s（原 10s = 下游读超时，余量 0）</td>
+</tr>
+<tr>
+<td>GAP-03</td>
+<td>body-service → nlp 嵌入</td>
+<td>Python 侧 <code>/embed</code> 接入 <code>run_with_budget</code>（12s）</td>
+</tr>
+<tr>
+<td>GAP-04</td>
+<td>sense-service → nlp OCR</td>
+<td>Python 侧 <code>/ocr</code> 接入 <code>run_with_budget</code>（12s）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>本轮闭合的 gap</strong>（2026-09-19，GAP 收尾轮 —— 方向统一为<strong>内层收敛、外层覆盖</strong>）：</p>
+<table>
+<thead>
+<tr>
+<th>已闭合</th>
+<th>边</th>
+<th>闭合方式</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>GAP-01</td>
+<td>session-manager → nlp <code>/brain/ask</code></td>
+<td><strong>收紧下游</strong>：<code>BRAIN_TOTAL_BUDGET_MS</code> 25s→20s（原 25s &gt; 级联最坏 22s、从不构成约束）；30s / 20s = 1.5x。不选"上游抬到 33s"——那会把 session 总预算顶到 38s，反把 GAP-06 恶化到需 ≥57s</td>
+</tr>
+<tr>
+<td>GAP-05</td>
+<td>nlp → body 检索</td>
+<td><strong>下游加端到端预算</strong>：body <code>RETRIEVAL_TOTAL_BUDGET_MS</code> = 10s（原表把"出站读超时 10s"误当端到端最坏，真实管线 = 嵌入 12s + Qdrant 2s + 重排 10s）；上游 <code>RETRIEVAL_BUDGET_MS</code> 8s→15s 并回收第二套口径。15s / 10s = 1.5x</td>
+</tr>
+<tr>
+<td>GAP-06</td>
+<td>wp-bff → session <code>/ask</code></td>
+<td><strong>单列档位</strong>：新增 ASK 档 53s（35s × 1.5 = 52.5s）只服务本边；GENERATE 档保持 45s（被 /brain/ask 等多条边共享，不宜随本边抬高）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>GAP-06 是新出现的，不是回归</strong>：REC-01 让 session 一次 ask 的最坏耗时<strong>变得可信</strong>
+（从"单个读超时 10s"变成"总预算 35s"），代价是 wp-bff 侧 45s 的余量比被摊薄到 1.29x。
+记录它的意义在于：<strong>给下游加预算上限会同时改变上游余量比</strong>，两侧必须同轮复核 ——
+否则"闭合一个缺口"会悄悄制造另一个。</p>
+</blockquote>
+<p><strong>根本方向（REC-01，本轮已落地主体）</strong>：LLM 级联原缺<strong>总预算上限</strong>，最坏耗时是
+「各级超时 × 重试次数」的乘积，随层级与重试数膨胀。现已实现 <strong>deadline propagation</strong>：</p>
+<ul>
+<li><code>llm_gateway.generate(request, deadline_ms=...)</code> —— 级联<strong>每一级</strong>的有效超时取
+  <code>min(该级超时, 剩余总预算)</code>，并统计 <code>deadline_exceeded</code>；</li>
+<li><code>pipeline.run(..., deadline_ms=...)</code> —— <strong>检索与生成共享同一个 deadline</strong>，不再各自为政；</li>
+<li>session-manager <code>RequestBudget</code> —— 每一跳读超时取 <code>min(该跳档位, 剩余预算)</code>，
+  预算耗尽时<strong>不发起调用</strong>，如实降级并标注 <code>budget_exhausted</code>。</li>
+</ul>
+<p><strong>GAP-01 / GAP-05 已于同日 GAP 收尾轮闭合</strong>：nlp 上限真正收紧到 20s（级联在预算内被截断）；
+body 检索链路补上端到端 deadline（<code>BudgetGuard</code>，REC-01 同路线）。跨服务预算余量全部 ≥ 1.5x。</p>
+<p><strong>启动前自检</strong>：<code>./scripts/start.sh gate</code>（<code>all</code> 模式会自动带跑）。
+门禁失败<strong>不静默忽略也不硬拦</strong>，需显式 <code>SKIP_BUDGET_GATE=1</code> 跳过，跳过时打印免责提示。</p>
 <h2 id="10">10. 已知缺口与待办<a class="headerlink" href="#10" title="Permanent link">&para;</a></h2>
 <p>按影响程度排序：</p>
 <table>
