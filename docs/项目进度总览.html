@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:01 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-19 12:32 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -177,6 +177,10 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 测试 <strong>Java 162 · Python 124 · wp-bff 55</strong>（共 341），契约 0 FAIL，文档覆盖 113/113。
 三件套见 <code>docs/项目进度日志报告/Phase4-*</code>；演示脚本见 <code>docs/demo/Phase4-DEMO.md</code>。
 <strong>Phase 5+ 处于冻结状态</strong>。</p>
+<p><strong>2026-09-19 端口冲突修复</strong>：<code>session-manager</code> 的 gRPC Health 默认端口由 <code>9092</code> 改为
+<strong><code>19092</code></strong>（原值与 Kafka 宿主端口 <code>9092</code> 冲突，导致启动失败），<code>healthcheck.sh</code> 同步改探 19092；
+起 jar 已<strong>无需再传 <code>GRPC_PORT</code> 覆盖</strong>。潜在项 <code>sense-service 9093 ↔ Alertmanager(P7) 9093</code>
+已登记为 <strong>DEBT-018</strong>（见《技术债台账》§4.17）。服务注册表 §5 与相关文档口径已同步。</p>
 <p><strong>⚠️ Phase 4 复审补全（2026-09-19）</strong>：首次验收后<strong>通读实现</strong>又查出 5 项"单测与验收报告都抓不到"的
 问题 —— 2 项<strong>语义级伪实现</strong>（语义缓存声称 Redis 后端实只写内存；决策链回放端点对任意 id 都返
 <code>200 + 空链</code>）+ 1 项跨服务租户口径不一致 + 1 项入库不失效检索热缓存 + 1 项记忆图谱"有边无点"。
@@ -841,6 +845,10 @@ git push origin codex/main:workbuddy/main
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p>上表为节选。<strong>2026-09-19 新增 DEBT-014~018</strong>（会话压缩 / LLM 引擎 / Token 计量 / 规则规划器 /
+<strong>gRPC 端口冲突</strong>），逐条见《技术债台账》§二与 §4.17。</p>
+</blockquote>
 <p><strong>两条红线提醒</strong>（引《D5-1》§5.2「触发点到达后 2 个迭代内必须替换，否则升级为风险项」）：
 DEBT-006 与 DEBT-009 的触发点（P2）<strong>已到</strong>且未闭合 → 按红线应升级为风险项。
 DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<strong>不构成验收阻塞</strong>。</p>

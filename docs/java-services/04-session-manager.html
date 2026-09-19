@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 08:54 · 源文件 04-session-manager.md</span>
+  <span class="meta">生成于 2026-09-19 12:32 · 源文件 04-session-manager.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -161,7 +161,7 @@
 <blockquote>
 <p>模块路径：<code>services/java/session-manager/</code>
 源文件：<strong>13 个主代码 + 5 个测试</strong>（主代码 616 行）
-HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
+HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（原 9092 与 Kafka 宿主端口冲突，2026-09-19 外移）
 主要依赖：Spring Web、Spring Data Redis、NATS（jnats）、Kafka clients</p>
 </blockquote>
 <h2 id="1">1. 模块职责<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
@@ -924,7 +924,7 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
 <tbody>
 <tr>
 <td><code>application.yml</code></td>
-<td><code>server.port</code>(8081)、<code>grpc.port</code>(9092)、<code>app.nlp.base-url</code>、<code>app.nlp.degrade-on-failure</code>、<code>app.body.base-url</code>、<code>app.body.degrade-on-failure</code>、<code>spring.data.redis.host/port</code>、<code>spring.cloud.nacos.discovery.server-addr</code></td>
+<td><code>server.port</code>(8081)、<code>grpc.port</code>(19092，默认值)、<code>app.nlp.base-url</code>、<code>app.nlp.degrade-on-failure</code>、<code>app.body.base-url</code>、<code>app.body.degrade-on-failure</code>、<code>spring.data.redis.host/port</code>、<code>spring.cloud.nacos.discovery.server-addr</code></td>
 </tr>
 <tr>
 <td>环境变量（<code>System.getenv</code>）</td>

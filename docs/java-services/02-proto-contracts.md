@@ -27,7 +27,7 @@
 | `proto/session/v1/session.proto` | `com.agent.session.v1` | `SessionService` | `Session`、`Message`、`Citation` + Create/Append/Get/List/UpdateStatus 各 Request/Response（13） |
 
 **6 份契约目前全部仅定义了接口、无任何运行时调用方** —— 当前服务间调用走 HTTP 与 NATS/Kafka。
-四个业务服务虽然在 9091-9094 开了 gRPC 端口，但那是 `grpc-services` 依赖自带的 `HealthStatusManager`
+四个业务服务虽然开了 gRPC 端口（9091 / 19092 / 9093 / 9094），但那是 `grpc-services` 依赖自带的 `HealthStatusManager`
 （标准 `grpc.health.v1` 协议），**与本模块的 `HealthService` 无关**。
 契约先行是为了让后续阶段（尤其 Phase 5 四肢层）在实现 gRPC 时不必回头改接口。
 

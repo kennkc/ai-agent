@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:01 · 源文件 Phase4-DEMO.md</span>
+  <span class="meta">生成于 2026-09-19 12:32 · 源文件 Phase4-DEMO.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -279,7 +279,7 @@ REDIS_URL=redis://127.0.0.1:6379/0 ../venv/Scripts/python.exe -m uvicorn app.mai
 
 export JWT_SECRET=agent-lifeform-dev-secret-key-2026-change-me-in-prod
 export DEV_TOKEN_ENDPOINT_ENABLED=true
-export GRPC_PORT=19092          # ⚠️ 默认 9092 会与 Kafka 撞端口，必须覆盖
+# gRPC 端口默认已是 19092（原 9092 与 Kafka 冲突，2026-09-19 已改默认值）——如需改端口再设 GRPC_PORT
 
 cd body-service    &amp;&amp; &quot;E:/software/java/jdk-21/bin/java.exe&quot; -Dserver.port=8083 -jar target/body-service-0.1.0-SNAPSHOT.jar &amp;
 cd ../session-manager &amp;&amp; &quot;E:/software/java/jdk-21/bin/java.exe&quot; -Dserver.port=8081 -jar target/session-manager-0.1.0-SNAPSHOT.jar &amp;
@@ -699,7 +699,7 @@ PY
 <tbody>
 <tr>
 <td><code>session-manager</code> 启动报 <code>Failed to start gRPC health server on port 9092</code></td>
-<td>默认 <code>grpc.port=9092</code> 与 <strong>Kafka 撞端口</strong> → 启动加 <code>GRPC_PORT=19092</code></td>
+<td>✅ <strong>已修复</strong>：<code>grpc.port</code> 默认值自 2026-09-19 起为 <strong>19092</strong>，不再与 Kafka 撞端口；仅旧版 jar 才需 <code>GRPC_PORT=19092</code> 覆盖</td>
 </tr>
 <tr>
 <td><code>session-manager</code> 启动报 <code>NacosException: Client not connected</code></td>

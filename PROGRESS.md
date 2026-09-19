@@ -316,6 +316,18 @@ Redis / PG / Kafka: semantic cache `backend=redis degraded=false`, cache-hit `si
 6-step replay with `404` on unknown/cross-tenant id; memory graph `backend=postgres`, 3 entities /
 2 relations; session FSM create→ask→close→**409**→Redis-restored context; BFF session proxy passthrough.
 
+### gRPC port conflict fixed (2026-09-19, DEBT-018)
+
+`session-manager`'s gRPC health default port was `9092` — the same host port Kafka binds — so the
+service only started when `GRPC_PORT=19092` was passed manually (and `healthcheck.sh`'s
+`check_port session-grpc 9092` was silently probing Kafka). The default is now **19092** in
+`application.yml`, `healthcheck.sh` probes 19092, and the service registry §5 documents the move.
+Verified by starting the jar with **no `GRPC_PORT` override**: `Started SessionManagerApplication in
+6.482s`, 19092 listening (session-manager) with 9092 still Kafka, `/actuator/health` = `UP`.
+The latent `sense-service 9093 ↔ Alertmanager (P7) 9093` overlap is registered, not silently
+changed. Docs updated in step: `docs/java-services/*`, `docs/proto契约使用说明.md`, `docs/demo/Phase*`,
+`docs/技术债台账.md` (§4.17), `docs/项目进度总览.md`.
+
 ## Frontend
 
 - [x] Vue 3 + Vite + TypeScript + Element Plus work-platform scaffold

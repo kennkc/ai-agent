@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:01 · 源文件 Phase4-开发执行日志.md</span>
+  <span class="meta">生成于 2026-09-19 12:32 · 源文件 Phase4-开发执行日志.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -392,7 +392,8 @@ node .workbuddy/tmp/console-smoke.js &lt;console目录&gt; api http://127.0.0.1:
 
 # 起服务（注意本机环境变量 SERVER__PORT 会顶掉 server.port，需显式指定）
 cd services/java &amp;&amp; bash ../../scripts/mvn-dev.sh -pl session-manager spring-boot:run \
-  -Dspring-boot.run.jvmArguments=&quot;-Dspring.cloud.nacos.discovery.enabled=false -Dserver.port=8081 -DGRPC_PORT=9192&quot;
+  -Dspring-boot.run.jvmArguments=&quot;-Dspring.cloud.nacos.discovery.enabled=false -Dserver.port=8081&quot;
+  # 注：gRPC 端口默认已是 19092（原 9092 与 Kafka 冲突，2026-09-19 已改默认值），无需再传 GRPC_PORT
 cd services/python/nlp-service &amp;&amp; ../venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 </code></pre>
 <hr />
@@ -559,7 +560,7 @@ cd services/python/nlp-service &amp;&amp; ../venv/Scripts/python.exe -m uvicorn 
 <tr>
 <td><code>session-manager</code> 启动失败：<code>Failed to start gRPC health server on port 9092</code></td>
 <td>默认 <code>grpc.port=9092</code> 与 Kafka 的 9092 <strong>端口撞车</strong></td>
-<td>启动时 <code>GRPC_PORT=19092</code> 覆盖；<strong>这是默认值的真实冲突，需在配置侧确认默认端口</strong></td>
+<td>✅ <strong>已修复（2026-09-19）</strong>：默认值改为 <strong>19092</strong>（<code>application.yml</code>），<code>healthcheck.sh</code> 同步改探 19092；起 jar <strong>无需再传 <code>GRPC_PORT</code> 覆盖</strong>，实测 <code>Started SessionManagerApplication in 6.482s</code>、<code>/actuator/health=UP</code>。登记 DEBT-018 / §4.17</td>
 </tr>
 <tr>
 <td><code>session-manager</code> 启动失败：<code>NacosException: Client not connected</code></td>

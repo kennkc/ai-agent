@@ -108,7 +108,7 @@ cd services/java
 
 export JWT_SECRET=agent-lifeform-dev-secret-key-2026-change-me-in-prod
 export DEV_TOKEN_ENDPOINT_ENABLED=true
-export GRPC_PORT=19092          # ⚠️ 默认 9092 会与 Kafka 撞端口，必须覆盖
+# gRPC 端口默认已是 19092（原 9092 与 Kafka 冲突，2026-09-19 已改默认值）——如需改端口再设 GRPC_PORT
 
 cd body-service    && "E:/software/java/jdk-21/bin/java.exe" -Dserver.port=8083 -jar target/body-service-0.1.0-SNAPSHOT.jar &
 cd ../session-manager && "E:/software/java/jdk-21/bin/java.exe" -Dserver.port=8081 -jar target/session-manager-0.1.0-SNAPSHOT.jar &
@@ -448,7 +448,7 @@ PY
 
 | 现象 | 排查 |
 |------|------|
-| `session-manager` 启动报 `Failed to start gRPC health server on port 9092` | 默认 `grpc.port=9092` 与 **Kafka 撞端口** → 启动加 `GRPC_PORT=19092` |
+| `session-manager` 启动报 `Failed to start gRPC health server on port 9092` | ✅ **已修复**：`grpc.port` 默认值自 2026-09-19 起为 **19092**，不再与 Kafka 撞端口；仅旧版 jar 才需 `GRPC_PORT=19092` 覆盖 |
 | `session-manager` 启动报 `NacosException: Client not connected` | `lifeform-nacos` 容器未运行 → `docker start lifeform-nacos`，等 healthy 再起服务 |
 | 服务起在奇怪端口（如 53568） | 环境变量污染 `server.port` → 启动加 `-Dserver.port=8081` |
 | 语义缓存 `backend=memory` / `degraded=true` | Redis 未启动或 `REDIS_URL` 不对 → `docker compose ps redis`；**降级是诚实上报，不是故障** |

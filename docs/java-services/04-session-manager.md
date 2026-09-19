@@ -2,7 +2,7 @@
 
 > 模块路径：`services/java/session-manager/`
 > 源文件：**13 个主代码 + 5 个测试**（主代码 616 行）
-> HTTP 端口：**8081** · gRPC 端口：**9092**
+> HTTP 端口：**8081** · gRPC 端口：**19092**（原 9092 与 Kafka 宿主端口冲突，2026-09-19 外移）
 > 主要依赖：Spring Web、Spring Data Redis、NATS（jnats）、Kafka clients
 
 ## 1. 模块职责
@@ -372,7 +372,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 
 | 来源 | 配置项 |
 |---|---|
-| `application.yml` | `server.port`(8081)、`grpc.port`(9092)、`app.nlp.base-url`、`app.nlp.degrade-on-failure`、`app.body.base-url`、`app.body.degrade-on-failure`、`spring.data.redis.host/port`、`spring.cloud.nacos.discovery.server-addr` |
+| `application.yml` | `server.port`(8081)、`grpc.port`(19092，默认值)、`app.nlp.base-url`、`app.nlp.degrade-on-failure`、`app.body.base-url`、`app.body.degrade-on-failure`、`spring.data.redis.host/port`、`spring.cloud.nacos.discovery.server-addr` |
 | 环境变量（`System.getenv`） | `NATS_URL`(默认 `nats://127.0.0.1:4222`)、`KAFKA_BOOTSTRAP`(默认 `127.0.0.1:9092`)、`KAFKA_CONSUMER_ENABLED`(默认 `true`) |
 | 环境变量（经 yml 占位符） | `REDIS_HOST`、`REDIS_PORT`、`NACOS_ADDR`、`GRPC_PORT`、`NLP_BASE_URL`、`BODY_BASE_URL`、`NLP_DEGRADE_ON_FAILURE`、`BODY_DEGRADE_ON_FAILURE`、`OTLP_ENDPOINT` |
 

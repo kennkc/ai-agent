@@ -4,7 +4,7 @@
 
 1. Start infrastructure and services: `./scripts/start.sh all`
 2. Ensure `JWT_SECRET` is set by the start script and `DEV_TOKEN_ENDPOINT_ENABLED=true`.
-3. Run `./scripts/healthcheck.sh` and confirm HTTP health plus gRPC ports 9091-9094.
+3. Run `./scripts/healthcheck.sh` and confirm HTTP health plus the gRPC health ports (9091 / 19092 / 9093 / 9094 — session-manager moved off 9092 in 2026-09-19 to avoid Kafka).
 
 ## Demo
 

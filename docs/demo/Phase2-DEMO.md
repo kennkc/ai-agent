@@ -91,7 +91,7 @@ node --check web/console/js/provider.js
 
 ```bash
 ./scripts/start.sh all
-./scripts/healthcheck.sh          # 期望 7/7 通过，gRPC 端口 9091-9094 开放
+./scripts/healthcheck.sh          # 期望通过，gRPC 端口 9091 / 19092 / 9093 / 9094 开放（session-manager 2026-09-19 起由 9092 外移到 19092）
 ```
 
 sense-service 关键配置（`services/java/sense-service/src/main/resources/application.yml`）：

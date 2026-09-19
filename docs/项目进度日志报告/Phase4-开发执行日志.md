@@ -159,7 +159,8 @@ node .workbuddy/tmp/console-smoke.js <console目录> api http://127.0.0.1:8090
 
 # 起服务（注意本机环境变量 SERVER__PORT 会顶掉 server.port，需显式指定）
 cd services/java && bash ../../scripts/mvn-dev.sh -pl session-manager spring-boot:run \
-  -Dspring-boot.run.jvmArguments="-Dspring.cloud.nacos.discovery.enabled=false -Dserver.port=8081 -DGRPC_PORT=9192"
+  -Dspring-boot.run.jvmArguments="-Dspring.cloud.nacos.discovery.enabled=false -Dserver.port=8081"
+  # 注：gRPC 端口默认已是 19092（原 9092 与 Kafka 冲突，2026-09-19 已改默认值），无需再传 GRPC_PORT
 cd services/python/nlp-service && ../venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
@@ -222,6 +223,6 @@ cd services/python/nlp-service && ../venv/Scripts/python.exe -m uvicorn app.main
 
 | 现象 | 根因 | 处置 |
 |---|---|---|
-| `session-manager` 启动失败：`Failed to start gRPC health server on port 9092` | 默认 `grpc.port=9092` 与 Kafka 的 9092 **端口撞车** | 启动时 `GRPC_PORT=19092` 覆盖；**这是默认值的真实冲突，需在配置侧确认默认端口** |
+| `session-manager` 启动失败：`Failed to start gRPC health server on port 9092` | 默认 `grpc.port=9092` 与 Kafka 的 9092 **端口撞车** | ✅ **已修复（2026-09-19）**：默认值改为 **19092**（`application.yml`），`healthcheck.sh` 同步改探 19092；起 jar **无需再传 `GRPC_PORT` 覆盖**，实测 `Started SessionManagerApplication in 6.482s`、`/actuator/health=UP`。登记 DEBT-018 / §4.17 |
 | `session-manager` 启动失败：`NacosException: Client not connected` | `lifeform-nacos` 容器 3 天前已退出，注册中心不可用 | `docker start lifeform-nacos` 待就绪后重启服务 |
 | 契约门禁报"前端调用未登记契约 `/session/{param}/context?turns={param}`" | 校验脚本把**查询串当成路径的一部分**参与比对 | `normalize_frontend_path` 剥离 `?...` 后再比对（查询参数是路径的入参，不是路径身份） |

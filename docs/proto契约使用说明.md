@@ -16,7 +16,7 @@
 > 看到 `SessionServiceGrpc` 这类生成类，**不等于**会话服务对外提供 gRPC 接口。
 > 目前服务间调用**全部走 HTTP + NATS/Kafka**，与这些 proto 无关。
 
-一个最容易被误判的点：**本仓库的 `common/health.proto` 也没有被使用**。四个服务确实在 9091-9094 开了 gRPC 端口，但那是 **`grpc-services` 依赖自带的 `HealthStatusManager`**（实现的是标准 `grpc.health.v1` 协议，供 `grpc-health-probe` 之类工具用），**不是**本仓库定义的 `com.agent.common.v1.HealthService`。两者只是名字像。
+一个最容易被误判的点：**本仓库的 `common/health.proto` 也没有被使用**。四个服务确实开了 gRPC 端口（9091 / 19092 / 9093 / 9094），但那是 **`grpc-services` 依赖自带的 `HealthStatusManager`**（实现的是标准 `grpc.health.v1` 协议，供 `grpc-health-probe` 之类工具用），**不是**本仓库定义的 `com.agent.common.v1.HealthService`。两者只是名字像。
 
 ---
 
@@ -96,7 +96,7 @@ grep -n "grpc health" -A1 scripts/healthcheck.sh
 | 服务 | 端口 | 实际提供 | 启动方式 |
 |---|---|---|---|
 | gateway-service | 9091 | `grpc.health.v1.Health/Check`（标准协议） | `GrpcHealthServer implements SmartLifecycle` |
-| session-manager | 9092 | 同上 | 同上 |
+| session-manager | 19092 | 同上 | 同上 |
 | sense-service | 9093 | 同上 | 同上 |
 | body-service | 9094 | 同上 | 同上 |
 
@@ -327,7 +327,7 @@ Python 产物   services/python/nlp-service/generated/<域>/v1/                 
 生成 Python   bash scripts/proto-gen.sh
 校验          E:/software/anaconda3/python.exe scripts/contract-check.py
 当前使用      0 个服务引用（服务间走 HTTP + NATS/Kafka）
-gRPC 9091-9094  用的是 grpc-services 自带 HealthStatusManager，与本仓库 proto 无关
+gRPC 9091 / 19092 / 9093 / 9094  用的是 grpc-services 自带 HealthStatusManager，与本仓库 proto 无关
 改契约要点    字段号只增不改；改完两侧都要重生成；proto 注释会进生成物
 同步门禁      bash scripts/proto-sync-check.sh all      （CI: proto-check-python / proto-check-java）
 ```

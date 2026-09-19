@@ -14,7 +14,10 @@ app:
     degrade-on-failure: ${BRAIN_DEGRADE_ON_FAILURE:true}
 
 grpc:
-  port: ${GRPC_PORT:9092}
+  # 默认 19092：原规划的 9092 与 Kafka 宿主端口（127.0.0.1:9092）冲突，
+  # 会导致启动失败 `Failed to start gRPC health server on port 9092`，故整体外移到 19092。
+  # 见《Agent-Lifeform 服务注册表》§5 与《技术债台账》DEBT-018。
+  port: ${GRPC_PORT:19092}
 
 spring:
   application:

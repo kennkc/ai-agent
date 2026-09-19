@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 23:19 · 源文件 Phase1-DEMO.md</span>
+  <span class="meta">生成于 2026-09-19 12:32 · 源文件 Phase1-DEMO.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -131,7 +131,7 @@
 <ol>
 <li>Start infrastructure and services: <code>./scripts/start.sh all</code></li>
 <li>Ensure <code>JWT_SECRET</code> is set by the start script and <code>DEV_TOKEN_ENDPOINT_ENABLED=true</code>.</li>
-<li>Run <code>./scripts/healthcheck.sh</code> and confirm HTTP health plus gRPC ports 9091-9094.</li>
+<li>Run <code>./scripts/healthcheck.sh</code> and confirm HTTP health plus the gRPC health ports (9091 / 19092 / 9093 / 9094 — session-manager moved off 9092 in 2026-09-19 to avoid Kafka).</li>
 </ol>
 <h2 id="demo">Demo<a class="headerlink" href="#demo" title="Permanent link">&para;</a></h2>
 <pre><code class="language-bash"># 1. get a dev token (loopback only)

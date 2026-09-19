@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-18 20:55 · 源文件 proto契约使用说明.md</span>
+  <span class="meta">生成于 2026-09-19 12:32 · 源文件 proto契约使用说明.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -166,7 +166,7 @@
 看到 <code>SessionServiceGrpc</code> 这类生成类，<strong>不等于</strong>会话服务对外提供 gRPC 接口。
 目前服务间调用<strong>全部走 HTTP + NATS/Kafka</strong>，与这些 proto 无关。</p>
 </blockquote>
-<p>一个最容易被误判的点：<strong>本仓库的 <code>common/health.proto</code> 也没有被使用</strong>。四个服务确实在 9091-9094 开了 gRPC 端口，但那是 <strong><code>grpc-services</code> 依赖自带的 <code>HealthStatusManager</code></strong>（实现的是标准 <code>grpc.health.v1</code> 协议，供 <code>grpc-health-probe</code> 之类工具用），<strong>不是</strong>本仓库定义的 <code>com.agent.common.v1.HealthService</code>。两者只是名字像。</p>
+<p>一个最容易被误判的点：<strong>本仓库的 <code>common/health.proto</code> 也没有被使用</strong>。四个服务确实开了 gRPC 端口（9091 / 19092 / 9093 / 9094），但那是 <strong><code>grpc-services</code> 依赖自带的 <code>HealthStatusManager</code></strong>（实现的是标准 <code>grpc.health.v1</code> 协议，供 <code>grpc-health-probe</code> 之类工具用），<strong>不是</strong>本仓库定义的 <code>com.agent.common.v1.HealthService</code>。两者只是名字像。</p>
 <hr />
 <h2 id="_2">二、契约清单<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
 <table>
@@ -350,7 +350,7 @@ grep -n &quot;grpc health&quot; -A1 scripts/healthcheck.sh
 </tr>
 <tr>
 <td>session-manager</td>
-<td>9092</td>
+<td>19092</td>
 <td>同上</td>
 <td>同上</td>
 </tr>
@@ -741,7 +741,7 @@ Python 产物   services/python/nlp-service/generated/&lt;域&gt;/v1/           
 生成 Python   bash scripts/proto-gen.sh
 校验          E:/software/anaconda3/python.exe scripts/contract-check.py
 当前使用      0 个服务引用（服务间走 HTTP + NATS/Kafka）
-gRPC 9091-9094  用的是 grpc-services 自带 HealthStatusManager，与本仓库 proto 无关
+gRPC 9091 / 19092 / 9093 / 9094  用的是 grpc-services 自带 HealthStatusManager，与本仓库 proto 无关
 改契约要点    字段号只增不改；改完两侧都要重生成；proto 注释会进生成物
 同步门禁      bash scripts/proto-sync-check.sh all      （CI: proto-check-python / proto-check-java）
 </code></pre>

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 12:01 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-19 12:32 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -154,6 +154,7 @@
 <li><a href="#414-phase-4-2026-09-19">4.14 Phase 4 选型口径差异（2026-09-19 开工如实留痕）</a></li>
 <li><a href="#415-phase-4-2026-09-19">4.15 Phase 4 运行态验证发现的缺陷（2026-09-19，均已修复）</a></li>
 <li><a href="#416-phase-4-2026-09-19">4.16 Phase 4 需求复审发现的伪实现与缺陷（2026-09-19，用户确认后均已修复）</a></li>
+<li><a href="#417-grpc-kafka-2026-09-19-debt-018">4.17 gRPC 默认端口与 Kafka 冲突（2026-09-19 发现并已修复，登记 DEBT-018）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -309,6 +310,14 @@
 <td>SimplePlanner 为<strong>规则模板映射</strong>（<code>planner=rule</code>），无模型规划</td>
 <td>LLM 规划 / 多步规划器</td>
 <td>P5 多模型策略阶段</td>
+<td>🟡</td>
+</tr>
+<tr>
+<td><strong>DEBT-018</strong></td>
+<td>gRPC Health 端口分配（跨服务）</td>
+<td>原规划的 9091-9094 与基础设施端口区间重叠：<strong>session-manager 9092 ↔ Kafka 9092</strong>（已修，外移 <strong>19092</strong>）；<strong>sense-service 9093 ↔ Alertmanager 9093</strong>（P7 未部署，待处理）</td>
+<td>端口块与《服务注册表》§2 基础设施不重叠</td>
+<td>Alertmanager（P7）部署前</td>
 <td>🟡</td>
 </tr>
 </tbody>
@@ -1027,6 +1036,45 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 合起来对不上；A5 属"<strong>抽取与应用口径脱节</strong>"。这三类都不是单测能覆盖的形状，
 因此本阶段把"起真进程 + 打真数据 + 跨服务串联"作为验收的<strong>必要条件</strong>，而不是加分项。</p>
 </blockquote>
+<h3 id="417-grpc-kafka-2026-09-19-debt-018">4.17 gRPC 默认端口与 Kafka 冲突（2026-09-19 <strong>发现并已修复</strong>，登记 DEBT-018）<a class="headerlink" href="#417-grpc-kafka-2026-09-19-debt-018" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>现象</td>
+<td><code>session-manager</code> 启动失败：<code>Failed to start gRPC health server on port 9092</code>（Kafka 容器已占用宿主 <code>9092</code>）</td>
+</tr>
+<tr>
+<td>根因</td>
+<td>《服务注册表》把 gRPC Health 端口块设为 9091-9094，而 §2 基础设施的 Kafka=9092、Alertmanager=9093 落在同一区间 —— <strong>设计层面的端口重叠</strong>；此前只能靠启动时 <code>GRPC_PORT=19092</code> 覆盖才起得来</td>
+</tr>
+<tr>
+<td>连带缺陷</td>
+<td><code>scripts/healthcheck.sh</code> 的 <code>check_port session-grpc 9092</code> <strong>探的其实是 Kafka</strong>，恒判"OK"，会话 gRPC 是否真活着无从得知</td>
+</tr>
+<tr>
+<td>处置</td>
+<td>① <code>session-manager/application.yml</code> 默认端口 <code>9092 → 19092</code>；② <code>healthcheck.sh</code> 改探 19092；③ 注册表 §5 更新并加冲突说明；④ 各文档端口口径同步（<code>docs/java-services/*</code>、<code>proto契约使用说明</code>、<code>docs/demo/Phase*</code>）</td>
+</tr>
+<tr>
+<td>验证</td>
+<td>起 jar <strong>不带任何 <code>GRPC_PORT</code> 覆盖</strong>：<code>Started SessionManagerApplication in 6.482s</code>，<code>netstat</code> 显示 19092 归 session-manager、9092 仍为 Kafka；<code>/actuator/health</code> = <code>UP</code></td>
+</tr>
+<tr>
+<td>遗留</td>
+<td><strong>sense-service 9093 ↔ Alertmanager（P7）9093</strong> 潜在冲突未处理（Alertmanager 未部署）；待 P7 落地前重新分配</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>共性</strong>：与 §4.15/4.16 同源 —— 都是"<strong>跑运行态才暴露</strong>"。设计注册表把两套端口写在同一个区间，
+纸面自洽，直到 Kafka 先起、session-manager 后起才撞上。</p>
+</blockquote>
 <hr />
 <h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>
 <ul>
@@ -1174,6 +1222,12 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>建议在 <code>provider.ts</code> 抽 <code>extractApiError(error)</code>：优先取响应体 <code>code</code>/<code>message</code>/<code>details</code>，回退到状态码文案；让 <code>reportDegrade</code> 与 <code>plannedEndpointError</code> 统一走它，并据此区分 <strong>404(planned) / 4xx(用错) / 5xx(故障)</strong> 三种降级文案</td>
 <td>下轮加固</td>
 </tr>
+<tr>
+<td>22</td>
+<td><strong>sense-service 9093 ↔ Alertmanager（P7）9093 潜在冲突</strong>（DEBT-018，§4.17）：session-manager 已外移 19092 解决问题，但 sense-service 与规划中的 Alertmanager 仍重叠</td>
+<td>Alertmanager 落地前重新分配（建议把整套 gRPC Health 端口块迁出 90xx 基础设施区间，如统一到 1909x）；并给 <code>healthcheck.sh</code> 加"端口归属断言"，避免再出现"探错对象恒判 OK"</td>
+<td>P7 前</td>
+</tr>
 </tbody>
 </table>
 <hr />
@@ -1246,6 +1300,10 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td><code>services/python/nlp-service/app/brain/planner.py</code>（模块注释）</td>
 <td>DEBT-017</td>
 </tr>
+<tr>
+<td><code>services/java/session-manager/.../resources/application.yml</code>（<code>grpc.port</code> 注释）</td>
+<td>DEBT-018（<strong>配置项</strong>，非 Java 代码注释）</td>
+</tr>
 </tbody>
 </table>
 <blockquote>
@@ -1254,6 +1312,8 @@ DEBT-013 为本轮新开。<strong>登记率现已 100%</strong>：代码中出�
 <p><strong>2026-09-19 Phase 4 开工补记</strong>：新增 DEBT-014~017（会话压缩 / LLM 引擎 / Token 计量 /
 规则规划器）。四者均为<strong>显式降级</strong>（<code>generator=template</code>、<code>planner=rule</code> 等标识可见），
 不属伪实现；触发点已写明，登记率保持 100%。</p>
+<p><strong>2026-09-19 端口修复补记</strong>：新增 DEBT-018（gRPC 默认端口与 Kafka 冲突，见 §4.17）。
+与其余条目不同，它落在<strong>配置 + 设计注册表</strong>而非代码注释，故索引指向 <code>application.yml</code>。</p>
 </blockquote>
 <hr />
 <p><em>本文件首次建立于 2026-09-17 · 维护：探索者一号（WorkBuddy 侧）</em>
