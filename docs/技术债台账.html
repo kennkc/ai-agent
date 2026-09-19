@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 08:55 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-19 12:01 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -153,6 +153,7 @@
 <li><a href="#413-bff-4042026-09-18">4.13 全平台错误信封不一致 + BFF 方法不支持返回 404（2026-09-18 质量审核发现并已闭合 ✅）</a></li>
 <li><a href="#414-phase-4-2026-09-19">4.14 Phase 4 选型口径差异（2026-09-19 开工如实留痕）</a></li>
 <li><a href="#415-phase-4-2026-09-19">4.15 Phase 4 运行态验证发现的缺陷（2026-09-19，均已修复）</a></li>
+<li><a href="#416-phase-4-2026-09-19">4.16 Phase 4 需求复审发现的伪实现与缺陷（2026-09-19，用户确认后均已修复）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -900,8 +901,8 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <tr>
 <td>语义缓存（R4-04）</td>
 <td>Redis 向量相似 <strong>0.95</strong></td>
-<td>Redis（不可用时进程内兜底，标 <code>degraded</code>）+ <strong>复用 Phase 3 嵌入</strong></td>
-<td>相似度质量受 DEBT-010 影响：哈希嵌入非语义相似，命中判定偏<strong>字面相似</strong>，真实语义命中率会低于理论值</td>
+<td>Redis（不可用时进程内兜底，标 <code>degraded</code>）+ <strong>复用 Phase 3 嵌入</strong>；<strong>Hash + TTL + 租户前缀 + 容量裁剪，读写全走 Redis</strong></td>
+<td>相似度质量受 DEBT-010 影响：哈希嵌入非语义相似，命中判定偏<strong>字面相似</strong>，真实语义命中率会低于理论值。<strong>2026-09-19 复审已修正</strong>：初版只保存 <code>_redis</code> 句柄、实际只写进程内字典（见 §4.16 A1），现读写均落 Redis，并补真 Redis 读写用例</td>
 </tr>
 <tr>
 <td>会话持久化（R4-02）</td>
@@ -911,9 +912,9 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 </tr>
 <tr>
 <td>缺口检测阈值（R4-07）</td>
-<td>覆盖度 <strong>≥0.85</strong> 视为充分（假设语义嵌入 + 交叉编码重排）</td>
+<td>~~覆盖度 ≥0.85~~ → <strong>≥0.35</strong>（2026-09-19 用户确认后<strong>已改设计文档</strong>）</td>
 <td>默认 <strong>0.35</strong>（<code>GAP_COVERAGE_THRESHOLD</code> 可调）+ 可用分下限 <strong>0.15</strong>（<code>GAP_MIN_USABLE_SCORE</code>）</td>
-<td>实测哈希嵌入 + 词法重排下得分仅 0.10~0.28，套 0.85 会让<strong>每个问题都判信息不足</strong>；DEBT-010/011 闭合后调回设计值</td>
+<td>实测哈希嵌入 + 词法重排下得分仅 0.10~0.35，套 0.85 会让<strong>每个问题都判信息不足</strong>；已按"口径校准"落笔到 <code>Phase4-需求设计文档.md</code> §6（含变更说明），DEBT-010/011 闭合后调环境变量即可回设计值</td>
 </tr>
 <tr>
 <td>可用性打分口径（R4-07）</td>
@@ -924,8 +925,8 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <tr>
 <td>Console 大脑视图（R-C04）</td>
 <td>大脑视图含意图分布 / 会话趋势等指标</td>
-<td>真实指标（LLM 路由 / 语义缓存命中率 / 知识片段数 / 模型运行时）取自 <code>GET /api/wp/brain</code>；<strong>意图分布与会话趋势两图仍为演示值</strong>并显式标注</td>
-<td>后端暂无这两个统计接口；DEBT 留待后续补接口后再切真实</td>
+<td>真实指标（LLM 路由 / 语义缓存命中率 / 知识片段数 / 模型运行时）取自 <code>GET /api/wp/brain</code>；<strong>活跃会话数与意图分布</strong>取自 <code>GET /api/wp/session/stats</code>（session-manager 实时 SCAN 汇总）；<strong>会话趋势（近 7 日）仍为演示值</strong>并显式标注</td>
+<td>2026-09-19 复审已把意图分布从演示值切到真实统计；趋势图需按日聚合的时序接口，后端暂无，标注保留</td>
 </tr>
 </tbody>
 </table>
@@ -964,6 +965,67 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <p>三条都是<strong>只有真正起进程/打真实数据才会暴露</strong>的问题 —— 这也是本阶段坚持"跑运行态验证"的收益。</p>
 <p><strong>判定</strong>：以上均<strong>不是 bug</strong>，但会影响"读设计文档的人"对技术栈的判断，故按规范留痕。
 需求·设计文档<strong>原文未改动</strong> —— 设计口径变更须先确认（见 §4.6 二选一处置）。</p>
+</blockquote>
+<h3 id="416-phase-4-2026-09-19">4.16 Phase 4 需求复审发现的伪实现与缺陷（2026-09-19，用户确认后<strong>均已修复</strong>）<a class="headerlink" href="#416-phase-4-2026-09-19" title="Permanent link">&para;</a></h3>
+<blockquote>
+<p>本轮<strong>复审口径</strong>：不看"测试是否绿"，而是通读实现后追问"这段代码真的在做它声称的事吗"。
+以下 3 类问题<strong>单测与验收报告都抓不到</strong> —— 因为测试替身恰好绕过了真实路径，
+而验收报告引用的是实现自己的自述字段（<code>backend</code>、<code>available</code>）。完整记录见
+<code>docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md</code>。</p>
+</blockquote>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>问题</th>
+<th>表现</th>
+<th>为什么抓不到</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>A1</strong></td>
+<td><strong>语义缓存"Redis 后端"是空壳</strong>（R4-04 红线）</td>
+<td><code>semantic_cache.py</code> 保存了 <code>_redis</code>，但 <code>store/lookup/_entries/_evict</code> 全部只操作进程内字典，<code>_redis</code> 在构造之外<strong>零引用</strong>；Redis 通/不通行为完全相同，唯一差别是 <code>health()</code> 回的 <code>backend</code> 字符串</td>
+<td>所有用例都构造 <code>redis_client=None</code>（走内存兜底分支），<strong>Redis 主路径零覆盖</strong>；验收报告写的"真实 Redis 后端"是照抄了 <code>health()</code> 的自述字段</td>
+<td>✅ <strong>已重写</strong>：<code>store/lookup/clear/_size/_prune</code> 全部按后端分流，Redis 侧 Hash + TTL + 租户前缀 + 容量裁剪；内存仅作降级兜底；补真 Redis 读写用例（注入假 Redis 断言 hset/hgetall 真实调用）</td>
+</tr>
+<tr>
+<td><strong>A2</strong></td>
+<td><strong>决策链回放端点永远"成功"</strong>（D5/X4 红线）</td>
+<td>BFF <code>GET /api/wp/brain/{decision_id}</code> 只要 nlp 活着，任意 id 都返 <code>200 + available:true + chain:[]</code>；函数注释明写"未命中返回 404"，但 <strong>404 分支根本不存在</strong>；全库无任何 AuditLog 实现</td>
+<td>BFF 测试只断言"端点可达"，反而<strong>固化了空壳行为</strong></td>
+<td>✅ <strong>已落地 IN3 AuditLog</strong>：PG 表 <code>brain_decision_log</code>（JSONB payload）+ <code>decision_id</code> 精确回放 + 租户强过滤；查不到即 <strong>404</strong>；补反向用例（不存在 id → 404、跨租户 → 404）</td>
+</tr>
+<tr>
+<td><strong>A3</strong></td>
+<td><strong>租户标识两处来源不一致</strong>（本轮新发现）</td>
+<td><code>/api/nlp/brain/ask</code> 从<strong>请求体</strong> <code>tenant_id</code> 取租户（默认 <code>default</code>），而回放/审计从<strong>请求头</strong> <code>X-Tenant-Id</code> 取 → 写入落 A 租户、按 B 租户查，<strong>回放 404</strong> 把一个真实缺陷伪装成"数据不存在"</td>
+<td>e2e 脚本与单测恰好都用 <code>default</code>，两个来源取值相同，掩盖了不一致</td>
+<td>✅ <strong>已统一</strong>：新增 <code>resolve_tenant(request, body_tenant)</code>（头优先、体兜底、默认 default），brain/记忆全部端点统一走它；补"请求头租户被正确落库"断言</td>
+</tr>
+<tr>
+<td><strong>A4</strong></td>
+<td><strong>知识入库不失效检索热缓存</strong>（本轮新发现）</td>
+<td><code>HotCacheStore.invalidateTenant</code> 只在 <strong>DELETE</strong> 路径调用，<strong>POST 入库不失效</strong> → 新文档入库后，同一问题的检索命中缓存旧结果集，新知识在 TTL（1h）内<strong>不可见</strong></td>
+<td>入库单测只看"写成功"，检索单测只看"能召回"；<strong>没有一条用例把两者串起来</strong>（写后立刻用同一问题读）</td>
+<td>✅ <strong>已修复</strong>：单篇/批量入库成功后都调 <code>invalidateTenant</code>；新增 <code>KnowledgeIngestInvalidationTest</code>（4 例：单篇失效 / 批量失效一次 / 批量全失败不失效 / 删除仍失效）</td>
+</tr>
+<tr>
+<td><strong>A5</strong></td>
+<td><strong>记忆图谱"有边无点"</strong>（IN-02）</td>
+<td>关系端点实体（如「大脑层」）不符合任何实体正则，<strong>不被登记为节点</strong> → 抽到关系也建不成边、子图查询恒空；<code>_SUFFIX</code> 贪婪把「大脑层依赖检索服务」整块当成实体名</td>
+<td>单测语料恰好是「带后缀的实体」形态，端点本身也带后缀</td>
+<td>✅ <strong>已修复</strong>：关系端点<strong>先补齐为节点</strong>再建边；<code>_clean_name</code> 在关系动词处切分（「大脑层依赖检索服务」→「检索服务」）；e2e 实测 3 实体 / 2 关系 / 子图命中 / 压缩率 0.883</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>共性</strong>：A1/A2 属"<strong>自述字段即证据</strong>"型伪实现——代码里有一个字段声称后端是什么，
+而真正的数据从未走到那里；A3/A4 属"<strong>两个地方各写一半</strong>"型不一致——单独看都自洽，
+合起来对不上；A5 属"<strong>抽取与应用口径脱节</strong>"。这三类都不是单测能覆盖的形状，
+因此本阶段把"起真进程 + 打真数据 + 跨服务串联"作为验收的<strong>必要条件</strong>，而不是加分项。</p>
 </blockquote>
 <hr />
 <h2 id="d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）<a class="headerlink" href="#d5-1-52" title="Permanent link">&para;</a></h2>

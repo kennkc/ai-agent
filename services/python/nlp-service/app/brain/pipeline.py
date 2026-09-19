@@ -1,17 +1,19 @@
 """R4-06 检索增强生成链路（RagPipeline）—— LangGraph StateGraph 串联。
 
-节点流：
-    plan（意图→任务模板） → retrieve（Phase3 检索） → gap（覆盖度评估）
-      ├─ 充分 / 部分不足 → generate（Prompt 组装 → LLM） → annotate（来源标注）
-      └─ 关键缺口      → insufficient（明确提示 + 建议补充）
+节点流（**决策链 6 步**，对齐 X4/D5 的"思考链回放"要求）：
+
+    intent（意图） → plan（规划） → retrieve（检索） → gap（覆盖度/缺口）
+        ├─ 充分 / 部分不足 → generate（生成） ─┐
+        └─ 关键缺口      → insufficient ──────┴→ verify（自校验） → END
 
 设计约定（与全局一致）：
 
 * **缓存优先**：进入管线前查 `SemanticCache`（相似 ≥0.95）→ 命中直接返回，带 `cache_hit=True`。
-* **降级可见**：检索不可用 / LLM 不可用 / 模板生成，分别在
+* **降级可见**：检索不可用 / LLM 不可用 / 模板生成 / 低依据度，分别在
   `degraded_reasons`（数组）与 `generator` 字段如实标注，**不静默填充**。
-* **决策链**：每步记录 `{step, model, latency_ms, confidence, io}`，
-  为 D5 思考链回放与 X4 决策审计提供数据（对齐 AuditLog 的 `chain[]` 形态）。
+* **决策链落账**：每步记录 `{step, model, latency_ms, confidence, io}`，
+  整条链写入 IN3 AuditLog（见 `app/brain/audit.py`）后可按 `decision_id` 回放 ——
+  **X4 明确要求接真实审计，不做 Mock 过渡**。
 
 > 注：需求文档选型 LangGraph 0.2+，本机安装为 1.2.11；`StateGraph` API 一致，
 > 已在 `docs/技术债台账.md` 记录版本口径。
@@ -19,6 +21,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 import uuid
 from dataclasses import dataclass, field
@@ -26,9 +29,10 @@ from typing import Any, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
 
+from app.brain.audit import AUDIT_LOG, CHAIN_STEPS, Decision
 from app.brain.gap import COVERAGE_THRESHOLD, GAP_DETECTOR, SOURCE_ANNOTATOR
 from app.brain.llm_gateway import L1, L2, L3, LlmGateway, LlmUnavailable
-from app.brain.planner import PLANNER, CHAT, NEEDS_RETRIEVAL, SUMMARIZE
+from app.brain.planner import PLANNER, CHAT, NEEDS_RETRIEVAL, SUMMARIZE, TEMPLATE_LABELS
 from app.brain.retrieval import RetrievalUnavailable
 from app.brain.semantic_cache import SEMANTIC_CACHE
 
@@ -39,6 +43,10 @@ SYSTEM_PROMPT = (
     "约束：1) 资料不足时明确说明，不臆测；2) 引用来源用 [来源] 标注；"
     "3) 不使用资料外的知识回答事实性问题。"
 )
+
+# 自校验口径：回答与检索资料的**依据度**下限（低于此值标注 low_groundedness）。
+# 与缺口阈值同源 —— 阈值随嵌入/重排后端校准（见 gap.py 顶部注释与台账 §4.14）。
+GROUNDEDNESS_FLOOR = float(os.getenv("GAP_GROUNDEDNESS_FLOOR", "0.25"))
 
 
 class RagState(TypedDict, total=False):
@@ -64,6 +72,7 @@ class RagState(TypedDict, total=False):
     generator: str
     model: str
     tokens: dict[str, int]
+    attribution: dict[str, Any]
 
 
 @dataclass
@@ -73,6 +82,7 @@ class RagResult:
     session_id: str = ""
     tenant_id: str = "default"
     intent: str = ""
+    intent_confidence: float = 1.0
     plan: dict[str, Any] = field(default_factory=dict)
     sources: list[dict[str, Any]] = field(default_factory=list)
     gap: dict[str, Any] = field(default_factory=dict)
@@ -87,6 +97,7 @@ class RagResult:
     latency_ms: int = 0
     tokens: dict[str, int] = field(default_factory=dict)
     retrieval: dict[str, Any] = field(default_factory=dict)
+    attribution: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict:
         return {
@@ -95,6 +106,7 @@ class RagResult:
             "session_id": self.session_id,
             "tenant_id": self.tenant_id,
             "intent": self.intent,
+            "intent_confidence": round(self.intent_confidence, 4),
             "plan": self.plan,
             "sources": self.sources,
             "gap": self.gap,
@@ -109,6 +121,7 @@ class RagResult:
             "latency_ms": self.latency_ms,
             "tokens": dict(self.tokens),
             "retrieval": dict(self.retrieval),
+            "attribution": dict(self.attribution),
         }
 
 
@@ -123,6 +136,7 @@ class RagPipeline:
         planner: Any = None,
         gap_detector: Any = None,
         annotator: Any = None,
+        audit: Any = None,
         system_prompt: str = SYSTEM_PROMPT,
     ) -> None:
         self.gateway = gateway or LlmGateway()
@@ -131,6 +145,7 @@ class RagPipeline:
         self.planner = planner or PLANNER
         self.gap_detector = gap_detector or GAP_DETECTOR
         self.annotator = annotator or SOURCE_ANNOTATOR
+        self.audit = audit if audit is not None else AUDIT_LOG
         self.system_prompt = system_prompt
         self._graph = self._build_graph()
 
@@ -163,6 +178,7 @@ class RagPipeline:
             cached = self._cache_lookup(state)
             if cached:
                 cached.latency_ms = int((time.time() - started) * 1000)
+                self._record(cached)
                 return cached
         final = self._graph.invoke(state)
         result = self._to_result(final)
@@ -170,17 +186,50 @@ class RagPipeline:
         # 只缓存「有生成结果」的回答：缺口/不可用结果不进缓存，避免把故障固化
         if use_cache and result.generator != "none":
             self.cache.store(question, result.to_dict(), tenant_id or "default")
+        self._record(result)
         return result
+
+    # ── 决策链落账（IN3 AuditLog）──
+    def _record(self, result: RagResult) -> Optional[dict]:
+        try:
+            decision = Decision(
+                decision_id=result.decision_id,
+                question=result.question,
+                tenant_id=result.tenant_id,
+                session_id=result.session_id,
+                intent=result.intent,
+                intent_confidence=result.intent_confidence,
+                plan=result.plan,
+                answer=result.answer,
+                generator=result.generator,
+                model=result.model,
+                degraded=result.degraded,
+                degraded_reasons=list(result.degraded_reasons),
+                chain=list(result.chain),
+                sources=list(result.sources),
+                gap=dict(result.gap),
+                retrieval=dict(result.retrieval),
+                cache_hit=result.cache_hit,
+                latency_ms=result.latency_ms,
+            )
+            return self.audit.record(decision)
+        except Exception as exc:  # noqa: BLE001 - 审计失败不得阻断问答
+            logger.warning("audit record failed (decision_id=%s): %s", result.decision_id, exc)
+            return None
 
     # ── 图构建 ──
     def _build_graph(self):
         graph = StateGraph(RagState)
+        graph.add_node("intent", self._node_intent)
         graph.add_node("plan", self._node_plan)
         graph.add_node("retrieve", self._node_retrieve)
         graph.add_node("gap", self._node_gap)
         graph.add_node("generate", self._node_generate)
         graph.add_node("insufficient", self._node_insufficient)
-        graph.set_entry_point("plan")
+        graph.add_node("verify", self._node_verify)
+        graph.add_node("annotate", self._node_annotate)
+        graph.set_entry_point("intent")
+        graph.add_edge("intent", "plan")
         graph.add_edge("plan", "retrieve")
         graph.add_edge("retrieve", "gap")
         graph.add_conditional_edges(
@@ -188,11 +237,28 @@ class RagPipeline:
             lambda state: "insufficient" if state.get("gap_has_gap") else "generate",
             {"insufficient": "insufficient", "generate": "generate"},
         )
-        graph.add_edge("generate", END)
-        graph.add_edge("insufficient", END)
+        graph.add_edge("generate", "verify")
+        graph.add_edge("insufficient", "verify")
+        graph.add_edge("verify", "annotate")
+        graph.add_edge("annotate", END)
         return graph.compile()
 
     # ── 节点 ──
+    def _node_intent(self, state: dict[str, Any]) -> dict[str, Any]:
+        """决策链第 1 步：意图。
+
+        意图由调用方（session-manager 的 Phase2 意图级联）传入时**原样记录**；
+        未传入时由规划器兜底猜测，并如实标注来源为 `planner-fallback`。
+        """
+        started = time.time()
+        intent = str(state.get("intent", "") or "")
+        confidence = float(state.get("intent_confidence", 1.0) or 1.0)
+        return {
+            "chain": _step(state, "intent", model="phase2-cascade" if intent else "planner-fallback",
+                           latency_ms=_ms(started), confidence=confidence,
+                           io={"intent": intent or "(未传入，由规划器兜底)", "confidence": round(confidence, 4)}),
+        }
+
     def _node_plan(self, state: dict[str, Any]) -> dict[str, Any]:
         started = time.time()
         plan = self.planner.plan(state["question"], state.get("intent", ""), state.get("intent_confidence", 1.0))
@@ -201,7 +267,8 @@ class RagPipeline:
             "intent": plan.intent,
             "chain": _step(state, "plan", model=plan.planner,
                            latency_ms=_ms(started), confidence=plan.confidence,
-                           io={"question": state["question"], "template": plan.template}),
+                           io={"question": state["question"], "template": plan.template,
+                               "label": TEMPLATE_LABELS.get(plan.template, plan.template)}),
         }
 
     def _node_retrieve(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -248,7 +315,8 @@ class RagPipeline:
             "gap_has_gap": verdict.has_gap,
             "chain": _step(state, "gap", model="rule", latency_ms=_ms(started),
                            confidence=verdict.coverage,
-                           io={"coverage": round(verdict.coverage, 4), "usable": verdict.usable_chunks}),
+                           io={"coverage": round(verdict.coverage, 4), "usable": verdict.usable_chunks},
+                           kind="substep", parent="retrieve"),
         }
 
     def _node_generate(self, state: dict[str, Any]) -> dict[str, Any]:
@@ -305,7 +373,78 @@ class RagPipeline:
             "answer": answer, "sources": sources, "generator": "none", "model": "none",
             "tokens": {}, "degraded_reasons": reasons,
             "chain": _step(state, "insufficient", model="rule", latency_ms=_ms(started),
-                           confidence=0.0, io={"coverage": gap.get("coverage", 0), "advice": advice}),
+                           confidence=0.0, io={"coverage": gap.get("coverage", 0), "advice": advice},
+                           kind="substep", parent="generate"),
+        }
+
+    def _node_verify(self, state: dict[str, Any]) -> dict[str, Any]:
+        """决策链末步：自校验（X4/D5 要求）。
+
+        校验三件事，**只标注不改答案**（改答案就是伪造）：
+
+        1. **依据度 groundedness** —— 回答中的实词有多少出现在检索资料里；
+           偏低说明回答偏离资料，标 `low_groundedness`；
+        2. **来源完整性** —— 生成了回答却没有来源，标 `missing_sources`；
+        3. **缺口一致性** —— 判了信息缺口却仍生成了正文，标 `gap_inconsistent`。
+
+        输出置信度 = 依据度与链步置信度的折中，供 X4「决策置信度」卡使用。
+        """
+        started = time.time()
+        answer = str(state.get("answer", "") or "")
+        sources = list(state.get("sources", []) or [])
+        generator = str(state.get("generator", "none") or "none")
+        reasons = list(state.get("degraded_reasons", []))
+        groundedness = _groundedness(answer, sources)
+        checks = {
+            "groundedness": round(groundedness, 4),
+            "floor": GROUNDEDNESS_FLOOR,
+            "sources": len(sources),
+            "answer_chars": len(answer),
+        }
+        if generator != "none" and answer and sources and groundedness < GROUNDEDNESS_FLOOR:
+            reasons.append("low_groundedness")
+        if generator != "none" and answer and not sources:
+            reasons.append("missing_sources")
+        if "information_gap" not in reasons and generator == "none" and answer and not reasons:
+            reasons.append("unannotated_degrade")
+        confidence = round(min(1.0, 0.5 * groundedness + 0.5 * (0.9 if generator == "model" else 0.6)), 4)
+        return {
+            "degraded_reasons": reasons,
+            "chain": _step(state, "verify", model="rule", latency_ms=_ms(started),
+                           confidence=confidence,
+                           io={"checks": checks, "reasons": reasons[len(state.get("degraded_reasons", [])):]}),
+        }
+
+    def _node_annotate(self, state: dict[str, Any]) -> dict[str, Any]:
+        """决策链末步：来源标注（R4-08 / X4 六步链的第 6 步）。
+
+        之前标注动作藏在 generate 节点里（顺手做了但链上不可见），
+        导致 X4 要求的「来源标注」这一步在回放时**查无此步**。
+        本节点把它显式成链：去重、编号、算归因覆盖率，供三卡中的 attribution 使用。
+        """
+        started = time.time()
+        sources = list(state.get("sources", []) or [])
+        seen: set[str] = set()
+        unique: list[dict[str, Any]] = []
+        for item in sources:
+            key = str(item.get("chunk_id") or item.get("doc_id") or item.get("title") or "")
+            if key in seen:
+                continue
+            seen.add(key)
+            unique.append(item)
+        scored = [s for s in unique if s.get("score") is not None]
+        attribution = {
+            "cited": len(unique),
+            "with_score": len(scored),
+            "top_score": round(max((float(s["score"]) for s in scored), default=0.0), 4),
+            "distinct_titles": len({str(s.get("title") or "") for s in unique}),
+        }
+        return {
+            "sources": unique,
+            "attribution": attribution,
+            "chain": _step(state, "annotate", model="rule", latency_ms=_ms(started),
+                           confidence=min(1.0, 0.4 + 0.2 * len(unique)),
+                           io=attribution),
         }
 
     # ── 工具 ──
@@ -346,11 +485,13 @@ class RagPipeline:
             session_id=state.get("session_id", ""),
             tenant_id=state.get("tenant_id", "default"),
             intent=str(cached.get("intent", "")),
+            intent_confidence=float(cached.get("intent_confidence", 1.0) or 1.0),
             plan=dict(cached.get("plan", {})),
             sources=list(cached.get("sources", [])),
             gap=dict(cached.get("gap", {})),
             chain=[{"step": "cache", "model": cached.get("cache_backend", "cache"), "latency_ms": 0,
-                    "confidence": cached.get("cache_similarity", 1.0), "io": {"hit": True}}],
+                    "confidence": cached.get("cache_similarity", 1.0),
+                    "io": {"hit": True, "cache_of": cached.get("decision_id", "")}}],
             decision_id=state.get("decision_id", ""),
             generator=str(cached.get("generator", "template")),
             model=str(cached.get("model", "")),
@@ -371,6 +512,7 @@ class RagPipeline:
             session_id=state.get("session_id", ""),
             tenant_id=state.get("tenant_id", "default"),
             intent=str(state.get("intent", "")),
+            intent_confidence=float(state.get("intent_confidence", 1.0) or 1.0),
             plan=dict(state.get("plan", {})),
             sources=list(state.get("sources", [])),
             gap=dict(state.get("gap", {})),
@@ -382,6 +524,7 @@ class RagPipeline:
             degraded_reasons=reasons,
             tokens=dict(state.get("tokens", {})),
             retrieval=dict(state.get("retrieval", {})),
+            attribution=dict(state.get("attribution", {})),
         )
 
 
@@ -405,12 +548,55 @@ def _retrieval_only_answer(chunks: list[dict[str, Any]]) -> str:
     return "\n".join(lines)
 
 
-def _step(state: dict[str, Any], step: str, model: str, latency_ms: int, confidence: float, io: dict) -> list:
+def _groundedness(answer: str, sources: list[dict[str, Any]]) -> float:
+    """回答依据度：回答里的实词有多少能在检索资料中命中（词法口径，与当前后端一致）。
+
+    与嵌入/重排同源于"当前是词法后端"，因此阈值同样可配；
+    DEBT-010/011 闭合后这里应换成语义蕴含判定。
+    """
+    terms = _terms(answer)
+    if not terms:
+        return 0.0
+    corpus = " ".join(str(s.get("snippet", "") or "") + " " + str(s.get("title", "") or "") for s in sources)
+    if not corpus.strip():
+        return 0.0
+    hit = sum(1 for term in terms if term in corpus)
+    return hit / len(terms)
+
+
+def _terms(text: str, min_len: int = 2) -> list[str]:
+    """粗分词：按非字母数字切分，过滤过短片段（中文按 2-gram 补）。"""
+    import re
+
+    raw = [t for t in re.split(r"[^\w一-龥]+", text or "") if len(t) >= min_len]
+    terms: list[str] = []
+    for token in raw:
+        if any("一" <= ch <= "龥" for ch in token):
+            terms.extend(token[i:i + 2] for i in range(len(token) - 1))
+        else:
+            terms.append(token.lower())
+    return terms[:120]
+
+
+def _step(state: dict[str, Any], step: str, model: str, latency_ms: int, confidence: float, io: dict,
+          kind: str = "step", parent: str = "") -> list:
+    """追加一个链步。
+
+    X4 要求「思考链 6 步可视化」：意图 → 规划 → 检索 → 生成 → 自校验 → 标注。
+    缺口检测（gap）是**检索结果的判定**，属于检索步的内部环节，
+    故标 `kind='substep'` + `parent='retrieve'` —— 数据照记（回放要看），
+    但沙盘按 6 个主步呈现，不会把 6 步撑成 7 步而与设计口径冲突。
+    """
     chain = list(state.get("chain", []))
-    chain.append({
+    entry = {
         "step": step, "model": model, "latency_ms": latency_ms,
         "confidence": round(float(confidence), 4), "io": io,
-    })
+    }
+    if kind != "step":
+        entry["kind"] = kind
+    if parent:
+        entry["parent"] = parent
+    chain.append(entry)
     return chain
 
 

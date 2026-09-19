@@ -6,12 +6,19 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
 import org.springframework.stereotype.Component;
 
+import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.HashSet;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
+
+import org.springframework.data.redis.core.Cursor;
+import org.springframework.data.redis.core.RedisCallback;
+import org.springframework.data.redis.core.ScanOptions;
 
 /**
  * R4-02 会话持久化：Redis Hash（{@code session:{id}}）+ 消息列表（{@code session:{id}:messages}）+ TTL。
@@ -166,6 +173,92 @@ public class SessionStore {
 
     public static String key(String sessionId) {
         return SESSION_PREFIX + sessionId;
+    }
+
+    /**
+     * R-C04 会话统计：活跃会话数 / 状态分布 / 意图分布。
+     *
+     * <p>数据源是**会话真相本身**（Redis Hash），不是二次汇总表 —— BFF 只需转发，
+     * 避免出现"第二份会话真相"。口径如实写在返回体里（采样上限与统计维度）。
+     *
+     * @param tenantId   租户（为空则统计全部租户）
+     * @param maxSessions 扫描上限（防止长会话量下把 Redis 打满）
+     */
+    public Map<String, Object> stats(String tenantId, int maxSessions) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        Map<String, Integer> byStatus = new LinkedHashMap<>();
+        Map<String, Integer> byIntent = new LinkedHashMap<>();
+        int scanned = 0;
+        int active = 0;
+        int messages = 0;
+        Set<String> keys = scanSessionKeys(maxSessions);
+        for (String sessionKey : keys) {
+            scanned++;
+            Map<String, String> session = load(sessionKey.substring(SESSION_PREFIX.length()));
+            if (session.isEmpty()) {
+                continue;
+            }
+            String owner = String.valueOf(session.getOrDefault("tenant_id", ""));
+            if (tenantId != null && !tenantId.isBlank() && !tenantId.equals(owner)) {
+                continue;
+            }
+            String status = String.valueOf(session.getOrDefault("status", "UNKNOWN"));
+            byStatus.merge(status, 1, Integer::sum);
+            if (!"CLOSED".equalsIgnoreCase(status)) {
+                active++;
+            }
+            try {
+                messages += Integer.parseInt(String.valueOf(session.getOrDefault("message_count", "0")));
+            } catch (NumberFormatException ignored) {
+                // 单条脏数据不影响整体统计
+            }
+            // 意图分布取该会话**最近一轮用户消息**的意图（会话维度的"当前在聊什么"）
+            List<Map<String, Object>> recent = context(sessionKey.substring(SESSION_PREFIX.length()), 1);
+            if (!recent.isEmpty()) {
+                String intent = String.valueOf(recent.get(0).getOrDefault("intent", "")).trim();
+                if (!intent.isEmpty() && !"null".equals(intent)) {
+                    byIntent.merge(intent, 1, Integer::sum);
+                }
+            }
+        }
+        result.put("tenant_id", tenantId == null || tenantId.isBlank() ? "*" : tenantId);
+        result.put("active_sessions", active);
+        result.put("scanned_sessions", scanned);
+        result.put("scan_limit", maxSessions);
+        result.put("messages", messages);
+        result.put("by_status", byStatus);
+        result.put("by_intent", byIntent);
+        result.put("ttl_hours", SESSION_TTL.toHours());
+        result.put("note", "统计口径：SCAN session:* 全量 Hash 实时汇总（非预聚合表）；意图分布按会话最近一轮用户消息统计");
+        return result;
+    }
+
+    /** SCAN 会话键（排除消息列表键），失败时返回空集合（降级：统计为空而不是报错）。
+     *  <p>protected 便于单测覆写键集合（避免单测依赖真实 Redis 的 SCAN）。 */
+    protected Set<String> scanSessionKeys(int maxSessions) {
+        Set<String> keys = new HashSet<>();
+        try {
+            Set<String> scanned = redis.execute((RedisCallback<Set<String>>) connection -> {
+                Set<String> out = new HashSet<>();
+                ScanOptions options = ScanOptions.scanOptions().match(SESSION_PREFIX + "*").count(500).build();
+                try (Cursor<byte[]> cursor = connection.keyCommands().scan(options)) {
+                    while (cursor.hasNext() && out.size() < maxSessions) {
+                        out.add(new String(cursor.next(), StandardCharsets.UTF_8));
+                    }
+                } catch (Exception e) {
+                    return out;
+                }
+                return out;
+            });
+            if (scanned != null) {
+                keys.addAll(scanned);
+            }
+        } catch (Exception e) {
+            // 统计失败不阻断业务：返回空集合，由调用方标注 degraded
+            keys.clear();
+        }
+        keys.removeIf(key -> key.endsWith(MESSAGE_SUFFIX));
+        return keys;
     }
 
     /**

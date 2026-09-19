@@ -1,0 +1,767 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 4 演示脚本：大脑期——推理与生成 🧠</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 12:01 · 源文件 Phase4-DEMO.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#docker">一、自动化验证（无需 Docker，先跑这一层）</a><ul>
+<li><a href="#11-java">1.1 Java 全量构建与单测</a></li>
+<li><a href="#12-python">1.2 Python 大脑层</a></li>
+<li><a href="#13-wp-bff">1.3 wp-bff 回归</a></li>
+<li><a href="#14">1.4 契约与文档覆盖</a></li>
+</ul>
+</li>
+<li><a href="#docker_1">二、端到端演示（需 Docker 基础设施）</a><ul>
+<li><a href="#20">2.0 启动</a></li>
+<li><a href="#21-r4-03-llm-gateway">2.1 R4-03 LLM Gateway 路由与降级（先确认大脑基座）</a></li>
+<li><a href="#22-r4-06">2.2 R4-06 端到端问答（完整决策链）</a></li>
+<li><a href="#23-r4-07">2.3 R4-07 缺口检测：无资料时明确拒答而不是编造</a></li>
+<li><a href="#24-r4-04-redis">2.4 R4-04 语义缓存（真 Redis）</a></li>
+<li><a href="#25-d5x4">2.5 D5/X4 决策链回放与三卡</a></li>
+<li><a href="#26-r4-01r4-02">2.6 R4-01/R4-02 会话状态机与持久化</a></li>
+<li><a href="#27-in-02">2.7 IN-02 记忆图谱</a></li>
+<li><a href="#28-90">2.8 意图准确率评测（≥90%）</a></li>
+<li><a href="#29-r4-09">2.9 工作平台对话界面（R4-09）</a></li>
+<li><a href="#210-r-c04">2.10 统一终端大脑视图与交互终端（R-C04）</a></li>
+<li><a href="#211">2.11 缓存一致性验证（复审修复项）</a></li>
+</ul>
+</li>
+<li><a href="#dod">三、量化验收（DoD 对齐）</a></li>
+<li><a href="#_1">四、故障排查</a></li>
+<li><a href="#_2">五、演示完成标准</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-4">Phase 4 演示脚本：大脑期——推理与生成 🧠<a class="headerlink" href="#phase-4" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>演示目标</strong>：证明生命体已"长出大脑"——问题进来能<strong>意图识别 → 规划 → 检索 → 缺口评估 →
+生成 → 自校验 → 来源标注</strong>跑完整条 LangGraph 决策链，回答可回溯、降级可见、<strong>每条决策可回放</strong>；
+会话有状态机与 Redis 持久化，长期记忆以实体关系图谱沉淀，并在工作平台与统一终端实时观测。
+<strong>前置条件</strong>：Docker Desktop（不要升级，本机 Build 19041）、JDK 21、Maven 3.9+、Python 3.13 + venv、Node 22
+<strong>对应需求</strong>：R4-01 ~ R4-09（Phase4-大脑期/需求设计文档.md）+ 终端线 R-C04 + IN-02 记忆图谱
+<strong>版本</strong>：2026-09-19 复审补全版 —— 本版<strong>按复审后的真实代码逐条核对</strong>接口与返回值；
+旧版本中"语义缓存已接 Redis""决策链回放可用"等表述在复审中被证明与实现不符，已修复后重写。</p>
+</blockquote>
+<hr />
+<h2 id="docker">一、自动化验证（无需 Docker，先跑这一层）<a class="headerlink" href="#docker" title="Permanent link">&para;</a></h2>
+<h3 id="11-java">1.1 Java 全量构建与单测<a class="headerlink" href="#11-java" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/java
+../../scripts/mvn-dev.sh test
+</code></pre>
+<p>预期（2026-09-19 实测）：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th style="text-align: right;">测试数</th>
+<th style="text-align: right;">失败</th>
+<th style="text-align: right;">错误</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>proto-contracts</td>
+<td style="text-align: right;">2</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>session-manager</td>
+<td style="text-align: right;">43</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>sense-service</td>
+<td style="text-align: right;">53</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td>body-service</td>
+<td style="text-align: right;">64</td>
+<td style="text-align: right;">0</td>
+<td style="text-align: right;">0</td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td style="text-align: right;"><strong>162</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+<td style="text-align: right;"><strong>0</strong></td>
+</tr>
+</tbody>
+</table>
+<p>本阶段新增：<code>SessionStatsTest</code>(3)、<strong><code>KnowledgeIngestInvalidationTest</code>(4)</strong>（入库失效热缓存一致性回归）、
+<code>SessionWiringTest</code>（反射固化 Spring 构造注入约束）。</p>
+<h3 id="12-python">1.2 Python 大脑层<a class="headerlink" href="#12-python" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/python/nlp-service
+../venv/Scripts/python.exe -m pytest -q      # Windows
+</code></pre>
+<p>预期（2026-09-19 实测）：</p>
+<pre><code>124 passed, 1 warning in 5.64s
+</code></pre>
+<table>
+<thead>
+<tr>
+<th>测试文件</th>
+<th>覆盖</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>test_brain.py</code></td>
+<td>大脑层：LLM 网关路由/超时/重试、语义缓存<strong>真 Redis 读写</strong>、规划器、缺口检测、来源标注、LangGraph 全链、IN3 审计落账与回放、思考链 6 步与三卡</td>
+</tr>
+<tr>
+<td><code>test_evalset_phase4.py</code></td>
+<td>意图评测集（50 条）级联口径门禁 ≥90%</td>
+</tr>
+<tr>
+<td><code>test_memory_graph.py</code></td>
+<td>IN-02 实体/关系抽取、PG 落图、递归 CTE 子图、压缩率与加载预算</td>
+</tr>
+<tr>
+<td><code>test_intent.py</code> / <code>test_ocr.py</code> / <code>test_chunking.py</code> / <code>test_embedding.py</code> / <code>test_rerank.py</code> / <code>test_http_errors.py</code></td>
+<td>Phase 2/3 存量</td>
+</tr>
+</tbody>
+</table>
+<h3 id="13-wp-bff">1.3 wp-bff 回归<a class="headerlink" href="#13-wp-bff" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd services/node/wp-bff
+node --test
+</code></pre>
+<p>预期：</p>
+<pre><code># tests 55
+# pass 55
+# fail 0
+</code></pre>
+<p>本阶段新增：大脑端点（<code>/brain</code>、<code>/brain/ask</code>、<code>/brain/{decision_id}</code> <strong>含 404 语义</strong>）、
+会话代理（创建 / ask / context / close / stats）、总览驾驶舱指标聚合。</p>
+<h3 id="14">1.4 契约与文档覆盖<a class="headerlink" href="#14" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd /e/AI/ai-agent
+python scripts/contract-check.py                 # 数据字典 ↔ proto：FAIL 0
+python scripts/contract-check.py --work-platform # BFF 契约分层：implemented 21 路径（22 方法） / planned 30 / 前端调用 41，0 FAIL
+</code></pre>
+<hr />
+<h2 id="docker_1">二、端到端演示（需 Docker 基础设施）<a class="headerlink" href="#docker_1" title="Permanent link">&para;</a></h2>
+<h3 id="20">2.0 启动<a class="headerlink" href="#20" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd /e/AI/ai-agent
+docker compose up -d redis postgres qdrant kafka jaeger nacos
+docker ps --format '{{.Names}} {{.Status}}'
+</code></pre>
+<blockquote>
+<p><strong>Nacos 必须在线</strong>：<code>session-manager</code> 启动时会向注册中心注册，Nacos 未就绪会直接
+<code>NacosException: Client not connected</code> 启动失败。</p>
+</blockquote>
+<p>启动 nlp-service（Python，<strong>指定 Redis</strong>）：</p>
+<pre><code class="language-bash">cd services/python/nlp-service
+REDIS_URL=redis://127.0.0.1:6379/0 ../venv/Scripts/python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
+</code></pre>
+<p>启动 Java 服务——<strong>务必显式指定端口</strong>（本机环境变量会污染 <code>server.port</code>）：</p>
+<pre><code class="language-bash">cd services/java
+../../scripts/mvn-dev.sh -pl body-service,session-manager -am package -DskipTests
+
+export JWT_SECRET=agent-lifeform-dev-secret-key-2026-change-me-in-prod
+export DEV_TOKEN_ENDPOINT_ENABLED=true
+export GRPC_PORT=19092          # ⚠️ 默认 9092 会与 Kafka 撞端口，必须覆盖
+
+cd body-service    &amp;&amp; &quot;E:/software/java/jdk-21/bin/java.exe&quot; -Dserver.port=8083 -jar target/body-service-0.1.0-SNAPSHOT.jar &amp;
+cd ../session-manager &amp;&amp; &quot;E:/software/java/jdk-21/bin/java.exe&quot; -Dserver.port=8081 -jar target/session-manager-0.1.0-SNAPSHOT.jar &amp;
+</code></pre>
+<p>启动 BFF 与前端：</p>
+<pre><code class="language-bash">cd services/node/wp-bff &amp;&amp; node server.js          # 8090
+cd web/work-platform &amp;&amp; npm run dev                # 3001
+</code></pre>
+<h3 id="21-r4-03-llm-gateway">2.1 R4-03 LLM Gateway 路由与降级（先确认大脑基座）<a class="headerlink" href="#21-r4-03-llm-gateway" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">curl -s --noproxy '*' http://127.0.0.1:8000/api/nlp/brain/health | python -m json.tool
+</code></pre>
+<p>预期关键字段：</p>
+<pre><code class="language-json">{
+  &quot;llm&quot;: {
+    &quot;available&quot;: true,
+    &quot;engines&quot;: [ { &quot;name&quot;: &quot;template&quot;, &quot;level&quot;: &quot;L1&quot;, &quot;available&quot;: true },
+                 { &quot;name&quot;: &quot;http&quot;,     &quot;level&quot;: &quot;L2&quot;, &quot;available&quot;: false } ],
+    &quot;timeouts&quot;: { &quot;L1&quot;: 3.0, &quot;L2&quot;: 8.0, &quot;L3&quot;: 20.0 },
+    &quot;stats&quot;: { &quot;calls&quot;: 0, &quot;timeouts&quot;: 0, &quot;retries&quot;: 0, &quot;degraded_calls&quot;: 0, &quot;cache_hits&quot;: 0 }
+  },
+  &quot;semantic_cache&quot;: { &quot;backend&quot;: &quot;redis&quot;, &quot;degraded&quot;: false, &quot;threshold&quot;: 0.95, &quot;ttl_seconds&quot;: 3600 },
+  &quot;planner&quot;: { &quot;name&quot;: &quot;SimplePlanner&quot;, &quot;engine&quot;: &quot;rule&quot; },
+  &quot;audit&quot;: { &quot;storage&quot;: { &quot;backend&quot;: &quot;postgres&quot;, &quot;degraded&quot;: false } }
+}
+</code></pre>
+<blockquote>
+<p><strong>R4-03 达标</strong>：L1/L2/L3 三级路由表 + 各级超时 + 调用统计齐备；
+<code>http</code> 引擎 <code>available=false</code> 是<strong>如实上报</strong>（真实 LLM 未接入，DEBT-015/016），不是故障。
+<code>semantic_cache.backend=redis</code> 只有在<strong>真的连上 Redis 且读写都走 Redis</strong> 时才成立（见 2.4）。</p>
+</blockquote>
+<h3 id="22-r4-06">2.2 R4-06 端到端问答（完整决策链）<a class="headerlink" href="#22-r4-06" title="Permanent link">&para;</a></h3>
+<p>用 Python 发 UTF-8 请求（Git Bash 下 <code>curl</code> 发中文会踩编码坑，见 §四）：</p>
+<pre><code class="language-bash">python - &lt;&lt;'PY'
+import json, urllib.request
+op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def post(p, b):
+    r = urllib.request.Request(&quot;http://127.0.0.1:8000&quot;+p,
+        data=json.dumps(b, ensure_ascii=False).encode(&quot;utf-8&quot;),
+        headers={&quot;Content-Type&quot;: &quot;application/json&quot;, &quot;X-Tenant-Id&quot;: &quot;default&quot;}, method=&quot;POST&quot;)
+    return json.load(op.open(r, timeout=60))
+
+r = post(&quot;/api/nlp/brain/ask&quot;, {&quot;question&quot;: &quot;大脑层包含哪些能力？&quot;, &quot;session_id&quot;: &quot;demo-1&quot;})
+print(&quot;generator:&quot;, r[&quot;generator&quot;])
+print(&quot;主步:&quot;, [s[&quot;step&quot;] for s in r[&quot;chain&quot;] if s.get(&quot;kind&quot;, &quot;step&quot;) == &quot;step&quot;])
+print(&quot;来源:&quot;, [(s[&quot;doc_id&quot;], s[&quot;score&quot;]) for s in r[&quot;sources&quot;]])
+print(&quot;覆盖度:&quot;, r[&quot;gap&quot;][&quot;coverage&quot;], &quot;阈值:&quot;, r[&quot;gap&quot;][&quot;threshold&quot;])
+print(&quot;decision_id:&quot;, r[&quot;decision_id&quot;])
+PY
+</code></pre>
+<p>预期（2026-09-19 实测）：</p>
+<pre><code>generator: template
+主步: ['intent', 'plan', 'retrieve', 'generate', 'verify', 'annotate']
+来源: [('brain-capabilities', 0.1945), ('phase3-arch', 0.1017), ...]   # 5 条
+覆盖度: 0.2884 阈值: 0.35
+decision_id: b926e3258e9c...
+</code></pre>
+<blockquote>
+<p><strong>R4-05/R4-06/R4-07/R4-08 达标</strong>：规划 → 检索 → 缺口评估 → 生成 → <strong>自校验</strong> → <strong>来源标注</strong>，
+X4 思考链 6 主步完整（<code>gap</code> 作为 <code>retrieve</code> 的子步展示，避免掩盖"为什么够格生成"这一判据）。
+<code>generator=template</code> 是<strong>如实标注的降级</strong>（规则模板生成，非 LLM），不伪装成模型输出。
+覆盖度 0.2884 ≥ 阈值 0.35 <strong>未达标但 ≥ 可用下限 0.15</strong> → 走"基于现有知识生成 + 标注部分不完整"分支，
+判定逻辑本身正确（阈值口径见 <code>Phase4-需求设计文档.md</code> §6 的口径变更说明）。</p>
+</blockquote>
+<h3 id="23-r4-07">2.3 R4-07 缺口检测：无资料时<strong>明确拒答</strong>而不是编造<a class="headerlink" href="#23-r4-07" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">python - &lt;&lt;'PY'
+import json, urllib.request
+op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+r = urllib.request.Request(&quot;http://127.0.0.1:8000/api/nlp/brain/ask&quot;,
+    data=json.dumps({&quot;question&quot;: &quot;请介绍一下量子纠缠在超导磁悬浮中的应用&quot;}, ensure_ascii=False).encode(),
+    headers={&quot;Content-Type&quot;: &quot;application/json&quot;, &quot;X-Tenant-Id&quot;: &quot;default&quot;}, method=&quot;POST&quot;)
+d = json.load(op.open(r, timeout=60))
+print(&quot;gap:&quot;, d[&quot;gap&quot;])
+print(&quot;degraded_reasons:&quot;, d[&quot;degraded_reasons&quot;])
+print(&quot;answer 前 80 字:&quot;, (d[&quot;answer&quot;] or &quot;&quot;)[:80])
+PY
+</code></pre>
+<p>预期：<code>gap.has_gap=true</code>、<code>gap.usable_chunks=0</code>、<code>degraded_reasons</code> 含 <code>information_gap</code>，
+回答以「⚠️ 信息不足：知识库中未找到可用资料」开头。</p>
+<blockquote>
+<p><strong>R4-07 达标</strong>：缺口<strong>只提示与标注，不静默补内容</strong>。这是本阶段最重要的诚实性约束。</p>
+</blockquote>
+<h3 id="24-r4-04-redis">2.4 R4-04 语义缓存（真 Redis）<a class="headerlink" href="#24-r4-04-redis" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 连打同一问题，观察第二次命中
+python - &lt;&lt;'PY'
+import json, urllib.request, time
+op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def post(q):
+    r = urllib.request.Request(&quot;http://127.0.0.1:8000/api/nlp/brain/ask&quot;,
+        data=json.dumps({&quot;question&quot;: q, &quot;session_id&quot;: &quot;cache-demo&quot;}, ensure_ascii=False).encode(),
+        headers={&quot;Content-Type&quot;: &quot;application/json&quot;, &quot;X-Tenant-Id&quot;: &quot;default&quot;}, method=&quot;POST&quot;)
+    return json.load(op.open(r, timeout=60))
+a = post(&quot;大脑层包含哪些能力？&quot;); print(&quot;ask#1 cache_hit=&quot;, a[&quot;cache_hit&quot;], &quot;耗时&quot;, a[&quot;latency_ms&quot;], &quot;ms&quot;)
+b = post(&quot;大脑层包含哪些能力？&quot;); print(&quot;ask#2 cache_hit=&quot;, b[&quot;cache_hit&quot;], &quot;相似度&quot;, b.get(&quot;cache_similarity&quot;), &quot;耗时&quot;, b[&quot;latency_ms&quot;], &quot;ms&quot;)
+PY
+curl -s --noproxy '*' http://127.0.0.1:8000/api/nlp/brain/cache/stats | python -m json.tool
+# 直接看 Redis 里到底有没有东西
+docker exec lifeform-redis redis-cli --scan --pattern 'brain:cache:*'
+</code></pre>
+<p>预期：<code>ask#2 cache_hit=true</code>、<code>相似度 1.0</code>、耗时由 ~85ms 降到 <strong>~3ms</strong>；
+<code>redis-cli</code> 能列出 <code>brain:cache:default</code> 这类键。</p>
+<blockquote>
+<p><strong>R4-04 达标</strong>：缓存<strong>真的落在 Redis</strong>（<code>docker exec</code> 可验证），命中率 ≥20%（本阶段实测 20%~67%）。
+<strong>复用 Phase 3 嵌入</strong>（哈希 n-gram），命中判定偏字面相似；条目上限 200/租户 + TTL 1h + 租户前缀隔离。
+<strong>只缓存"有生成结果"的回答</strong> —— 缺口拒答结果不进缓存，避免把故障固化。</p>
+</blockquote>
+<h3 id="25-d5x4">2.5 D5/X4 决策链回放与三卡<a class="headerlink" href="#25-d5x4" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">DECISION=$(python -c &quot;
+import json,urllib.request
+op=urllib.request.build_opener(urllib.request.ProxyHandler({}))
+r=urllib.request.Request('http://127.0.0.1:8000/api/nlp/brain/ask',
+ data=json.dumps({'question':'大脑层包含哪些能力？','session_id':'replay-demo'},ensure_ascii=False).encode(),
+ headers={'Content-Type':'application/json','X-Tenant-Id':'default'},method='POST')
+print(json.load(op.open(r,timeout=60))['decision_id'])&quot;)
+
+curl -s --noproxy '*' &quot;http://127.0.0.1:8000/api/nlp/brain/decision/$DECISION&quot; | python -m json.tool
+
+# 不存在的 id 必须 404（不是 200+空链）
+curl -s --noproxy '*' -o /dev/null -w &quot;不存在 id -&gt; HTTP %{http_code}\n&quot; \
+  http://127.0.0.1:8000/api/nlp/brain/decision/deadbeefdeadbeef
+
+# 跨租户访问同样按 404（不泄露&quot;这条决策存在过&quot;）
+curl -s --noproxy '*' -o /dev/null -w &quot;跨租户   -&gt; HTTP %{http_code}\n&quot; \
+  -H &quot;X-Tenant-Id: other-tenant&quot; &quot;http://127.0.0.1:8000/api/nlp/brain/decision/$DECISION&quot;
+
+# 最近决策索引
+curl -s --noproxy '*' &quot;http://127.0.0.1:8000/api/nlp/brain/decisions?limit=5&quot; -H &quot;X-Tenant-Id: default&quot; | python -m json.tool
+
+# 直查审计表（IN3 AuditLog 真的落库了吗）
+docker exec lifeform-postgres psql -U agent -d lifeform -c \
+  &quot;SELECT count(*), max(created_at_iso) FROM brain_decision_log;&quot;
+</code></pre>
+<p>预期：回放返回完整 <code>chain</code> + <strong>三卡</strong>（<code>confidence</code> 决策置信度 / <code>compliance</code> 合规审计 / <code>attribution</code> 归因溯源）；
+不存在 id → <strong>HTTP 404</strong>；跨租户 → <strong>HTTP 404</strong>；PG 表行数随问答增长。</p>
+<blockquote>
+<p><strong>D5/X4 达标</strong>：决策链<strong>真的落 PG</strong>（<code>brain_decision_log</code>，payload JSONB），可按 <code>decision_id</code> 回放。
+<strong>合规卡</strong>四项校验：回答基于检索资料 / 来源已标注 / 降级已如实标注 / 未伪造生成。
+这是 Phase 4 复审的重点修复项 —— 修复前该端点对任意 id 都返 <code>200 + available:true + chain:[]</code>。</p>
+</blockquote>
+<h3 id="26-r4-01r4-02">2.6 R4-01/R4-02 会话状态机与持久化<a class="headerlink" href="#26-r4-01r4-02" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">python - &lt;&lt;'PY'
+import json, urllib.request, urllib.error
+op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+BASE=&quot;http://127.0.0.1:8081&quot;
+def call(p, b=None, m=&quot;POST&quot;):
+    d = json.dumps(b, ensure_ascii=False).encode() if b is not None else None
+    h = {&quot;X-Tenant-Id&quot;:&quot;default&quot;}
+    if d: h[&quot;Content-Type&quot;]=&quot;application/json&quot;
+    r = urllib.request.Request(BASE+p, data=d, headers=h, method=m)
+    return json.load(op.open(r, timeout=60))
+
+s = call(&quot;/api/session&quot;); sid = s[&quot;session_id&quot;]
+print(&quot;create -&gt;&quot;, sid, s[&quot;status&quot;])
+print(&quot;ask#1  -&gt;&quot;, len(call(f&quot;/api/session/{sid}/ask&quot;, {&quot;question&quot;:&quot;大脑层包含哪些能力？&quot;})[&quot;answer&quot;]), &quot;字&quot;)
+print(&quot;ask#2  -&gt;&quot;, len(call(f&quot;/api/session/{sid}/ask&quot;, {&quot;question&quot;:&quot;那语义缓存的阈值是多少？&quot;})[&quot;answer&quot;]), &quot;字&quot;)
+ctx = call(f&quot;/api/session/{sid}/context&quot;)
+print(&quot;context 轮数 -&gt;&quot;, len(ctx.get(&quot;messages&quot;) or []), &quot;status:&quot;, ctx[&quot;status&quot;])
+print(&quot;close  -&gt;&quot;, call(f&quot;/api/session/{sid}&quot;, None, &quot;DELETE&quot;)[&quot;status&quot;])
+try:
+    call(f&quot;/api/session/{sid}/ask&quot;, {&quot;question&quot;:&quot;关闭后还能问吗？&quot;})
+    print(&quot;已关闭再问 -&gt; 竟然 200（错误）&quot;)
+except urllib.error.HTTPError as e:
+    print(&quot;已关闭再问 -&gt; HTTP&quot;, e.code, &quot;（应为 409）&quot;)
+print(&quot;stats -&gt;&quot;, json.dumps(call(&quot;/api/session/stats&quot;, None, &quot;GET&quot;), ensure_ascii=False)[:160])
+PY
+</code></pre>
+<p>预期：<code>ACTIVE</code> → 多轮上下文累积 → <code>CLOSED</code> → 已关闭再问 <strong>409</strong>；<code>stats</code> 返回 <code>active_sessions</code> / <code>by_status</code>。</p>
+<blockquote>
+<p><strong>R4-01 达标</strong>：<code>NEW → ACTIVE ⇄ IDLE → TIMEOUT / CLOSED</code>，非法转移抛 <code>IllegalTransitionException</code>。
+<strong>R4-02 达标</strong>：会话与消息落 <strong>Redis Hash + TTL 2h</strong>；杀进程重启后 <code>GET /{id}/context</code> 仍能重建上下文。</p>
+</blockquote>
+<h3 id="27-in-02">2.7 IN-02 记忆图谱<a class="headerlink" href="#27-in-02" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">python - &lt;&lt;'PY'
+import json, urllib.request
+op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def post(p,b):
+    r=urllib.request.Request(&quot;http://127.0.0.1:8000&quot;+p,data=json.dumps(b,ensure_ascii=False).encode(),
+        headers={&quot;Content-Type&quot;:&quot;application/json&quot;,&quot;X-Tenant-Id&quot;:&quot;default&quot;},method=&quot;POST&quot;)
+    return json.load(op.open(r,timeout=60))
+def get(p):
+    r=urllib.request.Request(&quot;http://127.0.0.1:8000&quot;+p,headers={&quot;X-Tenant-Id&quot;:&quot;default&quot;})
+    return json.load(op.open(r,timeout=60))
+
+m = post(&quot;/api/nlp/brain/memory/ingest&quot;, {&quot;text&quot;:&quot;大脑层依赖检索服务，检索服务依赖躯体层存储。&quot;})
+print(&quot;实体:&quot;, [e[&quot;name&quot;] for e in m[&quot;entities&quot;]])
+print(&quot;关系:&quot;, [(r[&quot;rel&quot;], r[&quot;source&quot;][:6], r[&quot;target&quot;][:6]) for r in m[&quot;relations&quot;]])
+print(&quot;存储:&quot;, m[&quot;storage&quot;][&quot;backend&quot;])
+
+sg = get(&quot;/api/nlp/brain/memory/subgraph?root=%E5%A4%A7%E8%84%91%E5%B1%82&amp;depth=2&quot;)
+print(&quot;子图实体:&quot;, [e[&quot;name&quot;] for e in sg[&quot;entities&quot;]], &quot;加载&quot;, sg[&quot;load_ms&quot;], &quot;ms&quot;)
+
+c = post(&quot;/api/nlp/brain/memory/compress&quot;, {&quot;text&quot;:&quot;大脑层依赖检索服务。&quot;*30})
+print(&quot;压缩:&quot;, &quot;applied=&quot;, c[&quot;applied&quot;], &quot;压缩率=&quot;, c[&quot;compression&quot;], &quot;达标=&quot;, c[&quot;meets_target&quot;])
+PY
+docker exec lifeform-postgres psql -U agent -d lifeform -c \
+  &quot;SELECT (SELECT count(*) FROM memory_entity), (SELECT count(*) FROM memory_relation);&quot;
+</code></pre>
+<p>预期（2026-09-19 实测）：</p>
+<pre><code>实体: ['检索服务', '大脑层', '躯体层存储']
+关系: [('依赖', ...), ('依赖', ...)]   # 2 条
+存储: postgres
+子图实体: ['大脑层', '躯体层存储', '检索服务'] 加载 34.77 ms
+压缩: applied= True 压缩率= 0.8833 达标= True
+</code></pre>
+<blockquote>
+<p><strong>IN-02 达标</strong>：实体关系抽取（<code>extractor=rule</code> 如实标注）+ PG 邻接表 + <strong>递归 CTE</strong> 子图查询；
+压缩率 <strong>0.883 ≥ 0.60</strong>、子图加载 <strong>34.77ms &lt; 100ms</strong>。
+复审修复：关系端点实体原先<strong>不被登记为节点</strong>（"大脑层"不符合任何实体正则）→ 有边无点、子图恒空；现已先补点再建边。</p>
+</blockquote>
+<h3 id="28-90">2.8 意图准确率评测（≥90%）<a class="headerlink" href="#28-90" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">curl -s --noproxy '*' -X POST http://127.0.0.1:8000/api/nlp/intent/eval | python -m json.tool
+</code></pre>
+<p>预期：<code>cascade_accuracy=98.33</code>、<code>l0_accuracy=90.0</code>、<code>pass_accuracy=true</code>。</p>
+<blockquote>
+<p><strong>口径澄清</strong>：线上走<strong>级联引擎</strong>（规则优先 → L0 兜底），因此 ≥90% 以<strong>级联口径</strong>判定；
+L0 单独准确率只是兜底组件指标，一并回传但不作为验收依据。
+50 条评测集在 <code>tests/evalset_phase4.json</code>，门禁固化在 <code>test_evalset_phase4.py</code>。</p>
+</blockquote>
+<h3 id="29-r4-09">2.9 工作平台对话界面（R4-09）<a class="headerlink" href="#29-r4-09" title="Permanent link">&para;</a></h3>
+<p>浏览器打开 <code>http://127.0.0.1:3001</code> → <strong>「工作台」</strong> → 「对话」：</p>
+<table>
+<thead>
+<tr>
+<th>面板</th>
+<th>展示内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>对话区</td>
+<td>多轮问答，会话表头显示<strong>真实 <code>session_id</code></strong>（非 Mock 的任务号）</td>
+</tr>
+<tr>
+<td>来源引用</td>
+<td>每条回答附来源卡片，可展开看<strong>相似度 + 片段浮层</strong></td>
+</tr>
+<tr>
+<td>缺口提示</td>
+<td>覆盖不足时显式提示「部分信息可能不完整 / 信息不足」</td>
+</tr>
+<tr>
+<td>降级徽标</td>
+<td><code>generator</code> 非真实模型时打 <strong>降级徽标</strong></td>
+</tr>
+<tr>
+<td>决策链</td>
+<td>可折叠面板展示 <code>intent → plan → retrieve → generate → verify → annotate</code> 各步耗时</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p><strong>R4-09 达标</strong>：界面走<strong>真实大脑层</strong>（经 BFF → session-manager → nlp-service），不再用浏览器内存数组拼上下文。</p>
+</blockquote>
+<h3 id="210-r-c04">2.10 统一终端大脑视图与交互终端（R-C04）<a class="headerlink" href="#210-r-c04" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">cd web/console &amp;&amp; python -m http.server 8080
+</code></pre>
+<p>浏览器打开 <code>http://127.0.0.1:8080</code> → <strong>「大脑视图」</strong>：</p>
+<table>
+<thead>
+<tr>
+<th>面板</th>
+<th>数据来源</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>LLM 路由状态 / 语义缓存命中率</td>
+<td><code>GET /api/wp/brain</code>（真实）</td>
+</tr>
+<tr>
+<td>知识片段数 / 模型运行时</td>
+<td><code>GET /api/wp/brain</code>（真实）</td>
+</tr>
+<tr>
+<td><strong>活跃会话数 / 意图分布</strong></td>
+<td><code>GET /api/wp/session/stats</code>（真实，session-manager 实时汇总）</td>
+</tr>
+<tr>
+<td>会话趋势（近 7 日）</td>
+<td>演示值，界面<strong>显式标注</strong>「演示图表」</td>
+</tr>
+</tbody>
+</table>
+<p>「交互终端」可输入问题，答复区展示<strong>来源 + 决策链 + 三卡</strong>；BFF 不可用时如实渲染失败提示，<strong>不伪造回复</strong>。</p>
+<blockquote>
+<p><strong>R-C04 达标</strong>：大脑视图展示模型调用/缓存命中/决策链指标；交互终端接真实链路。
+仍为演示值的<strong>只剩会话趋势一图</strong>，已标注（缺按日聚合的时序接口）。</p>
+</blockquote>
+<h3 id="211">2.11 缓存一致性验证（复审修复项）<a class="headerlink" href="#211" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash"># 入库一篇新文档后，立刻用同一问题检索（use_cache=true），新文档必须可见
+python - &lt;&lt;'PY'
+import json, urllib.request
+op = urllib.request.build_opener(urllib.request.ProxyHandler({}))
+def call(base,p,b):
+    r=urllib.request.Request(base+p,data=json.dumps(b,ensure_ascii=False).encode(),
+        headers={&quot;Content-Type&quot;:&quot;application/json&quot;,&quot;X-Tenant-Id&quot;:&quot;default&quot;},method=&quot;POST&quot;)
+    return json.load(op.open(r,timeout=60))
+print(call(&quot;http://127.0.0.1:8083&quot;,&quot;/api/body/knowledge&quot;,
+    {&quot;doc_id&quot;:&quot;demo-cache&quot;,&quot;title&quot;:&quot;缓存一致性&quot;,&quot;content&quot;:&quot;缓存一致性验证：新入库的文档必须立刻可被检索到。&quot;}))
+rows = call(&quot;http://127.0.0.1:8083&quot;,&quot;/api/body/retrieve&quot;,
+    {&quot;query&quot;:&quot;缓存一致性怎么验证？&quot;,&quot;top_k&quot;:5,&quot;use_cache&quot;:True})
+print(&quot;命中:&quot;, [h[&quot;doc_id&quot;] for h in rows[:3]])
+PY
+</code></pre>
+<p>预期：<code>demo-cache</code> <strong>立刻出现在命中列表</strong>。</p>
+<blockquote>
+<p>复审修复项：入库路径原先<strong>不失效检索热缓存</strong>，导致新知识在 TTL（1h）内不可见；
+现单篇/批量入库成功后均调 <code>invalidateTenant</code>，并由 <code>KnowledgeIngestInvalidationTest</code> 4 例固化。</p>
+</blockquote>
+<hr />
+<h2 id="dod">三、量化验收（DoD 对齐）<a class="headerlink" href="#dod" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>验收标准</th>
+<th>实测</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R4-01</td>
+<td>会话状态机；非法转移被拒</td>
+<td><code>NEW→ACTIVE⇄IDLE→TIMEOUT/CLOSED</code>；已关闭再问 <strong>409</strong></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R4-02</td>
+<td>会话持久化，重启可恢复</td>
+<td>Redis Hash + TTL 2h；重启后 <code>context</code> 可重建</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R4-03</td>
+<td>LLM 路由 + 超时重试 + Token 统计</td>
+<td>L1/L2/L3 路由表 + 各级超时 + 调用统计；<strong>真实引擎未接，模板后端如实标降级</strong></td>
+<td>✅（降级）</td>
+</tr>
+<tr>
+<td>R4-04</td>
+<td>语义缓存命中 ≥20%</td>
+<td><strong>真 Redis</strong>（<code>redis-cli</code> 可验证）；实测命中率 20%~67%；相同问题 85ms→3ms</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R4-05</td>
+<td>任务规划器产出模板+槽位</td>
+<td><code>SimplePlanner</code>（<code>planner=rule</code> 如实标注；DEBT-017）</td>
+<td>✅（降级）</td>
+</tr>
+<tr>
+<td>R4-06</td>
+<td>LangGraph RAG 决策链</td>
+<td>6 主步完整（含 <code>verify</code> 自校验）+ 全链 e2e</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R4-07</td>
+<td>缺口检测：不静默补全</td>
+<td>三分支（充分 / 部分 / 关键缺口）；阈值 <strong>0.35</strong>（设计文档已同步）</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R4-08</td>
+<td>来源标注可回溯</td>
+<td>每条回答附 <code>doc_id</code>/<code>chunk_id</code>/<code>score</code>/<code>rerank_score</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R4-09</td>
+<td>前端对话接真实大脑层</td>
+<td><code>ChatView</code> 走 BFF → session-manager → nlp-service，真实 <code>session_id</code></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>R-C04</td>
+<td>大脑视图 + 交互终端</td>
+<td>真实指标 + 真实会话统计；仅"会话趋势"为演示值并标注</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>IN-02</td>
+<td>压缩率 ≥60%；子图加载 &lt;100ms</td>
+<td>压缩率 <strong>0.883</strong>；加载 <strong>34.77ms</strong>；PG 邻接表 + 递归 CTE</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>X4/D5</td>
+<td>思考链 6 步 + 三卡 + 回放</td>
+<td>6 主步 + 三卡 + <code>decision_id</code> 回放；未命中 <strong>404</strong>、跨租户 <strong>404</strong></td>
+<td>✅</td>
+</tr>
+<tr>
+<td>意图准确率</td>
+<td>≥90%</td>
+<td>级联 <strong>98.33%</strong>（n=60）；L0 兜底 90.0%</td>
+<td>✅</td>
+</tr>
+<tr>
+<td>问答 P99</td>
+<td>&lt; 3s</td>
+<td>实测 <strong>85ms</strong>（样本量随问答累积）</td>
+<td>✅</td>
+</tr>
+</tbody>
+</table>
+<p><strong>端到端验收：两套脚本全绿</strong>（<code>.workbuddy/tmp/e2e_phase4.py</code>、<code>e2e_session_phase4.py</code>）。</p>
+<hr />
+<h2 id="_1">四、故障排查<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>现象</th>
+<th>排查</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>session-manager</code> 启动报 <code>Failed to start gRPC health server on port 9092</code></td>
+<td>默认 <code>grpc.port=9092</code> 与 <strong>Kafka 撞端口</strong> → 启动加 <code>GRPC_PORT=19092</code></td>
+</tr>
+<tr>
+<td><code>session-manager</code> 启动报 <code>NacosException: Client not connected</code></td>
+<td><code>lifeform-nacos</code> 容器未运行 → <code>docker start lifeform-nacos</code>，等 healthy 再起服务</td>
+</tr>
+<tr>
+<td>服务起在奇怪端口（如 53568）</td>
+<td>环境变量污染 <code>server.port</code> → 启动加 <code>-Dserver.port=8081</code></td>
+</tr>
+<tr>
+<td>语义缓存 <code>backend=memory</code> / <code>degraded=true</code></td>
+<td>Redis 未启动或 <code>REDIS_URL</code> 不对 → <code>docker compose ps redis</code>；<strong>降级是诚实上报，不是故障</strong></td>
+</tr>
+<tr>
+<td><code>audit.storage.backend=memory</code></td>
+<td>PG 未连上（凭据/容器） → 检查 <code>docker-compose.yml</code> 的 <code>agent/agent123</code>；降级时决策无法跨进程回放</td>
+</tr>
+<tr>
+<td>决策链回放 404，但明明刚问过</td>
+<td>租户不一致 → 请求头 <code>X-Tenant-Id</code> 必须与提问时相同（跨租户按未命中处理，不泄露存在性）</td>
+</tr>
+<tr>
+<td>入库成功但检索不到新文档</td>
+<td>检索热缓存未失效（旧版缺陷）→ 本阶段已修复；仍复现请确认 body-service 是<strong>新构建</strong></td>
+</tr>
+<tr>
+<td><code>curl</code> 发中文返回 500</td>
+<td>Git Bash 下 curl 未正确编码 UTF-8（项目 D-15 坑）→ 改用 Python <code>urllib</code></td>
+</tr>
+<tr>
+<td>BFF 端点 404</td>
+<td>运行的是<strong>旧版</strong> wp-bff 实例 → 重启加载新路由</td>
+</tr>
+<tr>
+<td>打包失败 <code>target/*.jar</code> 被占用</td>
+<td>Windows 文件锁 → 先停运行中的实例再 <code>package</code></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="_2">五、演示完成标准<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<ul>
+<li>[x] Java 全量 <code>test</code> 通过，<strong>162</strong> 测试 0 失败</li>
+<li>[x] Python <strong>124</strong> 项、wp-bff <strong>55</strong> 项全通过；契约门禁 <strong>0 FAIL</strong></li>
+<li>[x] 语义缓存<strong>真接 Redis</strong>（<code>redis-cli</code> 可验证键存在），命中 ≥20%</li>
+<li>[x] 端到端问答跑完整 LangGraph 决策链（6 主步），回答带可回溯来源</li>
+<li>[x] 缺口检测<strong>明确拒答</strong>而不编造；覆盖不足显式提示</li>
+<li>[x] <strong>IN3 AuditLog 真落 PG</strong>，决策链可按 <code>decision_id</code> 回放；未命中/跨租户均 404</li>
+<li>[x] X4 <strong>三卡</strong>（决策置信度 / 合规审计 / 归因溯源）随回放返回</li>
+<li>[x] 会话状态机（ACTIVE→CLOSED，已关闭 409）+ Redis 持久化</li>
+<li>[x] IN-02 记忆图谱：压缩率 0.883、子图加载 34.77ms</li>
+<li>[x] 意图级联准确率 98.33% ≥ 90%（50 条评测集门禁）</li>
+<li>[x] 工作平台对话界面 + Console 大脑视图/交互终端取真实数据</li>
+<li>[x] 降级处处可见（模板生成 / 规则规划 / 哈希嵌入 / 缓存降级 / 审计降级）</li>
+<li>[x] 端到端两套脚本全绿</li>
+</ul>
+<blockquote>
+<p>达标 → Phase 4 验收通过 → 进入 Phase 5（四肢期·工具调用与执行）</p>
+<p><strong>遗留（诚实登记）</strong>：真实 LLM 引擎未接入（DEBT-015/016，<code>generator=template</code>）；
+Console「会话趋势（近 7 日）」为演示值并标注；<code>grpc.port</code> 默认值与 Kafka 冲突待配置侧确认。</p>
+</blockquote></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

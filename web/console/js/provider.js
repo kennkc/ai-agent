@@ -131,6 +131,26 @@
       };
     }
 
+    /**
+     * Mock 模式不创建真实会话 —— `available=false` 且 id 为空，
+     * 界面据此标注「未接入会话链路」，不得本地拼 id 冒充持久化成立。
+     */
+    async createSession() {
+      return { available: false, session_id: '', status: '', reason: 'Mock 数据源不创建真实会话' };
+    }
+
+    async askSession(sessionId, question) {
+      const res = await this.askBrain(question, sessionId, []);
+      return Object.assign({ session_id: String(sessionId || '') }, res);
+    }
+
+    async getSessionStats() {
+      return { available: false, active_sessions: null, by_intent: {}, reason: 'Mock 数据源无会话真相' };
+    }
+
+    /** D5 决策链回放：Mock 下没有审计记录，返回 null（＝查无此决策） */
+    async getDecision() { return null; }
+
     /** 交互终端（R-C04）Mock 问答：明确标注为演示答复，不冒充模型输出 */
     async askBrain(question, sessionId, context) {
       return {
@@ -247,6 +267,52 @@
         })
       });
       return Object.assign({ source: 'api' }, data);
+    }
+
+    /* ── 会话链路（R4-01/02，BFF 代理 session-manager）────────────────
+     * 真实会话 id 由 session-manager 生成并落 Redis，多轮上下文取 Redis
+     * 而不是浏览器数组 —— 这是「重启可恢复」在 Console 上成立的前提。
+     */
+    async createSession() {
+      const data = await this.requestBff('/api/wp/session', {
+        method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}',
+      });
+      return data && data.session_id
+        ? { available: true, session_id: String(data.session_id), status: String(data.status || 'NEW') }
+        : { available: false, session_id: '', status: '', reason: (data && data.reason) || '会话服务不可用' };
+    }
+
+    async askSession(sessionId, question) {
+      const data = await this.requestBff(`/api/wp/session/${encodeURIComponent(sessionId)}/ask`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question }),
+      });
+      return Object.assign({ source: 'api', session_id: String(sessionId || '') }, data);
+    }
+
+    async getSessionStats() {
+      try {
+        const data = await this.requestBff('/api/wp/session/stats');
+        return data && data.available
+          ? data
+          : { available: false, active_sessions: null, by_intent: {}, reason: (data && data.reason) || '会话统计不可读' };
+      } catch (error) {
+        return { available: false, active_sessions: null, by_intent: {}, reason: error.message };
+      }
+    }
+
+    /**
+     * D5 决策链回放：读 IN3 AuditLog。
+     * 语义区分：404（审计里没这条）→ 返回 null；上游不可用 → 抛出（由界面显示降级）。
+     */
+    async getDecision(decisionId) {
+      try {
+        const data = await this.requestBff(`/api/wp/brain/${encodeURIComponent(decisionId)}`);
+        return data && data.available !== false ? data : null;
+      } catch (error) {
+        if (/HTTP 404/.test(String(error.message || ''))) return null;
+        throw error;
+      }
     }
   }
 

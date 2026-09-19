@@ -577,7 +577,10 @@ test('GET /api/wp/brain 上游全不可用时降级可见（不静默填 0）', 
     assert.deepEqual(data.degraded_reasons.sort(),
       ['llm_unavailable', 'retrieval_unavailable', 'semantic_cache_unavailable'])
     assert.equal(data.model_runtime.length, 3)
-    assert.equal(data.sessions.note.includes('session-manager'), true, '会话真相口径要说明来源，不能编造数字')
+    assert.equal(data.sessions.available, false, '会话服务不可用必须明示，不能编造活跃会话数')
+    assert.equal(data.sessions.active_sessions, null, '读不到就是 null，不能填 0 冒充「没有活跃会话」')
+    assert.ok(data.sessions.reason.includes('会话服务不可用'))
+    assert.ok(data.sessions.source.includes('/api/session'))
   }, { jsonRequest: async () => null })
 })
 
@@ -644,12 +647,174 @@ test('POST /api/wp/brain/ask 大脑层不可用时标 available=false', async ()
   }, { jsonRequest: async () => null })
 })
 
-test('GET /api/wp/brain/{decision_id} 决策链回放端点可达', async () => {
+test('GET /api/wp/brain/{decision_id} 查无此决策 → 404（不得用 200+空链冒充成功）', async () => {
+  class NotFound extends Error {
+    constructor() { super('404'); this.status = 404 }
+  }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain/deadbeef' })
+    assert.equal(res.status, 404, '审计里没有这条决策就是 404，绝不能返 200 + chain:[]')
+    assert.equal(res.json.code, 'AGENT_NOT_FOUND')
+    assert.equal(res.json.details.decision_id, 'deadbeef')
+    assert.equal(res.json.details.source, 'in3-auditlog')
+  }, { jsonRequest: async () => { throw new NotFound() } })
+})
+
+test('GET /api/wp/brain/{decision_id} 命中审计记录 → 200 且含六步链与三卡', async () => {
+  const record = {
+    decision_id: 'b6c3bd94',
+    question: '躯体期有哪些能力',
+    chain: [
+      { step: 'intent' }, { step: 'plan' }, { step: 'retrieve' },
+      { step: 'generate' }, { step: 'verify' }, { step: 'annotate' },
+    ],
+    compliance: { grounded: true }, attribution: { cited: 3 }, confidence: 0.72,
+  }
   await withServer(async ({ server }) => {
     const res = await request(server, { path: '/api/wp/brain/b6c3bd94' })
     assert.equal(res.status, 200)
-    assert.equal(res.json.data.decision_id, 'b6c3bd94')
-  }, { jsonRequest: async () => ({ backend: 'redis', stats: {} }) })
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.chain.length, 6, '决策链必须含 verify 自校验，共 6 步')
+    assert.ok(res.json.data.chain.some(n => n.step === 'verify'))
+    assert.ok(res.json.data.compliance && res.json.data.attribution)
+  }, { jsonRequest: async () => record })
+})
+
+test('GET /api/wp/brain/{decision_id} 大脑层整体不可用 → 200 + available:false（降级而非 404）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain/b6c3bd94' })
+    assert.equal(res.status, 200, '上游不可用是降级，不是「查不到」，不能混用 404')
+    assert.equal(res.json.data.available, false)
+    assert.ok(res.json.data.reason.includes('大脑层不可用'))
+  }, { jsonRequest: async () => null })
+})
+
+test('GET /api/wp/brain/decisions 返回最近决策索引', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain/decisions?limit=5' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.items.length, 1)
+  }, { jsonRequest: async () => ({ items: [{ decision_id: 'b6c3bd94' }] }) })
+})
+
+// ─────────── 会话链路代理（B1 · R4-01/02） ───────────
+
+test('POST /api/wp/session 会话服务不可用时不伪造 session_id', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { method: 'POST', path: '/api/wp/session', body: {} })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, false)
+    assert.equal(res.json.data.session_id, undefined, '不可用时必须不给 id，不能生成假会话')
+    assert.ok(res.json.data.reason.includes('会话服务不可用'))
+  }, { jsonRequest: async () => null })
+})
+
+test('POST /api/wp/session 可用时透传真实 session_id', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { method: 'POST', path: '/api/wp/session', body: {} })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.session_id, 'sess-0001')
+  }, { jsonRequest: async () => ({ session_id: 'sess-0001', status: 'NEW' }) })
+})
+
+test('POST /api/wp/session/{id}/ask 空问题 → 400，已关闭会话 → 409', async () => {
+  class Conflict extends Error {
+    constructor() { super('409'); this.status = 409 }
+  }
+  await withServer(async ({ server }) => {
+    const blank = await request(server, {
+      method: 'POST', path: '/api/wp/session/sess-0001/ask', body: { question: '  ' },
+    })
+    assert.equal(blank.status, 400)
+    assert.equal(blank.json.code, 'AGENT_BAD_REQUEST')
+  }, { jsonRequest: async () => ({ answer: 'x' }) })
+
+  await withServer(async ({ server }) => {
+    const closed = await request(server, {
+      method: 'POST', path: '/api/wp/session/sess-0001/ask', body: { question: '再问一句' },
+    })
+    assert.equal(closed.status, 409, '已关闭会话继续追问必须 409，不能静默新建')
+    assert.equal(closed.json.code, 'AGENT_CONFLICT')
+  }, { jsonRequest: async () => { throw new Conflict() } })
+})
+
+test('GET /api/wp/session/{id}/context 透传多轮上下文', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/session/sess-0001/context?turns=5' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.messages.length, 4)
+  }, { jsonRequest: async () => ({ session_id: 'sess-0001', messages: [1, 2, 3, 4] }) })
+})
+
+test('DELETE /api/wp/session/{id} 关闭会话透传终态', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { method: 'DELETE', path: '/api/wp/session/sess-0001' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.status, 'CLOSED')
+  }, { jsonRequest: async () => ({ session_id: 'sess-0001', status: 'CLOSED' }) })
+})
+
+test('GET /api/wp/session/stats 不可用时 active_sessions 为 null（不静默填 0）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/session/stats' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, false)
+    assert.equal(res.json.data.active_sessions, null)
+  }, { jsonRequest: async () => null })
+})
+
+// ─────────── IN-02 记忆图谱代理 ───────────
+
+test('POST /api/wp/brain/memory/ingest 空文本 → 400；可用时透传实体关系', async () => {
+  await withServer(async ({ server }) => {
+    const bad = await request(server, { method: 'POST', path: '/api/wp/brain/memory/ingest', body: { text: ' ' } })
+    assert.equal(bad.status, 400)
+  }, { jsonRequest: async () => ({}) })
+
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/brain/memory/ingest', body: { text: '大脑层依赖检索服务' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.entities.length, 2)
+    assert.equal(res.json.data.relations.length, 1)
+  }, { jsonRequest: async () => ({ entities: ['大脑层', '检索服务'], relations: [['大脑层', '依赖', '检索服务']] }) })
+})
+
+test('GET /api/wp/brain/memory/subgraph 缺 root → 400；命中时透传子图', async () => {
+  await withServer(async ({ server }) => {
+    const bad = await request(server, { path: '/api/wp/brain/memory/subgraph' })
+    assert.equal(bad.status, 400)
+  }, { jsonRequest: async () => ({}) })
+
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain/memory/subgraph?root=%E5%A4%A7%E8%84%91%E5%B1%82&depth=2' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.ok(res.json.data.entities.length >= 1)
+  }, { jsonRequest: async () => ({ entities: [{ name: '大脑层' }], relations: [] }) })
+})
+
+// ─────────── 总览驾驶舱（C3） ───────────
+
+test('GET /api/wp/overview 携带 model_calls / model_runtime 驾驶舱指标', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/overview' })
+    assert.equal(res.status, 200)
+    const data = res.json.data
+    assert.ok(Array.isArray(data.model_calls), '驾驶舱需要模型调用次数序列')
+    assert.ok(Array.isArray(data.model_runtime), '驾驶舱需要模型节点运行时状态')
+    assert.equal(data.model_runtime.length >= 3, true)
+    assert.ok(data.model_runtime.every(n => n.node && n.state))
+  }, {
+    jsonRequest: async url => String(url).includes('/brain/health')
+      ? { llm: { available: true, stats: { calls: 3 } }, semantic_cache: { backend: 'redis', degraded: false } }
+      : null,
+  })
 })
 
 test('GET /api/wp/brain 用不支持的方法 → 405 且带 Allow 头', async () => {

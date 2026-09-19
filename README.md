@@ -2,7 +2,9 @@
 
 > 当前基线：Phase 0 / Phase 1 / Phase 2 / Phase 3 / **Phase 4（大脑期）** 均已交付并通过验收；
 > VS1 垂直切片、Phase 3 知识闭环与 Phase 4 大脑问答链路均已打通
-> （**155 Java + 97 Python + 43 wp-bff tests green**，契约校验 0 FAIL，Java 文档覆盖 113/113）。
+> （**162 Java + 124 Python + 55 wp-bff tests green**，契约校验 0 FAIL，Java 文档覆盖 113/113）。
+> 另：Phase 4 交付后于 **2026-09-19 完成需求复审与补全**（2 项语义级伪实现已修复 + 3 项跨链路
+> 一致性缺陷已闭合 + 未落地项补齐），详见三件套补记与 `docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md`。
 > 下一阶段为 **Phase 5（四肢期 / 工具调用与执行视图）**。
 > 技术栈：Java 21 + Spring Cloud Alibaba + Python 3.12 + FastAPI + Vue 3 + Vite + Element Plus。
 

@@ -13,7 +13,9 @@ import re
 from dataclasses import dataclass, field
 from typing import Dict, List, Tuple
 
-from .corpus import RULE_KEYWORDS, RULE_PATTERNS
+from .corpus import (
+    EXPLAIN_PREFIXES, OPERATIONAL_INTENTS, OPERATION_DAMPING, RULE_KEYWORDS, RULE_PATTERNS,
+)
 
 NORMALIZE_RE = re.compile(r"[\s,，。！!？?、；;：:\"'“”‘’（）()【】\[\]…~]+")
 HIT_THRESHOLD = 0.35
@@ -41,14 +43,22 @@ class RuleIntentEngine:
     def score(self, text: str) -> Dict[str, Tuple[float, List[str]]]:
         """返回每个场景的 (综合得分, 命中特征)
 
-        综合得分 = 0.6 × 特征强度 + 0.4 × 句尾位置权重
-        —— 中文意图核心通常落在句尾动宾结构上，位置权重用于消解
+        综合得分 = 0.7 × 特征强度 + 0.3 × 位置权重
+        —— 中文意图核心常落在句尾动宾结构上，位置权重用于消解
         「算一下……汇总」这类多场景并列的歧义（汇总在句尾 → 判汇总报告）。
+
+        位置权重取 `(0.5 + 0.5 × 句尾比例)` 而非裸比例：
+        它只应让句尾特征**略微占优**（并列歧义的差值保持不变），
+        而不能把句首强特征压到命中阈值以下——「定义一下……」命中的是句首特征，
+        按裸比例算只有 0.2，会被误判为「未命中」而落到 L0 兜底成闲聊。
         """
         plain = self.normalize(text)
         raw_text = text or ""
         raw_len = max(1, len(raw_text))
         plain_len = max(1, len(plain))
+        # 概念解释问句（「如何理解…」「什么是…」）里出现的操作类关键词属于**被解释的对象**，
+        # 不是要执行的动作 —— 对操作类场景打折，避免「…的子图查询」被判成「数据查询」。
+        explains_concept = any(prefix in plain for prefix in EXPLAIN_PREFIXES)
         scores: Dict[str, Tuple[float, List[str]]] = {}
         for intent, keywords in RULE_KEYWORDS.items():
             hit_weight = 0.0
@@ -74,7 +84,9 @@ class RuleIntentEngine:
                 continue
             normalized = hit_weight / (hit_weight + 1.0)          # 饱和函数 → [0,1)
             tail_ratio = min(1.0, last_end / plain_len)            # 句尾位置权重
-            combined = 0.6 * normalized + 0.4 * tail_ratio
+            combined = 0.7 * normalized + 0.3 * (0.5 + 0.5 * tail_ratio)
+            if explains_concept and intent in OPERATIONAL_INTENTS:
+                combined *= OPERATION_DAMPING
             scores[intent] = (round(combined, 4), matched)
         return scores
 

@@ -148,8 +148,14 @@ def parse_frontend_endpoints(path):
 
 
 def normalize_frontend_path(p):
-    """前端模板变量 ${x} 归一化为 {param}，并确保以 / 开头"""
+    """前端模板变量 ${x} 归一化为 {param}，并确保以 / 开头。
+
+    查询串（`?turns=6`）**不属于路径身份**：契约里登记的是 `/session/{id}/context`
+    这样一条路径，查询参数是它的可变入参。若把查询串留在路径里参与比对，
+    就会出现「前端正常调用、契约也已登记，却报未登记」的假失败。
+    """
     p = re.sub(r"\$\{[^}]+\}", "{param}", p)
+    p = p.split("?", 1)[0]
     return p if p.startswith("/") else "/" + p
 
 

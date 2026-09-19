@@ -852,6 +852,193 @@ paths:
           $ref: '#/components/responses/ErrorEnvelope'
         '405':
           $ref: '#/components/responses/ErrorEnvelope'
+  /brain/decisions:
+    x-wp-status: implemented
+    get:
+      summary: 决策索引（D5）：最近 N 条决策清单，数据来自 IN3 AuditLog
+      parameters:
+        - { name: limit, in: query, required: false, schema: { type: integer, default: 10 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /brain/memory/ingest:
+    x-wp-status: implemented
+    post:
+      summary: 'IN-02 记忆图谱写入：文本 → 实体抽取 + 关系建图（PG 邻接表）'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+                tenant_id: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /brain/memory/compress:
+    x-wp-status: implemented
+    post:
+      summary: 'IN-02 上下文压缩：长会话按记忆子图压缩（压缩率 ≥60%）'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [text]
+              properties:
+                text: { type: string }
+                tenant_id: { type: string }
+                depth: { type: integer, default: 2 }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /brain/memory/subgraph:
+    x-wp-status: implemented
+    get:
+      summary: 'IN-02 子图查询：以 root 为起点按 depth 递归（PG 递归 CTE，<100ms）'
+      parameters:
+        - { name: root, in: query, required: true, schema: { type: string } }
+        - { name: tenant_id, in: query, required: false, schema: { type: string } }
+        - { name: depth, in: query, required: false, schema: { type: integer, default: 2 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /brain/memory/stats:
+    x-wp-status: implemented
+    get:
+      summary: 'IN-02 记忆图谱统计：实体数 / 关系数 / 降级状态'
+      parameters:
+        - { name: tenant_id, in: query, required: false, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /session:
+    x-wp-status: implemented
+    post:
+      summary: 'R4-01 创建会话（代理 session-manager，FSM NEW→ACTIVE）'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /session/stats:
+    x-wp-status: implemented
+    get:
+      summary: 'R-C04 会话真相：活跃会话数与意图分布（session-manager Redis SCAN 实时汇总）'
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /session/{session_id}:
+    x-wp-status: implemented
+    delete:
+      summary: 'R4-01 关闭会话（FSM → CLOSED）'
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /session/{session_id}/ask:
+    x-wp-status: implemented
+    post:
+      summary: 'R4-01/02 会话问答：FSM 校验 → 意图 → 大脑层（多轮上下文取自 Redis 持久化）'
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '409':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /session/{session_id}/context:
+    x-wp-status: implemented
+    get:
+      summary: 'R4-02 多轮上下文回放（重启可恢复的证据来源）'
+      parameters:
+        - { name: session_id, in: path, required: true, schema: { type: string } }
+        - { name: turns, in: query, required: false, schema: { type: integer, default: 10 } }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
   /evolution:
     x-wp-status: planned
     get:

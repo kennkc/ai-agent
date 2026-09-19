@@ -75,6 +75,10 @@ public class KnowledgeController {
         IngestService.IngestOutcome outcome = ingestService.ingest(tenantId, request.doc_id(), request.title(),
                 request.content(), request.source(), request.format());
         metrics.recordIngest(outcome.chunkCount(), true);
+        // 新知识入库必须失效该租户的检索热缓存：缓存键是「租户 + 问题指纹」，
+        // 命中即直接返回旧结果集；不失效就会出现「文档已入库、同一个问题仍检索不到」的
+        // 一致性缺陷（对新知识的可见性随 TTL 才恢复）。删除路径已有失效，写路径此前缺失。
+        storage.hot().invalidateTenant(tenantId);
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("doc_id", outcome.docId());
         result.put("chunk_count", outcome.chunkCount());
@@ -105,6 +109,9 @@ public class KnowledgeController {
                 results.add(Map.of("doc_id", String.valueOf(item.doc_id()), "status", "FAILED",
                         "success", false, "error", String.valueOf(e.getMessage())));
             }
+        }
+        if (success > 0) {
+            storage.hot().invalidateTenant(tenantId);   // 同单篇入库：批量写入后同样要失效热缓存
         }
         Map<String, Object> result = new LinkedHashMap<>();
         result.put("total", request.documents().size());

@@ -187,6 +187,14 @@ async function renderBrain(){
   const llmStats = llm.stats || {};
   const runtime = ov.model_runtime || [];
   const reasons = ov.degraded_reasons || [];
+  // 会话真相：/api/wp/brain 的 sessions 分片来自 session-manager；读不到时 active_sessions 为 null，
+  // 此时意图分布退回演示值并显式标注（不把「读不到」画成真实分布）。
+  const sessions = ov.sessions || null;
+  const intentDist = sessions && sessions.available && sessions.by_intent && Object.keys(sessions.by_intent).length
+    ? Object.entries(sessions.by_intent).map(([n, v]) => ({ n, v }))
+    : MOCK.brain.intent_dist;
+  // 图表在 renderCharts 里绘制（晚于本函数），真实分布经此变量传递，避免写死演示值
+  window.__brainIntent = intentDist;
 
   return `
   <div class="view-title"><h2>🧠 大脑视图</h2><span class="desc">会话 · 意图 · 任务规划 · 大脑运行时</span></div>
@@ -197,6 +205,9 @@ async function renderBrain(){
     ${card('LLM 调用次数', llmStats.calls != null ? llmStats.calls : '-','','完成 Token：' + (llmStats.completion_tokens != null ? llmStats.completion_tokens : '-'))}
     ${card('语义缓存命中率', cacheStats.hit_rate != null ? (cacheStats.hit_rate * 100).toFixed(1) + '%' : '-', (cacheStats.hit_rate || 0) >= 0.2 ? 'g' : 'r', `后端：${cache.backend || '-'} · 命中 ${cacheStats.hits != null ? cacheStats.hits : '-'}/${cacheStats.lookups != null ? cacheStats.lookups : '-'}`)}
     ${card('知识片段数', retrieval.chunks != null ? retrieval.chunks : '-','',`检索后端：${retrieval.backend || '-'}`)}
+    ${card('活跃会话', sessions && sessions.available && sessions.active_sessions != null ? sessions.active_sessions : '-',
+      sessions && sessions.available ? 'g' : 'r',
+      sessions && sessions.available ? 'session-manager Redis 实时汇总' : escapeHtml((sessions && sessions.reason) || '会话真相不可读'))}
   </div>
   <div class="grid c2">
     <div class="card"><div class="k">模型运行时（R-C04）</div><table><tr><th>节点</th><th>状态</th><th>调用</th></tr>${
@@ -205,15 +216,17 @@ async function renderBrain(){
     }</table></div>
     <div class="card"><div class="k">降级与口径</div>
       <div class="metric"><span>degraded_reasons</span><b>${reasons.length ? escapeHtml(reasons.join('、')) : '无'}</b></div>
-      <div class="metric"><span>会话真相来源</span><b style="font-size:12px">${escapeHtml((ov.sessions && ov.sessions.source) || '未接入')}</b></div>
-      <div class="s" style="white-space:normal;line-height:1.6">${escapeHtml((ov.sessions && ov.sessions.note) || '')}</div>
+      <div class="metric"><span>会话真相来源</span><b style="font-size:12px">${escapeHtml((sessions && sessions.source) || ((sessions && sessions.available) ? 'session-manager' : '未接入'))}</b></div>
+      <div class="s" style="white-space:normal;line-height:1.6">${escapeHtml((sessions && (sessions.reason || sessions.note)) || '')}</div>
     </div>
   </div>
   <div class="grid c2">
-    ${chartCard('意图分布','doughnut',null,MOCK.brain.intent_dist,'#185fa5')}
+    ${chartCard('意图分布','doughnut',null,intentDist,'#185fa5')}
     ${chartCard('会话趋势（近7日）','line',['D1','D2','D3','D4','D5','D6','D7'],MOCK.brain.trend,'#185fa5')}
   </div>
-  <div class="status-bar"><span>上方两图为<b>演示图表</b>（后端暂无意图分布/会话趋势统计接口，数字非真实指标）</span><span>问答链路：<b>${ov.brain_available ? '大脑层在线' : '大脑层离线'}</b></span></div>`;
+  <div class="status-bar"><span>${sessions && sessions.available
+    ? '意图分布为<b>真实统计</b>（session-manager Redis SCAN 汇总）；会话趋势仍为<b>演示图表</b>（后端无七日留存统计接口）'
+    : '上方两图为<b>演示图表</b>（会话统计不可读，数字非真实指标）'}</span><span>问答链路：<b>${ov.brain_available ? '大脑层在线' : '大脑层离线'}</b></span></div>`;
 }
 
 function sensorCard(sensor){
@@ -428,7 +441,7 @@ function renderChat(){
   return `
   <div class="view-title"><h2>💬 交互终端</h2><span class="desc">多轮对话 · 来源标注 · 降级可见（数据源 ${ds.toUpperCase()}）</span></div>
   <div class="chat-box">
-    <div class="chat-head"><span>Agent 会话</span><span style="margin-left:auto;font-size:11px;color:var(--text2)">会话 ${CHAT_SESSION} · 租户 default${ds === 'api' ? ` · BFF ${window.ConsoleDataProvider.bffBase}` : ''}</span></div>
+    <div class="chat-head"><span>Agent 会话</span><span style="margin-left:auto;font-size:11px;color:var(--text2)">租户 default${ds === 'api' ? ` · BFF ${window.ConsoleDataProvider.bffBase}` : ''} · <span class="session-tag">建立会话中…</span></span></div>
     <div class="chat-body" id="chatBody">
       <div class="msg ai">${intro}</div>
     </div>
@@ -441,6 +454,25 @@ function renderChat(){
 
 /** 一轮问答的会话上下文（多轮对话真相由 session-manager 维护，此处只透传最近 6 轮） */
 let chatTurns = [];
+/**
+ * 真实会话句柄（R4-01）。api 模式下由 session-manager 生成 id 并落 Redis；
+ * 不可用时保持 available=false，界面标注「未接入会话链路」，绝不本地拼 id。
+ */
+let chatSession = { available: false, session_id: '', status: '', reason: '' };
+
+async function ensureChatSession(){
+  if (chatSession.available) return chatSession;
+  try{
+    chatSession = await window.ConsoleDataProvider.source.createSession();
+  }catch(e){ chatSession = { available:false, session_id:'', status:'', reason:e.message }; }
+  const head = document.querySelector('.chat-head .session-tag');
+  if (head) {
+    head.textContent = chatSession.available
+      ? `会话 ${chatSession.session_id.slice(0, 12)} · ${chatSession.status || 'ACTIVE'}（Redis 持久化）`
+      : `未接入会话链路${chatSession.reason ? '：' + chatSession.reason : ''}`;
+  }
+  return chatSession;
+}
 
 function renderAiMessage(res){
   const sources = res.sources || [];
@@ -456,6 +488,7 @@ function renderAiMessage(res){
     ${gap.has_gap ? `<br><span class="src">⚠ 知识库覆盖不足：可用片段 ${gap.usable_chunks != null ? gap.usable_chunks : 0} 条 · 覆盖度 ${Math.round((gap.coverage || 0) * 100)}%</span>` : ''}
     ${sources.length ? `<br><span class="src">📌 来源：${sources.slice(0, 5).map(s => `${escapeHtml(s.title)}${s.score != null ? '（' + Math.round(s.score * 100) + '%）' : ''}`).join(' · ')}</span>` : ''}
     ${chain.length ? `<br><span class="src">🧭 决策链：${chain.map(c => `${escapeHtml(c.step)}${c.latency_ms != null ? ' ' + c.latency_ms + 'ms' : ''}`).join(' → ')}${res.decision_id ? ' · ' + escapeHtml(String(res.decision_id)).slice(0, 12) : ''}</span>` : ''}
+    ${(res.compliance || res.attribution || res.confidence != null) ? `<br><span class="src">🛡 合规 ${res.compliance ? escapeHtml(JSON.stringify(res.compliance)) : '-'} · 归因 ${res.attribution ? escapeHtml(JSON.stringify(res.attribution)) : '-'} · 置信 ${res.confidence != null ? res.confidence : '-'}</span>` : ''}
   </div>`;
 }
 
@@ -470,9 +503,25 @@ async function sendChat(){
   body.insertAdjacentHTML('beforeend', `<div class="msg ai" id="${pendingId}">检索与生成中…</div>`);
   body.scrollTop = body.scrollHeight;
   try{
-    const res = await window.ConsoleDataProvider.source.askBrain(text, CHAT_SESSION, chatTurns.slice(-6));
-    // 大脑层不可用（available=false）**绝不渲染成成功回复**
+    // 优先走真实会话链路（上下文取 session-manager 的 Redis，重启可恢复）；
+    // 会话不可用时退回 /brain/ask，并在徽标上如实标注 session_unavailable。
+    const sess = await ensureChatSession();
+    let res = sess.available
+      ? await window.ConsoleDataProvider.source.askSession(sess.session_id, text)
+      : await window.ConsoleDataProvider.source.askBrain(text, CHAT_SESSION, chatTurns.slice(-6));
+    if (!res || res.available === false){
+      // 会话可能已关闭/过期：重开一次再试，仍失败才报错
+      if (sess.available){
+        chatSession = { available:false, session_id:'', status:'', reason:'' };
+        const retry = await ensureChatSession();
+        if (retry.available) res = await window.ConsoleDataProvider.source.askSession(retry.session_id, text);
+      }
+    }
     if (!res || res.available === false) throw new Error((res && res.reason) || '大脑层不可用');
+    if (!sess.available){
+      res.degraded = true;
+      res.degraded_reasons = Array.from(new Set([...(res.degraded_reasons || []), 'session_unavailable']));
+    }
     chatTurns.push({ role: 'user', content: text }, { role: 'assistant', content: res.answer });
     const node = document.getElementById(pendingId);
     if (node) node.outerHTML = renderAiMessage(res); else body.insertAdjacentHTML('beforeend', renderAiMessage(res));
@@ -497,6 +546,8 @@ async function switchView(name){
     main.innerHTML = result;
   }
   if (name === 'sense') renderSenseTrend(); else renderCharts(name);
+  // 交互终端渲染后立即建立真实会话（R4-01），会话号与状态显示在标题栏
+  if (name === 'chat') ensureChatSession();
 }
 
 /** 感官趋势图（数据来自 provider，与数据源无关） */
@@ -515,7 +566,7 @@ function renderSenseTrend(){
 function renderCharts(name){
   Object.keys(charts).forEach(k=>{try{charts[k].destroy()}catch(e){}}); charts={};
   const specs = {
-    brain:[{id:'c-意图分布',type:'doughnut',data:MOCK.brain.intent_dist.map(x=>x.v),labels:MOCK.brain.intent_dist.map(x=>x.n),colors:['#185fa5','#0f6e56','#c05621','#94a3b8']},
+    brain:[{id:'c-意图分布',type:'doughnut',data:(window.__brainIntent||MOCK.brain.intent_dist).map(x=>x.v),labels:(window.__brainIntent||MOCK.brain.intent_dist).map(x=>x.n),colors:['#185fa5','#0f6e56','#c05621','#94a3b8']},
            {id:'c-会话趋势（近7日）',type:'line',data:MOCK.brain.trend,labels:['D1','D2','D3','D4','D5','D6','D7'],color:'#185fa5'}],
     // sense 视图趋势图由 renderSenseTrend 基于 ConsoleDataProvider 数据绘制（mock/api 双源一致）
     body:[{id:'c-检索延迟趋势（近6日）',type:'line',data:MOCK.body.retrieve_trend,labels:['D1','D2','D3','D4','D5','D6'],color:'#7c5cbf'}],

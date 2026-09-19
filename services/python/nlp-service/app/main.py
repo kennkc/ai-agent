@@ -10,6 +10,7 @@ Phase 3: 躯体期 —— 嵌入（BGE-M3/降级哈希）+ 重排（bge-reranker
 """
 import logging
 import time
+from collections import deque
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
@@ -17,7 +18,9 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from app.brain.audit import AUDIT_LOG
 from app.brain.llm_gateway import LlmGateway, LLM_GATEWAY, TemplateEngine
+from app.brain.memory_graph import MEMORY_GRAPH
 from app.brain.pipeline import RagPipeline
 from app.brain.planner import PLANNER
 from app.brain.retrieval import RETRIEVER
@@ -36,6 +39,9 @@ app = FastAPI(
 
 # Phase 4 大脑层：LLM 路由 + RAG 管线（默认引擎为模板降级后端，见 llm_gateway）
 BRAIN_PIPELINE = RagPipeline(gateway=LLM_GATEWAY, cache=SEMANTIC_CACHE)
+
+# 问答耗时滑动窗口（DoD 要求 **P99 < 3s**，不能用单次耗时代言）
+LATENCY_WINDOW: deque = deque(maxlen=500)
 
 logger = logging.getLogger("nlp-service")
 
@@ -130,16 +136,31 @@ class BrainPlanRequest(BaseModel):
     intent_confidence: float = 1.0
 
 
+def resolve_tenant(request: Request, body_tenant: str = "") -> str:
+    """租户标识的**唯一解析口径**。
+
+    约定：请求头 `X-Tenant-Id` 优先（传输层身份），其次请求体 `tenant_id`，最后回退 `default`。
+    本服务所有「写入 + 查询」必须走同一来源 —— 否则会出现
+    「按 A 租户落库、按 B 租户回放」的 404 假象，把真实缺陷伪装成"数据不存在"。
+    """
+    header_tenant = (request.headers.get("x-tenant-id") or "").strip()
+    if header_tenant:
+        return header_tenant
+    body_value = (body_tenant or "").strip()
+    return body_value or "default"
+
+
 @app.post("/api/nlp/brain/ask")
-def brain_ask(req: BrainAskRequest):
+def brain_ask(req: BrainAskRequest, request: Request):
     """R4-06 端到端问答：规划 → 检索 → 生成 → 来源标注（含缺口检测与语义缓存）。"""
     if not req.question.strip():
         raise HTTPException(status_code=400, detail="question must not be blank")
+    tenant_id = resolve_tenant(request, req.tenant_id)
     # 未提供意图时用本服务意图级联补齐（与 Phase 2 同源）
     intent, confidence = req.intent, req.intent_confidence
     if not intent:
         try:
-            recognized = CASCADE.recognize(req.question, req.session_id, req.tenant_id)
+            recognized = CASCADE.recognize(req.question, req.session_id, tenant_id)
             intent = recognized.intent
             confidence = recognized.confidence
         except Exception:  # noqa: BLE001 - 意图失败不阻断问答，降级为未知意图
@@ -147,12 +168,13 @@ def brain_ask(req: BrainAskRequest):
     result = BRAIN_PIPELINE.run(
         question=req.question,
         session_id=req.session_id,
-        tenant_id=req.tenant_id,
+        tenant_id=tenant_id,
         intent=intent,
         intent_confidence=confidence,
         context=req.context,
         use_cache=req.use_cache,
     )
+    LATENCY_WINDOW.append(float(result.latency_ms))
     return result.to_dict()
 
 
@@ -172,6 +194,8 @@ def brain_health():
         "semantic_cache": SEMANTIC_CACHE.health(),
         "planner": {"name": "SimplePlanner", "engine": "rule"},
         "retrieval": {"base_url": RETRIEVER.base_url, "timeout": RETRIEVER.timeout},
+        "audit": {"storage": AUDIT_LOG.storage(), "stats": AUDIT_LOG.stats()},
+        "latency": latency_percentiles(),
     }
 
 
@@ -179,6 +203,93 @@ def brain_health():
 def brain_cache_stats():
     """R4-04 语义缓存命中统计（命中率 = hits / lookups）。"""
     return SEMANTIC_CACHE.health()
+
+
+@app.get("/api/nlp/brain/decision/{decision_id}")
+def brain_decision(decision_id: str, request: Request):
+    """D5/X4 思考链回放：读 **IN3 AuditLog** 真实记录。
+
+    口径：**查不到就是 404**（未找到 ≠ 空链），不存在「200 + 空数据」的伪成功；
+    跨租户访问与"不存在"同等处理，不泄露决策是否曾发生。
+    """
+    tenant_id = resolve_tenant(request)
+    record = AUDIT_LOG.replay(decision_id, tenant_id)
+    if not record:
+        raise HTTPException(status_code=404, detail="decision not found: " + decision_id)
+    return record
+
+
+@app.get("/api/nlp/brain/decisions")
+def brain_decisions(request: Request, limit: int = 10):
+    """最近决策索引（供决策沙盘选择与大脑视图展示）。"""
+    tenant_id = resolve_tenant(request)
+    return {
+        "tenant_id": tenant_id,
+        "items": AUDIT_LOG.recent(tenant_id, max(1, min(int(limit), 100))),
+        "storage": AUDIT_LOG.storage(),
+    }
+
+
+# ─────────── IN-02 记忆图谱 ───────────
+class MemoryIngestRequest(BaseModel):
+    text: str
+    tenant_id: str = "default"
+
+
+class MemoryCompressRequest(BaseModel):
+    text: str
+    tenant_id: str = "default"
+    depth: int = 2
+
+
+@app.post("/api/nlp/brain/memory/ingest")
+def brain_memory_ingest(req: MemoryIngestRequest, request: Request):
+    """IN-02：会话/文档文本 → 实体关系抽取并落图（规则抽取，如实标 extractor=rule）。"""
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="text must not be blank")
+    return MEMORY_GRAPH.ingest(req.text, resolve_tenant(request, req.tenant_id))
+
+
+@app.get("/api/nlp/brain/memory/subgraph")
+def brain_memory_subgraph(root: str, request: Request, tenant_id: str = "default", depth: int = 2):
+    """IN-02：按根实体加载子图（递归 CTE；实体不存在时如实说明，不返回空成功）。"""
+    graph = MEMORY_GRAPH.subgraph(root, resolve_tenant(request, tenant_id), depth)
+    payload = graph.to_dict()
+    payload["within_load_budget"] = graph.load_ms < 100
+    payload["load_budget_ms"] = 100
+    return payload
+
+
+@app.post("/api/nlp/brain/memory/compress")
+def brain_memory_compress(req: MemoryCompressRequest, request: Request):
+    """IN-02：上下文压缩（实测压缩率，不达阈值如实标 meets_target=false）。"""
+    if not req.text.strip():
+        raise HTTPException(status_code=400, detail="text must not be blank")
+    return MEMORY_GRAPH.compress(req.text, resolve_tenant(request, req.tenant_id), req.depth)
+
+
+@app.get("/api/nlp/brain/memory/stats")
+def brain_memory_stats(request: Request, tenant_id: str = "default"):
+    """IN-02：图谱规模与存储后端（PG 不可用时降级可见）。"""
+    return MEMORY_GRAPH.stats(resolve_tenant(request, tenant_id))
+
+
+def latency_percentiles() -> dict:
+    """问答耗时分位（P50/P95/P99），样本不足时如实标注 sample_size。"""
+    samples = sorted(LATENCY_WINDOW)
+    if not samples:
+        return {"sample_size": 0, "p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "max_ms": 0, "basis": "no_sample"}
+    def at(q: float) -> float:
+        index = min(len(samples) - 1, int(round((len(samples) - 1) * q)))
+        return float(samples[index])
+    return {
+        "sample_size": len(samples),
+        "p50_ms": round(at(0.50), 1),
+        "p95_ms": round(at(0.95), 1),
+        "p99_ms": round(at(0.99), 1),
+        "max_ms": round(float(samples[-1]), 1),
+        "basis": "recent_window_500",
+    }
 
 
 # ─────────── 意图识别 ───────────
@@ -232,10 +343,32 @@ def intent_stats():
 
 @app.post("/api/nlp/intent/eval")
 def intent_eval():
-    """TC-04 留出集评测：≥10 场景 × 5 样本，输出准确率与延迟"""
-    accuracy, summary = CASCADE.l0.accuracy(EVAL_CORPUS)
+    """TC-04 留出集评测 + Phase 4 需求口径（意图准确率 ≥90%）。
+
+    **口径澄清（重要）**：线上走的是**级联引擎**（规则 → L0 兜底），
+    因此需求 §DoD 的「意图准确率 ≥90%」必须以级联口径判定；
+    L0 单独准确率只是兜底组件指标，一并回传但**不作为验收依据**。
+    """
+    l0_accuracy, summary = CASCADE.l0.accuracy(EVAL_CORPUS)
+    hit = total = 0
+    per_scenario: dict[str, list[int]] = {}
+    for label, texts in EVAL_CORPUS.items():
+        for text in texts:
+            total += 1
+            ok = CASCADE.recognize(text).intent == label
+            hit += 1 if ok else 0
+            bucket = per_scenario.setdefault(label, [0, 0])
+            bucket[1] += 1
+            bucket[0] += 1 if ok else 0
+    cascade_accuracy = round(100.0 * hit / total, 2) if total else 0.0
+    summary["basis"] = "cascade(rule->L0)"
+    summary["cascade_accuracy"] = cascade_accuracy
+    summary["cascade_samples"] = total
+    summary["cascade_per_scenario"] = {k: round(100.0 * v[0] / v[1], 2) for k, v in per_scenario.items()}
+    summary["l0_accuracy"] = l0_accuracy
     summary["core_scenario_accuracy"] = {k: v for k, v in summary["per_scenario"].items() if k in CORE_SCENARIOS}
-    summary["pass_accuracy"] = accuracy >= 85.0
+    # 验收门槛按级联口径；延迟门槛仍按意图识别的亚毫秒目标
+    summary["pass_accuracy"] = cascade_accuracy >= 90.0
     summary["pass_latency"] = summary["latency_p99_ms"] < 50.0
     return summary
 

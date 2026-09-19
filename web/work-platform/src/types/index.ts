@@ -103,6 +103,39 @@ export interface BrainAnswer {
   latency_ms?: number
   data_source?: 'mock' | 'live'
   reason?: string
+  /** 所属真实会话（session-manager 生成），未走会话链路时为空 */
+  session_id?: string
+  /** 会话状态机状态：NEW / ACTIVE / IDLE / TIMEOUT / CLOSED */
+  session_status?: string
+}
+
+/**
+ * R4-01 会话句柄。
+ * `available=false` 表示会话服务不可用 —— 此时 `session_id` 必为空字符串，
+ * 界面不得本地拼一个 id 冒充（那会让「多轮上下文持久化」看起来成立实则不存在）。
+ */
+export interface SessionInfo {
+  available: boolean
+  session_id: string
+  status: string
+  reason?: string
+}
+
+/** R4-02 多轮上下文（来自 Redis，不是浏览器内存） */
+export interface SessionContext {
+  available: boolean
+  session_id: string
+  messages: Array<{ role: string; content: string; created_at?: string }>
+  reason?: string
+}
+
+/** R-C04 会话真相汇总：读不到时 active_sessions 为 null（不静默填 0） */
+export interface SessionStats {
+  available: boolean
+  active_sessions: number | null
+  by_intent?: Record<string, number>
+  total_messages?: number
+  reason?: string
 }
 
 export interface ResultArtifact {

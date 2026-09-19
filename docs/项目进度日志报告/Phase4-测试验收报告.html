@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 09:00 · 源文件 Phase4-测试验收报告.md</span>
+  <span class="meta">生成于 2026-09-19 12:01 · 源文件 Phase4-测试验收报告.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -133,6 +133,13 @@
 <li><a href="#7">7. 缺陷与修复验证</a></li>
 <li><a href="#8">8. 待补验证项（不影响本阶段结论）</a></li>
 <li><a href="#9">9. 验收签字</a></li>
+<li><a href="#2026-09-19">补记（2026-09-19 · 需求复审后补全）</a><ul>
+<li><a href="#c-redis-pg-kafka">补记 C · 端到端复验（真进程 + 真 Redis / PG / Kafka）</a></li>
+<li><a href="#d-2026-09-19">补记 D · 测试基线（2026-09-19 实测）</a></li>
+<li><a href="#e">补记 E · 口径变更（已落笔设计文档）</a></li>
+<li><a href="#f">补记 F · 结论修订</a></li>
+</ul>
+</li>
 </ul>
 </div>
 </nav>
@@ -577,6 +584,138 @@ Console（vm 冒烟，ds=api）
 <tr>
 <td>遗留</td>
 <td>真实 LLM 未接入（诚实降级并登记 DEBT-015/016），Console 两个演示图表待补接口</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="2026-09-19">补记（2026-09-19 · 需求复审后补全）<a class="headerlink" href="#2026-09-19" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>本节由<strong>需求复审</strong>触发。复审结论：本阶段原报告"验收通过"成立，但<strong>通读实现</strong>又查出
+5 项"单测与验收报告都抓不到"的问题（2 项语义级伪实现 + 1 项跨服务口径不一致 +
+1 项跨链路一致性缺陷 + 1 项抽取口径脱节）。用户确认"按完整需求补齐，可优化不可简化"后，
+全部问题已修复并补测；同时把设计文档中已确认的口径变更落笔。
+逐条证据（文件 + 行号）见 <code>docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md</code>，
+缺陷登记见《技术债台账》§4.16。</p>
+</blockquote>
+<h3 id="c-redis-pg-kafka">补记 C · 端到端复验（真进程 + 真 Redis / PG / Kafka）<a class="headerlink" href="#c-redis-pg-kafka" title="Permanent link">&para;</a></h3>
+<p>两套 e2e 脚本，<strong>全绿</strong>（脚本：<code>.workbuddy/tmp/e2e_phase4.py</code>、<code>e2e_session_phase4.py</code>）：</p>
+<table>
+<thead>
+<tr>
+<th>验证项</th>
+<th>实测</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>语义缓存后端</td>
+<td><code>backend=redis</code>、<code>degraded=false</code>，相同问题二次提问 <code>cache_hit=true</code>、<code>similarity=1.0</code>、耗时 3ms</td>
+</tr>
+<tr>
+<td>问答生成</td>
+<td><code>generator=template</code>（如实标注降级）、5 条来源、覆盖度 0.29 ≥ 阈值 0.35 判定路径正确</td>
+</tr>
+<tr>
+<td>决策链回放</td>
+<td>6 主步 <code>intent→plan→retrieve→generate→verify→annotate</code>；三卡齐备；不存在 id → <strong>404</strong>；跨租户 → <strong>404</strong></td>
+</tr>
+<tr>
+<td>记忆图谱</td>
+<td>PG 落库（<code>backend=postgres</code>）；3 实体 / 2 关系；子图命中「大脑层」及其两跳邻居；压缩率 <strong>0.883</strong>；加载 <strong>35ms</strong></td>
+</tr>
+<tr>
+<td>意图评测</td>
+<td>级联 <strong>98.33%</strong>（n=60）；L0 兜底 90.0%；门禁 <code>pass=true</code></td>
+</tr>
+<tr>
+<td>会话状态机</td>
+<td>创建 ACTIVE → 多轮上下文 4 条 → 关闭 CLOSED → 已关闭再问 <strong>409</strong></td>
+</tr>
+<tr>
+<td>会话持久化</td>
+<td>上下文由 Redis 存储重建（非进程内假象）</td>
+</tr>
+<tr>
+<td>BFF 会话代理</td>
+<td><code>GET /api/wp/session/stats</code> 透传成功（<code>active_sessions</code> / <code>by_status</code> / <code>messages</code>）</td>
+</tr>
+<tr>
+<td>检索缓存一致性</td>
+<td>入库后同一问题 <code>use_cache=true</code> 即可见新文档（修复前不可见）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="d-2026-09-19">补记 D · 测试基线（2026-09-19 实测）<a class="headerlink" href="#d-2026-09-19" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>套件</th>
+<th>用例数</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java（<code>mvn test</code> 全模块）</td>
+<td><strong>162</strong></td>
+<td>0 失败</td>
+</tr>
+<tr>
+<td>Python（<code>pytest</code>）</td>
+<td><strong>124</strong></td>
+<td>0 失败</td>
+</tr>
+<tr>
+<td>BFF（<code>node --test</code>）</td>
+<td><strong>55</strong></td>
+<td>0 失败</td>
+</tr>
+<tr>
+<td>契约门禁（<code>contract-check.py</code> 双通道）</td>
+<td>—</td>
+<td><strong>FAIL: 0</strong></td>
+</tr>
+<tr>
+<td><strong>合计</strong></td>
+<td><strong>341</strong></td>
+<td>全绿</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>较原报告基线（Java 155 / Python 97 / wp-bff 43 = 295）<strong>净增 46 条</strong>：
+Java +7（缓存失效 4 + 会话统计 3）、Python +27（大脑层补齐、真 Redis、评测集、思考链）、BFF +12（决策链 404、会话代理、驾驶舱）。</p>
+</blockquote>
+<h3 id="e">补记 E · 口径变更（已落笔设计文档）<a class="headerlink" href="#e" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong>缺口覆盖度阈值 0.85 → 0.35</strong>（可用分下限 0.15），<strong>已写入 <code>Phase4-需求设计文档.md</code> §6</strong>
+  并附变更说明；判定逻辑三分支与"缺口只提示不补全"约束<strong>不变</strong>，属口径校准非需求删减。</li>
+<li>Console 大脑视图的<strong>意图分布</strong>已由演示值切为真实统计；<strong>会话趋势（近 7 日）</strong>仍为演示值并显式标注（缺时序聚合接口）。</li>
+</ul>
+<h3 id="f">补记 F · 结论修订<a class="headerlink" href="#f" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原报告</th>
+<th>补记后</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>验收结论</td>
+<td>通过</td>
+<td><strong>仍通过</strong>，但需并列本补记阅读</td>
+</tr>
+<tr>
+<td>D5 决策链</td>
+<td>"端点已按 <code>available=false</code> 诚实说明"</td>
+<td><strong>该描述有误</strong>：修复前端点对任意 id 都返 <code>200 + available:true</code>，并非诚实降级。现已改为读真实 AuditLog、未命中返 404</td>
+</tr>
+<tr>
+<td>遗留</td>
+<td>真实 LLM 未接入；Console 两图演示值；D5 无独立索引</td>
+<td>真实 LLM 仍未接入（DEBT-015/016）；Console 仅"会话趋势"为演示值；<strong>D5 已有 <code>decision_id</code> 独立回放索引</strong>（<code>GET /api/nlp/brain/decisions</code> + BFF 回放）</td>
 </tr>
 </tbody>
 </table></main>

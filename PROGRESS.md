@@ -42,10 +42,22 @@ All three are summarised in [Phase 3 post-closure hardening](#phase-3-post-closu
 **Phase 4 (大脑期 / brain stage, R4-01~R4-09 + R-C04) landed on 2026-09-19** — see
 [Phase 4](#phase-4-大脑期--brain-stage-2026-09-19) below for the full record.
 
-The suite now stands at **155 Java + 97 Python + 43 wp-bff tests green** (295 total), contract
+A **requirement-audit & gap-closure pass** on Phase 4 followed on 2026-09-19 (see
+`docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md`): re-reading the implementation against
+the requirement doc surfaced five defects the unit tests and the acceptance report had both
+missed — two semantic-level pseudo-implementations (semantic cache claimed a Redis backend but
+only wrote an in-process dict; the decision-replay endpoint returned `200 + available:true` with
+an empty chain for *any* id), one cross-service tenant-resolution inconsistency, one cross-pipeline
+consistency defect (knowledge ingest did not invalidate the retrieval hot cache) and one
+extraction-caliber gap (memory-graph edges were written without their endpoint nodes). All five
+are fixed with added regression tests, and the previously-undelivered items (IN-02 memory graph,
+the X4 self-verify/annotate steps, the three decision cards, the overview `model_calls` /
+`model_runtime` metrics, the 50-case intent evaluation set, P50/P95/P99 latency) are landed.
+
+The suite now stands at **162 Java + 124 Python + 55 wp-bff tests green** (341 total), contract
 check 0 FAIL (implemented 11 paths / 12 methods), Java doc coverage 113/113; the work platform
 and the Console both run against the real brain chain.
-The Java split is gateway 2 · session-manager 40 · sense-service 53 · body-service 60.
+The Java split is gateway 2 · session-manager 43 · sense-service 53 · body-service 64.
 
 ## Phase 0
 
@@ -271,6 +283,38 @@ Baseline `19c5347` — 39 files changed, +3839/-83.
 Known gap carried forward: **no real LLM engine is attached**, so generation stays on the template
 backend and is labelled as such (DEBT-015/016). The Console's intent-distribution and
 session-trend charts have no backend statistics endpoint yet and are explicitly labelled demo.
+
+### Requirement-audit gap-closure 补记 (2026-09-19)
+
+Re-reading the Phase 4 implementation against the requirement doc surfaced five defects that the
+unit suite and the acceptance report had both missed (registered in `docs/技术债台账.md` §4.16,
+evidence in `docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md`):
+
+| # | Defect | Nature | Fix |
+|---|---|---|---|
+| A1 | Semantic cache claimed Redis but only wrote an in-process dict | **pseudo-implementation (red line)** | read/write split by backend; Redis Hash + TTL + tenant prefix + capacity trim; memory only as degraded fallback; real-Redis cases added |
+| A2 | Decision replay returned `200 + available:true + chain:[]` for any id | **pseudo-implementation (red line)** | real IN3 AuditLog (PG `brain_decision_log`, JSONB payload); replay by `decision_id` + tenant; **miss -> 404**; negative cases added |
+| A3 | QA read the tenant from the **body** but replay from the **header** | cross-service caliber mismatch | unified `resolve_tenant()` (header first, body fallback) across brain/memory endpoints |
+| A4 | Knowledge ingest did **not** invalidate the retrieval hot cache | cross-pipeline consistency | single/batch ingest both call `invalidateTenant`; 4 regression cases |
+| A5 | Memory-graph relation endpoint wrote edges without registering endpoint nodes | extraction-caliber gap | relation endpoint upserts nodes before edges; `_clean_name` splits on relation verbs |
+
+Undelivered items landed in the same pass: **IN-02 memory graph** (entity/relation extraction +
+PG adjacency list + recursive-CTE subgraph + context compression, compression ratio **0.883**,
+load **35ms**), the **X4 self-verify + annotate** steps (chain now
+`intent→plan→retrieve→generate→verify→annotate`), the three decision cards (confidence / audit /
+provenance), the overview cockpit `model_calls` / `model_runtime` aggregation (BFF
+`GET /api/wp/brain`), the **50-case intent evaluation set** (`tests/evalset_phase4.json`, cascaded
+**98.33%** / L0 fallback 90.0%), and P50/P95/P99 latency via `latency_percentiles()`.
+
+Console's **intent distribution** is now switched to live session-manager statistics
+(`GET /api/wp/session/stats`); only **session trend (last 7 days)** remains a labelled demo value.
+Contract gate fixed: `normalize_frontend_path` now strips `?...` before comparison (a query string
+is a path's input, not its identity), so `contract-check.py` is 0 FAIL again.
+
+Two e2e harnesses (`.workbuddy/tmp/e2e_phase4.py`, `e2e_session_phase4.py`) run green against real
+Redis / PG / Kafka: semantic cache `backend=redis degraded=false`, cache-hit `similarity=1.0` at 3ms;
+6-step replay with `404` on unknown/cross-tenant id; memory graph `backend=postgres`, 3 entities /
+2 relations; session FSM create→ask→close→**409**→Redis-restored context; BFF session proxy passthrough.
 
 ## Frontend
 

@@ -10,6 +10,15 @@ import time
 import pytest
 from fastapi.testclient import TestClient
 
+from app.brain import pg as brain_pg
+from app.brain.audit import AUDIT_LOG, AuditLog, Decision
+from app.brain.memory_graph import (
+    COMPRESSION_TARGET,
+    EntityExtractor,
+    MEMORY_GRAPH,
+    MemoryGraph,
+    normalize,
+)
 from app.brain.gap import GapDetector, SourceAnnotator
 from app.brain.llm_gateway import (
     L1,
@@ -252,7 +261,14 @@ def _pipeline(retriever, cache=None, engines=None):
 def test_rag_pipeline_full_chain_with_sources():
     pipeline = _pipeline(_FakeRetriever([_chunk(0.95)]))
     result = pipeline.run("Phase 4 有哪些需求？", intent="知识问答")
-    assert [step["step"] for step in result.chain] == ["plan", "retrieve", "gap", "generate"]
+    # X4 思考链 6 主步；gap 是检索判定，标为子步（回放可见，但不占主步位）
+    assert [step["step"] for step in result.chain] == [
+        "intent", "plan", "retrieve", "gap", "generate", "verify", "annotate"
+    ]
+    assert [step["step"] for step in result.chain if step.get("kind", "step") == "step"] == [
+        "intent", "plan", "retrieve", "generate", "verify", "annotate"
+    ]
+    assert result.chain[3]["kind"] == "substep" and result.chain[3]["parent"] == "retrieve"
     assert result.sources and result.sources[0]["title"] == "设计文档"
     assert result.generator == "template" and result.degraded is True
     assert "llm_template_backend" in result.degraded_reasons
@@ -352,6 +368,296 @@ def test_http_brain_unknown_method_is_405():
     response = client.get("/api/nlp/brain/ask")
     assert response.status_code == 405
 
+
+
+# ───────────────────────── R4-04 语义缓存：真 Redis 后端 ─────────────────────────
+
+class _FakeRedis:
+    """最小 Redis Hash 替身。
+
+    存在意义：**证明缓存真的写进了 Redis**，而不是"连上了却把数据留在进程内"。
+    只靠 `redis_client=None`（内存后端）的用例抓不到 R4-04 的空壳问题。
+    """
+
+    def __init__(self) -> None:
+        self.hashes: dict[str, dict[str, str]] = {}
+        self.expires: dict[str, int] = {}
+
+    def ping(self):
+        return True
+
+    def hset(self, key, field, value):
+        self.hashes.setdefault(key, {})[field] = value
+        return 1
+
+    def hgetall(self, key):
+        return dict(self.hashes.get(key, {}))
+
+    def hdel(self, key, *fields):
+        bucket = self.hashes.get(key, {})
+        removed = 0
+        for field in fields:
+            if bucket.pop(field, None) is not None:
+                removed += 1
+        return removed
+
+    def hlen(self, key):
+        return len(self.hashes.get(key, {}))
+
+    def expire(self, key, ttl):
+        self.expires[key] = ttl
+        return True
+
+    def delete(self, *keys):
+        removed = 0
+        for key in keys:
+            if self.hashes.pop(key, None) is not None:
+                removed += 1
+        return removed
+
+    def scan(self, cursor=0, match=None, count=100):
+        return 0, list(self.hashes.keys())
+
+
+def test_semantic_cache_reports_redis_backend_when_connected():
+    cache = SemanticCache(redis_client=_FakeRedis(), encoder=_FakeEncoder())
+    assert cache.backend == "redis"
+    assert cache.degraded is False
+
+
+def test_semantic_cache_writes_through_to_redis_not_local_memory():
+    """核心回归：数据必须落在 Redis，进程内字典保持为空。"""
+    fake = _FakeRedis()
+    cache = SemanticCache(redis_client=fake, encoder=_FakeEncoder())
+    cache.store("写入redis的问题", {"answer": "A"}, tenant_id="t1")
+    assert cache._local.get("t1") is None                 # 没有偷偷留在内存
+    assert fake.hlen("brain:cache:t1") == 1               # 真的写进了 Redis
+    hit = cache.lookup("写入redis的问题", tenant_id="t1")
+    assert hit is not None and hit["answer"] == "A"
+    assert hit["cache_backend"] == "redis"
+
+
+def test_semantic_cache_is_shared_across_instances_via_redis():
+    """跨实例共享 —— 内存后端做不到，这条能区分"真 Redis"与"假 Redis"。"""
+    fake = _FakeRedis()
+    writer = SemanticCache(redis_client=fake, encoder=_FakeEncoder())
+    writer.store("跨实例共享的问题", {"answer": "shared"}, tenant_id="t1")
+    reader = SemanticCache(redis_client=fake, encoder=_FakeEncoder())
+    assert reader.lookup("跨实例共享的问题", tenant_id="t1")["answer"] == "shared"
+
+
+def test_semantic_cache_redis_entries_expire():
+    fake = _FakeRedis()
+    cache = SemanticCache(redis_client=fake, encoder=_FakeEncoder(), ttl_seconds=0)
+    cache.store("马上过期的问题", {"answer": "x"}, tenant_id="t1")
+    assert cache.lookup("马上过期的问题", tenant_id="t1") is None
+    assert cache.stats.misses >= 1
+
+
+def test_semantic_cache_redis_capacity_prune():
+    fake = _FakeRedis()
+    cache = SemanticCache(redis_client=fake, encoder=_FakeEncoder(), max_entries=2)
+    for index in range(5):
+        cache.store(f"问题{index}", {"answer": index}, tenant_id="t1")
+    assert fake.hlen("brain:cache:t1") == 2
+    assert cache.stats.evictions >= 3
+
+
+def test_semantic_cache_tenant_isolation_on_redis():
+    fake = _FakeRedis()
+    cache = SemanticCache(redis_client=fake, encoder=_FakeEncoder())
+    cache.store("同一个问题", {"answer": "租户A"}, tenant_id="a")
+    assert cache.lookup("同一个问题", tenant_id="b") is None
+
+
+def test_semantic_cache_real_redis_integration():
+    """真 Redis 集成（不可用时 skip，不伪造通过）。"""
+    try:
+        import redis  # type: ignore
+
+        client = redis.Redis(host="127.0.0.1", port=6379, socket_connect_timeout=1.0, socket_timeout=1.0)
+        client.ping()
+    except Exception as exc:  # noqa: BLE001
+        pytest.skip(f"redis unavailable: {exc}")
+    tenant = "test-cache-integration"
+    cache = SemanticCache(redis_client=client, encoder=_FakeEncoder())
+    try:
+        cache.store("真Redis集成问题", {"answer": "ok"}, tenant_id=tenant)
+        assert cache.backend == "redis"
+        other = SemanticCache(redis_client=client, encoder=_FakeEncoder())
+        assert other.lookup("真Redis集成问题", tenant_id=tenant)["answer"] == "ok"
+    finally:
+        cache.clear(tenant)
+
+
+# ───────────────────────── 决策链 6 步 + 自校验 ─────────────────────────
+
+def test_decision_chain_covers_six_steps():
+    pipeline = _pipeline(_FakeRetriever([_chunk(0.95)]))
+    result = pipeline.run("Phase 4 有哪些需求？", intent="知识问答")
+    # X4 思考链 6 主步；gap 是检索判定，标为子步（回放可见，但不占主步位）
+    assert [step["step"] for step in result.chain] == [
+        "intent", "plan", "retrieve", "gap", "generate", "verify", "annotate"
+    ]
+    assert [step["step"] for step in result.chain if step.get("kind", "step") == "step"] == [
+        "intent", "plan", "retrieve", "generate", "verify", "annotate"
+    ]
+    assert result.chain[3]["kind"] == "substep" and result.chain[3]["parent"] == "retrieve"
+    for step in result.chain:
+        for key in ("model", "latency_ms", "confidence", "io"):
+            assert key in step
+
+
+def test_verify_step_flags_low_groundedness():
+    """自校验：回答与资料无关时必须标 low_groundedness（只标注，不篡改答案）。"""
+
+    class UnrelatedEngine(TemplateEngine):
+        name = "unrelated"
+
+        def generate(self, request, timeout):
+            return "完全无关的自行发挥内容，与检索资料毫无重叠。"
+
+    pipeline = _pipeline(_FakeRetriever([_chunk(0.95)]), engines=[UnrelatedEngine()])
+    result = pipeline.run("资料里说了什么？", intent="知识问答")
+    assert "low_groundedness" in result.degraded_reasons
+    verify = next(step for step in result.chain if step["step"] == "verify")
+    checks = verify["io"]["checks"]
+    assert checks["groundedness"] < checks["floor"]
+
+
+def test_verify_step_passes_when_answer_grounded():
+    pipeline = _pipeline(_FakeRetriever([_chunk(0.95)]))
+    result = pipeline.run("大脑期包含什么？", intent="知识问答")
+    verify = next(step for step in result.chain if step["step"] == "verify")
+    assert verify["step"] == "verify"
+    assert result.chain[-1]["step"] == "annotate", "末步必须是来源标注（X4 第 6 步）"
+    assert "low_groundedness" not in result.degraded_reasons
+
+
+# ───────────────────────── IN3 AuditLog（X4/D5）─────────────────────────
+
+def _offline_audit(monkeypatch) -> AuditLog:
+    """关掉 PG，得到确定性的进程内审计（不影响断言"回放语义"）。"""
+    monkeypatch.setattr(brain_pg, "PG_ENABLED", False)
+    monkeypatch.setattr(brain_pg, "_state", {"initialized": True, "degraded": True, "reason": "test"})
+    return AuditLog()
+
+
+def test_audit_log_replays_recorded_decision(monkeypatch):
+    log = _offline_audit(monkeypatch)
+    decision = Decision(decision_id="d-1", question="问什么", tenant_id="t1",
+                        chain=[{"step": "plan", "confidence": 0.8}],
+                        sources=[{"doc_id": "doc-1"}], generator="template")
+    log.record(decision)
+    replayed = log.replay("d-1", "t1")
+    assert replayed is not None and replayed["question"] == "问什么"
+    assert replayed["confidence"] > 0
+    assert replayed["compliance"]["checks"] == 4
+    assert replayed["attribution"]["doc_ids"] == ["doc-1"]
+
+
+def test_audit_log_returns_none_for_unknown_or_foreign_tenant(monkeypatch):
+    """查不到就是 None（调用方回 404）；跨租户与"不存在"同等处理。"""
+    log = _offline_audit(monkeypatch)
+    log.record(Decision(decision_id="d-2", question="q", tenant_id="t1"))
+    assert log.replay("d-2", "t2") is None
+    assert log.replay("not-exist", "t1") is None
+    assert log.replay("", "t1") is None
+
+
+def test_http_brain_decision_replay_returns_404_when_missing():
+    """关键回归：不许用「200 + 空链」冒充成功。"""
+    response = client.get("/api/nlp/brain/decision/definitely-not-a-decision",
+                          headers={"X-Tenant-Id": "test-no-such-decision"})
+    assert response.status_code == 404
+    assert response.json()["code"] == "AGENT_NOT_FOUND"
+
+
+def test_http_brain_decision_replay_serves_real_record():
+    asked = client.post("/api/nlp/brain/ask",
+                        json={"question": "回放验证问题？", "tenant_id": "test-replay"})
+    assert asked.status_code == 200
+    decision_id = asked.json()["decision_id"]
+    replay = client.get(f"/api/nlp/brain/decision/{decision_id}",
+                        headers={"X-Tenant-Id": "test-replay"})
+    assert replay.status_code == 200
+    body = replay.json()
+    assert body["decision_id"] == decision_id
+    main_steps = [s["step"] for s in body["chain"] if s.get("kind", "step") == "step"]
+    sub_steps = [s["step"] for s in body["chain"] if s.get("kind") == "substep"]
+    assert main_steps[0] == "intent" and main_steps[-1] == "annotate", f"链首尾不对：{main_steps}"
+    # 本用例未注入检索替身 → 走缺口拒答分支：generate 由 insufficient 子步取代。
+    # 两条路径都必须可解释：要么真的生成，要么明确说明为什么没生成。
+    assert ("generate" in main_steps) or ("insufficient" in sub_steps), \
+        f"既没有生成步也没有缺口说明，链条不可解释：{main_steps}/{sub_steps}"
+    assert "compliance" in body and "attribution" in body and "confidence" in body
+
+
+def test_http_brain_decisions_lists_recent():
+    body = client.get("/api/nlp/brain/decisions?limit=5",
+                      headers={"X-Tenant-Id": "test-replay"}).json()
+    assert "items" in body and isinstance(body["items"], list)
+    assert "storage" in body
+
+
+# ───────────────────────── IN-02 记忆图谱 ─────────────────────────
+
+def test_memory_graph_extracts_entities_and_relations():
+    extractor = EntityExtractor()
+    extraction = extractor.extract("《Agent-Lifeform》项目依赖 BodyService 服务，项目文档引用设计文档。")
+    names = [entity.name for entity in extraction.entities]
+    assert any("Agent-Lifeform" in name for name in names)
+    assert extraction.extractor == "rule"          # 如实标注：规则抽取，非模型
+    assert extraction.relations
+    assert extraction.relations[0].rel in {"依赖", "引用", "关联"}
+
+
+def test_memory_graph_extracts_nothing_from_noise():
+    """抽不到就返回空图，不拿停用词凑数。"""
+    extraction = EntityExtractor().extract("嗯，这个那个")
+    assert extraction.entities == [] and extraction.relations == []
+
+
+def test_memory_entity_name_normalization_merges_variants():
+    assert normalize("Agent-Lifeform") == normalize("agent-lifeform")
+    assert normalize("《Agent-Lifeform》") == normalize("Agent-Lifeform")
+
+
+def test_memory_graph_subgraph_and_compression(monkeypatch):
+    monkeypatch.setattr(brain_pg, "PG_ENABLED", False)
+    monkeypatch.setattr(brain_pg, "_state", {"initialized": True, "degraded": True, "reason": "test"})
+    graph = MemoryGraph()
+    tenant = "test-memory"
+    # 模拟一段真实的多轮会话历史（压缩率口径就是"用子图替代长会话原文"）
+    turn = ("用户问：《Agent-Lifeform》项目依赖哪些服务？助手答：项目依赖 BodyService 服务，"
+            "BodyService 服务引用 Qdrant 数据库，Qdrant 数据库属于存储层，"
+            "会话状态机负责串联上下文，LLM 网关负责路由与降级标注。")
+    text = " ".join(turn for _ in range(6))
+    graph.ingest(text, tenant)
+    loaded = graph.subgraph("Agent-Lifeform", tenant)
+    assert loaded.entities and loaded.load_ms < 100          # 子图加载 < 100ms
+    compressed = graph.compress(text, tenant)
+    assert compressed["applied"] is True
+    assert compressed["compression"] >= COMPRESSION_TARGET   # 压缩率 ≥ 60%
+    assert compressed["meets_target"] is True
+
+
+def test_memory_graph_reports_absent_entity_instead_of_empty_success(monkeypatch):
+    monkeypatch.setattr(brain_pg, "PG_ENABLED", False)
+    monkeypatch.setattr(brain_pg, "_state", {"initialized": True, "degraded": True, "reason": "test"})
+    graph = MemoryGraph()
+    loaded = graph.subgraph("从未出现过的实体", "test-memory-none")
+    assert loaded.entities == {}
+    assert "不在图中" in loaded.reason
+
+
+def test_memory_graph_compression_reports_failure_when_no_entity(monkeypatch):
+    monkeypatch.setattr(brain_pg, "PG_ENABLED", False)
+    monkeypatch.setattr(brain_pg, "_state", {"initialized": True, "degraded": True, "reason": "test"})
+    result = MemoryGraph().compress("嗯，这个那个", "test-memory-none")
+    assert result["applied"] is False
+    assert result["compression"] == 0.0
+    assert result["meets_target"] is False
 
 # ───────────────────────── 测试替身 ─────────────────────────
 

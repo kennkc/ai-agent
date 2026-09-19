@@ -238,6 +238,27 @@ public class SessionController {
         return result;
     }
 
+    /**
+     * R-C04 会话统计（活跃会话 / 状态分布 / 意图分布）—— 大脑视图的真实数据源。
+     *
+     * <p>放在 {@code /stats} 而不是 {@code /{sessionId}/stats}，避免与会话详情路径冲突
+     * （Spring 会把 {@code /stats} 优先匹配到 {@code /{sessionId}}）。
+     */
+    @GetMapping("/stats")
+    public Map<String, Object> stats(@RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId,
+                                     @RequestParam(value = "limit", defaultValue = "500") int limit) {
+        Map<String, Object> result = new LinkedHashMap<>();
+        try {
+            result.putAll(sessionStore.stats(tenantId, Math.max(1, Math.min(limit, 2000))));
+            result.put("available", true);
+        } catch (Exception e) {
+            result.put("available", false);
+            result.put("reason", "session stats unavailable: " + e.getMessage());
+        }
+        result.put("checked_at", System.currentTimeMillis());
+        return result;
+    }
+
     public record AskRequest(String question) {}
 }
 

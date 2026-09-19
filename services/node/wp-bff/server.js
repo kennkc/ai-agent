@@ -166,6 +166,16 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'GET', path: '/brain' },
   { method: 'GET', path: '/brain/{decision_id}' },
   { method: 'POST', path: '/brain/ask' },
+  { method: 'GET', path: '/brain/decisions' },
+  { method: 'POST', path: '/brain/memory/ingest' },
+  { method: 'POST', path: '/brain/memory/compress' },
+  { method: 'GET', path: '/brain/memory/subgraph' },
+  { method: 'GET', path: '/brain/memory/stats' },
+  { method: 'POST', path: '/session' },
+  { method: 'GET', path: '/session/stats' },
+  { method: 'POST', path: '/session/{session_id}/ask' },
+  { method: 'GET', path: '/session/{session_id}/context' },
+  { method: 'DELETE', path: '/session/{session_id}' },
 ]
 
 /**
@@ -211,7 +221,7 @@ const ROUTE_GUARD = (() => {
 
 /** 总览页仍待 BFF 实现的聚合数据域，透传给前端用于降级展示 */
 const OVERVIEW_GAPS = [
-  'vitals', 'organs', 'brain', 'senses', 'evolution', 'collaboration',
+  'vitals', 'organs', 'senses', 'evolution', 'collaboration',
   'experts', 'skills', 'connectors', 'automations', 'cases', 'approvals',
   'models', 'remote_im', 'agents',
 ]
@@ -528,6 +538,7 @@ function createServer(options = {}) {
    * 其余数据域通过 gaps 显式列出，由前端按降级策略标注为 Mock，不做静默填充。
    */
   async function handleOverview(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
     const entries = await Promise.all(Object.keys(middleware).map(async key => ({ key, probe: await probeState(key) })))
     const items = entries.map(({ key, probe }) => nodeFor(key, probe.state, probe.latencyMs))
     const up = items.filter(item => item.state === 'up').length
@@ -553,10 +564,16 @@ function createServer(options = {}) {
       }
     }
 
+    const modelMetrics = await fetchModelMetrics(tenantId)
     send(req, res, 200, {
       data: {
         source: 'wp-bff',
         checked_at: nowTime(),
+        model_calls: modelMetrics.model_calls,
+        model_runtime: modelMetrics.model_runtime,
+        model_metrics_available: modelMetrics.available,
+        model_metrics_stale: modelMetrics.stale,
+        model_metrics_note: modelMetrics.note,
         observability: {
           middleware: {
             total: items.length,
@@ -612,6 +629,88 @@ function createServer(options = {}) {
    * body-service 未启动时返回 {@code available:false} 并列出未取到的数据域，
    * 由前端标注降级——**不以 0 冒充"知识量为零"**。
    */
+  /** 大模型工作状态节点（handleBrain 与 handleOverview 共用，避免两份口径）。 */
+  function modelRuntimeNodes(brain, cache, knowledge, cacheStats, chunkCount, llmAvailable) {
+    return [
+      {
+        node: 'llm_gateway',
+        state: llmAvailable ? 'healthy' : 'offline',
+        backend: (brain && brain.llm && brain.llm.engines && brain.llm.engines[0] && brain.llm.engines[0].name) || 'unknown',
+        degraded: !llmAvailable,
+        calls: (brain && brain.llm && brain.llm.stats && brain.llm.stats.calls) || 0,
+        tokens: (brain && brain.llm && brain.llm.stats && brain.llm.stats.completion_tokens) || 0,
+      },
+      {
+        node: 'semantic_cache',
+        state: cache ? 'healthy' : 'offline',
+        backend: (cache && cache.backend) || 'unknown',
+        degraded: Boolean(cache && cache.degraded),
+        hit_rate: (cacheStats && cacheStats.hit_rate) || 0,
+      },
+      {
+        node: 'retrieval',
+        state: knowledge ? 'healthy' : 'offline',
+        backend: 'body-service',
+        degraded: !knowledge,
+        chunks: chunkCount,
+      },
+    ]
+  }
+
+  /**
+   * 大模型调用监控（`model_calls`）—— 开发设计文档 §10 总览增强驾驶舱。
+   *
+   * 两条硬规矩（§10.3）：
+   *   1. **断流时保留最近点位**并显示「等待校准」，禁止画虚假归零曲线；
+   *   2. 成本未接入计量就回 `null` + `cost_basis='not_metered'`，**不编造金额**。
+   */
+  let lastModelMetrics = null
+
+  async function fetchModelMetrics(tenantId) {
+    const headers = { 'X-Tenant-Id': tenantId }
+    const [brain, cache, knowledge] = await Promise.all([
+      jsonRequest(`${nlpUrl}/api/nlp/brain/health`, { headers }).catch(() => null),
+      jsonRequest(`${nlpUrl}/api/nlp/brain/cache/stats`, { headers }).catch(() => null),
+      jsonRequest(`${bodyUrl}/api/body/knowledge/stats`, { headers }).catch(() => null),
+    ])
+    if (!brain) {
+      return {
+        available: false,
+        stale: lastModelMetrics !== null,
+        model_calls: lastModelMetrics ? lastModelMetrics.model_calls : [],
+        model_runtime: lastModelMetrics ? lastModelMetrics.model_runtime : [],
+        note: lastModelMetrics ? '指标断流：展示最近一次点位（等待校准）' : '大脑层不可用：模型指标等待校准',
+      }
+    }
+    const llmAvailable = Boolean(brain.llm && brain.llm.available)
+    const cacheStats = (cache && cache.stats) || null
+    const bodyKnowledge = (knowledge && knowledge.knowledge) || null
+    const chunkCount = (bodyKnowledge && bodyKnowledge.chunks) ?? 0
+    const stats = (brain.llm && brain.llm.stats) || {}
+    const latency = brain.latency || {}
+    const point = {
+      t: nowTime(),
+      calls: Number(stats.calls || 0),
+      tokens: Number(stats.completion_tokens || 0),
+      prompt_tokens: Number(stats.prompt_tokens || 0),
+      p95_ms: Number(latency.p95_ms || 0),
+      p99_ms: Number(latency.p99_ms || 0),
+      cost_cny: null,
+      cost_basis: 'not_metered',
+    }
+    const modelRuntime = modelRuntimeNodes(brain, cache, knowledge, cacheStats, chunkCount, llmAvailable)
+    // 时序只保留最近 30 个点位（滚动窗口），断流时照样能回传最近点位
+    const previous = lastModelMetrics ? lastModelMetrics.model_calls : []
+    lastModelMetrics = { model_calls: [...previous, point].slice(-30), model_runtime: modelRuntime }
+    return {
+      available: true,
+      stale: false,
+      model_calls: lastModelMetrics.model_calls,
+      model_runtime: modelRuntime,
+      note: 'model_calls 为滚动窗口（最近 30 点）；成本未接入计量，cost_cny 恒为 null',
+    }
+  }
+
   /**
    * R-C04 大脑视图聚合：活跃会话 / 意图分布 / 模型指标 / 决策链索引。
    *
@@ -637,30 +736,12 @@ function createServer(options = {}) {
       (knowledge && knowledge.retrieval && knowledge.retrieval.chunks) ?? 0
     const docCount = (bodyKnowledge && bodyKnowledge.documents) ??
       (knowledge && knowledge.retrieval && knowledge.retrieval.documents) ?? 0
-    const modelRuntime = [
-      {
-        node: 'llm_gateway',
-        state: llmAvailable ? 'healthy' : 'offline',
-        backend: (brain && brain.llm && brain.llm.engines && brain.llm.engines[0] && brain.llm.engines[0].name) || 'unknown',
-        degraded: !llmAvailable,
-        calls: (brain && brain.llm && brain.llm.stats && brain.llm.stats.calls) || 0,
-        tokens: (brain && brain.llm && brain.llm.stats && brain.llm.stats.completion_tokens) || 0,
-      },
-      {
-        node: 'semantic_cache',
-        state: cache ? 'healthy' : 'offline',
-        backend: (cache && cache.backend) || 'unknown',
-        degraded: Boolean(cache && cache.degraded),
-        hit_rate: (cacheStats && cacheStats.hit_rate) || 0,
-      },
-      {
-        node: 'retrieval',
-        state: knowledge ? 'healthy' : 'offline',
-        backend: 'body-service',
-        degraded: !knowledge,
-        chunks: chunkCount,
-      },
-    ]
+    const modelRuntime = modelRuntimeNodes(brain, cache, knowledge, cacheStats, chunkCount, llmAvailable)
+
+    // 会话维度：活跃会话 / 意图分布读 session-manager 的实时汇总（不再只回一个 URL）
+    const sessions = await jsonRequest(`${sessionUrl}/api/session/stats`, {
+      headers: { 'X-Tenant-Id': tenantId },
+    }).catch(() => null)
 
     return send(req, res, 200, {
       data: {
@@ -683,44 +764,269 @@ function createServer(options = {}) {
           ? { backend: 'body-service', degraded: false, chunks: chunkCount, documents: docCount }
           : null,
         model_runtime: modelRuntime,
-        // 会话维度：BFF 不直接持有会话真相，活跃会话数需前端经 session-manager 读取；
-        // 此处只给出来源地址，避免把「未知」写成 0。
-        sessions: {
-          source: `${sessionUrl}/api/session`,
-          note: '会话真相在 session-manager（Redis，TTL 2h）；BFF 不做二次汇总以免口径漂移',
-        },
+        sessions: sessions
+          ? { available: true, ...sessions }
+          : {
+              available: false,
+              active_sessions: null,
+              by_intent: {},
+              reason: '会话服务不可用：活跃会话与意图分布无法读取',
+              source: `${sessionUrl}/api/session`,
+            },
       },
     })
   }
 
   /**
-   * D5 决策链回放：按 decision_id 回放思考链（意图→规划→检索→生成→自校验）。
+   * D5/X4 决策链回放：读 **IN3 AuditLog** 真实记录（nlp-service 落 PG）。
    *
-   * 决策链由 nlp-service 大脑层在问答时产出并缓存在语义缓存里；
-   * 未命中时返回 404（**未找到就是 404，不用 200 + 空数据冒充成功**）。
+   * 语义严格区分三种情况（对齐 `docs/异常流程归纳.md` 的 planned 三态）：
+   *   - 大脑层整体不可用 → 200 + `available:false`（**降级**，不是故障也不是未实现）
+   *   - 大脑层可用但**查无此 decision** → **404 AGENT_NOT_FOUND**（未找到 ≠ 空链）
+   *   - 查到 → 200 + 完整链（含 compliance / attribution / confidence 三卡）
+   *
+   * 历史教训：上一版这里恒返 `200 + available:true + chain:[]`，注释却写着"未命中返回 404"——
+   * 那是把「查不到」伪装成「回放成功」，前端永远无法区分。本版按注释的口径落地。
    */
   async function handleBrainDecision(req, res, decisionId) {
     const tenantId = String(req.headers['x-tenant-id'] || 'default')
     if (!decisionId) return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'decision_id must not be blank')
-    const cached = await jsonRequest(`${nlpUrl}/api/nlp/brain/cache/stats`, { headers: { 'X-Tenant-Id': tenantId } }).catch(() => null)
-    if (!cached) {
+    let record = null
+    let upstreamError = null
+    try {
+      record = await jsonRequest(`${nlpUrl}/api/nlp/brain/decision/${encodeURIComponent(decisionId)}`, {
+        headers: { 'X-Tenant-Id': tenantId },
+      })
+    } catch (error) {
+      upstreamError = error
+    }
+    if (!record) {
+      if (upstreamError && Number(upstreamError.status) === 404) {
+        // 大脑层在线但审计里没有这条决策（含跨租户访问）—— 未找到就是 404
+        return fail(req, res, 404, 'AGENT_NOT_FOUND', `决策链不存在：${decisionId}`,
+          { decision_id: decisionId, source: 'in3-auditlog' })
+      }
       return send(req, res, 200, {
         data: {
           available: false,
           decision_id: decisionId,
           reason: '大脑层不可用：无法查询决策链（nlp-service /brain 未启动或返回异常）',
+          source: 'in3-auditlog',
         },
       })
     }
-    // 决策链随问答结果一并缓存：此处以「未找到」语义返回，前端据 available=false 提示重放失效
-    return send(req, res, 200, {
-      data: {
-        available: true,
-        decision_id: decisionId,
-        chain: [],
-        note: '决策链存储在问答响应与语义缓存中；当前版本未提供独立索引，回放需携带原始问答响应。',
-      },
-    })
+    return send(req, res, 200, { data: { available: true, source: 'in3-auditlog', ...record } })
+  }
+
+  /** D5 决策索引：最近决策清单（供沙盘选择与大脑视图展示，数据来自 AuditLog）。 */
+  async function handleBrainDecisions(req, res, limit) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const payload = await jsonRequest(`${nlpUrl}/api/nlp/brain/decisions?limit=${limit}`, {
+      headers: { 'X-Tenant-Id': tenantId },
+    }).catch(() => null)
+    if (!payload) {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          reason: '大脑层不可用：无法读取决策索引（nlp-service /brain 未启动或返回异常）',
+          items: [],
+        },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...payload } })
+  }
+
+  // ─────────── IN-02 记忆图谱（代理 nlp-service）───────────
+
+  async function handleMemoryIngest(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const payload = await readJsonBody(req)
+    if (!payload || typeof payload !== 'object' || !String(payload.text || '').trim()) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'text must not be blank')
+    }
+    const result = await jsonRequest(`${nlpUrl}/api/nlp/brain/memory/ingest`, {
+      method: 'POST',
+      headers: { 'X-Tenant-Id': tenantId },
+      body: { text: String(payload.text), tenant_id: tenantId },
+    }).catch(() => null)
+    if (!result) {
+      return send(req, res, 200, {
+        data: { available: false, reason: '大脑层不可用：记忆图谱抽取未执行（nlp-service 未启动）' },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
+  async function handleMemoryCompress(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const payload = await readJsonBody(req)
+    if (!payload || typeof payload !== 'object' || !String(payload.text || '').trim()) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'text must not be blank')
+    }
+    const result = await jsonRequest(`${nlpUrl}/api/nlp/brain/memory/compress`, {
+      method: 'POST',
+      headers: { 'X-Tenant-Id': tenantId },
+      body: { text: String(payload.text), tenant_id: tenantId, depth: Number(payload.depth || 2) },
+    }).catch(() => null)
+    if (!result) {
+      return send(req, res, 200, {
+        data: { available: false, applied: false, reason: '大脑层不可用：上下文压缩未执行（nlp-service 未启动）' },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
+  async function handleMemorySubgraph(req, res, params) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const root = String(params.get('root') || '').trim()
+    if (!root) return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'root must not be blank')
+    const query = `?root=${encodeURIComponent(root)}&tenant_id=${encodeURIComponent(tenantId)}&depth=${Number(params.get('depth') || 2)}`
+    const result = await jsonRequest(`${nlpUrl}/api/nlp/brain/memory/subgraph${query}`, {
+      headers: { 'X-Tenant-Id': tenantId },
+    }).catch(() => null)
+    if (!result) {
+      return send(req, res, 200, {
+        data: { available: false, root, entities: [], relations: [], reason: '大脑层不可用：子图未加载' },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
+  async function handleMemoryStats(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const result = await jsonRequest(
+      `${nlpUrl}/api/nlp/brain/memory/stats?tenant_id=${encodeURIComponent(tenantId)}`,
+      { headers: { 'X-Tenant-Id': tenantId } },
+    ).catch(() => null)
+    if (!result) {
+      return send(req, res, 200, {
+        data: { available: false, reason: '大脑层不可用：记忆图谱统计不可读' },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
+  // ─────────── 会话链路（代理 session-manager，R4-01/02 + R-C04）───────────
+
+  /**
+   * 会话真相在 session-manager（Redis + FSM）。BFF **只做代理**，不落第二份会话状态 ——
+   * 上一版这里只把 URL 当字符串丢给前端，导致 FSM/持久化在产品链路上无人调用。
+   */
+  async function handleSessionCreate(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const result = await jsonRequest(`${sessionUrl}/api/session`, {
+      method: 'POST',
+      headers: { 'X-Tenant-Id': tenantId },
+      body: {},
+    }).catch(() => null)
+    if (!result || !result.session_id) {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          reason: '会话服务不可用：无法创建会话（session-manager 未启动或返回异常）',
+          session_url: sessionUrl,
+        },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, session_id: result.session_id, ...result } })
+  }
+
+  /** 会话问答：走 FSM → 意图 → 大脑层（含来源/缺口/决策链/降级标注）。 */
+  async function handleSessionAsk(req, res, sessionId) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const payload = await readJsonBody(req)
+    if (!payload || typeof payload !== 'object') {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'request body must be a JSON object')
+    }
+    const question = String(payload.question || '').trim()
+    if (!question) return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'question must not be blank')
+    let result = null
+    let upstreamError = null
+    try {
+      result = await jsonRequest(`${sessionUrl}/api/session/${encodeURIComponent(sessionId)}/ask`, {
+        method: 'POST',
+        headers: { 'X-Tenant-Id': tenantId },
+        body: { question },
+      })
+    } catch (error) {
+      upstreamError = error
+    }
+    if (!result) {
+      if (upstreamError && Number(upstreamError.status) === 404) {
+        return fail(req, res, 404, 'AGENT_NOT_FOUND', `会话不存在：${sessionId}`)
+      }
+      if (upstreamError && Number(upstreamError.status) === 409) {
+        return fail(req, res, 409, 'AGENT_CONFLICT', '会话已关闭，无法继续追问')
+      }
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          session_id: sessionId,
+          question,
+          reason: '会话服务不可用：session-manager 未启动或返回异常',
+          degraded_reasons: ['session_unavailable'],
+        },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
+  async function handleSessionContext(req, res, sessionId, turns) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const result = await jsonRequest(
+      `${sessionUrl}/api/session/${encodeURIComponent(sessionId)}/context?turns=${turns}`,
+      { headers: { 'X-Tenant-Id': tenantId } },
+    ).catch(() => null)
+    if (!result) {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          session_id: sessionId,
+          messages: [],
+          reason: '会话服务不可用：无法读取多轮上下文',
+        },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
+  async function handleSessionClose(req, res, sessionId) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const result = await jsonRequest(`${sessionUrl}/api/session/${encodeURIComponent(sessionId)}`, {
+      method: 'DELETE',
+      headers: { 'X-Tenant-Id': tenantId },
+    }).catch(() => null)
+    if (!result) {
+      return send(req, res, 200, {
+        data: { available: false, session_id: sessionId, reason: '会话服务不可用：无法关闭会话' },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
+  /**
+   * R-C04 活跃会话 / 意图分布：数据来自 session-manager 的实时 SCAN 汇总。
+   *
+   * **不静默填 0** —— session-manager 不可用时回 `available:false` + reason，
+   * 由前端标注"会话真相不可读"，而不是把"读不到"画成"0 个活跃会话"。
+   */
+  async function handleSessionStats(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const result = await jsonRequest(`${sessionUrl}/api/session/stats`, {
+      headers: { 'X-Tenant-Id': tenantId },
+    }).catch(() => null)
+    if (!result) {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          reason: '会话服务不可用：活跃会话与意图分布无法读取（session-manager 未启动）',
+          active_sessions: null,
+          by_intent: {},
+          session_url: sessionUrl,
+        },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
   }
 
   /** R4-06 问答代理：前端 → BFF → nlp 大脑层（带降级可见）。 */
@@ -989,6 +1295,24 @@ function createServer(options = {}) {
     if (req.method === 'POST' && url.pathname === '/api/wp/knowledge/search') return handleKnowledgeSearch(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/brain') return handleBrain(req, res)
     if (req.method === 'POST' && url.pathname === '/api/wp/brain/ask') return handleBrainAsk(req, res)
+    // /brain/decisions 必须排在 /brain/{decision_id} 之前：后者是宽松正则，会把 "decisions" 也吃掉
+    if (req.method === 'GET' && url.pathname === '/api/wp/brain/decisions') {
+      return handleBrainDecisions(req, res, Number(url.searchParams.get('limit') || 10))
+    }
+    if (req.method === 'POST' && url.pathname === '/api/wp/brain/memory/ingest') return handleMemoryIngest(req, res)
+    if (req.method === 'POST' && url.pathname === '/api/wp/brain/memory/compress') return handleMemoryCompress(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/brain/memory/subgraph') return handleMemorySubgraph(req, res, url.searchParams)
+    if (req.method === 'GET' && url.pathname === '/api/wp/brain/memory/stats') return handleMemoryStats(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/session/stats') return handleSessionStats(req, res)
+    if (req.method === 'POST' && url.pathname === '/api/wp/session') return handleSessionCreate(req, res)
+    const sessionAsk = url.pathname.match(/^\/api\/wp\/session\/([a-z0-9-]{8,64})\/ask$/)
+    if (req.method === 'POST' && sessionAsk) return handleSessionAsk(req, res, sessionAsk[1])
+    const sessionCtx = url.pathname.match(/^\/api\/wp\/session\/([a-z0-9-]{8,64})\/context$/)
+    if (req.method === 'GET' && sessionCtx) {
+      return handleSessionContext(req, res, sessionCtx[1], Number(url.searchParams.get('turns') || 10))
+    }
+    const sessionOne = url.pathname.match(/^\/api\/wp\/session\/([a-z0-9-]{8,64})$/)
+    if (req.method === 'DELETE' && sessionOne) return handleSessionClose(req, res, sessionOne[1])
     const decisionMatch = url.pathname.match(/^\/api\/wp\/brain\/([a-z0-9-]{8,64})$/)
     if (req.method === 'GET' && decisionMatch) return handleBrainDecision(req, res, decisionMatch[1])
     if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])

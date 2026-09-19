@@ -9,7 +9,8 @@ import {
 import { reportApiOk, reportDegrade } from './status'
 import type {
   BrainAnswer, KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
-  MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SuggestionExecution, TracingOverview,
+  MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SessionContext, SessionInfo, SessionStats,
+  SuggestionExecution, TracingOverview,
 } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
 const api = axios.create({
@@ -277,6 +278,108 @@ export const dataProvider = {
       const reason = status ? `HTTP ${status}` : ((error as Error)?.message || 'BFF /brain/ask 不可达')
       reportDegrade('brain_ask', reason)
       return { available: false, question, answer: '', reason: `BFF /brain/ask 不可达（${reason}）` }
+    }
+  },
+
+  /**
+   * R4-01 创建会话（BFF → session-manager，FSM NEW→ACTIVE，Redis 持久化）。
+   *
+   * 与旧版"拿 taskId 当 session_id"不同：真实会话 id 由 session-manager 生成并落 Redis，
+   * 多轮上下文取 Redis 而不是浏览器内存 —— 这是 R4-02「重启可恢复」在产品侧成立的前提。
+   * 会话服务不可用时返回 `available=false`，由界面标注，绝不本地伪造 id。
+   */
+  async createSession(): Promise<SessionInfo> {
+    if (source === 'mock') {
+      return { available: false, session_id: '', status: '', reason: 'mock 数据源不创建真实会话' }
+    }
+    try {
+      const payload = unwrapBody(await api.post('/session', {}))
+      if (payload && payload.session_id) {
+        reportApiOk('session_create')
+        return { available: true, session_id: String(payload.session_id), status: String(payload.status || 'NEW') }
+      }
+      reportDegrade('session_create', '会话服务未返回 session_id')
+      return { available: false, session_id: '', status: '', reason: '会话服务不可用：未返回 session_id' }
+    } catch (error) {
+      const reason = (error as Error)?.message || 'BFF /session 不可达'
+      reportDegrade('session_create', reason)
+      return { available: false, session_id: '', status: '', reason: `会话服务不可用（${reason}）` }
+    }
+  },
+
+  /**
+   * R4-01/02 会话问答：走 session-manager FSM（状态校验 + 多轮上下文 + 落 Redis）后再问大脑层。
+   * 会话链路不可用时**回退到 /brain/ask 并如实标注**，而不是假装多轮上下文还在。
+   */
+  async askSession(sessionId: string, question: string): Promise<BrainAnswer> {
+    try {
+      const payload = unwrapBody(await api.post(`/session/${encodeURIComponent(sessionId)}/ask`, { question }))
+      if (payload && typeof payload === 'object' && 'available' in payload) {
+        if (payload.available === false) {
+          reportDegrade('session_ask', String(payload.reason || '会话服务不可用'))
+        } else {
+          reportApiOk('session_ask')
+        }
+        return { data_source: 'live', session_id: sessionId, ...(payload as BrainAnswer) }
+      }
+      reportDegrade('session_ask', '响应缺少 available 字段')
+      return { available: false, question, answer: '', reason: '响应结构不符合契约' }
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      const reason = status === 409
+        ? '会话已关闭，无法继续追问（请新建会话）'
+        : status === 404 ? '会话不存在或已过期' : ((error as Error)?.message || 'BFF 会话端点不可达')
+      reportDegrade('session_ask', reason)
+      return { available: false, question, answer: '', reason }
+    }
+  },
+
+  /** R4-02 多轮上下文回放：重启后能否读回历史，是「持久化」的硬证据。 */
+  async getSessionContext(sessionId: string, turns = 10): Promise<SessionContext> {
+    try {
+      const payload = unwrapBody(await api.get(`/session/${encodeURIComponent(sessionId)}/context?turns=${turns}`))
+      return payload && payload.available
+        ? { available: true, session_id: sessionId, messages: Array.isArray(payload.messages) ? payload.messages : [] }
+        : { available: false, session_id: sessionId, messages: [], reason: payload?.reason || '上下文不可读' }
+    } catch (error) {
+      return { available: false, session_id: sessionId, messages: [], reason: (error as Error)?.message || '上下文不可读' }
+    }
+  },
+
+  async closeSession(sessionId: string): Promise<SessionInfo> {
+    try {
+      const payload = unwrapBody(await api.delete(`/session/${encodeURIComponent(sessionId)}`))
+      if (payload && payload.available !== false) {
+        return { available: true, session_id: sessionId, status: String(payload.status || 'CLOSED') }
+      }
+      return { available: false, session_id: sessionId, status: '', reason: payload?.reason || '关闭会话失败' }
+    } catch (error) {
+      return { available: false, session_id: sessionId, status: '', reason: (error as Error)?.message || '关闭会话失败' }
+    }
+  },
+
+  /** R-C04 会话真相：活跃会话数 + 意图分布（不可用时不填 0）。 */
+  async getSessionStats(): Promise<SessionStats> {
+    try {
+      const payload = unwrapBody(await api.get('/session/stats'))
+      if (payload && payload.available) return { available: true, ...payload }
+      return { available: false, active_sessions: null, by_intent: {}, reason: payload?.reason || '会话统计不可读' }
+    } catch (error) {
+      return { available: false, active_sessions: null, by_intent: {}, reason: (error as Error)?.message || '会话统计不可读' }
+    }
+  },
+
+  /** D5 决策链回放：404 表示「审计里没有这条决策」，与上游不可用（available=false）是两回事。 */
+  async getDecision(decisionId: string): Promise<BrainAnswer | null> {
+    if (!decisionId) return null
+    try {
+      const payload = unwrapBody(await api.get(`/brain/${encodeURIComponent(decisionId)}`))
+      return { data_source: 'live', ...(payload as BrainAnswer) }
+    } catch (error) {
+      const status = (error as { response?: { status?: number } })?.response?.status
+      if (status === 404) return null
+      reportDegrade('decision_replay', `HTTP ${status || 'unknown'}`)
+      return null
     }
   },
 

@@ -4,6 +4,15 @@
       <div class="hero-kicker">NEURAL DIALOGUE / WB-02</div>
       <h2 class="hero-title">任务对话与结果工作区</h2>
       <p class="hero-desc">任务 {{ taskId }} · 持续追问保持上下文 · 产物/文件/变更/预览四区交付</p>
+      <div class="session-bar">
+        <el-tag v-if="session.available" size="small" type="success" effect="plain">
+          真实会话 {{ session.session_id.slice(0, 12) }} · {{ session.status || 'ACTIVE' }}（上下文存 Redis，重启可恢复）
+        </el-tag>
+        <el-tag v-else-if="session.reason" size="small" type="warning" effect="plain">
+          未接入会话链路：{{ session.reason }}（多轮上下文仅存浏览器内存）
+        </el-tag>
+        <el-button v-if="session.available" size="small" text type="primary" @click="closeCurrentSession">关闭会话</el-button>
+      </div>
     </div>
 
     <div class="two-column chat-layout">
@@ -114,7 +123,7 @@ import { ElMessage } from 'element-plus'
 import { Document, Paperclip, Promotion } from '@element-plus/icons-vue'
 import { dataProvider } from '../api/provider'
 import { chatMessages, resultArtifacts } from '../api/mock'
-import type { BrainAnswer, ChatMessage, ResultArtifact } from '../types'
+import type { BrainAnswer, ChatMessage, ResultArtifact, SessionInfo } from '../types'
 
 const route = useRoute()
 const taskId = String(route.query.task_id || 'T-1042')
@@ -131,6 +140,8 @@ const sendError = ref(false)
 const sendErrorMsg = ref('')
 const failedQuestion = ref('')
 const fileInputRef = ref<HTMLInputElement | null>(null)
+/** R4-01 真实会话句柄：available=false 时绝不本地伪造 id，界面如实标注 */
+const session = ref<SessionInfo>({ available: false, session_id: '', status: '', reason: '' })
 
 async function loadChat() {
   loading.value = true
@@ -144,6 +155,23 @@ async function loadChat() {
   } finally {
     loading.value = false
   }
+  await openSession()
+}
+
+/**
+ * 打开真实会话（session-manager 生成 id + FSM + Redis 持久化）。
+ * 失败时保留 available=false，由顶部徽标说明——多轮上下文退化为浏览器内存，但不假装成立。
+ */
+async function openSession() {
+  if (session.value.available) return
+  session.value = await dataProvider.createSession()
+}
+
+async function closeCurrentSession() {
+  if (!session.value.available) return
+  const closed = await dataProvider.closeSession(session.value.session_id)
+  session.value = { available: false, session_id: '', status: '', reason: '会话已关闭，如需继续请重新发起' }
+  ElMessage.success(closed.available ? '会话已关闭（FSM → CLOSED）' : '关闭指令未送达会话服务')
 }
 
 async function send() {
@@ -170,12 +198,31 @@ async function submitQuestion(text: string, appendUser: boolean) {
   loading.value = true
   streaming.value = true
   try {
-    // 多轮上下文：把当前提问之前的若干轮透传给大脑层（会话状态机在 session-manager 侧维护）
-    const context = messages.value.slice(-7, -1).map(item => ({
-      role: item.role === 'user' ? 'user' : 'assistant',
-      content: item.content,
-    }))
-    const reply: BrainAnswer = await dataProvider.askBrain(text, taskId, context)
+    // 多轮上下文：优先走会话链路（上下文由 session-manager 从 Redis 取回，
+    // 这是 R4-02「重启可恢复」成立的路径）；会话不可用时退回 /brain/ask 并带内存上下文，
+    // 同时把 session_unavailable 记入降级原因，界面如实标注。
+    let reply: BrainAnswer
+    if (session.value.available) {
+      reply = await dataProvider.askSession(session.value.session_id, text)
+      if (!reply.available) {
+        // 会话链路中断（如已关闭/已过期）：重开一个会话再试一次，仍失败则如实报错
+        session.value = await dataProvider.createSession()
+        if (session.value.available) {
+          reply = await dataProvider.askSession(session.value.session_id, text)
+        }
+      }
+      if (reply.available) reply.session_status = session.value.status
+    } else {
+      const context = messages.value.slice(-7, -1).map(item => ({
+        role: item.role === 'user' ? 'user' : 'assistant',
+        content: item.content,
+      }))
+      reply = await dataProvider.askBrain(text, taskId, context)
+      if (reply.available) {
+        reply.degraded = true
+        reply.degraded_reasons = Array.from(new Set([...(reply.degraded_reasons || []), 'session_unavailable']))
+      }
+    }
     // 大脑层不可用（available=false）时**绝不把空回答渲染成成功**
     if (!reply.available) throw new Error(reply.reason || '大脑层不可用')
     const message: ChatMessage = {
@@ -251,6 +298,7 @@ onMounted(loadChat)
 
 <style scoped>
 .chat-layout { grid-template-columns: 1.15fr .85fr; align-items: start; }
+.session-bar { display: flex; gap: 8px; align-items: center; margin-top: 10px; flex-wrap: wrap; }
 .header-meta { float: right; color: var(--wp-sub); font-size: 11px; }
 .chat-list { min-height: 400px; max-height: 540px; overflow: auto; padding-right: 8px; }
 .message { margin-bottom: 16px; }
