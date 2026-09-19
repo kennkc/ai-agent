@@ -40,8 +40,69 @@ export interface TaskItem {
 export interface ChatMessage {
   role: 'user' | 'assistant' | 'system'
   content: string
-  citations?: Array<{ title: string; source: string }>
+  citations?: Array<{ title: string; source?: string; score?: number; snippet?: string }>
   created_at: string
+  /** 大脑层原始回答（R4-06/R4-08）：界面据此展示来源置信度、缺口提示与降级标注 */
+  brain?: BrainAnswer
+}
+
+/**
+ * 大脑层回答来源（R4-08 来源标注）。
+ * `score` 为向量召回相似（判可用性的依据），`rerank_score` 仅用于排序展示 ——
+ * 二者量纲不同，前端不要混用做阈值判断。
+ */
+export interface BrainSource {
+  chunk_id?: string
+  doc_id?: string
+  title: string
+  heading?: string
+  score?: number
+  rerank_score?: number
+  snippet?: string
+  source?: string
+}
+
+/** 信息缺口判定（R4-07）：`has_gap=true` 时界面需明确提示「知识不足」 */
+export interface BrainGap {
+  coverage?: number
+  sufficient?: boolean
+  has_gap?: boolean
+  usable_chunks?: number
+  threshold?: number
+}
+
+/** 决策链单步（D5 思考链回放） */
+export interface BrainChainStep {
+  step: string
+  model?: string
+  latency_ms?: number
+  note?: string
+}
+
+/**
+ * 大脑层回答（R4-06 / R4-08 / R4-09）。
+ *
+ * `available=false` 表示大脑层不可用（此时 `answer` 为空、`reason` 说明原因）——
+ * 界面**必须**展示失败，不得拿它当空回答渲染成"发送成功"。
+ */
+export interface BrainAnswer {
+  available: boolean
+  question: string
+  answer: string
+  /** 生成后端：template（模板降级）/ model（真实模型）/ local-retrieval（本地检索直出） */
+  generator?: string
+  degraded?: boolean
+  degraded_reasons?: string[]
+  sources?: BrainSource[]
+  gap?: BrainGap
+  chain?: BrainChainStep[]
+  plan?: { template?: string; top_k?: number; planner?: string }
+  decision_id?: string
+  cache_hit?: boolean
+  cache_similarity?: number
+  latency_ms?: number
+  data_source?: 'mock' | 'live'
+  reason?: string
 }
 
 export interface ResultArtifact {

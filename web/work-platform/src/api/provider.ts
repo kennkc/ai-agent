@@ -8,7 +8,7 @@ import {
 } from './mock'
 import { reportApiOk, reportDegrade } from './status'
 import type {
-  KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
+  BrainAnswer, KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
   MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SuggestionExecution, TracingOverview,
 } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
@@ -176,6 +176,31 @@ function mockKnowledgeSearch(query: string, topK: number): KnowledgeSearchResult
   }
 }
 
+/**
+ * 演示问答（R4-09 对话界面骨架）。
+ *
+ * 仅用于 `VITE_DATA_SOURCE=mock`：给出的回答与来源一律带 `data_source='mock'`，
+ * 且 `degraded=true`，界面会显示"演示答复"徽标——**不冒充真实模型输出**。
+ */
+function mockBrainAnswer(question: string): BrainAnswer {
+  return {
+    available: true,
+    question,
+    answer: `（演示答复 · 未调用大脑层）已基于任务上下文完成追问分析。本次问题：${question}。切到 VITE_DATA_SOURCE=api 后将走 nlp-service 大脑层的真实检索增强链路。`,
+    generator: 'mock',
+    degraded: true,
+    degraded_reasons: ['mock_data_source'],
+    sources: [
+      { title: '演示来源 · 任务上下文', heading: 'demo', score: 0.5, source: 'mock' },
+      { title: '演示来源 · 知识检索', heading: 'demo', score: 0.45, source: 'mock' },
+    ],
+    gap: { coverage: 0, sufficient: false, has_gap: true, usable_chunks: 0 },
+    chain: [{ step: 'mock', model: 'demo', latency_ms: 0, note: '未执行真实链路' }],
+    decision_id: '',
+    data_source: 'mock',
+  }
+}
+
 export const dataProvider = {
   mode: source,
   async getOverview() {
@@ -220,23 +245,38 @@ export const dataProvider = {
   },
 
   /**
-   * 追问：契约中 `/chat/{task_id}` 的 POST 仍为 `planned`。
-   * api 模式下**不回落演示答复**——一条编造的"回答"比报错更危险（会被当成真实模型输出）。
+   * 追问（R4-06 端到端 / R4-09 对话界面）：BFF `/brain/ask` → nlp-service 大脑层。
+   *
+   * 与旧的 `/chat/{task_id}`（契约仍为 planned）不同，该端点已在 Phase 4 实装，
+   * 会回传 `sources`（来源标注 R4-08）/ `gap`（缺口检测 R4-07）/ `chain`（决策链 D5）。
+   *
+   * 约定：**大脑层不可用时不伪造回答** —— 返回 `available=false` + `reason`，
+   * 由界面展示失败（一条编造的"回答"比报错更危险，会被当成真实模型输出）。
    */
-  async ask(question: string, taskId = 'T-1042') {
-    if (source !== 'api') {
-      return {
-        answer: `已基于任务上下文完成追问分析。本次问题：${question}。结论已追加到结果工作区，原有产物保持不变。`,
-        citations: [
-          { title: '任务上下文 T-1042', source: 'session-manager' },
-          { title: '知识检索结果', source: 'body-service' },
-        ],
-      }
-    }
+  async askBrain(question: string, taskId = 'T-1042', context: Array<{ role: string; content: string }> = []): Promise<BrainAnswer> {
+    if (source === 'mock') return mockBrainAnswer(question)
     try {
-      return unwrap(await api.post(`/chat/${taskId}`, { question }))
+      const payload = unwrapBody(await api.post('/brain/ask', {
+        question,
+        session_id: taskId,
+        intent: '',
+        context,
+      }))
+      if (payload && typeof payload === 'object' && 'available' in payload) {
+        if (payload.available === false) {
+          reportDegrade('brain_ask', String(payload.reason || '大脑层不可用（nlp-service 未启动）'))
+        } else {
+          reportApiOk('brain_ask')
+        }
+        return { data_source: 'live', ...(payload as BrainAnswer) }
+      }
+      reportDegrade('brain_ask', '响应缺少 available 字段')
+      return { available: false, question, answer: '', reason: '响应结构不符合契约' }
     } catch (error) {
-      throw plannedEndpointError('chat_ask', 'POST', `/chat/${taskId}`, error)
+      const status = (error as { response?: { status?: number } })?.response?.status
+      const reason = status ? `HTTP ${status}` : ((error as Error)?.message || 'BFF /brain/ask 不可达')
+      reportDegrade('brain_ask', reason)
+      return { available: false, question, answer: '', reason: `BFF /brain/ask 不可达（${reason}）` }
     }
   },
 

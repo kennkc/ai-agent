@@ -19,15 +19,47 @@
                 {{ message.content }}<span v-if="streaming && message === messages[messages.length - 1]" class="stream-cursor">▍</span>
               </div>
               <div v-if="message.citations?.length" class="citations">
-                <el-popover v-for="citation in message.citations" :key="citation.title" placement="top" trigger="hover" :width="260">
-                  <template #reference><el-tag size="small" type="info" effect="plain">{{ citation.title }}</el-tag></template>
-                  <strong>{{ citation.title }}</strong><p class="citation-source">{{ citation.source }}</p>
+                <el-popover v-for="citation in message.citations" :key="citation.title" placement="top" trigger="hover" :width="320">
+                  <template #reference>
+                    <el-tag size="small" type="info" effect="plain">
+                      {{ citation.title }}<span v-if="citation.score != null" class="citation-score">{{ Math.round(citation.score * 100) }}%</span>
+                    </el-tag>
+                  </template>
+                  <strong>{{ citation.title }}</strong>
+                  <p class="citation-source">来源：{{ citation.source || 'body-service' }}</p>
+                  <p v-if="citation.snippet" class="citation-snippet">{{ citation.snippet }}</p>
                 </el-popover>
+              </div>
+
+              <div v-if="message.brain" class="brain-meta">
+                <el-tag v-if="message.brain.generator === 'mock'" size="small" type="warning" effect="plain">演示答复 · 未调用大脑层</el-tag>
+                <el-tag v-else-if="message.brain.degraded" size="small" type="warning" effect="plain">
+                  降级生成 · {{ message.brain.generator }}{{ message.brain.degraded_reasons?.length ? `（${message.brain.degraded_reasons.join('、')}）` : '' }}
+                </el-tag>
+                <el-tag v-if="message.brain.cache_hit" size="small" type="success" effect="plain">语义缓存命中 {{ (message.brain.cache_similarity ?? 0).toFixed(2) }}</el-tag>
+                <el-alert
+                  v-if="message.brain.gap?.has_gap"
+                  class="gap-alert"
+                  type="warning"
+                  :closable="false"
+                  show-icon
+                  :title="`知识库覆盖不足：命中 ${message.brain.gap.usable_chunks ?? 0} 条可用片段，覆盖度 ${Math.round((message.brain.gap.coverage ?? 0) * 100)}%（阈值 ${Math.round((message.brain.gap.threshold ?? 0.35) * 100)}%）`"
+                />
+                <el-collapse v-if="message.brain.chain?.length" class="chain-collapse">
+                  <el-collapse-item :name="'chain'" :title="`决策链 ${message.brain.chain.length} 步${message.brain.decision_id ? ' · ' + message.brain.decision_id.slice(0, 12) : ''}`">
+                    <div v-for="step in message.brain.chain" :key="step.step" class="chain-step">
+                      <strong>{{ step.step }}</strong>
+                      <span class="chain-model">{{ step.model || '-' }}</span>
+                      <span>{{ step.latency_ms ?? 0 }} ms</span>
+                      <span v-if="step.note" class="chain-note">{{ step.note }}</span>
+                    </div>
+                  </el-collapse-item>
+                </el-collapse>
               </div>
             </div>
           </div>
 
-          <el-alert v-if="sendError" title="消息发送失败，任务上下文已保留" type="error" :closable="false" show-icon class="send-error">
+          <el-alert v-if="sendError" :title="sendErrorMsg || '消息发送失败，任务上下文已保留'" type="error" :closable="false" show-icon class="send-error">
             <template #default><el-button size="small" text type="primary" @click="retrySend">重发</el-button></template>
           </el-alert>
 
@@ -82,7 +114,7 @@ import { ElMessage } from 'element-plus'
 import { Document, Paperclip, Promotion } from '@element-plus/icons-vue'
 import { dataProvider } from '../api/provider'
 import { chatMessages, resultArtifacts } from '../api/mock'
-import type { ChatMessage, ResultArtifact } from '../types'
+import type { BrainAnswer, ChatMessage, ResultArtifact } from '../types'
 
 const route = useRoute()
 const taskId = String(route.query.task_id || 'T-1042')
@@ -96,6 +128,7 @@ const streaming = ref(false)
 const activeResultTab = ref('artifacts')
 const selectedArtifact = ref<ResultArtifact | null>(null)
 const sendError = ref(false)
+const sendErrorMsg = ref('')
 const failedQuestion = ref('')
 const fileInputRef = ref<HTMLInputElement | null>(null)
 
@@ -127,6 +160,7 @@ async function retrySend() {
 
 async function submitQuestion(text: string, appendUser: boolean) {
   sendError.value = false
+  sendErrorMsg.value = ''
   failedQuestion.value = ''
   if (appendUser) {
     messages.value.push({ role: 'user', content: text, created_at: new Date().toLocaleTimeString() })
@@ -136,8 +170,26 @@ async function submitQuestion(text: string, appendUser: boolean) {
   loading.value = true
   streaming.value = true
   try {
-    const reply = await dataProvider.ask(text, taskId) as { answer: string; citations?: ChatMessage['citations'] }
-    const message: ChatMessage = { role: 'assistant', content: '', citations: reply.citations, created_at: new Date().toLocaleTimeString() }
+    // 多轮上下文：把当前提问之前的若干轮透传给大脑层（会话状态机在 session-manager 侧维护）
+    const context = messages.value.slice(-7, -1).map(item => ({
+      role: item.role === 'user' ? 'user' : 'assistant',
+      content: item.content,
+    }))
+    const reply: BrainAnswer = await dataProvider.askBrain(text, taskId, context)
+    // 大脑层不可用（available=false）时**绝不把空回答渲染成成功**
+    if (!reply.available) throw new Error(reply.reason || '大脑层不可用')
+    const message: ChatMessage = {
+      role: 'assistant',
+      content: '',
+      citations: (reply.sources || []).map(item => ({
+        title: item.title,
+        source: item.source || 'body-service',
+        score: item.score,
+        snippet: item.snippet,
+      })),
+      brain: reply,
+      created_at: new Date().toLocaleTimeString(),
+    }
     messages.value.push(message)
     const chunks = reply.answer.match(/.{1,6}/g) || [reply.answer]
     for (const chunk of chunks) {
@@ -157,8 +209,9 @@ async function submitQuestion(text: string, appendUser: boolean) {
     artifacts.value.unshift(artifact)
     selectedArtifact.value = artifact
     activeResultTab.value = 'artifacts'
-  } catch {
+  } catch (error) {
     sendError.value = true
+    sendErrorMsg.value = (error as Error)?.message || '消息发送失败，任务上下文已保留'
     failedQuestion.value = text
   } finally {
     loading.value = false
@@ -206,6 +259,16 @@ onMounted(loadChat)
 .message-role { margin-bottom: 4px; color: var(--wp-sub); font-size: 12px; }
 .citations { display: flex; gap: 6px; margin-top: 6px; flex-wrap: wrap; }
 .citation-source { margin: 6px 0 0; color: var(--wp-sub); font-size: 12px; }
+.citation-snippet { margin: 6px 0 0; color: var(--wp-text); font-size: 12px; line-height: 1.6; }
+.citation-score { margin-left: 4px; opacity: .75; }
+.brain-meta { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; align-items: flex-start; }
+.brain-meta .el-alert { padding: 6px 10px; }
+.gap-alert { margin-top: 2px; }
+.chain-collapse { width: 100%; margin-top: 2px; }
+.chain-step { display: flex; gap: 10px; align-items: baseline; font-size: 12px; color: var(--wp-sub); }
+.chain-step strong { color: var(--wp-text); }
+.chain-model { padding: 0 6px; border: 1px solid var(--wp-border); border-radius: 6px; }
+.chain-note { flex: 1; }
 .composer { display: flex; gap: 8px; margin-top: 14px; align-items: flex-end; }
 .composer .el-textarea { flex: 1; }
 .hidden-file { display: none; }
