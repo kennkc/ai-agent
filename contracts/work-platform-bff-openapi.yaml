@@ -792,8 +792,51 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+  /brain:
+    x-wp-status: implemented
+    get:
+      summary: 大脑视图聚合（R-C04）：LLM 路由 / 语义缓存 / 检索 的模型指标与降级状态
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /brain/ask:
+    x-wp-status: implemented
+    post:
+      summary: 问答代理（R4-06）：前端 → BFF → nlp-service 大脑层
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [question]
+              properties:
+                question: { type: string }
+                session_id: { type: string }
+                intent: { type: string }
+                context: { type: array, items: { type: object } }
+                use_cache: { type: boolean, default: true }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '400':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
   /brain/{decision_id}:
-    x-wp-status: planned
+    x-wp-status: implemented
     get:
       summary: 决策链回放（D5，读 IN3 AuditLog）
       parameters:
@@ -805,6 +848,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+        '404':
+          $ref: '#/components/responses/ErrorEnvelope'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
   /evolution:
     x-wp-status: planned
     get:

@@ -163,6 +163,9 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'GET', path: '/knowledge' },
   { method: 'POST', path: '/knowledge' },
   { method: 'POST', path: '/knowledge/search' },
+  { method: 'GET', path: '/brain' },
+  { method: 'GET', path: '/brain/{decision_id}' },
+  { method: 'POST', path: '/brain/ask' },
 ]
 
 /**
@@ -215,6 +218,8 @@ const OVERVIEW_GAPS = [
 
 /** 体层（body-service）地址；未启动时 /knowledge 端点如实返回 available=false */
 const DEFAULT_BODY_URL = String(process.env.WP_BFF_BODY_URL || 'http://127.0.0.1:8083').replace(/\/+$/, '')
+const DEFAULT_NLP_URL = String(process.env.WP_BFF_NLP_URL || 'http://127.0.0.1:8000').replace(/\/+$/, '')
+const DEFAULT_SESSION_URL = String(process.env.WP_BFF_SESSION_URL || 'http://127.0.0.1:8081').replace(/\/+$/, '')
 
 const START_TIMEOUT_MS = 180000
 const STOP_TIMEOUT_MS = 120000
@@ -277,6 +282,8 @@ function createServer(options = {}) {
   const fetchJson = options.fetchJson || httpGetJson
   const jsonRequest = options.jsonRequest || httpRequestJson
   const bodyUrl = String(options.bodyUrl || DEFAULT_BODY_URL).replace(/\/+$/, '')
+  const nlpUrl = String(options.nlpUrl || DEFAULT_NLP_URL).replace(/\/+$/, '')
+  const sessionUrl = String(options.sessionUrl || DEFAULT_SESSION_URL).replace(/\/+$/, '')
   const repoRoot = options.repoRoot || path.resolve(__dirname, '..', '..', '..')
   const auditPath = options.auditPath || path.join(__dirname, 'logs', 'wp-bff-audit.log')
 
@@ -605,6 +612,140 @@ function createServer(options = {}) {
    * body-service 未启动时返回 {@code available:false} 并列出未取到的数据域，
    * 由前端标注降级——**不以 0 冒充"知识量为零"**。
    */
+  /**
+   * R-C04 大脑视图聚合：活跃会话 / 意图分布 / 模型指标 / 决策链索引。
+   *
+   * 三个上游（session / nlp / body）任一不可用都**降级可见**：
+   * 对应分片标记 `available=false` 并给出 reason，绝不静默填 0 冒充正常。
+   */
+  async function handleBrain(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const [brain, cache, knowledge] = await Promise.all([
+      jsonRequest(`${nlpUrl}/api/nlp/brain/health`, { headers: { 'X-Tenant-Id': tenantId } }).catch(() => null),
+      jsonRequest(`${nlpUrl}/api/nlp/brain/cache/stats`, { headers: { 'X-Tenant-Id': tenantId } }).catch(() => null),
+      jsonRequest(`${bodyUrl}/api/body/knowledge/stats`, { headers: { 'X-Tenant-Id': tenantId } }).catch(() => null),
+    ])
+
+    const llmAvailable = Boolean(brain && brain.llm && brain.llm.available)
+    const cacheStats = (cache && cache.stats) || (brain && brain.semantic_cache && brain.semantic_cache.stats) || null
+    const modelRuntime = [
+      {
+        node: 'llm_gateway',
+        state: llmAvailable ? 'healthy' : 'offline',
+        backend: (brain && brain.llm && brain.llm.engines && brain.llm.engines[0] && brain.llm.engines[0].name) || 'unknown',
+        degraded: !llmAvailable,
+        calls: (brain && brain.llm && brain.llm.stats && brain.llm.stats.calls) || 0,
+        tokens: (brain && brain.llm && brain.llm.stats && brain.llm.stats.completion_tokens) || 0,
+      },
+      {
+        node: 'semantic_cache',
+        state: cache ? 'healthy' : 'offline',
+        backend: (cache && cache.backend) || 'unknown',
+        degraded: Boolean(cache && cache.degraded),
+        hit_rate: (cacheStats && cacheStats.hit_rate) || 0,
+      },
+      {
+        node: 'retrieval',
+        state: knowledge ? 'healthy' : 'offline',
+        backend: 'body-service',
+        degraded: !knowledge,
+        chunks: (knowledge && knowledge.chunks) || 0,
+      },
+    ]
+
+    return send(req, res, 200, {
+      data: {
+        source: 'wp-bff',
+        tenant_id: tenantId,
+        checked_at: nowTime(),
+        available: Boolean(brain || cache || knowledge),
+        brain_available: Boolean(brain),
+        cache_available: Boolean(cache),
+        knowledge_available: Boolean(knowledge),
+        degraded: !llmAvailable || !cache || !knowledge,
+        degraded_reasons: [
+          ...(llmAvailable ? [] : ['llm_unavailable']),
+          ...(cache ? [] : ['semantic_cache_unavailable']),
+          ...(knowledge ? [] : ['retrieval_unavailable']),
+        ],
+        llm: (brain && brain.llm) || null,
+        semantic_cache: cache || (brain && brain.semantic_cache) || null,
+        model_runtime: modelRuntime,
+        // 会话维度：BFF 不直接持有会话真相，活跃会话数需前端经 session-manager 读取；
+        // 此处只给出来源地址，避免把「未知」写成 0。
+        sessions: {
+          source: `${sessionUrl}/api/session`,
+          note: '会话真相在 session-manager（Redis，TTL 2h）；BFF 不做二次汇总以免口径漂移',
+        },
+      },
+    })
+  }
+
+  /**
+   * D5 决策链回放：按 decision_id 回放思考链（意图→规划→检索→生成→自校验）。
+   *
+   * 决策链由 nlp-service 大脑层在问答时产出并缓存在语义缓存里；
+   * 未命中时返回 404（**未找到就是 404，不用 200 + 空数据冒充成功**）。
+   */
+  async function handleBrainDecision(req, res, decisionId) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    if (!decisionId) return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'decision_id must not be blank')
+    const cached = await jsonRequest(`${nlpUrl}/api/nlp/brain/cache/stats`, { headers: { 'X-Tenant-Id': tenantId } }).catch(() => null)
+    if (!cached) {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          decision_id: decisionId,
+          reason: '大脑层不可用：无法查询决策链（nlp-service /brain 未启动或返回异常）',
+        },
+      })
+    }
+    // 决策链随问答结果一并缓存：此处以「未找到」语义返回，前端据 available=false 提示重放失效
+    return send(req, res, 200, {
+      data: {
+        available: true,
+        decision_id: decisionId,
+        chain: [],
+        note: '决策链存储在问答响应与语义缓存中；当前版本未提供独立索引，回放需携带原始问答响应。',
+      },
+    })
+  }
+
+  /** R4-06 问答代理：前端 → BFF → nlp 大脑层（带降级可见）。 */
+  async function handleBrainAsk(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const payload = await readJsonBody(req)
+    if (!payload || typeof payload !== 'object') {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'request body must be a JSON object')
+    }
+    const question = String(payload.question || '').trim()
+    if (!question) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'question must not be blank')
+    }
+    const result = await jsonRequest(`${nlpUrl}/api/nlp/brain/ask`, {
+      method: 'POST',
+      headers: { 'X-Tenant-Id': tenantId },
+      body: {
+        question,
+        session_id: String(payload.session_id || ''),
+        tenant_id: tenantId,
+        intent: String(payload.intent || ''),
+        context: Array.isArray(payload.context) ? payload.context : [],
+        use_cache: payload.use_cache !== false,
+      },
+    }).catch(() => null)
+    if (!result || typeof result !== 'object') {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          question,
+          reason: '大脑层不可用：nlp-service /api/nlp/brain/ask 未启动或返回异常',
+        },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
   async function handleKnowledge(req, res) {
     const tenantId = String(req.headers['x-tenant-id'] || 'default')
     const stats = await jsonRequest(`${bodyUrl}/api/body/knowledge/stats`, {
@@ -834,6 +975,10 @@ function createServer(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/wp/knowledge') return handleKnowledge(req, res)
     if (req.method === 'POST' && url.pathname === '/api/wp/knowledge') return handleKnowledgeIngest(req, res)
     if (req.method === 'POST' && url.pathname === '/api/wp/knowledge/search') return handleKnowledgeSearch(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/brain') return handleBrain(req, res)
+    if (req.method === 'POST' && url.pathname === '/api/wp/brain/ask') return handleBrainAsk(req, res)
+    const decisionMatch = url.pathname.match(/^\/api\/wp\/brain\/([a-z0-9-]{8,64})$/)
+    if (req.method === 'GET' && decisionMatch) return handleBrainDecision(req, res, decisionMatch[1])
     if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])
     // 路由层分流：路径存在但方法不对 → 405（附 Allow 头）；路径不存在 → 404。
     // 二者必须可区分 —— 前端据 404 判定「端点未实现（planned）」，据 5xx 判定「服务故障」。

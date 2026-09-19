@@ -533,7 +533,8 @@ test('参数化路径方法不支持 -> 405（同一分流逻辑覆盖 {key} 路
 
 test('ROUTE_GUARD 由 IMPLEMENTED_ENDPOINTS 派生（不立第三份端点真相）', () => {
   for (const { method, path } of IMPLEMENTED_ENDPOINTS) {
-    const concrete = `/api/wp${path.replace('{key}', 'redis')}`
+    // 通用替换所有占位符（不止 {key}，还有 {decision_id} 等）
+    const concrete = `/api/wp${path.replace(/\{[^}]+\}/g, 'sample-id')}`
     const allowed = ROUTE_GUARD.allowedMethods(concrete)
     assert.ok(allowed, `已声明端点应可被路由守卫识别：${method} ${path}`)
     assert.ok(allowed.includes(method), `${method} ${path} 的方法应被允许，实得 ${JSON.stringify(allowed)}`)
@@ -560,4 +561,102 @@ test('鉴权失败不触达下游，且错误体带统一错误码', async () =>
     }, { jsonRequest: async () => { called = true; return null } })
   }
   assert.equal(called, false, '鉴权失败时绝不能触达体层 — 否则即为无鉴权写入后门')
+})
+
+// ─────────── Phase 4 大脑端点（R-C04 / D5 / R4-06 代理） ───────────
+
+test('GET /api/wp/brain 上游全不可用时降级可见（不静默填 0）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain', headers: { 'x-tenant-id': 'default' } })
+    assert.equal(res.status, 200)
+    const data = res.json.data
+    assert.equal(data.brain_available, false)
+    assert.equal(data.cache_available, false)
+    assert.equal(data.knowledge_available, false)
+    assert.equal(data.degraded, true)
+    assert.deepEqual(data.degraded_reasons.sort(),
+      ['llm_unavailable', 'retrieval_unavailable', 'semantic_cache_unavailable'])
+    assert.equal(data.model_runtime.length, 3)
+    assert.equal(data.sessions.note.includes('session-manager'), true, '会话真相口径要说明来源，不能编造数字')
+  }, { jsonRequest: async () => null })
+})
+
+test('GET /api/wp/brain 上游可用时回传模型与缓存指标', async () => {
+  const brainHealth = {
+    llm: { available: true, engines: [{ name: 'template', level: 'L1', available: true }],
+      stats: { calls: 7, completion_tokens: 210 } },
+    semantic_cache: { backend: 'redis', degraded: false },
+  }
+  const cacheStats = { backend: 'redis', degraded: false, stats: { lookups: 10, hits: 4, hit_rate: 0.4 } }
+  const knowledge = { chunks: 12, documents: 8 }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain', headers: { 'x-tenant-id': 'default' } })
+    const data = res.json.data
+    assert.equal(data.degraded, false, '全部上游可用时不应标降级')
+    assert.equal(data.llm.available, true)
+    assert.equal(data.semantic_cache.stats.hit_rate, 0.4)
+    const gateway = data.model_runtime.find(n => n.node === 'llm_gateway')
+    assert.equal(gateway.state, 'healthy')
+    assert.equal(gateway.calls, 7)
+  }, {
+    jsonRequest: async url => (String(url).includes('/cache/stats') ? cacheStats
+      : String(url).includes('/knowledge/stats') ? knowledge : brainHealth),
+  })
+})
+
+test('POST /api/wp/brain/ask 空问题返回 400 统一信封', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/brain/ask', body: { question: '   ' },
+    })
+    assert.equal(res.status, 400)
+    assert.equal(res.json.code, 'AGENT_BAD_REQUEST')
+    assert.ok(res.json.message)
+  })
+})
+
+test('POST /api/wp/brain/ask 代理大脑层并回传来源与决策链', async () => {
+  const answer = {
+    answer: '模板回答', generator: 'template', degraded: true,
+    degraded_reasons: ['llm_template_backend'], sources: [{ title: '设计文档' }],
+    chain: [{ step: 'plan' }, { step: 'generate' }], decision_id: 'abc123',
+  }
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/brain/ask', body: { question: '躯体期有哪些能力' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.answer, '模板回答')
+    assert.equal(res.json.data.sources.length, 1)
+    assert.equal(res.json.data.decision_id, 'abc123')
+  }, { jsonRequest: async () => answer })
+})
+
+test('POST /api/wp/brain/ask 大脑层不可用时标 available=false', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/brain/ask', body: { question: '问题' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, false)
+    assert.ok(res.json.data.reason.includes('大脑层不可用'))
+  }, { jsonRequest: async () => null })
+})
+
+test('GET /api/wp/brain/{decision_id} 决策链回放端点可达', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain/b6c3bd94' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.decision_id, 'b6c3bd94')
+  }, { jsonRequest: async () => ({ backend: 'redis', stats: {} }) })
+})
+
+test('GET /api/wp/brain 用不支持的方法 → 405 且带 Allow 头', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { method: 'DELETE', path: '/api/wp/brain' })
+    assert.equal(res.status, 405)
+    assert.equal(res.json.code, 'AGENT_METHOD_NOT_ALLOWED')
+    assert.equal(res.headers.allow, 'GET')
+  })
 })
