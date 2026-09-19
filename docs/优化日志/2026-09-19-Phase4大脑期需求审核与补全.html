@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>优化日志 · 2026-09-19 Phase 4 大脑期需求审核与补全</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-19 09:30 · 源文件 2026-09-19-Phase4大脑期需求审核与补全.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 本轮目标</a></li>
+<li><a href="#2">2. 审核方法</a></li>
+<li><a href="#3">3. 审核结论</a><ul>
+<li><a href="#31-0-2">3.1 伪代码排查：扫描 0 处标记，但通读发现 2 处实质伪实现</a><ul>
+<li><a href="#a1-r4-04-redis">🔴 A1 · R4-04 语义缓存的「Redis 后端」是空壳（谎报后端）</a></li>
+<li><a href="#a2-d5">🔴 A2 · D5 决策链回放端点永远返回「成功 + 空链」（静默假装成功）</a></li>
+</ul>
+</li>
+<li><a href="#32-r4-01r4-09-indx">3.2 需求对账表（R4-01~R4-09 + 终端线 + IN/D/X）</a></li>
+<li><a href="#33-session-manager">3.3 链路可达性：session-manager 在端到端链路上是孤岛</a></li>
+<li><a href="#34-4">3.4 文档失真（4 处）</a></li>
+<li><a href="#35-phase-4">3.5 顺带发现（非 Phase 4 引入）</a></li>
+</ul>
+</li>
+<li><a href="#4">4. 缺失项汇总（按处置建议分类）</a></li>
+<li><a href="#5">5. 需要你拍板的三件事</a></li>
+<li><a href="#6">6. 客观达标的部分（避免一棍子打死）</a></li>
+<li><a href="#7">7. 下一步（待你确认后执行）</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="2026-09-19-phase-4">优化日志 · 2026-09-19 Phase 4 大脑期需求审核与补全<a class="headerlink" href="#2026-09-19-phase-4" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>阶段</strong>：Phase 4 大脑期（<strong>审核轮</strong>，不新增功能）
+<strong>分支</strong>：<code>dev</code>（三分支同哈希 <code>4c5585f</code>）
+<strong>审核对象</strong>：Phase 4 交付基线 <code>1581ddd</code>（Python+Java）→ <code>31d2dc1</code>（前端）→ <code>3124572</code>（Console）→ <code>b7c02c1</code>（BFF）→ <code>19c5347</code>（缺陷修复）→ <code>4c5585f</code>（三件套收口）
+<strong>依据</strong>：《Phase4-大脑期 · 需求设计文档》v1.0 / 开发设计文档 v1.1 / 测试设计案例文档 / 部署文档
+<strong>结论</strong>：<strong>发现 2 处伪实现（红线级）+ 1 处链路断裂 + 5 项需求未落地 + 4 处文档失真</strong>；
+本轮<strong>只出结论与处置建议，未改生产代码</strong>（详见 §5「需你拍板」）</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 本轮目标<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>Phase 4 已宣告"验收通过"。按阶段复审惯例，本轮<strong>不看阶段报告的结论，直接拿需求文档对源码取证据</strong>：</p>
+<ol>
+<li><strong>伪代码排查</strong>：搜生产代码里的 TODO / 占位 / 假实现 / 静默降级，并<strong>逐个读核心算法</strong>判断是否"看起来做了其实没做"；</li>
+<li><strong>需求对账</strong>：需求文档 §2（R4-01~R4-09）、§7（DoD）、§8（R-C04 / R-C09）、§8（IN-02）、§9（D5）、§10（X4）与开发设计 §10（总览增强驾驶舱），逐条到代码找落点；</li>
+<li><strong>链路可达性</strong>：检查 前端 → BFF → 后端 每条链路是否<strong>真的通</strong>，而非只有单侧接口；</li>
+<li><strong>文档失真</strong>：把阶段报告里的结论与<strong>代码返回值</strong>逐条比对。</li>
+</ol>
+<hr />
+<h2 id="2">2. 审核方法<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>手段</th>
+<th>具体做法</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>生产代码扫描</td>
+<td><code>grep -rn "TODO\|FIXME\|XXX\|HACK\|占位\|待实现\|placeholder\|dummy\|fake\|stub\|NotImplemented"</code> 覆盖 <code>services/java/*/src/main</code>、<code>services/python/nlp-service/app</code>、<code>services/node/wp-bff/server.js</code>、<code>web/work-platform/src</code>、<code>web/console/js</code></td>
+</tr>
+<tr>
+<td>核心算法逐个读</td>
+<td><code>pipeline.py</code> / <code>llm_gateway.py</code> / <code>semantic_cache.py</code> / <code>gap.py</code> / <code>planner.py</code> / <code>SessionFsm.java</code> / <code>SessionStore.java</code> / <code>BrainClient.java</code> 全文通读</td>
+</tr>
+<tr>
+<td>需求逐条对账</td>
+<td>需求文档每条到代码找<strong>落点</strong>（文件 + 行号），找不到即记缺失</td>
+</tr>
+<tr>
+<td>链路可达性</td>
+<td>反查调用方：<code>grep -rn "session_id\|/api/session"</code> 于前端 / Console / BFF，确认 session-manager 是否真被端到端调用</td>
+</tr>
+<tr>
+<td>DEBT 双向差集</td>
+<td>代码里 <code>DEBT-0xx</code> ↔ <code>docs/技术债台账.md</code> 条目对账</td>
+</tr>
+<tr>
+<td>文档失真</td>
+<td>阶段三件套结论 ↔ 代码实际返回值逐条比对</td>
+</tr>
+<tr>
+<td>基线复跑</td>
+<td><code>services/python/venv/Scripts/python.exe -m pytest -q</code> → <strong>97 passed</strong></td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="3">3. 审核结论<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<h3 id="31-0-2">3.1 伪代码排查：扫描 0 处标记，但<strong>通读发现 2 处实质伪实现</strong><a class="headerlink" href="#31-0-2" title="Permanent link">&para;</a></h3>
+<p><code>grep</code> 层面：<strong>0 处</strong> <code>TODO/FIXME/占位/dummy/fake/stub</code> 出现在业务源码中
+（<code>proto-contracts</code> 的 <code>Stub</code> 命中项是 protoc 生成的 gRPC 类名，属正常产物；
+<code>web/work-platform/dist/**</code> 命中项是<strong>构建产物且已入库</strong>，见 §3.5）。</p>
+<p>但<strong>通读核心算法后</strong>，发现 2 处"注释/自述与行为不符"的实质伪实现 —— 这类问题 <code>grep</code> 抓不到，
+只有把"它声称做什么"与"它实际做什么"摆在一起才看得见：</p>
+<h4 id="a1-r4-04-redis">🔴 A1 · R4-04 语义缓存的「Redis 后端」是空壳（谎报后端）<a class="headerlink" href="#a1-r4-04-redis" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>证据</strong></td>
+<td><code>services/python/nlp-service/app/brain/semantic_cache.py:93-100</code>（保存 <code>_redis</code>）、<code>:152/158/160/165/169/173/176/179</code>（<strong>读写路径全部只操作 <code>self._local</code> 进程内字典</strong>）</td>
+</tr>
+<tr>
+<td><strong>声称</strong></td>
+<td>类注释 <code>:3</code>「存储：Redis（复用 Phase 3 的 lifeform-redis）；Redis 不可用时降级为进程内缓存」；<code>health()</code> 在 Redis 连通时回 <code>backend=redis, degraded=false</code></td>
+</tr>
+<tr>
+<td><strong>实际</strong></td>
+<td><code>self._redis</code> 在 <code>__init__</code> 之外<strong>零引用</strong> —— <code>store()</code> 只写 <code>_local</code>，<code>lookup()</code> 只扫 <code>_local</code>。Redis 通与不通，行为完全一致，唯一差别是 <code>backend</code> 字段的<strong>字符串</strong></td>
+</tr>
+<tr>
+<td><strong>后果</strong></td>
+<td>① 进程重启即失忆、多实例不共享（设计口径"复用 Redis"落空）；② <code>health()</code> 报 <code>redis</code> 而数据实为内存，属<strong>谎报</strong>；③ 阶段报告据此写下"真实 Redis 后端，非内存兜底"（见 E1）</td>
+</tr>
+<tr>
+<td><strong>为何单测抓不到</strong></td>
+<td><code>tests/test_brain.py</code> 全部用例构造 <code>SemanticCache(redis_client=None, ...)</code> → <strong>Redis 路径零覆盖</strong>，测试只证明了"内存兜底自洽"</td>
+</tr>
+<tr>
+<td><strong>定性</strong></td>
+<td><strong>伪实现（红线）</strong> —— 不是"能力缺失但诚实上报"，而是"声称用了 Redis 实际没用"</td>
+</tr>
+</tbody>
+</table>
+<h4 id="a2-d5">🔴 A2 · D5 决策链回放端点永远返回「成功 + 空链」（静默假装成功）<a class="headerlink" href="#a2-d5" title="Permanent link">&para;</a></h4>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><strong>证据</strong></td>
+<td><code>services/node/wp-bff/server.js:702-724</code></td>
+</tr>
+<tr>
+<td><strong>声称</strong></td>
+<td>函数注释 <code>:700</code>「未命中时返回 404（<strong>未找到就是 404，不用 200 + 空数据冒充成功</strong>）」；契约 <code>contracts/work-platform-bff-openapi.yaml:841</code>「决策链回放（D5，<strong>读 IN3 AuditLog</strong>）」，声明 404/405</td>
+</tr>
+<tr>
+<td><strong>实际</strong></td>
+<td>只要 <code>nlp-service</code> 活着，无论 <code>decision_id</code> 是什么，一律 <code>200 + {available:true, chain:[], note:…}</code> —— <strong>404 分支根本不存在</strong>；且全库 <code>grep -rln "AuditLog\|audit_log"</code> 仅有 <code>pipeline.py</code> 一处注释命中，<strong>不存在任何 AuditLog 实现</strong></td>
+</tr>
+<tr>
+<td><strong>后果</strong></td>
+<td>① 任意合法格式的 decision_id 都能"回放成功"，只是链为空 → 前端无法区分"没这条决策"与"回放失败"；② 违反本仓库已定型的 planned 三态口径（404=未实现/不存在）；③ 契约声明 404 而实现没有 → 客户端按契约写的错误处理永远不会触发</td>
+</tr>
+<tr>
+<td><strong>为何单测抓不到</strong></td>
+<td><code>services/node/wp-bff/test/server.test.js:647</code> 用例名为「决策链回放端点<strong>可达</strong>」，只断言 <code>data.decision_id === 'b6c3bd94'</code>，<strong>没有断言 available / 404 语义</strong> → 测试反而固化了空壳行为</td>
+</tr>
+<tr>
+<td><strong>定性</strong></td>
+<td><strong>伪实现（红线）</strong> —— 注释写了 404，代码给了 200；属"静默假装成功"</td>
+</tr>
+</tbody>
+</table>
+<h3 id="32-r4-01r4-09-indx">3.2 需求对账表（R4-01~R4-09 + 终端线 + IN/D/X）<a class="headerlink" href="#32-r4-01r4-09-indx" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>名称</th>
+<th>代码落点</th>
+<th>判定</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R4-01</td>
+<td>会话状态机 FSM</td>
+<td><code>fsm/SessionFsm.java</code>（纯状态机，5 态 5 事件，TIMEOUT 可经 MESSAGE 恢复）</td>
+<td>✅ 真实实现</td>
+<td>无占位</td>
+</tr>
+<tr>
+<td>R4-02</td>
+<td>会话持久化 Redis</td>
+<td><code>fsm/SessionStore.java</code>（Hash + List + TTL 2h + 最近 K 轮）</td>
+<td>✅ 真实实现</td>
+<td>真 Redis；<strong>但端到端无调用方</strong>（见 B1）</td>
+</tr>
+<tr>
+<td>R4-03</td>
+<td>LLM Gateway</td>
+<td><code>brain/llm_gateway.py</code>（L1/L2/L3 路由 + 超时 + 重试 + 统计 + OpenAI 兼容 HTTP 引擎）</td>
+<td>⚠️ 实现真实，引擎未接</td>
+<td><code>TemplateEngine</code> 是<strong>降级后端且如实标 <code>generator=template</code>、<code>degraded=true</code></strong>（DEBT-015/016）→ <strong>可接受</strong>，非伪实现</td>
+</tr>
+<tr>
+<td>R4-04</td>
+<td>语义缓存</td>
+<td><code>brain/semantic_cache.py</code></td>
+<td>🔴 <strong>伪实现</strong></td>
+<td>见 A1（Redis 空壳）</td>
+</tr>
+<tr>
+<td>R4-05</td>
+<td>任务规划器</td>
+<td><code>brain/planner.py</code>（意图→模板映射 + 槽位提取）</td>
+<td>⚠️ 规则版</td>
+<td>如实回 <code>planner=rule</code>（DEBT-017）→ <strong>可接受</strong>；但"参数槽位提取"仅 4 类正则（书名号/时间范围/条数/问号），<strong>未做准确率评测</strong>（见 C4）</td>
+</tr>
+<tr>
+<td>R4-06</td>
+<td>检索增强生成链路</td>
+<td><code>brain/pipeline.py</code>（LangGraph StateGraph，plan→retrieve→gap→generate/insufficient）</td>
+<td>✅ 真实实现</td>
+<td>TypedDict 显式通道，无占位返回值</td>
+</tr>
+<tr>
+<td>R4-07</td>
+<td>信息缺口检测</td>
+<td><code>brain/gap.py</code></td>
+<td>⚠️ 阈值已改</td>
+<td>需求 §6 口径 0.85 → 实现默认 0.35（<code>GAP_COVERAGE_THRESHOLD</code>），因嵌入/重排降级实测仅 0.15~0.35。<strong>已在台账 §4.14 登记</strong>，但属"设计文档口径变更"，按流程<strong>应经你确认</strong>（见 §5-Q2）</td>
+</tr>
+<tr>
+<td>R4-08</td>
+<td>来源标注</td>
+<td><code>brain/gap.py:85-135</code>（Source/SourceAnnotator）</td>
+<td>✅ 真实实现</td>
+<td>含 chunk_id/score/rerank/backend/channel/collected_at</td>
+</tr>
+<tr>
+<td>R4-09</td>
+<td>前端对话界面</td>
+<td><code>web/work-platform/src/views/ChatView.vue</code></td>
+<td>⚠️ 部分</td>
+<td>输入/回答/来源/缺口/降级徽标/决策链齐备；<strong>但"会话管理"未实现</strong>，session_id 用的是 <code>taskId</code>（默认 <code>T-1042</code>），见 B1</td>
+</tr>
+<tr>
+<td>R-C04</td>
+<td>Console 大脑视图 + 交互终端</td>
+<td><code>web/console/index.html</code> + <code>js/provider.js</code></td>
+<td>⚠️ 部分</td>
+<td>多轮对话 ✅、来源/缺口/降级 ✅；<strong>"活跃会话"无真实数据</strong>（BFF 只回 URL 字符串），<strong>"意图分布"为演示图表</strong>（已诚实标注）</td>
+</tr>
+<tr>
+<td>R-C09</td>
+<td>统一数据模块（Mock 先行）</td>
+<td><code>provider.ts</code> / <code>mock.ts</code> / Console <code>MockDataSource</code>/<code>ApiDataSource</code></td>
+<td>✅ 达标</td>
+<td>切换零 UI 改动；planned 端点抛说明性错误不伪造</td>
+</tr>
+<tr>
+<td><strong>IN-02</strong></td>
+<td>记忆图谱（C21 · Should · P4）</td>
+<td>—</td>
+<td>❌ <strong>未实现</strong></td>
+<td>全库无实体抽取/子图查询，阶段三件套<strong>未提及该编号</strong>（见 C1，属"悄悄缩小范围"）</td>
+</tr>
+<tr>
+<td><strong>D5 / X4</strong></td>
+<td>大脑决策沙盘 · 思考链回放</td>
+<td><code>pipeline.py</code> chain + <code>server.js:702</code> + Console</td>
+<td>🔴 <strong>未达标</strong></td>
+<td>X4 要求「<strong>不做 Mock 过渡、直接接真实 IN3 AuditLog</strong>」「思考链 <strong>6 步</strong>」「三卡（置信度/合规/归因）」；实际 chain 仅 <strong>4 步</strong>（plan/retrieve/gap/generate，<strong>缺"自校验"</strong>）、无 AuditLog、无三卡、回放端点为空壳（A2）</td>
+</tr>
+<tr>
+<td><strong>§10 总览增强驾驶舱</strong></td>
+<td>大模型调用监控图 / 工作状态图</td>
+<td><code>server.js:527 handleOverview</code></td>
+<td>❌ <strong>未落地</strong></td>
+<td>契约 <code>:381-382</code> 已声明 <code>model_calls</code> / <code>model_runtime</code> schema，但 <code>/api/wp/overview</code> <strong>只回 observability</strong>，这两个字段只在 <code>/api/wp/brain</code> 出现且只有 <code>model_runtime</code>（见 C3）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="33-session-manager">3.3 链路可达性：<strong>session-manager 在端到端链路上是孤岛</strong><a class="headerlink" href="#33-session-manager" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>链路</th>
+<th>现状</th>
+<th>判定</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>work-platform → BFF → nlp 大脑层</td>
+<td><code>ChatView.vue:178</code> → <code>provider.ts:259 POST /brain/ask</code> → <code>server.js:737</code> → nlp</td>
+<td>✅ 通</td>
+</tr>
+<tr>
+<td>Console → BFF → nlp 大脑层</td>
+<td><code>provider.js:239</code> → <code>/api/wp/brain/ask</code></td>
+<td>✅ 通</td>
+</tr>
+<tr>
+<td><strong>前端 → session-manager（FSM / Redis 会话）</strong></td>
+<td><strong>不存在</strong></td>
+<td>🔴 断</td>
+</tr>
+</tbody>
+</table>
+<p>证据：</p>
+<ul>
+<li><code>services/node/wp-bff/server.js</code> 全文<strong>没有代理任何 <code>/api/session</code> 端点</strong>，<code>sessionUrl</code> 只在 <code>:688-691</code> 被拼成一个字符串塞进 <code>sessions.source</code> 返回给前端（注释自述"BFF 不做二次汇总"）；</li>
+<li><code>web/work-platform/src/views/ChatView.vue:120</code> <code>taskId = route.query.task_id || 'T-1042'</code>，<code>:178</code> 把 <code>taskId</code> 当 <code>session_id</code> 传给大脑层 —— <strong>任务号不是会话号</strong>；</li>
+<li>同文件 <code>:173-174</code> 多轮上下文取 <code>messages.value.slice(-7, -1)</code>，即<strong>前端内存数组</strong>，刷新即丢失；</li>
+<li><code>web/console/index.html:151</code> 用一个<strong>静态常量</strong>当会话号（注释却写"与 session-manager 的 session_id 对应"）。</li>
+</ul>
+<p>后果（直接冲击 DoD）：</p>
+<ul>
+<li>DoD「多轮对话上下文保持（连续 5 轮不串）」—— 现阶段靠浏览器内存撑着，<strong>刷新即断</strong>；</li>
+<li>DoD「服务重启会话可恢复」（R4-02 验收标准）—— 会话真相在 Redis，但<strong>没有任何产品链路写入或读取它</strong>，Redis 里只有端到端脚本手动造的会话；</li>
+<li>R4-09「会话管理」与 R-C04「大脑视图展示<strong>活跃会话</strong>」—— 均无真实数据源。</li>
+</ul>
+<blockquote>
+<p>与 Phase 3 复审同一类问题：<strong>实现了、单测过了、端到端脚本（直连 8081）也过了，但产品链路不走它</strong>。
+差别是 Phase 3 那次是"知识入库链路断"，这次是"会话链路断"。</p>
+</blockquote>
+<h3 id="34-4">3.4 文档失真（4 处）<a class="headerlink" href="#34-4" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>位置</th>
+<th>报告写法</th>
+<th>代码实际</th>
+<th>性质</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>E1</td>
+<td><code>Phase4-测试验收报告.md:18</code>、<code>:49</code></td>
+<td>「Redis ✅ 运行中 · 语义缓存（<strong>真实后端 <code>redis</code>，非内存兜底</strong>）」「<strong>真实 Redis 后端</strong>，实测命中率 57.1%~66.7%」</td>
+<td>见 A1：Redis 客户端零读写，命中率全部来自进程内字典</td>
+<td><strong>结论失真</strong></td>
+</tr>
+<tr>
+<td>E2</td>
+<td><code>Phase4-测试验收报告.md:141</code></td>
+<td>「D5 决策链独立索引 … 端点已按 <code>available=false</code> <strong>诚实说明</strong>」</td>
+<td>见 A2：端点恒回 <code>available:true</code>，<code>available=false</code> 只在「nlp 整个不可用」时出现</td>
+<td><strong>结论失真</strong></td>
+</tr>
+<tr>
+<td>E3</td>
+<td><code>Phase4-阶段性报告.md:96</code></td>
+<td>架构图标注「↑语义缓存（<strong>Redis 向量</strong>）」</td>
+<td>实为进程内线性扫描</td>
+<td><strong>架构图失真</strong></td>
+</tr>
+<tr>
+<td>E4</td>
+<td><code>proto-contracts/.../SessionServiceGrpc.java:9/226/287/303/380/452</code></td>
+<td>「DEBT-003: 存储为<strong>内存 Map</strong>（VS1 简化版），<strong>触发点 P4 完成时替换 Redis 持久化</strong>」</td>
+<td>P4 已完成 Redis 持久化（<code>SessionStore</code> 真 Redis）</td>
+<td><strong>注释过期</strong>（DEBT-003 应销账但未销）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="35-phase-4">3.5 顺带发现（非 Phase 4 引入）<a class="headerlink" href="#35-phase-4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><strong><code>web/work-platform/dist/**</code> 构建产物已入库</strong>：<code>grep</code> 全仓伪代码标记时命中 <code>dist/assets/*.js</code>（压缩后的 Vue 运行时）。
+  建议：把 <code>dist/</code> 加入 <code>.gitignore</code>，否则每次构建都会产生巨型 diff，也会污染全仓检索。</li>
+</ul>
+<hr />
+<h2 id="4">4. 缺失项汇总（按处置建议分类）<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>编号</th>
+<th>项</th>
+<th>严重度</th>
+<th>建议处置</th>
+<th>是否需你拍板</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>A1</td>
+<td>语义缓存 Redis 空壳</td>
+<td>🔴 红线</td>
+<td>二选一：① <strong>真接 Redis</strong>（把 <code>store/lookup/_entries</code> 落到 Redis Hash + TTL，内存只做兜底）；② <strong>改口径</strong>（承认是进程内缓存，<code>backend</code> 恒回 <code>memory</code> 并把设计文档 §2「Redis 向量相似」改成"进程内"）</td>
+<td>✅ 是（涉设计口径）</td>
+</tr>
+<tr>
+<td>A2</td>
+<td>决策链回放空壳</td>
+<td>🔴 红线</td>
+<td>最小修复：删掉"假装成功"分支，<strong>查不到就 404</strong>（对齐契约与注释）；补一条反向用例断言 404</td>
+<td>否（阶段内可闭环）</td>
+</tr>
+<tr>
+<td>B1</td>
+<td>会话链路断裂</td>
+<td>🟠 高</td>
+<td>让 BFF 代理 <code>POST /api/session</code> 与 <code>/{id}/ask</code>，前端用<strong>真实 session_id</strong>；或明确把"会话管理"移出本阶段并登记</td>
+<td>✅ 是（涉范围调整）</td>
+</tr>
+<tr>
+<td>C1</td>
+<td>IN-02 记忆图谱未实现</td>
+<td>🟠 高</td>
+<td>需求 §8 明确列在本阶段（Should）。要么补实现，要么<strong>在报告里显式登记"本阶段未做 + 理由"</strong>，不能只字不提</td>
+<td>✅ 是</td>
+</tr>
+<tr>
+<td>C2</td>
+<td>X4 思考链 6 步 / 三卡缺失</td>
+<td>🟠 高</td>
+<td>补 <code>verify</code>（自校验）节点；三卡需先有 AuditLog 才谈得上合规审计与归因溯源</td>
+<td>✅ 是（依赖 AuditLog 建设）</td>
+</tr>
+<tr>
+<td>C3</td>
+<td>总览驾驶舱 model_calls / model_runtime</td>
+<td>🟡 中</td>
+<td>在设计文档 §10 要求下，<code>/api/wp/overview</code> 应聚合这两个数组（可直接复用 <code>/api/wp/brain</code> 的 <code>model_runtime</code> 逻辑）</td>
+<td>否</td>
+</tr>
+<tr>
+<td>C4</td>
+<td>DoD「意图准确率 ≥ 90%」无评测</td>
+<td>🟡 中</td>
+<td>设计文档 §4 要求 50 条问答评测集，<code>planner=rule</code> 至今未做过准确率评测 —— <strong>DoD 这条实际未验收，报告不应打勾</strong></td>
+<td>否（补评测集即可）</td>
+</tr>
+<tr>
+<td>C5</td>
+<td>缺 <code>docs/demo/Phase4-DEMO.md</code></td>
+<td>🟡 中</td>
+<td>归档约定是三件套 + DEMO，<code>docs/demo/</code> 目前只有 Phase0~3</td>
+<td>否</td>
+</tr>
+<tr>
+<td>C6</td>
+<td>P99 &lt; 3s 用单次耗时代言</td>
+<td>🟡 中</td>
+<td>报告写的是 186ms / 104ms（单次），DoD 要的是 <strong>P99</strong>。需补多轮采样分位统计</td>
+<td>否</td>
+</tr>
+<tr>
+<td>E1~E3</td>
+<td>报告结论失真</td>
+<td>🔴 高</td>
+<td>随 A1/A2 修复<strong>同步改报告</strong>，并在三件套各加一节「补记」引用本文件，原结论不改（历史留痕）</td>
+<td>否</td>
+</tr>
+<tr>
+<td>E4</td>
+<td>DEBT-003 注释过期</td>
+<td>🟡 中</td>
+<td>销账 + 改注释</td>
+<td>否</td>
+</tr>
+<tr>
+<td>—</td>
+<td><code>dist/</code> 入库</td>
+<td>🟢 低</td>
+<td>加 <code>.gitignore</code></td>
+<td>否</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<h2 id="5">5. 需要你拍板的三件事<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p>这三条都涉及<strong>设计文档口径或阶段范围</strong>，按本仓库约定（台账 §4.6 给的二选一）<strong>不擅自改</strong>：</p>
+</blockquote>
+<p><strong>Q1 · R4-04 语义缓存到底要不要真用 Redis？</strong>
+- ① 补真 Redis 后端（推荐）：数据与口径一致，跨实例共享；代价是要写序列化 + TTL + 租户键，约 1~2 小时；
+- ② 改设计口径为"进程内缓存"：省事，但语义缓存的跨实例价值归零，且 R4-04 的"失效策略"只剩 LRU。</p>
+<p><strong>Q2 · R4-07 缺口阈值 0.85 → 0.35 是否确认改设计文档？</strong>
+- 实现侧已按当前嵌入/重排后端的实测分布（0.15~0.35）校准并落到环境变量；
+- 但需求文档 §6 原文写的 0.85 属<strong>口径变更</strong>，需你点头后我才能改设计文档（或选择"保留 0.85 作为目标值、等 DEBT-010/011 闭合再回落"）。</p>
+<p><strong>Q3 · IN-02 记忆图谱 / 会话链路 是否在 Phase 4 内补？</strong>
+- IN-02 是 Should、2 人天；会话链路补 BFF 代理约 1 人天；
+- 若外移，建议在 <code>docs/技术债台账.md</code> §3 登记为"超范围未实现项"并在阶段报告显式说明，不留"悄悄缩小范围"的口子。</p>
+<hr />
+<h2 id="6">6. 客观达标的部分（避免一棍子打死）<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<p>以下经通读确认<strong>是真实实现，不是伪代码</strong>，与 Phase 3 复审的判定口径一致（能力缺失但诚实上报 ≠ 伪实现）：</p>
+<table>
+<thead>
+<tr>
+<th>模块</th>
+<th>结论</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pipeline.py</code>（LangGraph 决策链）</td>
+<td>真 StateGraph，5 节点 + 条件边；<code>insufficient</code> 分支<strong>明确不编造回答</strong></td>
+</tr>
+<tr>
+<td><code>llm_gateway.py</code></td>
+<td>真路由（L3→L2→L1 降级链）+ 真重试 + 真超时 + 真统计；<code>HttpLlmEngine</code> 已写好 OpenAI 兼容调用，配 <code>LLM_BASE_URL</code>/<code>LLM_MODEL</code> 即可启用</td>
+</tr>
+<tr>
+<td><code>planner.py</code></td>
+<td>真规则映射 + 槽位提取，如实回 <code>planner=rule</code></td>
+</tr>
+<tr>
+<td><code>gap.py</code></td>
+<td>真覆盖度计算（主片段 + 边际递减累加），阈值可配且文档化</td>
+</tr>
+<tr>
+<td><code>SessionFsm.java</code> / <code>SessionStore.java</code></td>
+<td>纯状态机 + 真 Redis Hash/List/TTL，旧数据兼容（缺省状态按 ACTIVE）</td>
+</tr>
+<tr>
+<td><code>BrainClient.java</code></td>
+<td>真 HTTP 调用 + 降级不伪造回答（answer 留空由调用方决定）</td>
+</tr>
+<tr>
+<td>BFF <code>/brain</code> / <code>/brain/ask</code> 与前端降级标注</td>
+<td>上游不可用回 <code>available=false</code> + reason，<strong>不静默填 0</strong></td>
+</tr>
+<tr>
+<td>Console / work-platform 的降级徽标</td>
+<td><code>generator=template</code> / <code>mock</code> / <code>degraded_reasons</code> 均有显式 UI 标注</td>
+</tr>
+</tbody>
+</table>
+<p>测试基线（本轮复跑）：Python <strong>97 passed</strong>；契约检查未跑（本轮未改代码）。</p>
+<hr />
+<h2 id="7">7. 下一步（待你确认后执行）<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<ol>
+<li>按 Q1~Q3 的选择，分<strong>代码</strong>与<strong>文档</strong>两次提交：
+   - <code>fix(phase4-review): 语义缓存 Redis 后端 + 决策链 404 语义 + 会话链路</code>
+   - <code>docs(phase4-review): 审核日志 + 三件套补记 + 台账登记</code></li>
+<li>每个新增错误分支（如决策链 404）<strong>必须补对应测试</strong>；A1 修完要补<strong>真 Redis 读写用例</strong>（不能再用 <code>redis_client=None</code> 绕过）。</li>
+<li>收口：重生 HTML 孪生 → <code>STALE</code> 为空 → 三分支推送 → 追加工作记忆。</li>
+</ol>
+<hr />
+<p><em>本轮只审核不改码。所有结论均附</em><em>文件 + 行号</em><em>证据，可逐条复验。</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
