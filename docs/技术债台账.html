@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 08:16 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-19 08:41 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -919,6 +919,12 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>未规定</td>
 <td>统一以 <strong><code>score</code></strong>（向量召回）判可用，<code>rerank_score</code> 仅用于排序展示</td>
 <td>重排分量纲随后端而变（词法重排压缩在 0.10~0.12），拿它当绝对阈值会<strong>换后端即失效</strong></td>
+</tr>
+<tr>
+<td>Console 大脑视图（R-C04）</td>
+<td>大脑视图含意图分布 / 会话趋势等指标</td>
+<td>真实指标（LLM 路由 / 语义缓存命中率 / 知识片段数 / 模型运行时）取自 <code>GET /api/wp/brain</code>；<strong>意图分布与会话趋势两图仍为演示值</strong>并显式标注</td>
+<td>后端暂无这两个统计接口；DEBT 留待后续补接口后再切真实</td>
 </tr>
 </tbody>
 </table>

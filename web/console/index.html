@@ -146,6 +146,10 @@ const MOCK = {
 let charts = {};
 const $ = id => document.getElementById(id);
 const main = document.getElementById('main');
+/** 用户输入/后端文本进 innerHTML 前一律转义，避免 XSS 与标签破坏 */
+const escapeHtml = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+/** 交互终端会话号（多轮上下文标识，与 session-manager 的 session_id 对应） */
+const CHAT_SESSION = 'S-' + Math.random().toString(36).slice(2, 6).toUpperCase();
 
 // ═══════════ 视图渲染 ═══════════
 function card(k,v,cls='',s=''){return `<div class="card"><div class="k">${k}</div><div class="v ${cls}">${v}</div>${s?`<div class="s">${s}</div>`:''}</div>`}
@@ -153,20 +157,63 @@ function chartCard(title,type,labels,data,color){
   return `<div class="card"><div class="k">${title}</div><div class="chart-box"><canvas id="c-${title.replace(/\s/g,'')}"></canvas></div></div>`;
 }
 
-function renderBrain(){
+/**
+ * 大脑视图（R-C04）。
+ *
+ * 真实指标（LLM 路由 / 语义缓存命中率 / 检索片段数 / 模型运行时）来自
+ * `ConsoleDataProvider.getBrainOverview()`（api 模式 = wp-bff `/api/wp/brain`）；
+ * 后端暂无统计接口的维度（意图分布 / 会话趋势）保留演示图表，但**显式标注为演示值**，
+ * 不把它们混进真实指标区。
+ */
+async function renderBrain(){
+  const ds = window.ConsoleDataProvider.dataSource;
+  let ov = null, err = null;
+  try{
+    ov = await window.ConsoleDataProvider.source.getBrainOverview();
+  }catch(e){ err = e; }
+
+  if (err){
+    return `
+    <div class="view-title"><h2>🧠 大脑视图</h2><span class="desc">会话 · 意图 · 任务规划</span></div>
+    <div class="placeholder">大脑指标加载失败：${escapeHtml(err.message)}<br><br>
+      排查：① wp-bff 已启动（默认 8090，可用 ?bff= 指定）② nlp-service 已启动（8000）③ ?ds=mock 回退演示数据</div>`;
+  }
+
+  const llm = ov.llm || {};
+  const cache = ov.semantic_cache || {};
+  const cacheStats = cache.stats || {};
+  const retrieval = ov.retrieval || {};
+  const engines = (llm.engines || []).map(e => `${e.name}(${e.level})`).join(' · ') || '无可用引擎';
+  const llmStats = llm.stats || {};
+  const runtime = ov.model_runtime || [];
+  const reasons = ov.degraded_reasons || [];
+
   return `
-  <div class="view-title"><h2>🧠 大脑视图</h2><span class="desc">会话 · 意图 · 任务规划（Mock 数据）</span></div>
+  <div class="view-title"><h2>🧠 大脑视图</h2><span class="desc">会话 · 意图 · 任务规划 · 大脑运行时</span></div>
+  <div class="ds-note">数据源：<b>${ds.toUpperCase()}</b>${ds === 'api' ? `（BFF ${window.ConsoleDataProvider.bffBase}）` : '（静态演示数据）'}
+    ${ov.degraded ? ' · <b style="color:var(--warn,#b45309)">降级</b>' : ''} · 采集于 ${ov.checked_at || '-'}</div>
   <div class="grid">
-    ${card('活跃会话','42','b','较昨日 +8')}
-    ${card('意图识别准确率','91.5%','g','P99 45ms')}
-    ${card('任务队列','3','','规划中')}
-    ${card('今日完成任务','186','','完成率 97.2%')}
+    ${card('LLM 路由', llm.available ? '可用' : '不可用', llm.available ? 'g' : 'r', `引擎：${engines}`)}
+    ${card('LLM 调用次数', llmStats.calls != null ? llmStats.calls : '-','','完成 Token：' + (llmStats.completion_tokens != null ? llmStats.completion_tokens : '-'))}
+    ${card('语义缓存命中率', cacheStats.hit_rate != null ? (cacheStats.hit_rate * 100).toFixed(1) + '%' : '-', (cacheStats.hit_rate || 0) >= 0.2 ? 'g' : 'r', `后端：${cache.backend || '-'} · 命中 ${cacheStats.hits != null ? cacheStats.hits : '-'}/${cacheStats.lookups != null ? cacheStats.lookups : '-'}`)}
+    ${card('知识片段数', retrieval.chunks != null ? retrieval.chunks : '-','',`检索后端：${retrieval.backend || '-'}`)}
+  </div>
+  <div class="grid c2">
+    <div class="card"><div class="k">模型运行时（R-C04）</div><table><tr><th>节点</th><th>状态</th><th>调用</th></tr>${
+      runtime.length ? runtime.map(n=>`<tr><td>${escapeHtml(n.node)}</td><td><span class="st ${n.state === 'healthy' ? 'up' : 'deg'}">${escapeHtml(n.state)}</span></td><td>${n.calls != null ? n.calls : '-'}</td></tr>`).join('')
+        : '<tr><td colspan="3">未提供运行时数据</td></tr>'
+    }</table></div>
+    <div class="card"><div class="k">降级与口径</div>
+      <div class="metric"><span>degraded_reasons</span><b>${reasons.length ? escapeHtml(reasons.join('、')) : '无'}</b></div>
+      <div class="metric"><span>会话真相来源</span><b style="font-size:12px">${escapeHtml((ov.sessions && ov.sessions.source) || '未接入')}</b></div>
+      <div class="s" style="white-space:normal;line-height:1.6">${escapeHtml((ov.sessions && ov.sessions.note) || '')}</div>
+    </div>
   </div>
   <div class="grid c2">
     ${chartCard('意图分布','doughnut',null,MOCK.brain.intent_dist,'#185fa5')}
     ${chartCard('会话趋势（近7日）','line',['D1','D2','D3','D4','D5','D6','D7'],MOCK.brain.trend,'#185fa5')}
   </div>
-  <div class="status-bar"><span>任务队列：<b>${MOCK.brain.queue.map(q=>q).join(' · ')}</b></span><span>多轮上下文：<b>10 轮</b></span><span>语义缓存命中：<b class="ok">24%</b></span></div>`;
+  <div class="status-bar"><span>上方两图为<b>演示图表</b>（后端暂无意图分布/会话趋势统计接口，数字非真实指标）</span><span>问答链路：<b>${ov.brain_available ? '大脑层在线' : '大脑层离线'}</b></span></div>`;
 }
 
 function sensorCard(sensor){
@@ -367,23 +414,74 @@ function renderSystem(){
   <div class="status-bar"><span>Nacos：<b class="ok">正常</b></span><span>Qdrant：<b class="ok">正常</b></span><span>Jaeger：<b class="ok">正常</b></span></div>`;
 }
 
+/**
+ * 交互终端（R-C04「Console 内完成多轮对话」）。
+ *
+ * Mock 模式下也走同一套渲染管线，只是回答由 MockDataSource 给出并标 `generator=mock`；
+ * 切到 api 后调用链为 Console → wp-bff → nlp 大脑层 → body 检索，**UI 零改动**。
+ */
 function renderChat(){
+  const ds = window.ConsoleDataProvider.dataSource;
+  const intro = ds === 'api'
+    ? `您好，我是 Agent-Lifeform 知识助手。当前接入<b>真实大脑层</b>，回答附带检索来源（含相似度）与知识缺口提示。`
+    : `您好，我是 Agent-Lifeform 知识助手。<b>当前为 Mock 数据源</b>，回复为演示文本；追加 <code>?ds=api&amp;bff=http://127.0.0.1:8090</code> 可切到真实链路。`;
   return `
-  <div class="view-title"><h2>💬 交互终端</h2><span class="desc">多轮对话 · 来源标注 · 反馈（Mock 数据）</span></div>
+  <div class="view-title"><h2>💬 交互终端</h2><span class="desc">多轮对话 · 来源标注 · 降级可见（数据源 ${ds.toUpperCase()}）</span></div>
   <div class="chat-box">
-    <div class="chat-head"><span>Agent 会话</span><span style="margin-left:auto;font-size:11px;color:var(--text2)">会话 S-8821 · 租户 default</span></div>
+    <div class="chat-head"><span>Agent 会话</span><span style="margin-left:auto;font-size:11px;color:var(--text2)">会话 ${CHAT_SESSION} · 租户 default${ds === 'api' ? ` · BFF ${window.ConsoleDataProvider.bffBase}` : ''}</span></div>
     <div class="chat-body" id="chatBody">
-      <div class="msg ai">您好，我是 Agent-Lifeform 知识助手。支持知识问答、工具调用与任务汇总，请问有什么可以帮您？</div>
-      <div class="msg user">帮我查一下 Q2 季度竞品的市场占有率？</div>
-      <div class="msg ai">已为您检索相关情报（3 个来源交叉验证）。Q2 竞品市场占有率情况如下：<br><br>• 竞品A：32.4%（较上季 +2.1%）<br>• 竞品B：28.7%（较上季 -0.8%）<br>• 竞品C：19.2%（较上季 +1.4%）<br><span class="src">📌 来源：① 行业报告 2026-08-08 · ② 财经媒体 2026-08-07 · ③ 官方财报 2026-08-06（置信度 0.92）</span></div>
-      <div class="msg user">汇总成一份简要报告，并列出数据来源。</div>
-      <div class="msg ai">已完成汇总：<br><br><b>Q2 竞品市场格局简报</b><br>头部集中度小幅提升（CR3 由 78%→80.3%），竞品A 增速最快。建议重点关注其渠道策略变化。<br><span class="src">📌 数据来源：3 个信息源交叉验证 · 生成于 2026-08-08 13:15</span><br><span style="font-size:11px">👍 有帮助 · 👎 回答有误</span></div>
+      <div class="msg ai">${intro}</div>
     </div>
     <div class="chat-input">
-      <input id="chatInput" placeholder="输入问题…（原型演示，输入任意内容可模拟回复）">
-      <button onclick="mockReply()">发送</button>
+      <input id="chatInput" placeholder="输入问题…（Enter 发送）" onkeydown="if(event.key==='Enter')sendChat()">
+      <button onclick="sendChat()">发送</button>
     </div>
   </div>`;
+}
+
+/** 一轮问答的会话上下文（多轮对话真相由 session-manager 维护，此处只透传最近 6 轮） */
+let chatTurns = [];
+
+function renderAiMessage(res){
+  const sources = res.sources || [];
+  const gap = res.gap || {};
+  const chain = res.chain || [];
+  const badges = [];
+  if (res.generator === 'mock') badges.push('演示答复 · 未调用大脑层');
+  else if (res.degraded) badges.push(`降级生成 · ${res.generator}${res.degraded_reasons && res.degraded_reasons.length ? '（' + res.degraded_reasons.join('、') + '）' : ''}`);
+  if (res.cache_hit) badges.push(`语义缓存命中 ${(res.cache_similarity || 0).toFixed(2)}`);
+
+  return `<div class="msg ai">${escapeHtml(res.answer || '')}
+    ${badges.length ? `<br><span class="src">🏷 ${escapeHtml(badges.join(' · '))}</span>` : ''}
+    ${gap.has_gap ? `<br><span class="src">⚠ 知识库覆盖不足：可用片段 ${gap.usable_chunks != null ? gap.usable_chunks : 0} 条 · 覆盖度 ${Math.round((gap.coverage || 0) * 100)}%</span>` : ''}
+    ${sources.length ? `<br><span class="src">📌 来源：${sources.slice(0, 5).map(s => `${escapeHtml(s.title)}${s.score != null ? '（' + Math.round(s.score * 100) + '%）' : ''}`).join(' · ')}</span>` : ''}
+    ${chain.length ? `<br><span class="src">🧭 决策链：${chain.map(c => `${escapeHtml(c.step)}${c.latency_ms != null ? ' ' + c.latency_ms + 'ms' : ''}`).join(' → ')}${res.decision_id ? ' · ' + escapeHtml(String(res.decision_id)).slice(0, 12) : ''}</span>` : ''}
+  </div>`;
+}
+
+async function sendChat(){
+  const input = $('chatInput');
+  const text = (input.value || '').trim();
+  if (!text) return;
+  const body = $('chatBody');
+  body.insertAdjacentHTML('beforeend', `<div class="msg user">${escapeHtml(text)}</div>`);
+  input.value = '';
+  const pendingId = 'msg-' + Date.now();
+  body.insertAdjacentHTML('beforeend', `<div class="msg ai" id="${pendingId}">检索与生成中…</div>`);
+  body.scrollTop = body.scrollHeight;
+  try{
+    const res = await window.ConsoleDataProvider.source.askBrain(text, CHAT_SESSION, chatTurns.slice(-6));
+    // 大脑层不可用（available=false）**绝不渲染成成功回复**
+    if (!res || res.available === false) throw new Error((res && res.reason) || '大脑层不可用');
+    chatTurns.push({ role: 'user', content: text }, { role: 'assistant', content: res.answer });
+    const node = document.getElementById(pendingId);
+    if (node) node.outerHTML = renderAiMessage(res); else body.insertAdjacentHTML('beforeend', renderAiMessage(res));
+  }catch(err){
+    const node = document.getElementById(pendingId);
+    const failure = `<div class="msg ai">⚠ 回答失败：${escapeHtml(err.message)}<br><span class="src">未生成任何回答（不伪造回复）。排查：wp-bff 已启动（8090）· nlp-service 已启动（8000）· 或不带参数回退 ?ds=mock</span></div>`;
+    if (node) node.outerHTML = failure; else body.insertAdjacentHTML('beforeend', failure);
+  }
+  body.scrollTop = body.scrollHeight;
 }
 
 // ═══════════ 视图切换 ═══════════
@@ -437,19 +535,6 @@ function renderCharts(name){
 document.getElementById('nav').addEventListener('click',e=>{
   const item=e.target.closest('.nav-item'); if(item)switchView(item.dataset.view);
 });
-
-function mockReply(){
-  const input=document.getElementById('chatInput'); const v=input.value.trim();
-  if(!v)return;
-  const body=document.getElementById('chatBody');
-  body.insertAdjacentHTML('beforeend',`<div class="msg user">${v}</div>`);
-  input.value='';
-  setTimeout(()=>{
-    body.insertAdjacentHTML('beforeend',`<div class="msg ai">（Mock 回复）已收到您的问题，正在检索知识库与调用工具分析…<br><span class="src">📌 原型演示：真实回复将在 DATA_SOURCE=api 后由后端 Agent 生成</span></div>`);
-    body.scrollTop=body.scrollHeight;
-  },600);
-  body.scrollTop=body.scrollHeight;
-}
 
 // ═══════════ 数据源标识（R-C09 Mock / Api 双数据源）═══════════
 (function initDataSourceTag(){

@@ -628,6 +628,15 @@ function createServer(options = {}) {
 
     const llmAvailable = Boolean(brain && brain.llm && brain.llm.available)
     const cacheStats = (cache && cache.stats) || (brain && brain.semantic_cache && brain.semantic_cache.stats) || null
+    // 体层 stats 的**知识量是嵌套的**：`/api/body/knowledge/stats` 返回
+    // `{knowledge:{documents,chunks,...}, retrieval:{...}}`，顶层并没有 chunks。
+    // 直接取 `knowledge.chunks` 会恒为 0 —— 那是"静默把未知写成 0"，与降级可见原则冲突。
+    // 这里按嵌套口径取，取不到再退回 retrieval 分片统计。
+    const bodyKnowledge = (knowledge && knowledge.knowledge) || null
+    const chunkCount = (bodyKnowledge && bodyKnowledge.chunks) ??
+      (knowledge && knowledge.retrieval && knowledge.retrieval.chunks) ?? 0
+    const docCount = (bodyKnowledge && bodyKnowledge.documents) ??
+      (knowledge && knowledge.retrieval && knowledge.retrieval.documents) ?? 0
     const modelRuntime = [
       {
         node: 'llm_gateway',
@@ -649,7 +658,7 @@ function createServer(options = {}) {
         state: knowledge ? 'healthy' : 'offline',
         backend: 'body-service',
         degraded: !knowledge,
-        chunks: (knowledge && knowledge.chunks) || 0,
+        chunks: chunkCount,
       },
     ]
 
@@ -670,6 +679,9 @@ function createServer(options = {}) {
         ],
         llm: (brain && brain.llm) || null,
         semantic_cache: cache || (brain && brain.semantic_cache) || null,
+        retrieval: knowledge
+          ? { backend: 'body-service', degraded: false, chunks: chunkCount, documents: docCount }
+          : null,
         model_runtime: modelRuntime,
         // 会话维度：BFF 不直接持有会话真相，活跃会话数需前端经 session-manager 读取；
         // 此处只给出来源地址，避免把「未知」写成 0。

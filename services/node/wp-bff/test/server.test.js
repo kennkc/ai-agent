@@ -660,3 +660,37 @@ test('GET /api/wp/brain 用不支持的方法 → 405 且带 Allow 头', async (
     assert.equal(res.headers.allow, 'GET')
   })
 })
+
+test('GET /api/wp/brain 知识量按体层嵌套口径取（不能静默填 0）', async () => {
+  // 体层 /api/body/knowledge/stats 的知识量嵌在 knowledge.knowledge 下；
+  // 按顶层取会恒为 0 —— 那是「把未知写成 0」，会让大脑视图显示错误的知识量。
+  const brainHealth = { llm: { available: true, engines: [], stats: { calls: 1 } }, semantic_cache: { backend: 'redis' } }
+  const cacheStats = { backend: 'redis', degraded: false, stats: { lookups: 2, hits: 1, hit_rate: 0.5 } }
+  const knowledge = { knowledge: { documents: 7, chunks: 11 }, retrieval: { chunks: 11, documents: 7 } }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain', headers: { 'x-tenant-id': 'default' } })
+    const data = res.json.data
+    assert.equal(data.retrieval.chunks, 11, 'chunks 必须取自嵌套的 knowledge.knowledge')
+    assert.equal(data.retrieval.documents, 7)
+    const retrievalNode = data.model_runtime.find(n => n.node === 'retrieval')
+    assert.equal(retrievalNode.chunks, 11, '模型运行时节点不得显示 0')
+  }, {
+    jsonRequest: async url => (String(url).includes('/cache/stats') ? cacheStats
+      : String(url).includes('/knowledge/stats') ? knowledge : brainHealth),
+  })
+})
+
+test('GET /api/wp/brain 体层不可用时 retrieval 为 null（不伪造知识量）', async () => {
+  const brainHealth = { llm: { available: true, engines: [], stats: { calls: 0 } }, semantic_cache: { backend: 'redis' } }
+  const cacheStats = { backend: 'redis', degraded: false, stats: { lookups: 0, hits: 0, hit_rate: 0 } }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/brain', headers: { 'x-tenant-id': 'default' } })
+    const data = res.json.data
+    assert.equal(data.retrieval, null)
+    assert.equal(data.knowledge_available, false)
+    assert.deepEqual(data.degraded_reasons, ['retrieval_unavailable'])
+  }, {
+    jsonRequest: async url => (String(url).includes('/cache/stats') ? cacheStats
+      : String(url).includes('/knowledge/stats') ? null : brainHealth),
+  })
+})

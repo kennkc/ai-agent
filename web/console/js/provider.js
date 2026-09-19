@@ -9,6 +9,10 @@
  *               尚未开发的视图接口自动回落 Mock 并标记 degraded=true（不静默失败）
  *
  * 阶段：Phase 2 感官期 —— 感官视图（R-C02）已接入真实 API：/api/sense/channels 等
+ *       Phase 4 大脑期 —— 大脑视图 / 交互终端（R-C04）接入 wp-bff 大脑端点：
+ *         GET  /api/wp/brain      模型路由 + 语义缓存 + 检索的模型指标与降级状态
+ *         POST /api/wp/brain/ask  多轮问答（带来源标注 R4-08 / 缺口检测 R4-07）
+ *       这两个端点**不经过网关令牌**（wp-bff 仅控制端点要求令牌），故走独立 BFF_BASE。
  * ═══════════════════════════════════════════════════════════════════════════ */
 (function (global) {
   'use strict';
@@ -16,6 +20,7 @@
   const params = new URLSearchParams(global.location.search);
   const DATA_SOURCE = (params.get('ds') || global.localStorage.getItem('console_data_source') || 'mock').toLowerCase();
   const API_BASE = params.get('api') || global.localStorage.getItem('console_api_base') || 'http://127.0.0.1:8080';
+  const BFF_BASE = params.get('bff') || global.localStorage.getItem('console_bff_base') || 'http://127.0.0.1:8090';
   const TENANT_ID = params.get('tenant') || 'default';
 
   /* ── Mock 数据（与后端契约同构，字段 snake_case）───────────────────────── */
@@ -104,13 +109,46 @@
     async getViewData(view) {
       return { view, source: 'mock', degraded: false, payload: null };
     }
+
+    /**
+     * 大脑视图（R-C04）Mock 数据。
+     * `source='mock'` + `degraded=true`：**数字是演示值，不得被当作真实运行指标**。
+     */
+    async getBrainOverview() {
+      return {
+        source: 'mock', available: true, degraded: true,
+        degraded_reasons: ['mock_data_source'],
+        llm: { available: false, engines: [{ name: 'template', level: 'L1', available: true }],
+               stats: { calls: 0, completion_tokens: 0 } },
+        semantic_cache: { backend: 'memory', degraded: true, stats: { lookups: 0, hits: 0, hit_rate: 0 } },
+        retrieval: { backend: 'body-service', degraded: true, chunks: 0 },
+        model_runtime: [
+          { node: 'llm_gateway', state: 'mock', calls: 0 },
+          { node: 'semantic_cache', state: 'mock', calls: 0 },
+          { node: 'retrieval', state: 'mock', calls: 0 },
+        ],
+        sessions: { source: '', note: 'Mock 数据源：会话真相需切 ?ds=api 后由 session-manager 提供' },
+      };
+    }
+
+    /** 交互终端（R-C04）Mock 问答：明确标注为演示答复，不冒充模型输出 */
+    async askBrain(question, sessionId, context) {
+      return {
+        available: true, source: 'mock', question,
+        answer: `（演示答复 · 未调用大脑层）已收到：${question}。切到 ?ds=api&bff=http://127.0.0.1:8090 后将走真实检索增强链路。`,
+        generator: 'mock', degraded: true, degraded_reasons: ['mock_data_source'],
+        sources: [], gap: { has_gap: true, usable_chunks: 0, coverage: 0 },
+        chain: [], decision_id: '',
+      };
+    }
   }
 
   /* ── API 数据源（经网关访问真实服务）────────────────────────────────── */
   class ApiDataSource {
-    constructor(base, tenantId) {
+    constructor(base, tenantId, bffBase) {
       this.name = 'api';
       this.base = base.replace(/\/$/, '');
+      this.bffBase = String(bffBase || 'http://127.0.0.1:8090').replace(/\/$/, '');
       this.tenantId = tenantId;
       this.token = null;
       this.degraded = false;
@@ -173,16 +211,54 @@
       return { view, source: 'api', degraded: true, payload: null,
                message: `${view} 视图真实接口尚未开发（Phase 3+），当前回落 Mock 数据` };
     }
+
+    /* ── 大脑视图 / 交互终端（R-C04，Phase 4）────────────────────────────
+     * 走 wp-bff（BFF_BASE）而非网关：这两个端点不需要控制令牌。
+     * 与网关请求的区别仅在 base 与鉴权头，返回结构与 Mock 同源（snake_case）。
+     */
+    async requestBff(path, options) {
+      const opts = options || {};
+      const response = await fetch(`${this.bffBase}${path}`, Object.assign({}, opts, {
+        headers: Object.assign({
+          'Accept': 'application/json',
+          'X-Tenant-Id': this.tenantId
+        }, opts.headers || {})
+      }));
+      if (!response.ok) throw new Error(`${path} HTTP ${response.status}`);
+      const body = await response.json();
+      // BFF 统一信封 {code,message,data} —— 视图只消费 data
+      return body && typeof body === 'object' && 'data' in body ? body.data : body;
+    }
+
+    async getBrainOverview() {
+      const data = await this.requestBff('/api/wp/brain');
+      return Object.assign({ source: 'api' }, data);
+    }
+
+    async askBrain(question, sessionId, context) {
+      const data = await this.requestBff('/api/wp/brain/ask', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          question,
+          session_id: String(sessionId || ''),
+          intent: '',
+          context: Array.isArray(context) ? context : [],
+        })
+      });
+      return Object.assign({ source: 'api' }, data);
+    }
   }
 
   const provider = DATA_SOURCE === 'api'
-    ? new ApiDataSource(API_BASE, TENANT_ID)
+    ? new ApiDataSource(API_BASE, TENANT_ID, BFF_BASE)
     : new MockDataSource();
 
   global.ConsoleDataProvider = {
     source: provider,
     dataSource: DATA_SOURCE,
     apiBase: API_BASE,
+    bffBase: BFF_BASE,
     tenantId: TENANT_ID,
     mock: MOCK_SENSE_MATRIX
   };
