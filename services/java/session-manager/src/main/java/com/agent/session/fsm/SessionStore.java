@@ -2,7 +2,9 @@ package com.agent.session.fsm;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.core.type.TypeReference;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.stereotype.Component;
 
 import java.time.Duration;
 import java.util.ArrayList;
@@ -26,6 +28,13 @@ import java.util.UUID;
  * <p>DEBT-014: 会话消息列表为**全量保留 + 读取时截断**（无压缩），长会话会持续增长 ——
  * 触发点: 多轮上下文超过 100 轮或引入会话压缩策略（设计文档 §3.1 预留）。
  */
+/**
+ * 注册为 Spring Bean：{@code SessionController} 需要注入它。
+ * 注意本类有**两个构造**，Spring 在存在多个构造且均未标注时无法选择，
+ * 故在默认构造上显式标注 {@code @Autowired}（这一约束只在**运行态**暴露，
+ * 单元测试手工 new 是抓不到的）。
+ */
+@Component
 public class SessionStore {
 
     public static final String SESSION_PREFIX = "session:";
@@ -37,6 +46,7 @@ public class SessionStore {
     private final ObjectMapper objectMapper;
     private final int contextTurns;
 
+    @Autowired
     public SessionStore(StringRedisTemplate redis, ObjectMapper objectMapper) {
         this(redis, objectMapper, DEFAULT_CONTEXT_TURNS);
     }

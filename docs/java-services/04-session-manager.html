@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 08:05 · 源文件 04-session-manager.md</span>
+  <span class="meta">生成于 2026-09-19 08:54 · 源文件 04-session-manager.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -260,8 +260,8 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
 <tr>
 <td><code>controller/SessionController.java</code></td>
 <td>控制器</td>
-<td style="text-align: right;">236</td>
-<td>会话 CRUD + <code>ask</code>（走大脑层，降级本地直出）+ <code>context</code> 上下文端点</td>
+<td style="text-align: right;">244</td>
+<td>会话 CRUD + <code>ask</code>（走大脑层，降级本地直出）+ <code>context</code> 上下文端点；主构造 <code>@Autowired</code></td>
 </tr>
 <tr>
 <td><code>bus/BusProxy.java</code></td>
@@ -374,8 +374,8 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>9092</strong>
 <tr>
 <td><code>fsm/SessionStore.java</code></td>
 <td>存储</td>
-<td style="text-align: right;">178</td>
-<td><strong>R4-02</strong> Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014）</td>
+<td style="text-align: right;">188</td>
+<td><strong>R4-02</strong> Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014）；<code>@Component</code>（多构造需显式指定注入构造）</td>
 </tr>
 <tr>
 <td><code>test/…/SessionFsmTest.java</code></td>

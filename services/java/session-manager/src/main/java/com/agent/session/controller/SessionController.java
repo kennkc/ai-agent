@@ -11,6 +11,7 @@ import com.agent.session.orchestration.BrainClient;
 import com.agent.session.orchestration.NlpClient;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.redis.core.StringRedisTemplate;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.web.bind.annotation.*;
 
 import java.time.Duration;
@@ -49,6 +50,13 @@ public class SessionController {
                 sessionStore, null);
     }
 
+    /**
+     * 主构造（Spring 注入）。
+     *
+     * 本类保留三个构造：全量构造（本方法，供 Spring）/ 兼容构造（7 参与 6 参，供既有测试与降级场景）。
+     * Spring 在**存在多个构造且均未标注**时会要求默认构造并启动失败，故此处显式标注。
+     */
+    @Autowired
     public SessionController(StringRedisTemplate redisTemplate, BusProxy busProxy,
                              KafkaEventPublisher kafkaEventPublisher, NlpClient nlpClient,
                              BodyClient bodyClient, ObjectMapper objectMapper, SessionStore sessionStore,

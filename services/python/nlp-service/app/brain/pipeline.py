@@ -26,7 +26,7 @@ from typing import Any, Optional, TypedDict
 
 from langgraph.graph import END, StateGraph
 
-from app.brain.gap import GAP_DETECTOR, SOURCE_ANNOTATOR
+from app.brain.gap import COVERAGE_THRESHOLD, GAP_DETECTOR, SOURCE_ANNOTATOR
 from app.brain.llm_gateway import L1, L2, L3, LlmGateway, LlmUnavailable
 from app.brain.planner import PLANNER, CHAT, NEEDS_RETRIEVAL, SUMMARIZE
 from app.brain.retrieval import RetrievalUnavailable
@@ -296,7 +296,9 @@ class RagPipeline:
         answer = (
             f"⚠️ 信息不足，暂不作答：{advice}。\n"
             f"当前检索到 {len(chunks)} 条候选片段，覆盖度 {gap.get('coverage', 0)}"
-            f"（阈值 {gap.get('threshold', 0.85)}）。"
+            # 阈值兜底必须取**当前生效的配置值**（环境变量可覆盖），
+            # 写死 0.85 会在校准后给出与判定不一致的提示口径。
+            f"（阈值 {gap.get('threshold', COVERAGE_THRESHOLD)}）。"
         )
         reasons = list(state.get("degraded_reasons", [])) + ["information_gap"]
         return {

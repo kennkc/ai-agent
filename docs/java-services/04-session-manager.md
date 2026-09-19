@@ -72,7 +72,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | 文件 | 类型 | 行数 | 职责 |
 |---|---|---:|---|
 | `SessionManagerApplication.java` | 启动类 | 19 | Spring Boot 入口 + 服务发现 |
-| `controller/SessionController.java` | 控制器 | 236 | 会话 CRUD + `ask`（走大脑层，降级本地直出）+ `context` 上下文端点 |
+| `controller/SessionController.java` | 控制器 | 244 | 会话 CRUD + `ask`（走大脑层，降级本地直出）+ `context` 上下文端点；主构造 `@Autowired` |
 | `bus/BusProxy.java` | 组件 | 34 | 总线调用的**容错包装**（异常吞掉返回 null） |
 | `nats/NatsClient.java` | 组件 | 75 | NATS 连接、同步请求-应答、异步发布 |
 | `kafka/KafkaEventPublisher.java` | 组件 | 55 | Kafka 事件发布（持久化事件通道） |
@@ -81,7 +81,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | `orchestration/BodyClient.java` | 客户端 | 44 | 调 `body-service` 做知识检索（含降级） |
 | `orchestration/OutboundHttp.java` | 工具类 | 46 | **跨服务 HTTP 统一出口**（HTTP/1.1 + 超时） |
 | `orchestration/BrainClient.java` | 客户端 | 143 | **R4-06** 大脑层 `/api/nlp/brain/ask` 调用（含降级，不伪造回答） |
-| `test/…/BrainClientWiringTest.java` | 测试 | 167 | 大脑层回传字段 / 上下文透传 / 降级标注 |
+| `test/…/BrainClientWiringTest.java` | 测试 | 167 | 大脑层回传字段 / 上下文透传 / 降级标注 |\n| `test/…/SessionWiringTest.java` | 测试 | 42 | **Spring 装配约束**：控制器唯一 `@Autowired` 构造 + SessionStore 为 Bean（防运行态启动失败） |
 | `common/ErrorCode.java` | 枚举 | 30 | 统一错误码定义 |
 | `common/BizException.java` | 异常 | 41 | 携带错误码 + 明细的业务异常 |
 | `common/GlobalExceptionHandler.java` | 切面 | 54 | 错误码 → HTTP 状态码映射与统一响应体 |
@@ -91,7 +91,7 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | `test/…/OutboundHttpTest.java` | 测试 | 101 | **缺陷 D-1 回归守卫** |
 | `test/…/UpstreamDegradeTest.java` | 测试 | 56 | 上游降级与不降级两种语义 |
 | `fsm/SessionFsm.java` | 状态机 | 94 | **R4-01** 会话状态机：`NEW→ACTIVE⇄IDLE→TIMEOUT/CLOSED` + 非法迁移 | 
-| `fsm/SessionStore.java` | 存储 | 178 | **R4-02** Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014） |
+| `fsm/SessionStore.java` | 存储 | 188 | **R4-02** Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014）；`@Component`（多构造需显式指定注入构造） |
 | `test/…/SessionFsmTest.java` | 测试 | 82 | 全量迁移、终态拒绝、超时可恢复 |
 | `test/…/SessionStoreTest.java` | 测试 | 192 | 落库字段 / TTL / 上下文窗口 / 旧数据兼容 |
 

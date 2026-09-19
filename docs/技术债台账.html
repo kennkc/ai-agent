@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 08:41 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-19 08:55 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -152,6 +152,7 @@
 <li><a href="#412-2026-09-18-docs">4.12 模块功能说明文档的「基线数字」无人守（2026-09-18 docs 核对发现并已修复 ✅）</a></li>
 <li><a href="#413-bff-4042026-09-18">4.13 全平台错误信封不一致 + BFF 方法不支持返回 404（2026-09-18 质量审核发现并已闭合 ✅）</a></li>
 <li><a href="#414-phase-4-2026-09-19">4.14 Phase 4 选型口径差异（2026-09-19 开工如实留痕）</a></li>
+<li><a href="#415-phase-4-2026-09-19">4.15 Phase 4 运行态验证发现的缺陷（2026-09-19，均已修复）</a></li>
 </ul>
 </li>
 <li><a href="#d5-1-52">五、管理规则（引《D5-1-简化版演进规范》§5.2）</a></li>
@@ -928,7 +929,39 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 </tr>
 </tbody>
 </table>
+<h3 id="415-phase-4-2026-09-19">4.15 Phase 4 运行态验证发现的缺陷（2026-09-19，均已修复）<a class="headerlink" href="#415-phase-4-2026-09-19" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>缺陷</th>
+<th>表现</th>
+<th>为什么单测抓不到</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Spring 构造注入歧义</td>
+<td><code>session-manager</code> <strong>启动失败</strong>：<code>No default constructor found</code></td>
+<td>单测手工 <code>new</code> 控制器，不走 Spring 容器</td>
+<td>控制器主构造标注 <code>@Autowired</code>；<code>SessionStore</code> 注册 <code>@Component</code> 并标注注入构造；新增 <code>SessionWiringTest</code> 用反射固化该约束</td>
+</tr>
+<tr>
+<td>BFF 知识量取错层级</td>
+<td><code>GET /api/wp/brain</code> 的 <code>chunks</code> 恒为 <strong>0</strong>（体层 stats 的知识量嵌在 <code>knowledge.knowledge</code> 下）</td>
+<td>BFF 单测的替身数据用的是顶层 <code>chunks</code></td>
+<td>改按嵌套口径取并新增顶层 <code>retrieval{chunks,documents}</code>；补两条替身数据用真实嵌套结构的用例</td>
+</tr>
+<tr>
+<td>缺口提示阈值兜底</td>
+<td>「信息不足」文案里写死 <code>阈值 0.85</code>，与校准后的实际阈值（0.35）不一致</td>
+<td>该分支未被触发过，无断言</td>
+<td>兜底改为取当前生效的 <code>COVERAGE_THRESHOLD</code></td>
+</tr>
+</tbody>
+</table>
 <blockquote>
+<p>三条都是<strong>只有真正起进程/打真实数据才会暴露</strong>的问题 —— 这也是本阶段坚持"跑运行态验证"的收益。</p>
 <p><strong>判定</strong>：以上均<strong>不是 bug</strong>，但会影响"读设计文档的人"对技术栈的判断，故按规范留痕。
 需求·设计文档<strong>原文未改动</strong> —— 设计口径变更须先确认（见 §4.6 二选一处置）。</p>
 </blockquote>
