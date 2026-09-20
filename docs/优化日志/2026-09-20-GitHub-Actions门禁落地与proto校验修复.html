@@ -1,0 +1,285 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>优化日志 · 2026-09-20 GitHub Actions 门禁落地与 proto 校验修复</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 10:34 · 源文件 2026-09-20-GitHub-Actions门禁落地与proto校验修复.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1-ci">1. 根因：CI 定义与托管平台不匹配</a></li>
+<li><a href="#2-githubworkflowsciyml5-job">2. 新增 .github/workflows/ci.yml（5 个 job）</a></li>
+<li><a href="#3-proto-ci-ci">3. 修复 proto 同步校验的三处缺陷（本地预演 CI 时发现，不修则 CI 必红）</a></li>
+<li><a href="#4">4. 忽略规则与版本声明</a></li>
+<li><a href="#5">5. 与协作者提交的合并（语义协调）</a></li>
+<li><a href="#6-ci">6. 验证（本机完整预演 CI 全部步骤）</a></li>
+<li><a href="#7">7. 未执行项</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="2026-09-20-github-actions-proto">优化日志 · 2026-09-20 GitHub Actions 门禁落地与 proto 校验修复<a class="headerlink" href="#2026-09-20-github-actions-proto" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>触发</strong>：项目评估发现「13 个 CI job 齐备却从未拦住任何问题」
+<strong>根因</strong>：远端托管在 GitHub，流水线却只写在 .gitlab-ci.yml —— GitHub 侧不会执行
+<strong>范围</strong>：CI 托管迁移 · proto 同步校验修复 · 忽略规则与版本声明</p>
+</blockquote>
+<hr />
+<h2 id="1-ci">1. 根因：CI 定义与托管平台不匹配<a class="headerlink" href="#1-ci" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">远端仓库           : git@github.com:kennkc/ai-agent.git   （GitHub）
+CI 配置            : .gitlab-ci.yml                        （GitLab CI）
+.github/workflows  : 不存在                                ← GitHub 无任何流水线
+</code></pre>
+<p>这解释了此前的现象：ruff 报 223 项、F601/F811 等缺陷进入代码，却没有任何门禁报警 ——
+<strong>不是门禁失效，而是门禁从未运行</strong>。</p>
+<h2 id="2-githubworkflowsciyml5-job">2. 新增 .github/workflows/ci.yml（5 个 job）<a class="headerlink" href="#2-githubworkflowsciyml5-job" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>job</th>
+<th>内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>java-test</td>
+<td>mvn -B -ntp test + proto 生成物同步校验（Java 侧）</td>
+</tr>
+<tr>
+<td>python-check</td>
+<td>ruff==0.16.8 + pytest + proto 同步校验（Python 侧）</td>
+</tr>
+<tr>
+<td>wp-bff-test</td>
+<td>node --test（含写端点统一鉴权回归）</td>
+</tr>
+<tr>
+<td>frontend-build</td>
+<td>npm ci + typecheck + build</td>
+</tr>
+<tr>
+<td>contract-check</td>
+<td>契约分层校验 + 跨服务超时预算校验</td>
+</tr>
+</tbody>
+</table>
+<p>触发：push / PR 到三条长期分支，另支持手动 workflow_dispatch；concurrency 取消同分支重复运行。
+.gitlab-ci.yml 保留以兼容原有 GitLab 环境。</p>
+<h2 id="3-proto-ci-ci">3. 修复 proto 同步校验的三处缺陷（本地预演 CI 时发现，不修则 CI 必红）<a class="headerlink" href="#3-proto-ci-ci" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>#</th>
+<th>问题</th>
+<th>处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>1</td>
+<td>pick_python 只找 services/python/venv，而 setup-python-env.ps1 建的是 nlp-service/.venv</td>
+<td>增加探测（约定路径优先，.venv 标注为历史兼容）</td>
+</tr>
+<tr>
+<td>2</td>
+<td>导入自检的 shell 判据在 Git Bash 与 Linux bash 下行为不同 → 误报失败</td>
+<td>改用 grep -q 判据</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Java 侧用 cmp 逐字节比较：入库产物为 CRLF、protoc 输出为 LF → 90 个文件全部误报「内容不同」</td>
+<td>改用 diff -q --strip-trailing-cr（忽略行尾，仍能发现真实漂移）</td>
+</tr>
+</tbody>
+</table>
+<p>第 3 条尤其关键：它在 Linux CI 上<strong>同样会失败</strong>，若不修，新加的 job 一推就红。</p>
+<h2 id="4">4. 忽略规则与版本声明<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<ul>
+<li>.gitignore 补 .pytest_cache/ 与 .ruff_cache/（此前未覆盖，本机已生成但侥幸未被提交）</li>
+<li>新增 .python-version = 3.12；README 4.4 标注「最低 3.10 / 推荐 3.12」</li>
+</ul>
+<h2 id="5">5. 与协作者提交的合并（语义协调）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<p>推送时发现协作者已提交 f6399a4（对上一轮环境修复的复检收口）：</p>
+<ul>
+<li>对方把 setup-python-env.ps1 的默认路径从 nlp-service/.venv 改回 services/python/venv
+  （仓库既有约定：docs 中 15+ 处命令与 .gitignore 均按该路径）—— 这是我上轮引入的不一致，对方订正正确</li>
+<li>对方同时校正了 PROGRESS 的基线数字口径</li>
+</ul>
+<p>处置：rebase 到对方提交之上，双方改动共存；并把 pick_python 的注释改为
+「约定路径优先 → .venv 历史兼容 → 系统 python3」，避免出现两套并列约定。</p>
+<h2 id="6-ci">6. 验证（本机完整预演 CI 全部步骤）<a class="headerlink" href="#6-ci" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>步骤</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>proto 同步校验（Python 侧）</td>
+<td>通过（12 个文件 + 6 模块导入自检）</td>
+</tr>
+<tr>
+<td>proto 同步校验（Java 侧）</td>
+<td>通过（90 个文件双向一致）</td>
+</tr>
+<tr>
+<td>契约分层校验</td>
+<td>63 端点 / implemented 35 路径 / 0 FAIL</td>
+</tr>
+<tr>
+<td>跨服务超时预算</td>
+<td>ok=19 / gap=0 / fail=0</td>
+</tr>
+<tr>
+<td>pytest</td>
+<td>199 passed / 1 skipped</td>
+</tr>
+<tr>
+<td>wp-bff node --test</td>
+<td>106 passed</td>
+</tr>
+<tr>
+<td>前端 typecheck</td>
+<td>通过</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7">7. 未执行项<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>沙箱镜像构建与 R5-03 复验</td>
+<td>Docker daemon 未运行（npipe 端点不可用）</td>
+</tr>
+<tr>
+<td>BGE-M3 / bge-reranker 权重下载</td>
+<td>hf-mirror.com 可达，但模型体积 GB 级，需择机执行；scripts/model-readiness.py 已可检查并给出获取命令</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>关联：.github/workflows/ci.yml · scripts/proto-sync-check.sh · docs/技术债台账.md</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
