@@ -1,0 +1,51 @@
+server:
+  port: ${COLLAB_HTTP_PORT:8085}
+
+spring:
+  application:
+    name: collab-bus
+  cloud:
+    nacos:
+      discovery:
+        server-addr: ${NACOS_ADDR:127.0.0.1:8848}
+        enabled: ${NACOS_ENABLED:false}
+  datasource:
+    url: ${PG_URL:jdbc:postgresql://127.0.0.1:5432/lifeform}
+    username: ${PG_USER:agent}
+    password: ${PG_PASSWORD:agent123}
+    hikari:
+      maximum-pool-size: 8
+      connection-timeout: 3000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      show-details: always
+  tracing:
+    sampling:
+      probability: 1.0
+  otlp:
+    tracing:
+      endpoint: ${OTLP_ENDPOINT:http://127.0.0.1:4318/v1/traces}
+
+app:
+  collab:
+    nats-url: ${NATS_URL:nats://127.0.0.1:4222}
+    # 心跳最小间隔：低于该间隔的上报被限流（throttled=true），但窗口内最后一次值仍被采纳
+    heartbeat-min-interval-ms: ${COLLAB_HEARTBEAT_MIN_INTERVAL_MS:5000}
+    # 成员失联判定：超过该时长未上报 -> state=stale（保留条目，不删除）
+    member-stale-ms: ${COLLAB_MEMBER_STALE_MS:30000}
+    # 消费重投上限：超过后进入死信主题，不静默丢弃
+    retry-max: ${COLLAB_RETRY_MAX:3}
+    # 域并发上限（本切片仅登记，Phase 6 使用）
+    domain-concurrency-limit: ${COLLAB_DOMAIN_CONCURRENCY_LIMIT:8}
+    # 域关闭后 stream 清理保留期
+    stream-retention-after-close-ms: ${COLLAB_STREAM_RETENTION_MS:604800000}
+
+logging:
+  level:
+    com.agent.collab: INFO

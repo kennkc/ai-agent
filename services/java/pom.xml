@@ -27,6 +27,7 @@
         <module>body-service</module>
         <!-- Phase 5 四肢期（R5-01~R5-08）：工具注册 / 执行 / 沙箱 / 审计 -->
         <module>tool-executor</module>
+        <module>collab-bus</module>
     </modules>
 
     <properties>
