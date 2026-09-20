@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>优化日志 · 2026-09-20 沙箱真隔离复验与文档一致性修正</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 10:53 · 源文件 2026-09-20-沙箱真隔离复验与文档一致性修正.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 环境与构建</a></li>
+<li><a href="#2">2. 镜像层隔离验证（直接对容器施加逃逸尝试）</a></li>
+<li><a href="#3-tool-executor">3. 服务层验证（tool-executor 真实执行路径）</a></li>
+<li><a href="#4">4. 逃逸样本集（区分两层防护）</a></li>
+<li><a href="#5">5. 发现的残留项（已登记，非阻塞）</a></li>
+<li><a href="#6">6. 文档一致性修正</a></li>
+<li><a href="#7">7. 结论</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="2026-09-20">优化日志 · 2026-09-20 沙箱真隔离复验与文档一致性修正<a class="headerlink" href="#2026-09-20" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>触发</strong>：Docker Desktop 启动后，执行此前因环境阻塞的 P0-2（沙箱镜像构建 + R5-03 复验）
+<strong>前置</strong>：该缺口在评估中被列为「运行时可信度」的主要短板
+<strong>结论</strong>：R5-03 真隔离路径复验通过；同时发现文档自相矛盾与一处设计残留</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 环境与构建<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">Docker Desktop : 29.6.2（已配 3 个国内镜像加速器）
+镜像构建       : docker build -t agent-sandbox:latest infra/docker/sandbox/
+产物           : agent-sandbox:latest  184MB
+</code></pre>
+<h2 id="2">2. 镜像层隔离验证（直接对容器施加逃逸尝试）<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>样本</th>
+<th>期望</th>
+<th>实测结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>正常执行</td>
+<td>成功</td>
+<td>sandbox-exec-ok</td>
+</tr>
+<tr>
+<td>网络访问</td>
+<td>失败</td>
+<td>Traceback（连接不可达）</td>
+</tr>
+<tr>
+<td>rootfs 写入</td>
+<td>失败</td>
+<td>PermissionError: [Errno 13] Permission denied</td>
+</tr>
+<tr>
+<td>/tmp 写入</td>
+<td>成功</td>
+<td>tmp-writable（只读 rootfs + tmpfs 可写区）</td>
+</tr>
+<tr>
+<td>身份</td>
+<td>非 root</td>
+<td>uid= 1000</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3-tool-executor">3. 服务层验证（tool-executor 真实执行路径）<a class="headerlink" href="#3-tool-executor" title="Permanent link">&para;</a></h2>
+<p>启动 tool-executor（8084）后，<code>GET /api/tool/sandbox</code> 返回：</p>
+<pre><code class="language-json">{ &quot;enabled&quot;: true, &quot;active_backend&quot;: &quot;docker&quot;, &quot;isolated&quot;: true, &quot;degraded&quot;: false,
+  &quot;docker_available&quot;: true, &quot;timeout_ms&quot;: 10000, &quot;memory_mb&quot;: 256 }
+</code></pre>
+<p><strong>真实执行</strong>（<code>POST /api/tool/execute</code>，code 工具）：</p>
+<pre><code class="language-json">{ &quot;success&quot;: true, &quot;output&quot;: &quot;sandbox-probe-ok&quot;, &quot;sandboxed&quot;: true,
+  &quot;sandbox_backend&quot;: &quot;docker&quot;, &quot;degraded&quot;: false, &quot;latency_ms&quot;: 791 }
+</code></pre>
+<h2 id="4">4. 逃逸样本集（区分两层防护）<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<p><strong>第一层 · 静态参数规则（R5-07，入沙箱前拦截）</strong></p>
+<table>
+<thead>
+<tr>
+<th>样本</th>
+<th>HTTP</th>
+<th>错误码</th>
+<th>命中规则</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>import socket / urllib.request</td>
+<td>403</td>
+<td>AGENT_TOOL_ARGS_BLOCKED</td>
+<td>网络访问类正则</td>
+</tr>
+<tr>
+<td>/etc/passwd、/etc/shadow</td>
+<td>403</td>
+<td>AGENT_TOOL_ARGS_BLOCKED</td>
+<td>敏感文件正则</td>
+</tr>
+<tr>
+<td>rm -rf</td>
+<td>403</td>
+<td>AGENT_TOOL_ARGS_BLOCKED</td>
+<td>破坏性命令正则</td>
+</tr>
+</tbody>
+</table>
+<p><strong>第二层 · 沙箱内核隔离（R5-03，绕过静态规则后仍被拦）</strong></p>
+<table>
+<thead>
+<tr>
+<th>样本（混淆 import 绕过正则）</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>写 /workspace/escape.txt</td>
+<td>非零退出（容器内只读）</td>
+</tr>
+<tr>
+<td>混淆 socket 外连 1.1.1.1:53</td>
+<td>非零退出（容器内禁网）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>熔断</strong>：连续失败触发 <code>AGENT_TOOL_CIRCUIT_OPEN</code>（503），30s 后自动恢复 —— 与设计一致。</p>
+<h2 id="5">5. 发现的残留项（已登记，非阻塞）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<p><code>DockerSandboxBackend.available()</code> 是<strong>刻意非阻塞</strong>的设计：</p>
+<pre><code class="language-java">// 缓存过期 → 投递后台探测 → 立即返回旧值
+if (过期 &amp;&amp; refreshing.compareAndSet(false, true)) { 启动后台线程 doProbe(); }
+return lastProbeResult;   // ← 可能是 15s 前的旧值
+</code></pre>
+<p>后果：在 15s 缓存刷新的瞬间，<strong>状态端点报告 docker 可用，但实际执行会降级到受限进程</strong>
+（我在复验中真实遇到：同一分钟内 <code>/api/tool/sandbox</code> 返回 docker，而执行返回 process-restricted）。</p>
+<p>建议（对 <code>sandbox_required=true</code> 的工具）：探针刷新期间<strong>有界等待</strong>（如 1-2s）或<strong>直接拒绝执行</strong>，
+而不是静默降级 —— 安全语义上，「以为在沙箱里」比「明确失败」危险。</p>
+<h2 id="6">6. 文档一致性修正<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<p>PROGRESS.md 中存在自相矛盾：</p>
+<ul>
+<li>Phase 5 章节（L460）：<strong>已关闭</strong> —— agent-sandbox 已构建、R5-03 已验证（2026-09-19）</li>
+<li>Remaining 段（L891）：<strong>未验证</strong> —— agent-sandbox 未构建、走降级后端</li>
+</ul>
+<p>本轮复验确认前者正确，已把 Remaining 段更新为「已验证（09-19，09-20 复验）+ 残留项登记」，
+消除同一文档内的状态冲突。</p>
+<h2 id="7">7. 结论<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<p>R5-03（沙箱真隔离）从「未验证」转为「<strong>已验证</strong>」，Phase 5 最后一项未验证缺口闭合。
+「运行时可信度」短板中的沙箱一项目前已消除；剩余为真实模型权重（BGE-M3 / reranker）未安装。</p>
+<hr />
+<p><em>关联：infra/docker/sandbox/ · services/java/tool-executor/ · PROGRESS.md · docs/技术债台账.md</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

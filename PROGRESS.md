@@ -888,10 +888,20 @@ Lesson: unsafe fixes must always be followed by a full test run.
   DEBT-001 closed. **Phase 4 (大脑期 / brain stage, R4-01~R4-09 + R-C04) landed on 2026-09-19**;
   **Phase 5 (四肢期 / limb stage, R5-01~R5-08 + R-C05 预 + IN-06) landed on 2026-09-19**.
   Phase 6 (小脑期 / orchestration) is next.
-- **Sandbox true isolation is unverified on this host**: `agent-sandbox:latest` is not built, so
-  `docker_available=false` and execution goes through the restricted-process fallback
-  (`degraded=true`). Build the image and re-run the escape-sample set before R5-03 is written up
-  as verified.
+- ~~**Sandbox true isolation is unverified on this host**~~ **Verified 2026-09-19, re-verified
+  2026-09-20**: `agent-sandbox:latest` is built (184 MB on the 2026-09-20 rebuild) and the real
+  Docker path is in use — `GET /api/tool/sandbox` reports `active_backend=docker` / `isolated=true`
+  / `degraded=false`, and a `code` tool call returns `sandboxed=true, sandbox_backend=docker,
+  degraded=false`. Escape-sample set re-run on 2026-09-20: static rules (socket imports,
+  `/etc/passwd`, `rm -rf`) → **403 `AGENT_TOOL_ARGS_BLOCKED`**; sandbox-layer attempts with
+  obfuscated imports (write to `/workspace`, outbound connect) → **non-zero exit inside the
+  container**. Direct image checks: network unreachable, rootfs read-only, `/tmp` writable,
+  uid=1000.
+  **Residual (follow-up, not a blocker)**: `DockerSandboxBackend.available()` is deliberately
+  non-blocking (background probe + cached result), so an execution issued while the 15 s cache is
+  refreshing can still take the restricted-process fallback even though the status endpoint reports
+  docker as available. For `sandbox_required` tools it would be safer to bound-wait for the probe or
+  refuse instead of silently degrading — registered as a follow-up.
 - Tool registry is in-process only (no etcd) and tool metrics are not on Prometheus — DEBT-019/021.
 - Real embedding (BGE-M3) and cross-encoder reranker weights are not installed on this host;
   the services fall back to deterministic backends and report `degraded=true` (honest degradation,

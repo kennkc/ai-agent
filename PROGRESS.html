@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 10:25 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 10:53 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -1089,10 +1089,20 @@ Lesson: unsafe fixes must always be followed by a full test run.</p>
   DEBT-001 closed. <strong>Phase 4 (大脑期 / brain stage, R4-01~R4-09 + R-C04) landed on 2026-09-19</strong>;
   <strong>Phase 5 (四肢期 / limb stage, R5-01~R5-08 + R-C05 预 + IN-06) landed on 2026-09-19</strong>.
   Phase 6 (小脑期 / orchestration) is next.</li>
-<li><strong>Sandbox true isolation is unverified on this host</strong>: <code>agent-sandbox:latest</code> is not built, so
-  <code>docker_available=false</code> and execution goes through the restricted-process fallback
-  (<code>degraded=true</code>). Build the image and re-run the escape-sample set before R5-03 is written up
-  as verified.</li>
+<li>~~<strong>Sandbox true isolation is unverified on this host</strong>~~ <strong>Verified 2026-09-19, re-verified
+  2026-09-20</strong>: <code>agent-sandbox:latest</code> is built (184 MB on the 2026-09-20 rebuild) and the real
+  Docker path is in use — <code>GET /api/tool/sandbox</code> reports <code>active_backend=docker</code> / <code>isolated=true</code>
+  / <code>degraded=false</code>, and a <code>code</code> tool call returns <code>sandboxed=true, sandbox_backend=docker,
+  degraded=false</code>. Escape-sample set re-run on 2026-09-20: static rules (socket imports,
+  <code>/etc/passwd</code>, <code>rm -rf</code>) → <strong>403 <code>AGENT_TOOL_ARGS_BLOCKED</code></strong>; sandbox-layer attempts with
+  obfuscated imports (write to <code>/workspace</code>, outbound connect) → <strong>non-zero exit inside the
+  container</strong>. Direct image checks: network unreachable, rootfs read-only, <code>/tmp</code> writable,
+  uid=1000.
+  <strong>Residual (follow-up, not a blocker)</strong>: <code>DockerSandboxBackend.available()</code> is deliberately
+  non-blocking (background probe + cached result), so an execution issued while the 15 s cache is
+  refreshing can still take the restricted-process fallback even though the status endpoint reports
+  docker as available. For <code>sandbox_required</code> tools it would be safer to bound-wait for the probe or
+  refuse instead of silently degrading — registered as a follow-up.</li>
 <li>Tool registry is in-process only (no etcd) and tool metrics are not on Prometheus — DEBT-019/021.</li>
 <li>Real embedding (BGE-M3) and cross-encoder reranker weights are not installed on this host;
   the services fall back to deterministic backends and report <code>degraded=true</code> (honest degradation,
