@@ -25,7 +25,10 @@
 param(
   [switch]$Recreate,
   [switch]$SkipTest,
-  [string]$VenvPath
+  [string]$VenvPath,
+  # 解释器（默认取 PATH 中的 python）。推荐显式指定 3.12，避免 torch 版本上限：
+  #   -PythonExe "C:\Users\<you>\.local\bin\python3.12.exe"
+  [string]$PythonExe = "python"
 )
 
 $ErrorActionPreference = "Stop"
@@ -53,7 +56,8 @@ if (Test-Path $venvPython) {
   Write-Host "[1/4] 复用已有 venv: $venvDir"
 } else {
   Write-Host "[1/4] 创建 venv: $venvDir"
-  python -m venv $venvDir
+  Write-Host ("      解释器: " + (& $PythonExe --version 2>&1))
+  & $PythonExe -m venv $venvDir
 }
 
 Write-Host "[2/4] 升级 pip"
