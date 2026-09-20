@@ -48,12 +48,15 @@ services:
     ports:
       - "4222:4222"
       - "8222:8222"
-    command: ["-js", "-m", "8222"]
+    command: ["-js", "-m", "8222", "--store_dir", "/data"]
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:8222/healthz"]
       interval: 10s
       timeout: 3s
       retries: 5
+    volumes:
+      # JetStream 持久化：不加卷则容器重启即丢消息，"可靠投递"无从谈起
+      - nats-data:/data
 
   nacos:
     image: nacos/nacos-server:v2.3.2
@@ -117,6 +120,7 @@ services:
       - kafka-data:/tmp/kraft-combined-logs
 
 volumes:
+  nats-data:
   redis-data:
   pg-data:
   qdrant-data:
