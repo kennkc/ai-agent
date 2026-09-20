@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 10:20 · 源文件 README.md</span>
+  <span class="meta">生成于 2026-09-20 10:34 · 源文件 README.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -322,6 +322,7 @@ API 模式下观测区两页展示真实数据：<strong>中间件监控</strong
 <p><strong>数据源降级不再静默</strong>（2026-09-16 起）：BFF 未覆盖或请求失败的数据域仍会回落 Mock，但顶栏会显示 <code>API · 降级 N</code> 徽标并在页面顶部给出黄色横幅，点击可查看是哪些数据域、因为什么原因在展示 Mock 数据。</p>
 <p><strong>中间件控制面需要令牌</strong>：<code>POST /api/wp/middleware/:key/start|stop</code> 必须同时满足「来源白名单」与「控制令牌」两项校验。令牌优先取环境变量 <code>WP_BFF_CONTROL_TOKEN</code>，未配置时由 wp-bff 启动时随机生成到 <code>services/node/wp-bff/logs/wp-bff-control-token</code>；开发期 Vite 代理在服务端读取该文件并注入请求头，令牌不会进入浏览器。局域网 IP 访问开发服务器时需把该来源加入 <code>WP_BFF_ALLOWED_ORIGINS</code>。详见 <code>services/node/wp-bff/README.md</code>。</p>
 <h3 id="44-python-nlp-service">4.4 Python 依赖与环境（nlp-service）<a class="headerlink" href="#44-python-nlp-service" title="Permanent link">&para;</a></h3>
+<p><strong>Python 版本</strong>：最低 3.10，推荐 <strong>3.12</strong>（CI 使用 3.12；仓库根 <code>.python-version</code> 已声明）。</p>
 <p>nlp-service 的依赖声明在 <code>services/python/nlp-service/requirements.txt</code>（运行时）与
 <code>requirements-dev.txt</code>（测试与 proto 工具）。<strong>不要</strong>用系统 Python 直接装依赖，用一键脚本建立项目 venv：</p>
 <pre><code class="language-powershell">pwsh -File scripts/setup-python-env.ps1              # 创建 services/python/venv + 装依赖 + pytest 冒烟
