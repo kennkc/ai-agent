@@ -1,0 +1,60 @@
+openapi: 3.0.3
+info:
+  title: AI Lifeform Collab Bus API
+  version: 0.1.0
+  description: MC-01 协作总线服务契约（领域管理 / 心跳聚合 / 可靠投递幂等边界）。
+# 这些模板同时是 Phase 6 planner 与 bus consumer 的主题冻结面。
+x-nats-subject-templates:
+  - collab.<domain_id>.dispatch.<member_id>
+  - collab.<domain_id>.result.<member_id>
+  - collab.<domain_id>.heartbeat.<member_id>
+  - collab.<domain_id>.negotiate.<member_id>
+  - collab.<domain_id>.deadletter
+paths:
+  /api/collab/health:
+    x-collab-status: implemented
+    get:
+      summary: 服务与 JetStream 状态
+      responses:
+        '200': { description: OK }
+  /api/collab/domains:
+    x-collab-status: implemented
+    post:
+      summary: 创建协作域
+      responses:
+        '200': { description: OK }
+    get:
+      summary: 列出当前租户协作域
+      responses:
+        '200': { description: OK }
+  /api/collab/domains/{domain_id}:
+    x-collab-status: implemented
+    get:
+      summary: 域详情 + 实时聚合进度
+      parameters:
+        - { name: domain_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+    delete:
+      summary: 关闭协作域
+      parameters:
+        - { name: domain_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+  /api/collab/domains/{domain_id}/members:
+    x-collab-status: implemented
+    get:
+      summary: 成员心跳列表（含 stale 标记）
+      parameters:
+        - { name: domain_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+  /api/collab/domains/{domain_id}/heartbeats:
+    x-collab-status: implemented
+    post:
+      summary: 上报成员心跳（低于最小间隔仍采纳，响应标注 throttled）
+      parameters:
+        - { name: domain_id, in: path, required: true, schema: { type: string } }
+      responses:
+        '200': { description: OK }
+        '409': { description: 域已关闭 }

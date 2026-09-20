@@ -59,6 +59,56 @@ WP_WS_EVENTS = {
 }
 
 
+# MC-01 · collab-bus 服务契约：REST 端点 + NATS 主题模板
+COLLAB_ENDPOINTS = {
+    "/api/collab/health",
+    "/api/collab/domains",
+    "/api/collab/domains/{domain_id}",
+    "/api/collab/domains/{domain_id}/members",
+    "/api/collab/domains/{domain_id}/heartbeats",
+}
+COLLAB_SUBJECT_TEMPLATES = {
+    "collab.<domain_id>.dispatch.<member_id>",
+    "collab.<domain_id>.result.<member_id>",
+    "collab.<domain_id>.heartbeat.<member_id>",
+    "collab.<domain_id>.negotiate.<member_id>",
+    "collab.<domain_id>.deadletter",
+}
+
+def parse_collab_openapi(path):
+    """解析 collab-bus OpenAPI 的路径与 x-collab-status（不引入 YAML 依赖）。"""
+    paths, status = set(), {}
+    current = None
+    for line in Path(path).read_text(encoding="utf-8").splitlines():
+        m = re.match(r"^  (/[a-z0-9_{}/.-]+):\s*$", line)
+        if m:
+            current = m.group(1)
+            paths.add(current)
+            status.setdefault(current, "unmarked")
+            continue
+        m2 = re.match(r"^    x-collab-status:\s*(\w+)\s*$", line)
+        if m2 and current:
+            status[current] = m2.group(1)
+    return paths, status
+
+def check_collab_bus(openapi_path):
+    """校验 MC-01 服务端契约：端点完整、状态 implemented、主题模板已登记。"""
+    if not os.path.exists(openapi_path):
+        return [f"FAIL 契约文件缺失: {openapi_path}"]
+    text = Path(openapi_path).read_text(encoding="utf-8")
+    paths, status = parse_collab_openapi(openapi_path)
+    issues = []
+    for ep in sorted(COLLAB_ENDPOINTS):
+        if ep not in paths:
+            issues.append(f"FAIL collab-bus 端点缺失: {ep}")
+    for ep in sorted(paths):
+        if status.get(ep) != "implemented":
+            issues.append(f"FAIL collab-bus 端点状态不符: {ep}（{status.get(ep)}，应为 implemented）")
+    for subject in sorted(COLLAB_SUBJECT_TEMPLATES):
+        if subject not in text:
+            issues.append(f"FAIL collab-bus NATS 主题未登记: {subject}")
+    print(f"collab-bus 契约: {len(paths)} 个端点 | 主题模板: {len(COLLAB_SUBJECT_TEMPLATES)} 个")
+    return issues
 def parse_proto_messages(path):
     """提取 proto 中所有 message 定义的字段名"""
     messages = {}
@@ -298,6 +348,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--proto-dir", default=str(REPO_ROOT / "proto"), help="proto 根目录")
     ap.add_argument("--work-platform", action="store_true", help="校验 work-platform 契约分层（X3）")
+    ap.add_argument("--collab", action="store_true", help="校验 MC-01 collab-bus 服务契约")
+    ap.add_argument("--collab-openapi", default="", help="collab-bus OpenAPI 契约路径")
     ap.add_argument("--openapi", default="", help="work-platform OpenAPI 契约路径")
     args = ap.parse_args()
 
@@ -312,6 +364,14 @@ def main():
             "contracts", "work-platform-bff-openapi.yaml",
         )
         all_issues = check_work_platform(openapi)
+    elif args.collab:
+        print("Contract Check · collab-bus 服务契约（MC-01）")
+        print("=" * 60)
+        collab_openapi = args.collab_openapi or os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "contracts", "collab-bus-openapi.yaml",
+        )
+        all_issues = check_collab_bus(collab_openapi)
     else:
         print("Contract Check · 数据字典 ↔ proto 双向校验")
         print("=" * 60)

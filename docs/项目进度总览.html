@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 09:41 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-20 14:19 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -162,6 +162,11 @@
 Kafka 旁路）+ <strong>IN-06 工具契约治理</strong>（semver + schema 指纹 + 变更影响分析 + 契约基线门禁），
 并在工作平台落地<strong>执行视图</strong>（工具卡片 / 试运行 / 沙箱状态灯 / 审计流水 / 熔断徽标 / <strong>影响面抽屉</strong>）。</p>
 <blockquote>
+<p><strong>2026-09-20 MC-01 协作总线独立切片（Phase 6 前置）已落地</strong>：<code>services/java/collab-bus</code>
+完成 R-MC01-01~04 —— 域生命周期、JetStream 可靠投递与幂等、心跳聚合/降频/stale、
+P99 &lt; 10ms 门禁；契约独立登记在 <code>contracts/collab-bus-openapi.yaml</code>。实测 30/30 测试通过，
+10000 次单机 NATS 往返 P99 = 3.159ms，GitHub Actions 已加入 <code>collab-bus-check</code> job。
+R-MC01-05（协作视图切真实聚合数据）仍为 Should 后续项，未用 Mock 冒充完成。</p>
 <p><strong>2026-09-19 Phase 5 复审结论</strong>：<strong>未触碰伪实现红线</strong>。复审时唯一需留意的是<strong>沙箱降级被当作"沙箱验收通过"
 叙述的风险</strong> —— 当时实测 <code>docker_available=false</code>、<code>active_backend=process-restricted</code>、<code>degraded=true</code>。
 <strong>该缺口已于同日收口轮闭合</strong>：构建 <code>agent-sandbox:latest</code> 后重启服务，<code>GET /api/tool/sandbox</code> 回到
@@ -591,7 +596,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>Java</td>
 <td><code>cd services/java &amp;&amp; ../../scripts/mvn-dev.sh test</code></td>
-<td><strong>251 测试 / 0 失败</strong>（gateway <strong>2</strong> · session-manager <strong>43</strong> · sense-service <strong>53</strong> · body-service <strong>67</strong> · <strong>tool-executor 86</strong>；body +3 来自 GAP 收尾轮）</td>
+<td><strong>281 测试 / 0 失败</strong>（gateway <strong>2</strong> · session-manager <strong>43</strong> · sense-service <strong>53</strong> · body-service <strong>67</strong> · tool-executor <strong>86</strong> · <strong>collab-bus 30</strong>）</td>
 </tr>
 <tr>
 <td>Python</td>
@@ -768,9 +773,9 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 </tr>
 <tr>
 <td>7</td>
-<td><strong>Phase 3 阶段范围缺口：IN-01 / WB-03 / WB-05 / MC-01 未实现</strong></td>
+<td><strong>Phase 3 阶段范围缺口：IN-01 / WB-03 / WB-05 / ~~MC-01~~ 仍未实现（MC-01 已闭合）</strong></td>
 <td>Phase 3 需求文档 §8/§9 列有其需求与验收标准，但阶段报告「需求范围」只声明 <code>R3-01~R3-09 + R-C03</code></td>
-<td>技能包模型（MinIO+etcd）、专家中心、技能市场、NATS 协作总线服务化 —— <strong>各需独立服务</strong>，需规划侧确认归属阶段；已登记 <a href="./技术债台账.md">技术债台账 §6-12</a></td>
+<td>技能包模型（MinIO+etcd）、专家中心、技能市场仍各需独立服务；<strong>MC-01 已于 2026-09-20 作为 Phase 6 前置独立切片完成 R-MC01-01~04</strong>（R-MC01-05 为后续 Should 项）</td>
 </tr>
 <tr>
 <td>8</td>

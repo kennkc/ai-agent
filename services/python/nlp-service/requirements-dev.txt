@@ -8,3 +8,6 @@ protobuf>=4.25.0
 # （安装后本地即可复现门禁：services/python/venv/Scripts/ruff check .）
 # 上界由精确固定版本承担；升级时同时改这里与两处 CI 的说明，不要只改 CI。
 ruff==0.16.8
+
+# MC-01: R-MC01-04 NATS 请求/回应时延门禁（scripts/collab-bus-check.py）
+nats-py>=2.9.0

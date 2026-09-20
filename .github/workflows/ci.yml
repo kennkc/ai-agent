@@ -103,3 +103,30 @@ jobs:
         run: python scripts/timeout-budget-check.py
       # proto 生成物同步校验需要 grpcio-tools / Maven 生成步骤，
       # 因此分别落在 python-check 与 java-test 两个 job 中，此处不再重复。
+  collab-bus-check:
+    name: MC-01 / NATS P99 < 10ms
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 启动 NATS JetStream
+        run: |
+          docker run --rm -d --name nats-gate \
+            -p 4222:4222 -p 8222:8222 \
+            nats:2.10-alpine -js -m 8222 --store_dir /data
+      - name: 等待 NATS 健康
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8222/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "NATS did not become healthy" >&2
+          exit 1
+      - name: 安装 nats-py
+        run: pip install 'nats-py>=2.9.0'
+      - name: R-MC01-04 P99 门禁
+        run: python scripts/collab-bus-check.py --require-jetstream

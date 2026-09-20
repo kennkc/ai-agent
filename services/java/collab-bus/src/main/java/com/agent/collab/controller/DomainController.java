@@ -1,6 +1,7 @@
 package com.agent.collab.controller;
 
 import com.agent.collab.domain.CollabDomain;
+import com.agent.collab.heartbeat.HeartbeatService;
 import com.agent.collab.domain.DomainService;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -27,8 +28,11 @@ public class DomainController {
 
     private final DomainService service;
 
-    public DomainController(DomainService service) {
+    private final HeartbeatService heartbeatService;
+
+    public DomainController(DomainService service, HeartbeatService heartbeatService) {
         this.service = service;
+        this.heartbeatService = heartbeatService;
     }
 
     @PostMapping
@@ -55,7 +59,9 @@ public class DomainController {
     public Map<String, Object> detail(
             @RequestHeader(value = "X-Tenant-Id", defaultValue = "default") String tenantId,
             @PathVariable String domainId) {
-        return wrap(service.summary(tenantId, domainId));
+        Map<String, Object> data = new LinkedHashMap<>(service.summary(tenantId, domainId));
+        data.putAll(heartbeatService.aggregate(tenantId, domainId));
+        return wrap(data);
     }
 
     /** 关闭域：幂等；此后该域消息一律被拒（409），已在 MC-P3 需求中冻结。 */
