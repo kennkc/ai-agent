@@ -858,7 +858,11 @@ Triggered by a full code review. Three defect classes found and fixed; no new fe
 - 220 findings auto-fixed; `F601` (duplicate dict key), `F402/F811` (`field` shadowing) and
   `ISC004` (7 multi-line SQL concatenations) fixed by hand; 7 intentional broad catches annotated
   with `# noqa: BLE001 - <reason>`.
-- `.gitlab-ci.yml` pins `ruff==0.16.8` - the previous unpinned install meant the job could not pass.
+- `ruff==0.16.8` is pinned in exactly one place - `services/python/nlp-service/requirements-dev.txt`.
+  Both pipelines and the local venv consume that single source; before this, the version string was
+  duplicated across two CI files and absent from the local dev requirements, so the gate could not be
+  reproduced on a developer host. `.gitlab-ci.yml` (python-lint) and `.github/workflows/ci.yml`
+  (python-check) now install from the file instead of restating the version.
 
 ### Pitfall recorded
 
@@ -874,6 +878,30 @@ Lesson: unsafe fixes must always be followed by a full test run.
 - contract-check: 63 endpoints, implemented 35 paths, 0 FAIL; timeout-budget: ok=19 / gap=0 / fail=0
 - Vue `typecheck`: passed
 - Optimization log: `docs/优化日志/2026-09-20-写端点鉴权收敛与静态检查门禁落地.md`
+
+### Local environment reproducibility (2026-09-20, pass 5)
+
+The pass-4 numbers were produced on a host whose prerequisites were assembled by hand, so the
+documented commands could not be replayed from a clean checkout. Two gaps closed:
+
+- `ruff==0.16.8` now lives in `services/python/nlp-service/requirements-dev.txt` (single source), so
+  `scripts/setup-python-env.ps1` alone yields an environment that can run `ruff check .` - previously
+  the lint gate existed only inside CI.
+- `scripts/setup-python-env.ps1` builds `services/python/venv` (the path referenced by 15+ documents),
+  installs `requirements.txt` + `requirements-dev.txt`, and smoke-runs pytest. `-VenvPath` exists for
+  explicit deviations; nothing should create a second venv by default.
+
+Two prerequisites are genuine external steps and are documented rather than automated:
+`proto-sync-check.sh` needs the Java generated sources (`mvn -Pproto-gen -pl proto-contracts -am
+generate-sources`) and Maven downloads `protoc` / `protoc-gen-grpc-java` on first run.
+
+Verification (2026-09-20, pass 5, full gate replay): Java `mvn test` **251 passed / 0 failed**
+(2 + 43 + 53 + 67 + 86); pytest **199 passed / 1 skipped**; wp-bff `node --test` **106 passed**;
+`ruff check` (services/python, 0.16.8) **All checks passed**; `proto-sync-check.sh` **通过**
+(12 Python artefacts, 90 Java artefacts, byte-identical both ways); contract-check **0 FAIL**
+(63 endpoints / 35 implemented paths) plus work-platform layering **✅ 全部通过**;
+timeout-budget **ok=19 / gap=0 / fail=0**; `java-doc-coverage.py` **160/160**;
+`doc-consistency-check.py` **FAIL=0**.
 
 ## Remaining
 

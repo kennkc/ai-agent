@@ -32,7 +32,9 @@ python-lint:
   script:
     # 版本固定：ruff 默认规则集随版本变化，不固定会让 CI 结论与本地漂移
     # （2026-09-20 实测：未固定版本的 job 从未拦住过任何问题）
-    - pip install ruff==0.16.8
+    # 固定值统一放在 services/python/nlp-service/requirements-dev.txt，
+    # 与 GitHub Actions 的 python-check job、本地 venv 共用同一来源。
+    - pip install -r services/python/nlp-service/requirements-dev.txt
     - cd services/python
     - ruff check .
 

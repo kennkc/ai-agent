@@ -49,11 +49,9 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt -r requirements-dev.txt
-      - name: Ruff 静态检查（版本固定，避免规则漂移）
+      - name: Ruff 静态检查（版本由 requirements-dev.txt 固定，避免规则漂移）
         working-directory: services/python
-        run: |
-          pip install ruff==0.16.8
-          ruff check .
+        run: ruff check .
       - name: Pytest
         working-directory: services/python/nlp-service
         run: python -m pytest -q

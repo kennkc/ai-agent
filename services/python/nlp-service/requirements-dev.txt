@@ -4,3 +4,7 @@ httpx>=0.27.0
 grpcio-tools>=1.65.0
 grpcio>=1.65.0
 protobuf>=4.25.0
+# 静态检查：CI 与本地共用同一版本，避免规则集漂移导致结论不一致
+# （安装后本地即可复现门禁：services/python/venv/Scripts/ruff check .）
+# 上界由精确固定版本承担；升级时同时改这里与两处 CI 的说明，不要只改 CI。
+ruff==0.16.8

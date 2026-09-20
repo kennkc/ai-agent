@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 10:53 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 10:56 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -203,6 +203,7 @@
 <li><a href="#p1-static-check-gate-actually-enforced-223-0">P1 - Static-check gate actually enforced (223 -&gt; 0)</a></li>
 <li><a href="#pitfall-recorded">Pitfall recorded</a></li>
 <li><a href="#verification-2026-09-20-pass-4">Verification (2026-09-20, pass 4)</a></li>
+<li><a href="#local-environment-reproducibility-2026-09-20-pass-5">Local environment reproducibility (2026-09-20, pass 5)</a></li>
 </ul>
 </li>
 <li><a href="#remaining">Remaining</a></li>
@@ -1061,7 +1062,11 @@ Java 251 · Vue <code>typecheck</code> + <code>build</code> clean · <code>java-
 <li>220 findings auto-fixed; <code>F601</code> (duplicate dict key), <code>F402/F811</code> (<code>field</code> shadowing) and
   <code>ISC004</code> (7 multi-line SQL concatenations) fixed by hand; 7 intentional broad catches annotated
   with <code># noqa: BLE001 - &lt;reason&gt;</code>.</li>
-<li><code>.gitlab-ci.yml</code> pins <code>ruff==0.16.8</code> - the previous unpinned install meant the job could not pass.</li>
+<li><code>ruff==0.16.8</code> is pinned in exactly one place - <code>services/python/nlp-service/requirements-dev.txt</code>.
+  Both pipelines and the local venv consume that single source; before this, the version string was
+  duplicated across two CI files and absent from the local dev requirements, so the gate could not be
+  reproduced on a developer host. <code>.gitlab-ci.yml</code> (python-lint) and <code>.github/workflows/ci.yml</code>
+  (python-check) now install from the file instead of restating the version.</li>
 </ul>
 <h3 id="pitfall-recorded">Pitfall recorded<a class="headerlink" href="#pitfall-recorded" title="Permanent link">&para;</a></h3>
 <p><code>ruff --fix --unsafe-fixes</code> rewrote <code>timezone.utc</code> into <code>datetime.UTC</code> (3.11+), which broke test
@@ -1076,6 +1081,27 @@ Lesson: unsafe fixes must always be followed by a full test run.</p>
 <li>Vue <code>typecheck</code>: passed</li>
 <li>Optimization log: <code>docs/优化日志/2026-09-20-写端点鉴权收敛与静态检查门禁落地.md</code></li>
 </ul>
+<h3 id="local-environment-reproducibility-2026-09-20-pass-5">Local environment reproducibility (2026-09-20, pass 5)<a class="headerlink" href="#local-environment-reproducibility-2026-09-20-pass-5" title="Permanent link">&para;</a></h3>
+<p>The pass-4 numbers were produced on a host whose prerequisites were assembled by hand, so the
+documented commands could not be replayed from a clean checkout. Two gaps closed:</p>
+<ul>
+<li><code>ruff==0.16.8</code> now lives in <code>services/python/nlp-service/requirements-dev.txt</code> (single source), so
+  <code>scripts/setup-python-env.ps1</code> alone yields an environment that can run <code>ruff check .</code> - previously
+  the lint gate existed only inside CI.</li>
+<li><code>scripts/setup-python-env.ps1</code> builds <code>services/python/venv</code> (the path referenced by 15+ documents),
+  installs <code>requirements.txt</code> + <code>requirements-dev.txt</code>, and smoke-runs pytest. <code>-VenvPath</code> exists for
+  explicit deviations; nothing should create a second venv by default.</li>
+</ul>
+<p>Two prerequisites are genuine external steps and are documented rather than automated:
+<code>proto-sync-check.sh</code> needs the Java generated sources (<code>mvn -Pproto-gen -pl proto-contracts -am
+generate-sources</code>) and Maven downloads <code>protoc</code> / <code>protoc-gen-grpc-java</code> on first run.</p>
+<p>Verification (2026-09-20, pass 5, full gate replay): Java <code>mvn test</code> <strong>251 passed / 0 failed</strong>
+(2 + 43 + 53 + 67 + 86); pytest <strong>199 passed / 1 skipped</strong>; wp-bff <code>node --test</code> <strong>106 passed</strong>;
+<code>ruff check</code> (services/python, 0.16.8) <strong>All checks passed</strong>; <code>proto-sync-check.sh</code> <strong>通过</strong>
+(12 Python artefacts, 90 Java artefacts, byte-identical both ways); contract-check <strong>0 FAIL</strong>
+(63 endpoints / 35 implemented paths) plus work-platform layering <strong>✅ 全部通过</strong>;
+timeout-budget <strong>ok=19 / gap=0 / fail=0</strong>; <code>java-doc-coverage.py</code> <strong>160/160</strong>;
+<code>doc-consistency-check.py</code> <strong>FAIL=0</strong>.</p>
 <h2 id="remaining">Remaining<a class="headerlink" href="#remaining" title="Permanent link">&para;</a></h2>
 <ul>
 <li>~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:

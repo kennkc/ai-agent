@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 10:34 · 源文件 README.md</span>
+  <span class="meta">生成于 2026-09-20 10:54 · 源文件 README.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -333,10 +333,15 @@ pwsh -File scripts/setup-python-env.ps1 -SkipTest    # 只装依赖，跳过测�
 内容会抛 <code>UnicodeDecodeError</code>；同时把依赖装进 <code>services/python/venv</code>（仓库统一路径：<code>docs/demo/Phase2~Phase5-Demo</code>、
 <code>docs/proto契约使用说明</code>、<code>docs/java-services</code> 等处的命令都写作 <code>../venv/Scripts/python.exe</code>，
 <code>.gitignore</code> 亦按该路径忽略），不污染系统 Python。需要别的位置用 <code>-VenvPath</code> 显式指定。</p>
-<p>装好后手动跑测试：</p>
+<p>装好后手动跑测试与静态检查：</p>
 <pre><code class="language-powershell">cd services/python/nlp-service
 ..\venv\Scripts\python.exe -m pytest -q        # 基线：199 passed / 1 skipped
+
+cd services/python
+..\venv\Scripts\ruff.exe check .               # 基线：All checks passed（ruff 版本由 requirements-dev.txt 固定为 0.16.8）
 </code></pre>
+<p><code>requirements-dev.txt</code> 是 ruff 版本的唯一来源，CI（<code>.github/workflows/ci.yml</code> 的 <code>python-check</code>、
+<code>.gitlab-ci.yml</code> 的 <code>python-lint</code>）与本地 venv 都从该文件取版本，避免规则集漂移导致结论不一致。</p>
 <p><strong>模型就绪检查</strong>（嵌入 BGE-M3 与重排 bge-reranker 均为可选项）：</p>
 <pre><code class="language-powershell">python scripts/model-readiness.py
 </code></pre>

@@ -181,12 +181,18 @@ pwsh -File scripts/setup-python-env.ps1 -SkipTest    # 只装依赖，跳过测�
 `docs/proto契约使用说明`、`docs/java-services` 等处的命令都写作 `../venv/Scripts/python.exe`，
 `.gitignore` 亦按该路径忽略），不污染系统 Python。需要别的位置用 `-VenvPath` 显式指定。
 
-装好后手动跑测试：
+装好后手动跑测试与静态检查：
 
 ```powershell
 cd services/python/nlp-service
 ..\venv\Scripts\python.exe -m pytest -q        # 基线：199 passed / 1 skipped
+
+cd services/python
+..\venv\Scripts\ruff.exe check .               # 基线：All checks passed（ruff 版本由 requirements-dev.txt 固定为 0.16.8）
 ```
+
+`requirements-dev.txt` 是 ruff 版本的唯一来源，CI（`.github/workflows/ci.yml` 的 `python-check`、
+`.gitlab-ci.yml` 的 `python-lint`）与本地 venv 都从该文件取版本，避免规则集漂移导致结论不一致。
 
 **模型就绪检查**（嵌入 BGE-M3 与重排 bge-reranker 均为可选项）：
 
