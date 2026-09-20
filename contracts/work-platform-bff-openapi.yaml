@@ -209,9 +209,18 @@ components:
         messages_per_sec: { type: number, example: 42 }
         updated_at: { type: string }
         agents: { type: array, items: { $ref: '#/components/schemas/CollaborationAgent' } }
-        msg_flow: { type: array, items: { $ref: '#/components/schemas/CollaborationMessage' } }
+        messages: { type: array, items: { $ref: '#/components/schemas/CollaborationMessage' } }
         artifacts: { type: array, items: { $ref: '#/components/schemas/Artifact' } }
         gates: { type: array, items: { type: object } }
+        data_quality:
+          type: object
+          description: 字段来源标注；synthetic_fields 在生产/Phase 6 接线前不得当作真实业务数据
+          required: [source, real_fields, synthetic_fields]
+          properties:
+            source: { type: string, example: collab-bus-heartbeat }
+            real_fields: { type: array, items: { type: string } }
+            synthetic_fields: { type: array, items: { type: string } }
+            note: { type: string }
     CollaborationMessage:
       type: object
       required: [message_id, time, type, from, to, text]

@@ -411,6 +411,55 @@ def test_ensure_schema_applies_every_module_ddl(monkeypatch):
         brain_pg.reset_for_test()
 
 
+def test_production_persistence_failure_rejects_create(monkeypatch):
+    """生产模式：PG 写失败必须 503，不能返回“保存成功但只在内存”。"""
+    tenant = _tenant()
+    monkeypatch.setenv("MODEL_CONFIG_REQUIRE_PERSISTENCE", "true")
+    monkeypatch.setattr(brain_pg, "execute", lambda statements, fetch=False: (False, None))
+    model_config.reset_for_test()
+    monkeypatch.setattr(model_config, "_schema_ready", {"done": True})
+
+    with pytest.raises(model_config.ModelConfigError) as exc:
+        model_config.create_config(tenant, _payload(name="生产写入"))
+    assert exc.value.code == "AGENT_CONFIG_STORAGE_UNAVAILABLE"
+    assert exc.value.status == 503
+    assert model_config.list_configs(tenant)["total"] == 0
+
+
+def test_production_persistence_failure_rejects_update_and_delete(monkeypatch):
+    """生产模式：更新与删除的 PG 写失败同样必须 fail-closed。"""
+    monkeypatch.setenv("MODEL_CONFIG_REQUIRE_PERSISTENCE", "true")
+    monkeypatch.setattr(brain_pg, "execute", lambda statements, fetch=False: (False, None))
+    row = {key: None for key in model_config.COLUMNS}
+    row.update({
+        "id": 1, "tenant_id": "t", "config_key": "generate", "name": "n",
+        "provider": "custom", "base_url": "https://example.com/v1", "model": "m",
+        "api_key_cipher": "", "api_key_hint": "", "tier": "L2", "max_tokens": 512,
+        "temperature": 0.2, "timeout_ms": 8000, "routing_weight": 100,
+        "enabled": True, "extra": {},
+    })
+    for action, call in (
+        ("update", lambda: model_config._persist(row)),
+        ("delete", lambda: model_config._remove("t", 1)),
+    ):
+        with pytest.raises(model_config.ModelConfigError) as exc:
+            call()
+        assert exc.value.code == "AGENT_CONFIG_STORAGE_UNAVAILABLE"
+        assert exc.value.details["action"] == action
+
+def test_production_can_forbid_local_key_file(monkeypatch):
+    """生产模式：缺少环境密钥且禁止本地文件时，不得自动生成密钥文件。"""
+    monkeypatch.delenv("MODEL_CONFIG_MASTER_KEY", raising=False)
+    monkeypatch.setenv("MODEL_CONFIG_ALLOW_LOCAL_KEY_FILE", "false")
+    model_config.reset_for_test()
+    try:
+        key, source = model_config.resolve_master_key()
+        assert key is None
+        assert source == "missing_env"
+    finally:
+        model_config.reset_for_test()
+
+
 # ─────────── 5. HTTP 层 ───────────
 
 def _client():

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:55 · 源文件 模型接入配置-功能逻辑.md</span>
+  <span class="meta">生成于 2026-09-20 17:20 · 源文件 模型接入配置-功能逻辑.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -301,9 +301,10 @@ BFF <strong>没有</strong>第二份配置副本（它是零依赖纯 Node 代�
 <h2 id="aes-256-gcm">四、凭据安全（AES-256-GCM）<a class="headerlink" href="#aes-256-gcm" title="Permanent link">&para;</a></h2>
 <h3 id="41">4.1 主密钥来源链（有优先级，且可追溯）<a class="headerlink" href="#41" title="Permanent link">&para;</a></h3>
 <pre><code class="language-text">① env  MODEL_CONFIG_MASTER_KEY        ← 生产必须走这条
-   ↓ 缺失
-② file MODEL_CONFIG_KEY_FILE          ← 默认 &lt;nlp-service&gt;/.model-config-key（0600，已 gitignore）
-   ↓ 缺失则首次生成并落盘
+   ↓ 缺失且 MODEL_CONFIG_ALLOW_LOCAL_KEY_FILE=false → key_source=missing_env，拒绝写配置
+   ↓ 缺失且允许本地文件
+② file MODEL_CONFIG_KEY_FILE          ← 仅开发环境；默认 &lt;nlp-service&gt;/.model-config-key（0600，已 gitignore）
+   ↓ 缺失则首次生成并落盘（生产应禁止）
 </code></pre>
 <p><code>status()</code> 里的 <code>key_source</code> 会回报<strong>当前实际用的是哪一条</strong>；
 走文件时会附带 <code>key_source_warning</code>（"仅限开发环境"）——
@@ -480,7 +481,7 @@ nlp-service model_config.create_config() / update_config()
    同角色内重名 → 409 AGENT_CONFLICT
    api_key → seal_secret() → api_key_cipher + api_key_hint
    ▼
-PG upsert（失败则进程内存储 + degraded=True）
+PG upsert（开发：失败可进程内降级 + degraded=True；生产 REQUIRE_PERSISTENCE=true：失败返回 503，不内存伪成功）
    ▼
 返回 _to_public(row) + 附带 reload 摘要
    ▼
@@ -636,16 +637,28 @@ PG upsert（失败则进程内存储 + degraded=True）
 </thead>
 <tbody>
 <tr>
-<td>PG 不可用</td>
-<td><code>status().degraded=true</code>, <code>backend='memory'</code>；配置"改得动、重启即丢"</td>
-<td>可接受，但<strong>必须显示</strong></td>
-<td>界面 + <code>status()</code> 如实回报</td>
+<td>PG 不可用（开发）</td>
+<td><code>MODEL_CONFIG_REQUIRE_PERSISTENCE=false</code>：<code>backend='memory'</code>、<code>degraded=true</code>，配置"改得动、重启即丢"</td>
+<td>仅开发可接受</td>
+<td>必须显示降级</td>
 </tr>
 <tr>
-<td><code>MODEL_CONFIG_MASTER_KEY</code> 未设</td>
-<td>退回本地密钥文件并带 <code>key_source_warning</code></td>
+<td>PG 写失败（生产）</td>
+<td><code>MODEL_CONFIG_REQUIRE_PERSISTENCE=true</code>：返回 <code>503 AGENT_CONFIG_STORAGE_UNAVAILABLE</code>，不写内存</td>
+<td>强制 fail-closed</td>
+<td>主存储失败不得伪造成功</td>
+</tr>
+<tr>
+<td><code>MODEL_CONFIG_MASTER_KEY</code> 未设（开发）</td>
+<td>允许本地密钥文件并带 <code>key_source_warning</code></td>
 <td>开发可接受</td>
-<td>生产需注意</td>
+<td>生产应禁止</td>
+</tr>
+<tr>
+<td><code>MODEL_CONFIG_MASTER_KEY</code> 未设且禁止本地文件</td>
+<td><code>key_source='missing_env'</code>、<code>key_available=false</code>，写配置被拒</td>
+<td>生产 fail-closed</td>
+<td>密钥必须由密钥管理系统注入</td>
 </tr>
 <tr>
 <td>角色未配任何模型</td>
@@ -781,9 +794,9 @@ PG upsert（失败则进程内存储 + degraded=True）
 </tr>
 <tr>
 <td>5</td>
-<td>单进程内存储不持久</td>
-<td>PG 降级期间改的配置重启即丢</td>
-<td>已通过 <code>degraded</code> 标志显式暴露</td>
+<td>~~单进程内存储不持久~~</td>
+<td>已新增生产 fail-closed：<code>MODEL_CONFIG_REQUIRE_PERSISTENCE=true</code> 时 PG 写失败返回 503，不再内存伪成功；开发模式仍允许显式降级</td>
+<td><strong>已闭合生产风险</strong></td>
 </tr>
 </tbody>
 </table>
@@ -798,7 +811,7 @@ PG upsert（失败则进程内存储 + degraded=True）
   （实测：表里已有 <code>id=10</code>，序列停在 <code>1</code>），因为旧代码<strong>总是显式带 <code>id</code> 插入，从不推进序列</strong>。</li>
 </ul>
 <p>修复：<code>_insert()</code> 改为 <strong><code>INSERT ... RETURNING id</code>，id 由 PostgreSQL 序列分配</strong>；
-  进程内计数器降级为"PG 不可用时的兜底"，并跳过已占用号；
+  进程内计数器仅在开发模式作为"PG 不可用时的兜底"，并跳过已占用号；生产模式直接返回 503；
   DDL 增加一条幂等的序列校正语句，把历史漂移一次性对齐。</p>
 <ul>
 <li>

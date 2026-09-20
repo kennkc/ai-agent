@@ -836,6 +836,19 @@ function createServer(options = {}) {
       dag: { nodes, edges },
       artifacts: [],
       gates: [],
+      data_quality: {
+        source: 'collab-bus-heartbeat',
+        real_fields: [
+          'domain_id', 'progress', 'stale_count', 'concurrency_limit',
+          'agents.agent_id', 'agents.progress', 'agents.state', 'messages',
+        ],
+        synthetic_fields: [
+          'agents.current_task', 'agents.use_case', 'agents.model', 'agents.tools',
+          'agents.artifact_count', 'agents.confidence', 'p99_ms', 'ack_rate',
+          'messages_per_sec', 'artifacts', 'gates',
+        ],
+        note: '仅心跳聚合与成员状态为真实数据；工件、验收门、模型与吞吐指标待 Phase 6 接线。',
+      },
     }
   }
 

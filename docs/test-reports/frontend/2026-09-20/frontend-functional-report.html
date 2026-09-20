@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 16:25 · 源文件 frontend-functional-report.md</span>
+  <span class="meta">生成于 2026-09-20 17:22 · 源文件 frontend-functional-report.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -140,10 +140,11 @@
 <ul>
 <li>测试文件：<strong>8 个</strong></li>
 <li>测试用例：<strong>19 passed / 0 failed</strong></li>
-<li>语句覆盖率：<strong>27.26%</strong>（1378 / 5054）</li>
+<li>语句覆盖率：<strong>27.20%</strong>（1378 / 5066）</li>
 <li>分支覆盖率：<strong>74.94%</strong>（323 / 431）</li>
 <li>函数覆盖率：<strong>26.81%</strong>（48 / 179）</li>
-<li>行覆盖率：<strong>27.26%</strong>（1378 / 5054）</li>
+<li>行覆盖率：<strong>27.20%</strong>（1378 / 5066）</li>
+<li>覆盖率门禁：行/语句 25% · 函数 20% · 分支 65% · <code>npm run test:report</code> 强制执行</li>
 <li>类型检查：<code>npm run typecheck</code> 通过</li>
 <li>生产构建：<code>npm run build</code> 通过（仅有 Element Plus 主包 &gt;500 kB 的体积提示）</li>
 </ul>
@@ -286,7 +287,7 @@
 <li>继续补知识库、协作总线、远程 IM、Agent 在线等高交互页面的组件测试；</li>
 <li>增加 provider 的 Mock/API/超时/404/降级分支覆盖，重点验证“不伪造真实数据”的约束；</li>
 <li>引入 Playwright，覆盖登录、路由、主题、服务启停、协作域切换和真实 BFF 降级；</li>
-<li>保持 25% 行覆盖率门槛，补齐核心页面后提高到 40%；</li>
+<li>已设置 25% 行/语句、20% 函数、65% 分支硬门禁，补齐核心页面后提高到 40%；</li>
 <li>为关键按钮和状态补充稳定的 <code>data-testid</code>；</li>
 <li>将 <code>npm run test:report</code> 纳入 CI 并上传 JUnit/覆盖率 artifact。</li>
 </ol></main>

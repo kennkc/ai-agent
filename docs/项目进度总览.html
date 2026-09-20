@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 16:25 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-20 17:22 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -149,7 +149,7 @@
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 项目进度总览<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-20（Phase 5 收口 + WB-10 多模型接入配置落地轮） · <strong>代码基线</strong>：<code>dev</code>（Phase 5 收口 + WB-10 落地，已提交推送）
+<p><strong>口径时间</strong>：2026-09-20（Phase 5 收口 + MC-01 R-MC01-05 完成轮） · <strong>代码基线</strong>：<code>codex/main</code>（与 <code>dev</code>、<code>workbuddy/main</code> 同步，已提交推送）
 <strong>数据来源</strong>：仓库 <code>PROGRESS.md</code>、<code>docs/项目进度日志报告/</code>、<code>docs/优化日志/</code>、各服务源码实测统计
 <strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73/61/106/162 项测试）<strong>不回改</strong>，以本文件为准。</p>
 </blockquote>
@@ -173,6 +173,9 @@ JetStream <strong>durable pull consumer</strong>、手工 ack/nak、有限重投
 wp-bff 新增应用服务监控/受控启停与协作域代理端点（113/113 测试）；OpenRouter 固定上游模型
 通过非降级验证，free router 仅保留 smoke 用途；<code>versions.lock.json</code> 与部署版本基线文档已落地。
 后台服务控制页、总览真实协作域选择与降级展示已加入工作平台；R-MC01-05 已闭合。
+生产路由已补 gateway-service <code>/api/wp/** -&gt; WP_BFF_URI</code> 与 Nginx 模板；模型配置新增生产 fail-closed 开关（<code>MODEL_CONFIG_REQUIRE_PERSISTENCE=true</code>），
+生产禁止本地密钥文件并以 503 拒绝内存伪成功。前端覆盖率已设置 25%/20%/65% 硬门禁；新增 <code>scripts/doc-truth-check.py</code>
+校验契约计数、分支、文档和当前测试产物。Phase 6 暂不开发，仅冻结 DAG、状态机、工件与验收门接口。
 <strong>2026-09-19 Phase 5 复审结论</strong>：<strong>未触碰伪实现红线</strong>。复审时唯一需留意的是<strong>沙箱降级被当作"沙箱验收通过"
 叙述的风险</strong> —— 当时实测 <code>docker_available=false</code>、<code>active_backend=process-restricted</code>、<code>degraded=true</code>。
 <strong>该缺口已于同日收口轮闭合</strong>：构建 <code>agent-sandbox:latest</code> 后重启服务，<code>GET /api/tool/sandbox</code> 回到
@@ -627,7 +630,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>前端</td>
 <td><code>cd web/work-platform &amp;&amp; npm run test:report &amp;&amp; npm run typecheck &amp;&amp; npm run build</code></td>
-<td><strong>19/19 功能测试通过</strong>；覆盖率 27.26% 行 / 74.94% 分支；typecheck/build 通过</td>
+<td><strong>19/19 功能测试通过</strong>；覆盖率 27.20% 行 / 74.94% 分支；typecheck/build 通过</td>
 </tr>
 <tr>
 <td><strong>超时预算（跨服务）</strong></td>
@@ -686,20 +689,29 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 </thead>
 <tbody>
 <tr>
+<td><code>codex/main</code></td>
+<td>Codex 本机主开发分支</td>
+<td>当前 HEAD；本轮 R-MC01-05 与优化提交落点</td>
+</tr>
+<tr>
 <td><code>dev</code></td>
-<td><strong>本机（WorkBuddy 侧）工作分支</strong> —— Phase 0~5 全部代码与文档</td>
-<td><code>0921345</code>（Phase 4 端口修复提交）</td>
+<td>另一台开发机协作分支</td>
+<td>与 <code>codex/main</code> 同步；推送前必须先 fetch，避免覆盖对方改动</td>
+</tr>
+<tr>
+<td><code>workbuddy/main</code></td>
+<td>WorkBuddy 协作分支</td>
+<td>与 <code>codex/main</code> 同步；仅在明确需要时推送</td>
 </tr>
 <tr>
 <td><code>main</code></td>
 <td>仓库初始提交（仅含一个 <code>README</code>），<strong>历史遗留、不维护</strong></td>
-<td><code>a305c5e</code></td>
+<td>不做开发</td>
 </tr>
 </tbody>
 </table>
 <blockquote>
-<p>表内为<strong>代码基线</strong>；Phase 5 的改动（<code>tool-executor</code> 新服务 + 文档）<strong>尚未提交</strong>，见 <code>git status</code>。
-历史分支 <code>codex/main</code> / <code>workbuddy/main</code> 在本机已不存在（另一台开发机的历史线），本表不再登记。</p>
+<p>表内角色描述以当前远端配置为准；提交号不写死在文档里，使用 <code>git branch -vv</code> / <code>git rev-parse</code> 查询。</p>
 </blockquote>
 <p><strong>远端（本机）</strong>：</p>
 <table>
@@ -755,9 +767,9 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 </tr>
 <tr>
 <td>3</td>
-<td><strong>BFF 契约 30 个 planned 端点</strong></td>
-<td>仅实现 Ops 子集 + 躯体视图 + <strong>工具执行（9 方法）</strong></td>
-<td>未实现域回落 Mock（<strong>已非静默</strong>，有降级提示）</td>
+<td><strong>BFF 契约 27 个 planned 端点</strong></td>
+<td>已实现 40 个路径 / 43 个方法，覆盖观测、大脑、会话、知识、工具、协作、模型与服务控制</td>
+<td>已实现域接真实数据；未实现域回落 Mock 并显式提示，不得当作功能完成</td>
 </tr>
 <tr>
 <td>4</td>
@@ -769,7 +781,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <td>5</td>
 <td>Phase 6+</td>
 <td>团队节奏控制</td>
-<td>小脑期（编排）未开工；大脑期已验收但生成器仍为 <code>template</code>（DEBT-015/016）</td>
+<td>小脑期（编排）暂不开工，只做前置设计；大脑期已验收并支持 <code>llm_model_config</code> 外部模型装配，生产仍需结构化输出、预算与供应商降级策略（DEBT-015/016）</td>
 </tr>
 <tr>
 <td>6</td>

@@ -1837,6 +1837,9 @@ test('GET /api/wp/collab/{domain_id} 映射真实聚合为协作视图', async (
     assert.equal(res.json.data.agents[1].state, 'blocked')
     assert.equal(res.json.data.agents[2].state, 'blocked')
     assert.equal(res.json.data.agents[3].state, 'waiting')
+    assert.equal(res.json.data.data_quality.source, 'collab-bus-heartbeat')
+    assert.ok(res.json.data.data_quality.real_fields.includes('agents.progress'))
+    assert.ok(res.json.data.data_quality.synthetic_fields.includes('artifacts'))
   }, { jsonRequestMeta: async () => ({ ok: true, data: upstream }) })
 })
 

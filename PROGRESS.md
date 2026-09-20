@@ -2,6 +2,29 @@
 
 > Last updated: 2026-09-20
 
+## Production Hardening & Phase 6 Pre-design (2026-09-20)
+
+This pass closes the highest-risk production gaps without starting Phase 6 implementation:
+
+- **Production route**: gateway-service now routes `/api/wp/**` to
+  `${WP_BFF_URI:http://127.0.0.1:8090}`. `infra/nginx/lifeform.conf` provides the
+  production static + API entrypoint, so the working platform no longer depends on the
+  Vite development proxy.
+- **Model config fail-closed**: `MODEL_CONFIG_REQUIRE_PERSISTENCE=true` rejects PostgreSQL
+  write failures with `503 AGENT_CONFIG_STORAGE_UNAVAILABLE` instead of returning an
+  in-memory success. `MODEL_CONFIG_ALLOW_LOCAL_KEY_FILE=false` forbids generated local
+  master-key files in production.
+- **Collaboration data quality**: wp-bff returns `data_quality` with real and synthetic
+  field lists; the collaboration page warns that artifact/gate/model/throughput fields
+  remain Phase 6 placeholders. The OpenAPI `msg_flow` drift is corrected to `messages`.
+- **Coverage gate**: Vitest now enforces global thresholds
+  (statements/lines 25%, functions 20%, branches 65%).
+- **Documentation truth gate**: `scripts/doc-truth-check.py` verifies OpenAPI counts,
+  branch topology, MC-01 closure, frontend JUnit/coverage figures and stale wording;
+  it is wired into GitHub Actions.
+- **Phase 6 pre-design**: `docs/Phase6-前置设计冻结稿.md` freezes DAG, node state machine,
+  collaboration envelope, artifact metadata and acceptance-gate contracts without
+  implementing Phase 6.
 ## MC-01 Collaboration Bus Hardening (2026-09-20)
 
 The Phase 6 prerequisite **MC-01 collaboration-bus service** is now hardened beyond the
@@ -44,7 +67,7 @@ This pass added the operational and verification layer requested in the latest r
   selection, OverviewView, MiddlewareView, ModelsView and ServicesView. The first component run
   exposed and fixed a real `MiddlewareView` null-summary crash.
 - **Frontend test archive**: `docs/test-reports/frontend/2026-09-20/` contains the
-  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.26% lines /
+  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.20% lines /
   74.94% branches; typecheck and production build pass. The report explicitly marks this as the MVP
   baseline, not a full-coverage claim.
 - **Backend service control**: wp-bff now exposes `/api/wp/services` plus controlled

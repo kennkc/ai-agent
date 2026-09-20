@@ -50,3 +50,13 @@ docker compose down -v
   ]
 }
 ```
+## 生产反向代理
+
+`infra/nginx/lifeform.conf` 提供生产入口模板：
+
+- Nginx 承载 `web/work-platform/dist` 静态资源；
+- `/api/**` 统一转发到 `gateway-service`；
+- `/api/wp/**` 由 gateway-service 通过 `WP_BFF_URI` 转发到 wp-bff；
+- WebSocket Upgrade 头已保留，供后续协作/消息流使用。
+
+详见 `infra/nginx/README.md`。

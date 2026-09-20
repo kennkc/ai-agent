@@ -23,6 +23,10 @@ spring:
           enabled: true
           lower-case-service-id: true
       routes:
+        - id: work-platform-bff
+          uri: ${WP_BFF_URI:http://127.0.0.1:8090}
+          predicates:
+            - Path=/api/wp/**
         - id: session-manager
           uri: lb://session-manager
           predicates:

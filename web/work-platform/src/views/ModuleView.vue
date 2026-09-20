@@ -144,6 +144,20 @@
           <div class="collab-kpi"><span>总线 P99</span><strong>{{ collaborationData.p99_ms }}ms</strong><small>目标 &lt; 10ms</small></div>
           <div class="collab-kpi"><span>消息确认率</span><strong>{{ collaborationData.ack_rate }}%</strong><small>{{ collaborationData.messages_per_sec }} msg/s</small></div>
         </div>
+        <el-alert
+          v-if="collaborationData.data_quality?.synthetic_fields?.length"
+          class="collab-data-quality"
+          type="warning"
+          :closable="false"
+          show-icon
+          title="部分字段为 Phase 6 接线前占位"
+        >
+          <template #default>
+            真实来源：{{ collaborationData.data_quality.source }}；
+            占位字段：{{ collaborationData.data_quality.synthetic_fields.join('、') }}。
+            这些字段不得作为工件、验收门、模型路由或吞吐指标的业务真相。
+          </template>
+        </el-alert>
 
         <el-card class="section-card collaboration-mode-card" shadow="never">
           <template #header><strong>协作模式模块</strong><span class="header-meta">MC-02 · 三模式可切换</span></template>
@@ -1028,6 +1042,7 @@ onMounted(loadWorkbench)
 
 <style scoped>
 .collab-kpi-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 12px; }
+.collab-data-quality { margin-top: 12px; }
 .collab-kpi { display: flex; flex-direction: column; gap: 5px; padding: 15px 16px; border: 1px solid var(--wp-border); border-radius: 14px; background: var(--wp-card); box-shadow: var(--wp-shadow); }
 .collab-kpi span { color: var(--wp-sub); font-size: 10px; letter-spacing: .12em; text-transform: uppercase; }
 .collab-kpi strong { font-family: "Bodoni MT", serif; font-size: 23px; }

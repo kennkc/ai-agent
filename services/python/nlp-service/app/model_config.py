@@ -5,13 +5,15 @@
 
 设计约定（与全局一致）：
 
-* **唯一真相源**：PostgreSQL `llm_model_config`。PG 不可用时降级为进程内存储并
-  在 `status()` 里**如实标 `degraded=True`** —— 此时配置"改得动、重启即丢"，必须让人看见。
+* **唯一真相源**：PostgreSQL `llm_model_config`。开发环境允许 PG 不可用时降级为进程内存储并
+  在 `status()` 里**如实标 `degraded=True`**；生产环境设置
+  `MODEL_CONFIG_REQUIRE_PERSISTENCE=true` 后，写操作在主存储失败时返回 503，**绝不以内存成功冒充持久化成功**。
 * **凭据只以密文落库**：`api_key` 用 AES-256-GCM 加密后存 `api_key_cipher`，
   对外接口一律只回 `api_key_hint`（`sk-***last4`）与 `has_api_key`。
   **解密只发生在构造引擎的那一刻**，不经过任何响应体。
 * **密钥来源可追溯**：优先 `MODEL_CONFIG_MASTER_KEY`（生产必须）；
-  缺省退回本地密钥文件（0600，已 gitignore），便于本地开发**且重启后仍能解密**。
+  缺省仅在 `MODEL_CONFIG_ALLOW_LOCAL_KEY_FILE=true` 时退回本地密钥文件（0600，已 gitignore），
+  便于本地开发**且重启后仍能解密**；生产设置该变量为 false 后，缺少环境密钥直接判定不可用。
   刻意不做"每次启动随机生成"—— 那会让已存密文在重启后静默变成一堆不可解的字节。
 * **功能角色是绑定的唯一维度**：`intent / embed / rerank / generate / plan / code`。
   按"这个活由谁干"而不是"哪个服务调"来分，因为同一个服务里混着多种任务
@@ -144,6 +146,27 @@ class ModelConfigError(RuntimeError):
         self.details = details or {}
 
 
+def _env_flag(name: str, default: bool = False) -> bool:
+    raw = os.getenv(name)
+    if raw is None:
+        return default
+    return raw.strip().lower() in {"1", "true", "yes", "on"}
+
+
+def _require_persistence() -> bool:
+    """生产模式：模型配置写路径必须落在 PostgreSQL，内存只能用于开发降级。"""
+    return _env_flag("MODEL_CONFIG_REQUIRE_PERSISTENCE", False)
+
+
+def _storage_unavailable(action: str) -> ModelConfigError:
+    return ModelConfigError(
+        "AGENT_CONFIG_STORAGE_UNAVAILABLE",
+        f"模型配置主存储不可用，拒绝执行 {action}；本次操作未生效",
+        status=503,
+        details={"storage": "postgres", "action": action},
+    )
+
+
 # ─────────── 凭据加解密 ───────────
 
 _key_state: dict[str, Any] = {"key": None, "source": "unresolved", "error": ""}
@@ -184,6 +207,13 @@ def resolve_master_key() -> tuple[bytes | None, str]:
                 _key_state.update(key=_decode_key(raw), source="env", error="")
             except ModelConfigError as exc:
                 _key_state.update(key=None, source="error", error=exc.message)
+            return _key_state["key"], _key_state["source"]
+        if not _env_flag("MODEL_CONFIG_ALLOW_LOCAL_KEY_FILE", True):
+            _key_state.update(
+                key=None,
+                source="missing_env",
+                error="MODEL_CONFIG_MASTER_KEY 未设置，且已禁止本地密钥文件",
+            )
             return _key_state["key"], _key_state["source"]
         # 本地开发兜底：与 wp-bff 控制令牌同构的"文件即密钥"策略。
         # 关键点：**持久化**。若每次启动随机生成，已落库的密文重启后全部不可解，
@@ -698,7 +728,9 @@ def _insert(row: dict[str, Any]) -> dict[str, Any]:
     ok, rows = pg.execute([(sql, params)], fetch=True)
     if ok and rows:
         return {**row, "id": int(rows[0][0])}
-    # PG 不可用/失败 → 进程内存储（如实降级；status() 会标 degraded）
+    if _require_persistence():
+        raise _storage_unavailable("create")
+    # 开发模式：PG 不可用/失败 → 进程内存储（如实降级；status() 会标 degraded）
     stored = {**row, "id": _next_id()}
     with _memory_lock:
         _memory[int(stored["id"])] = dict(stored)
@@ -710,6 +742,8 @@ def _persist(row: dict[str, Any]) -> None:
     assignments = ", ".join(f"{key} = %s" for key in COLUMNS if key != "id")
     params = (*tuple(json.dumps(row.get("extra") or {}) if key == "extra" else row.get(key) for key in COLUMNS if key != "id"), int(row["id"]))
     ok, _ = pg.execute([(f"UPDATE llm_model_config SET {assignments} WHERE id = %s", params)])
+    if not ok and _require_persistence():
+        raise _storage_unavailable("update")
     if not ok:
         with _memory_lock:
             _memory[int(row["id"])] = dict(row)
@@ -719,6 +753,8 @@ def _persist(row: dict[str, Any]) -> None:
 def _remove(tenant_id: str, config_id: int) -> None:
     ok, _ = pg.execute([("DELETE FROM llm_model_config WHERE tenant_id = %s AND id = %s",
                          (tenant_id, int(config_id)))])
+    if not ok and _require_persistence():
+        raise _storage_unavailable("delete")
     with _memory_lock:
         _memory.pop(int(config_id), None)
     if not ok:
@@ -747,16 +783,23 @@ def _record_probe(tenant_id: str, config_id: int, result: dict[str, Any]) -> Non
 def status() -> dict[str, Any]:
     _, key_source = resolve_master_key()
     storage = pg.status()
+    storage_degraded = bool(storage.get("degraded", True))
+    key_available = str(key_source) in {"env", "file", "file:generated"}
+    warning = ""
+    if str(key_source).startswith("file"):
+        warning = "MODEL_CONFIG_MASTER_KEY 未设置，正在使用本地密钥文件（仅限开发环境）"
+    elif str(key_source) == "missing_env":
+        warning = "MODEL_CONFIG_MASTER_KEY 未设置，且本地密钥文件已禁用"
     return {
-        "backend": "postgres" if not storage.get("degraded", True) else "memory",
-        "degraded": bool(storage.get("degraded", True)),
+        "backend": "postgres" if not storage_degraded else "memory",
+        "degraded": storage_degraded or not key_available,
         "reason": str(storage.get("reason", "")),
         "dsn": str(storage.get("dsn", "")),
+        "persistence_required": _require_persistence(),
+        "local_key_file_allowed": _env_flag("MODEL_CONFIG_ALLOW_LOCAL_KEY_FILE", True),
         "key_source": key_source,
-        "key_source_warning": (
-            "MODEL_CONFIG_MASTER_KEY 未设置，正在使用本地密钥文件（仅限开发环境）"
-            if str(key_source).startswith("file") else ""
-        ),
+        "key_available": key_available,
+        "key_source_warning": warning,
         "encryption": "aes-256-gcm",
         "crypto_available": _crypto_available(),
         "roles": list(ROLE_KEYS),

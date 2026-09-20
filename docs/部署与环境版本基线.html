@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:49 · 源文件 部署与环境版本基线.md</span>
+  <span class="meta">生成于 2026-09-20 17:24 · 源文件 部署与环境版本基线.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -132,13 +132,15 @@
 <li><a href="#6">6. 标准部署流程</a></li>
 <li><a href="#7">7. 维护约定</a></li>
 <li><a href="#8">8. 后台服务监控与本地受控启停</a></li>
+<li><a href="#9-bff">9. 生产反向代理与 BFF 路由</a></li>
+<li><a href="#10-fail-closed">10. 模型配置生产 fail-closed</a></li>
 </ul>
 </div>
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 部署与环境版本基线<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p><strong>基线日期</strong>：2026-09-20<br />
-<strong>适用范围</strong>：本地开发、联调、CI、单机 Demo 部署<br />
+<strong>适用范围</strong>：本地开发、联调、CI、单机 Demo 与生产入口基线
 <strong>版本唯一来源</strong>：<code>versions.lock.json</code> + <code>pom.xml</code> / <code>package-lock.json</code> / <code>requirements*.txt</code> / <code>docker-compose.yml</code></p>
 </blockquote>
 <hr />
@@ -384,7 +386,62 @@ POST /api/wp/services/{key}/stop
 <li><code>wp-bff</code> 自身只监控，不允许自停止；</li>
 <li>外部启动的进程无法安全推断 PID，<code>stop</code> 返回 409，不猜测、不误杀；</li>
 <li><code>WP_BFF_APP_CONTROL=false</code> 可关闭控制，只保留监控。</li>
-</ol></main>
+</ol>
+<h2 id="9-bff">9. 生产反向代理与 BFF 路由<a class="headerlink" href="#9-bff" title="Permanent link">&para;</a></h2>
+<p>开发环境通过 Vite 代理访问 wp-bff；生产环境必须走统一入口：</p>
+<pre><code class="language-text">Nginx
+  -&gt; /              Vue dist 静态资源
+  -&gt; /api/**        gateway-service
+  -&gt; /api/wp/**     gateway-service -&gt; WP_BFF_URI -&gt; wp-bff
+</code></pre>
+<p>配置位置：</p>
+<ul>
+<li><code>services/java/gateway-service/src/main/resources/application.yml</code></li>
+<li><code>work-platform-bff</code> 路由：<code>Path=/api/wp/**</code></li>
+<li>上游：<code>${WP_BFF_URI:http://127.0.0.1:8090}</code></li>
+<li><code>infra/nginx/lifeform.conf</code></li>
+<li><code>infra/nginx/README.md</code></li>
+</ul>
+<p>生产检查：</p>
+<pre><code class="language-bash">curl -fsS http://127.0.0.1/healthz
+curl -fsS http://127.0.0.1/api/wp/healthz
+</code></pre>
+<p>第二个请求必须经过 gateway-service 到达 wp-bff，不得依赖 Vite 开发代理。</p>
+<h2 id="10-fail-closed">10. 模型配置生产 fail-closed<a class="headerlink" href="#10-fail-closed" title="Permanent link">&para;</a></h2>
+<p>模型配置唯一主存储为 PostgreSQL <code>llm_model_config</code>。</p>
+<table>
+<thead>
+<tr>
+<th>变量</th>
+<th>开发默认</th>
+<th>生产要求</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>MODEL_CONFIG_MASTER_KEY</code></td>
+<td>可退化为本地密钥文件</td>
+<td>必须由密钥管理系统注入</td>
+</tr>
+<tr>
+<td><code>MODEL_CONFIG_ALLOW_LOCAL_KEY_FILE</code></td>
+<td><code>true</code></td>
+<td>必须为 <code>false</code></td>
+</tr>
+<tr>
+<td><code>MODEL_CONFIG_REQUIRE_PERSISTENCE</code></td>
+<td><code>false</code></td>
+<td>必须为 <code>true</code></td>
+</tr>
+</tbody>
+</table>
+<p>生产设置 <code>MODEL_CONFIG_REQUIRE_PERSISTENCE=true</code> 后：</p>
+<ul>
+<li>PG 新增、更新、删除失败返回 <code>503 AGENT_CONFIG_STORAGE_UNAVAILABLE</code>；</li>
+<li>不得写入进程内存储后返回成功；</li>
+<li>本地密钥文件自动生成能力必须关闭；</li>
+<li><code>status()</code> 返回 <code>persistence_required</code>、<code>key_available</code> 与 <code>key_source</code>，供观测页和告警判定。</li>
+</ul></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

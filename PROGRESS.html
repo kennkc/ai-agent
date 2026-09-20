@@ -116,10 +116,11 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 16:25 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 17:20 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#production-hardening-phase-6-pre-design-2026-09-20">Production Hardening &amp; Phase 6 Pre-design (2026-09-20)</a></li>
 <li><a href="#mc-01-collaboration-bus-hardening-2026-09-20">MC-01 Collaboration Bus Hardening (2026-09-20)</a></li>
 <li><a href="#frontend-tests-service-control-toolchain-baseline-2026-09-20">Frontend Tests / Service Control / Toolchain Baseline (2026-09-20)</a></li>
 <li><a href="#archived-stage-reports">Archived stage reports</a></li>
@@ -217,6 +218,29 @@
 <blockquote>
 <p>Last updated: 2026-09-20</p>
 </blockquote>
+<h2 id="production-hardening-phase-6-pre-design-2026-09-20">Production Hardening &amp; Phase 6 Pre-design (2026-09-20)<a class="headerlink" href="#production-hardening-phase-6-pre-design-2026-09-20" title="Permanent link">&para;</a></h2>
+<p>This pass closes the highest-risk production gaps without starting Phase 6 implementation:</p>
+<ul>
+<li><strong>Production route</strong>: gateway-service now routes <code>/api/wp/**</code> to
+  <code>${WP_BFF_URI:http://127.0.0.1:8090}</code>. <code>infra/nginx/lifeform.conf</code> provides the
+  production static + API entrypoint, so the working platform no longer depends on the
+  Vite development proxy.</li>
+<li><strong>Model config fail-closed</strong>: <code>MODEL_CONFIG_REQUIRE_PERSISTENCE=true</code> rejects PostgreSQL
+  write failures with <code>503 AGENT_CONFIG_STORAGE_UNAVAILABLE</code> instead of returning an
+  in-memory success. <code>MODEL_CONFIG_ALLOW_LOCAL_KEY_FILE=false</code> forbids generated local
+  master-key files in production.</li>
+<li><strong>Collaboration data quality</strong>: wp-bff returns <code>data_quality</code> with real and synthetic
+  field lists; the collaboration page warns that artifact/gate/model/throughput fields
+  remain Phase 6 placeholders. The OpenAPI <code>msg_flow</code> drift is corrected to <code>messages</code>.</li>
+<li><strong>Coverage gate</strong>: Vitest now enforces global thresholds
+  (statements/lines 25%, functions 20%, branches 65%).</li>
+<li><strong>Documentation truth gate</strong>: <code>scripts/doc-truth-check.py</code> verifies OpenAPI counts,
+  branch topology, MC-01 closure, frontend JUnit/coverage figures and stale wording;
+  it is wired into GitHub Actions.</li>
+<li><strong>Phase 6 pre-design</strong>: <code>docs/Phase6-前置设计冻结稿.md</code> freezes DAG, node state machine,
+  collaboration envelope, artifact metadata and acceptance-gate contracts without
+  implementing Phase 6.</li>
+</ul>
 <h2 id="mc-01-collaboration-bus-hardening-2026-09-20">MC-01 Collaboration Bus Hardening (2026-09-20)<a class="headerlink" href="#mc-01-collaboration-bus-hardening-2026-09-20" title="Permanent link">&para;</a></h2>
 <p>The Phase 6 prerequisite <strong>MC-01 collaboration-bus service</strong> is now hardened beyond the
 original helper-level slice:</p>
@@ -257,7 +281,7 @@ the fixed demo id <code>DOM-2048</code>.</p>
   selection, OverviewView, MiddlewareView, ModelsView and ServicesView. The first component run
   exposed and fixed a real <code>MiddlewareView</code> null-summary crash.</li>
 <li><strong>Frontend test archive</strong>: <code>docs/test-reports/frontend/2026-09-20/</code> contains the
-  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.26% lines /
+  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.20% lines /
   74.94% branches; typecheck and production build pass. The report explicitly marks this as the MVP
   baseline, not a full-coverage claim.</li>
 <li><strong>Backend service control</strong>: wp-bff now exposes <code>/api/wp/services</code> plus controlled

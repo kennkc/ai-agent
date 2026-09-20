@@ -138,6 +138,8 @@ jobs:
       - name: 前端功能测试与覆盖率报告
         working-directory: web/work-platform
         run: npm run test:report
+      - name: 文档真相源校验（使用当前测试生成物）
+        run: python scripts/doc-truth-check.py
       - name: 上传前端测试报告
         if: always()
         uses: actions/upload-artifact@v4

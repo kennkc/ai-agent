@@ -39,6 +39,11 @@ describe('dataProvider collaboration wiring', () => {
           dag: { nodes: [], edges: [] },
           artifacts: [],
           gates: [],
+          data_quality: {
+            source: 'collab-bus-heartbeat',
+            real_fields: ['agents.progress'],
+            synthetic_fields: ['artifacts'],
+          },
         } } }
       }
       return { data: { data: null } }
@@ -53,6 +58,7 @@ describe('dataProvider collaboration wiring', () => {
     expect(result.collaboration.domain_id).toBe('dom-real')
     expect(result.collaboration.progress).toBe(66)
     expect(result.collaboration.agents[0].agent_id).toBe('agent-a')
+    expect(result.collaboration.data_quality.synthetic_fields).toContain('artifacts')
   })
 
   it('keeps the mock collaboration fallback without requesting the fixed demo domain when no real domain exists', async () => {

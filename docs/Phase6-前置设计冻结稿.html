@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Phase 6 并发编排 · 前置设计冻结稿</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 17:29 · 源文件 Phase6-前置设计冻结稿.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 目标与非目标</a><ul>
+<li><a href="#_1">目标</a></li>
+<li><a href="#_2">非目标</a></li>
+</ul>
+</li>
+<li><a href="#2-dag">2. DAG 编译契约</a></li>
+<li><a href="#3">3. 节点状态机</a></li>
+<li><a href="#4">4. 协作消息信封</a></li>
+<li><a href="#5">5. 共享工件契约</a></li>
+<li><a href="#6">6. 验收门契约</a></li>
+<li><a href="#7">7. 与既有模块的边界</a></li>
+<li><a href="#8">8. 解冻前必须完成的检查</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="phase-6">Phase 6 并发编排 · 前置设计冻结稿<a class="headerlink" href="#phase-6" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>状态</strong>：设计冻结候选稿，<strong>不包含 Phase 6 代码实现</strong>
+<strong>日期</strong>：2026-09-20
+<strong>依赖</strong>：MC-01 R-MC01-01~05、Phase 5 工具执行与审计、WB-10 模型配置
+<strong>决策</strong>：暂不启动 Phase 6 开发，先冻结编排输入输出契约、状态语义和验收边界。</p>
+</blockquote>
+<h2 id="1">1. 目标与非目标<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<h3 id="_1">目标<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h3>
+<p>为未来 Phase 6 开发提供可直接落库、可直接写契约测试的接口冻结：</p>
+<ol>
+<li>DAG 编译结果的数据结构；</li>
+<li>节点执行状态机与重试/取消语义；</li>
+<li>协作总线消息信封；</li>
+<li>共享工件层元数据；</li>
+<li>验收门与证据模型；</li>
+<li>与 MC-01、工具执行、模型角色的边界。</li>
+</ol>
+<h3 id="_2">非目标<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h3>
+<ul>
+<li>不实现 planner / merger / dispatcher；</li>
+<li>不实现共享工件存储服务；</li>
+<li>不实现冲突消解；</li>
+<li>不接入前端新的 Phase 6 页面；</li>
+<li>不改变 MC-01 已验证的 durable consumer、DLQ 与心跳语义。</li>
+</ul>
+<h2 id="2-dag">2. DAG 编译契约<a class="headerlink" href="#2-dag" title="Permanent link">&para;</a></h2>
+<pre><code class="language-json">{
+  &quot;workflow_id&quot;: &quot;wf-20260920-0001&quot;,
+  &quot;domain_id&quot;: &quot;collab-20260920-0001&quot;,
+  &quot;tenant_id&quot;: &quot;default&quot;,
+  &quot;mode&quot;: &quot;fanout&quot;,
+  &quot;max_concurrency&quot;: 8,
+  &quot;budget_ms&quot;: 120000,
+  &quot;nodes&quot;: [],
+  &quot;edges&quot;: [],
+  &quot;entry_nodes&quot;: [],
+  &quot;terminal_nodes&quot;: [],
+  &quot;artifact_policy&quot;: {},
+  &quot;gate_policy&quot;: {}
+}
+</code></pre>
+<p>节点类型首期冻结为：</p>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>作用</th>
+<th>必填输入</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>plan</code></td>
+<td>任务拆解或再规划</td>
+<td>原始任务、上下文引用</td>
+</tr>
+<tr>
+<td><code>retrieve</code></td>
+<td>知识检索</td>
+<td>query、top_k、filter</td>
+</tr>
+<tr>
+<td><code>generate</code></td>
+<td>模型生成</td>
+<td>prompt、role、budget</td>
+</tr>
+<tr>
+<td><code>tool</code></td>
+<td>工具执行</td>
+<td>tool_name、args、sandbox_required</td>
+</tr>
+<tr>
+<td><code>verify</code></td>
+<td>自校验或交叉验证</td>
+<td>目标工件、验收规则</td>
+</tr>
+<tr>
+<td><code>merge</code></td>
+<td>结果合并</td>
+<td>输入工件列表、合并策略</td>
+</tr>
+<tr>
+<td><code>approval</code></td>
+<td>人工/策略审批</td>
+<td>风险等级、审批策略</td>
+</tr>
+</tbody>
+</table>
+<p>DAG 约束：</p>
+<ul>
+<li><code>workflow_id</code> 全局唯一；</li>
+<li>节点 ID 在单个 DAG 内唯一；</li>
+<li>边必须指向已声明节点，禁止自环；</li>
+<li>首期只支持有向无环图；</li>
+<li><code>entry_nodes</code> 入度为 0，<code>terminal_nodes</code> 出度为 0；</li>
+<li><code>max_concurrency</code> 默认 8，超过需显式配置理由。</li>
+</ul>
+<h2 id="3">3. 节点状态机<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">pending -&gt; ready -&gt; running -&gt; succeeded
+                     |  |-&gt; failed -&gt; retry_wait -&gt; ready
+                     |  |-&gt; cancelled
+                     |  |-&gt; blocked
+                     |-&gt; timed_out -&gt; retry_wait / failed
+</code></pre>
+<p>状态语义：</p>
+<table>
+<thead>
+<tr>
+<th>状态</th>
+<th>含义</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pending</code></td>
+<td>已入图，前置依赖未满足</td>
+</tr>
+<tr>
+<td><code>ready</code></td>
+<td>依赖满足，等待调度</td>
+</tr>
+<tr>
+<td><code>running</code></td>
+<td>已占用执行槽</td>
+</tr>
+<tr>
+<td><code>retry_wait</code></td>
+<td>可重试，等待退避时间</td>
+</tr>
+<tr>
+<td><code>succeeded</code></td>
+<td>产出符合节点契约</td>
+</tr>
+<tr>
+<td><code>failed</code></td>
+<td>重试耗尽或不可重试错误</td>
+</tr>
+<tr>
+<td><code>cancelled</code></td>
+<td>用户/策略取消</td>
+</tr>
+<tr>
+<td><code>blocked</code></td>
+<td>缺少人工审批、外部依赖或冲突未解</td>
+</tr>
+<tr>
+<td><code>timed_out</code></td>
+<td>超出节点或全局预算</td>
+</tr>
+</tbody>
+</table>
+<p>硬约束：</p>
+<ul>
+<li>每次尝试必须使用新的 <code>attempt_id</code>，但保持 <code>request_id</code> 稳定；</li>
+<li>成功节点不得重复执行；</li>
+<li>重试必须幂等，副作用只能由工具侧幂等键抑制；</li>
+<li>全局预算耗尽后不得启动新节点；</li>
+<li>取消是协作式，不允许强杀造成状态未知。</li>
+</ul>
+<h2 id="4">4. 协作消息信封<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<pre><code class="language-json">{
+  &quot;request_id&quot;: &quot;req-0001&quot;,
+  &quot;workflow_id&quot;: &quot;wf-20260920-0001&quot;,
+  &quot;domain_id&quot;: &quot;collab-20260920-0001&quot;,
+  &quot;node_id&quot;: &quot;n-generate-01&quot;,
+  &quot;attempt_id&quot;: &quot;att-01&quot;,
+  &quot;tenant_id&quot;: &quot;default&quot;,
+  &quot;type&quot;: &quot;dispatch&quot;,
+  &quot;from&quot;: &quot;planner&quot;,
+  &quot;to&quot;: &quot;agent-a&quot;,
+  &quot;created_at&quot;: &quot;2026-09-20T17:00:00+08:00&quot;,
+  &quot;deadline_ms&quot;: 20000,
+  &quot;payload&quot;: {}
+}
+</code></pre>
+<p><code>type</code>：</p>
+<ul>
+<li><code>dispatch</code></li>
+<li><code>heartbeat</code></li>
+<li><code>result</code></li>
+<li><code>failure</code></li>
+<li><code>negotiate</code></li>
+<li><code>cancel</code></li>
+<li><code>deadletter</code></li>
+</ul>
+<p>消息必须复用 MC-01 的 <code>request_id</code> 幂等语义；<code>node_id + attempt_id</code> 用于业务级追踪。</p>
+<h2 id="5">5. 共享工件契约<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<pre><code class="language-json">{
+  &quot;artifact_id&quot;: &quot;art-0001&quot;,
+  &quot;workflow_id&quot;: &quot;wf-20260920-0001&quot;,
+  &quot;node_id&quot;: &quot;n-generate-01&quot;,
+  &quot;kind&quot;: &quot;document&quot;,
+  &quot;title&quot;: &quot;竞品分析摘要&quot;,
+  &quot;version&quot;: 1,
+  &quot;content_ref&quot;: &quot;s3://lifeform-artifacts/...&quot;,
+  &quot;checksum&quot;: &quot;sha256:...&quot;,
+  &quot;producer&quot;: &quot;agent-a&quot;,
+  &quot;provenance&quot;: [&quot;doc-1&quot;, &quot;doc-2&quot;],
+  &quot;visibility&quot;: &quot;workflow&quot;,
+  &quot;created_at&quot;: &quot;2026-09-20T17:00:00+08:00&quot;
+}
+</code></pre>
+<p>规则：</p>
+<ul>
+<li>工件内容与元数据分离，元数据可落 PG，正文放对象存储；</li>
+<li>新版本递增 <code>version</code>，不得覆盖旧版本；</li>
+<li><code>checksum</code> 用于合并与验收去重；</li>
+<li><code>provenance</code> 必须能回溯知识文档或上游工件；</li>
+<li><code>visibility</code> 首期只允许 <code>private / workflow / tenant</code>。</li>
+</ul>
+<h2 id="6">6. 验收门契约<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<pre><code class="language-json">{
+  &quot;gate_id&quot;: &quot;gate-fact-01&quot;,
+  &quot;workflow_id&quot;: &quot;wf-20260920-0001&quot;,
+  &quot;type&quot;: &quot;factuality&quot;,
+  &quot;required&quot;: true,
+  &quot;state&quot;: &quot;pending&quot;,
+  &quot;inputs&quot;: [&quot;art-0001&quot;],
+  &quot;rules&quot;: {&quot;min_score&quot;: 0.85},
+  &quot;evidence&quot;: [],
+  &quot;decided_by&quot;: &quot;verifier&quot;,
+  &quot;decided_at&quot;: null
+}
+</code></pre>
+<p>状态：</p>
+<pre><code class="language-text">pending -&gt; passed
+        -&gt; rejected
+        -&gt; needs_revision
+        -&gt; blocked
+</code></pre>
+<p>约束：</p>
+<ul>
+<li>必需门未通过时，工作流不得进入 <code>succeeded</code>；</li>
+<li>拒绝与需要修订必须带可执行原因；</li>
+<li>人工审批必须记录操作者、时间和证据；</li>
+<li>验收结论是业务真相，不得由前端本地计算替代。</li>
+</ul>
+<h2 id="7">7. 与既有模块的边界<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>能力</th>
+<th>归属</th>
+<th>Phase 6 只做什么</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>消息可靠投递、幂等、DLQ、心跳</td>
+<td>MC-01 collab-bus</td>
+<td>发布/消费冻结后的消息信封</td>
+</tr>
+<tr>
+<td>模型选择、密钥、Token 计量</td>
+<td>WB-10 nlp-service</td>
+<td>按 role 请求生成，不自建模型配置</td>
+</tr>
+<tr>
+<td>工具执行、沙箱、审计</td>
+<td>tool-executor</td>
+<td>通过既有工具 API 调用</td>
+</tr>
+<tr>
+<td>工作平台协作展示</td>
+<td>wp-bff + Vue</td>
+<td>消费聚合视图，不在前端实现编排</td>
+</tr>
+<tr>
+<td>DAG 调度与合并</td>
+<td>Phase 6</td>
+<td>使用本冻结稿，另立开发任务</td>
+</tr>
+<tr>
+<td>工件存储与验收门</td>
+<td>Phase 6</td>
+<td>使用本冻结稿，另立服务设计</td>
+</tr>
+</tbody>
+</table>
+<h2 id="8">8. 解冻前必须完成的检查<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<ol>
+<li>MC-01 多域、多实例 consumer 压测通过；</li>
+<li><code>data_quality.synthetic_fields</code> 清零或明确降级展示；</li>
+<li>Phase 6 必需 BFF planned 端点有独立排期；</li>
+<li>模型配置生产 fail-closed 已验证；</li>
+<li>工件与验收门存储方案完成设计评审；</li>
+<li>DAG 状态机形成契约测试。</li>
+</ol>
+<p><strong>结论</strong>：本稿只冻结设计输入，不构成 Phase 6 开工声明。</p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
