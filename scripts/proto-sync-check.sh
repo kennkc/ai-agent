@@ -43,8 +43,13 @@ bad() { echo "  [FAIL] $*"; FAIL=1; }
 info(){ echo "  [--]   $*"; }
 
 pick_python() {
-  if   [ -x "$ROOT/services/python/venv/bin/python" ];        then echo "$ROOT/services/python/venv/bin/python"
-  elif [ -x "$ROOT/services/python/venv/Scripts/python.exe" ]; then echo "$ROOT/services/python/venv/Scripts/python.exe"
+  # 探测顺序：仓库约定路径 services/python/venv（setup-python-env.ps1 默认建在这里）
+  #          -> 历史兼容 nlp-service/.venv（早期脚本产物，已不再默认创建）
+  #          -> 系统 python3（CI 走这条）
+  if   [ -x "$ROOT/services/python/venv/bin/python" ];                        then echo "$ROOT/services/python/venv/bin/python"
+  elif [ -x "$ROOT/services/python/venv/Scripts/python.exe" ];                then echo "$ROOT/services/python/venv/Scripts/python.exe"
+  elif [ -x "$ROOT/services/python/nlp-service/.venv/bin/python" ];           then echo "$ROOT/services/python/nlp-service/.venv/bin/python"
+  elif [ -x "$ROOT/services/python/nlp-service/.venv/Scripts/python.exe" ];   then echo "$ROOT/services/python/nlp-service/.venv/Scripts/python.exe"
   else echo "python3"; fi
 }
 
@@ -110,7 +115,7 @@ for m in ["common.v1.health_pb2","session.v1.session_pb2","brain.v1.brain_pb2",
           "sensor.v1.sensor_pb2","body.v1.body_pb2","limb.v1.limb_pb2"]:
     importlib.import_module(m)
 print("imported-6-modules")
-' 2>&1 )" && [ "${out##*$'\n'}" = "imported-6-modules" ]; then
+' 2>&1 )" && printf '%s' "$out" | grep -q "imported-6-modules"; then
     ok "6 个 _pb2 模块导入自检通过"
   else
     bad "导入自检失败："
@@ -143,7 +148,7 @@ check_java() {
     local tgt="$JAVA_SRC/com/agent/$rel"
     if [ ! -f "$tgt" ]; then
       missing=$((missing + 1)); echo "         [未入库]   com/agent/$rel"
-    elif ! cmp -s "$f" "$tgt"; then
+    elif ! diff -q --strip-trailing-cr "$f" "$tgt" >/dev/null 2>&1; then
       differ=$((differ + 1));  echo "         [内容不同] com/agent/$rel"
     fi
   done < <(find "$JAVA_GEN_ROOT" -name '*.java' | sort)

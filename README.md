@@ -165,6 +165,8 @@ API 模式下观测区两页展示真实数据：**中间件监控**（8 容器�
 
 ### 4.4 Python 依赖与环境（nlp-service）
 
+**Python 版本**：最低 3.10，推荐 **3.12**（CI 使用 3.12；仓库根 `.python-version` 已声明）。
+
 nlp-service 的依赖声明在 `services/python/nlp-service/requirements.txt`（运行时）与
 `requirements-dev.txt`（测试与 proto 工具）。**不要**用系统 Python 直接装依赖，用一键脚本建立项目 venv：
 

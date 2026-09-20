@@ -1,0 +1,107 @@
+name: CI
+
+# 2026-09-20 新增：远端托管在 GitHub，而此前的流水线只写在 .gitlab-ci.yml 里，
+# GitHub 侧不会执行任何门禁（这就是"门禁齐备却从未拦住问题"的根因）。
+# 本 workflow 把关键门禁搬到 GitHub Actions；.gitlab-ci.yml 保留以兼容原有 GitLab 环境。
+
+on:
+  push:
+    branches: [codex/main, dev, workbuddy/main]
+  pull_request:
+    branches: [codex/main, dev, workbuddy/main]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  java-test:
+    name: Java / mvn test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: 运行 Java 测试
+        working-directory: services/java
+        run: mvn -B -ntp test
+      - name: proto 生成物同步校验（Java 侧）
+        working-directory: services/java
+        run: |
+          mvn -B -ntp -Pproto-gen -pl proto-contracts -am generate-sources
+          cd ../..
+          bash scripts/proto-sync-check.sh java
+
+  python-check:
+    name: Python / ruff + pytest
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: 安装依赖
+        working-directory: services/python/nlp-service
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt -r requirements-dev.txt
+      - name: Ruff 静态检查（版本固定，避免规则漂移）
+        working-directory: services/python
+        run: |
+          pip install ruff==0.16.8
+          ruff check .
+      - name: Pytest
+        working-directory: services/python/nlp-service
+        run: python -m pytest -q
+      - name: proto 生成物同步校验（Python 侧）
+        run: bash scripts/proto-sync-check.sh python
+
+  wp-bff-test:
+    name: wp-bff / node --test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 控制面鉴权与代理回归
+        working-directory: services/node/wp-bff
+        run: node --test
+
+  frontend-build:
+    name: 前端 / typecheck + build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: npm
+          cache-dependency-path: web/work-platform/package-lock.json
+      - name: 构建工作平台
+        working-directory: web/work-platform
+        run: |
+          npm ci
+          npm run typecheck
+          npm run build
+
+  contract-check:
+    name: 契约 / contract + timeout + proto
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: proto 与数据字典校验
+        run: python scripts/contract-check.py
+      - name: work-platform 契约分层校验
+        run: python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
+      - name: 跨服务超时预算校验
+        run: python scripts/timeout-budget-check.py
+      # proto 生成物同步校验需要 grpcio-tools / Maven 生成步骤，
+      # 因此分别落在 python-check 与 java-test 两个 job 中，此处不再重复。
