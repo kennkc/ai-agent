@@ -32,6 +32,31 @@ Verification on 2026-09-20:
 R-MC01-05 (work-platform collaboration view switching from Mock to the real aggregate) remains a
 follow-up Should item because the current UI still uses a fixed demo domain id. It is recorded
 rather than silently faked.
+## Frontend Tests / Service Control / Toolchain Baseline (2026-09-20)
+
+This pass added the operational and verification layer requested in the latest review:
+
+- **Frontend functional testing**: Vitest 3.2.7 + Vue Test Utils + jsdom. Six test files and
+  **15/15 tests** now cover theme persistence, routing, degradation state, MiddlewareView,
+  ModelsView and the new ServicesView. The first component run exposed and fixed a real
+  `MiddlewareView` null-summary crash.
+- **Frontend test archive**: `docs/test-reports/frontend/2026-09-20/` contains the
+  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 16.86% lines /
+  78.1% branches; the report explicitly marks this as the MVP baseline, not a full-coverage claim.
+- **Backend service control**: wp-bff now exposes `/api/wp/services` plus controlled
+  `/start` and `/stop` endpoints for the application-service catalog. Commands are fixed
+  server-side, `wp-bff` itself is monitor-only, and externally-started processes return 409
+  rather than guessing a PID. wp-bff tests grew from 106 to **110 passed**.
+- **Work Platform page**: new Vue `后台服务` page shows Gateway, Session, NLP, Body, Tool,
+  Collab, BFF and Frontend service health with controlled/external/read-only status.
+- **OpenRouter non-degraded check**: `scripts/openrouter-e2e.py` is opt-in and reads the key
+  only from `OPENROUTER_API_KEY`. The gateway path returned `degraded=false` and
+  `generator=model`; the free router alias was observed routing to different upstream models,
+  including one `None` output. The report therefore records **pass_with_warning** and recommends
+  pinning an upstream model for quality evaluation.
+- **Toolchain/deployment baseline**: `versions.lock.json`, `scripts/check-toolchain.ps1`,
+  `scripts/check-toolchain.sh`, and `docs/部署与环境版本基线.md` now provide the version matrix,
+  installation checks and IDE-plugin baseline.
 ## Archived stage reports
 
 Phase 0 / Phase 1 / Phase 2 / Phase 3 stage reports (stage report + execution log + test &

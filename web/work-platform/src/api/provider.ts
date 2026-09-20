@@ -10,7 +10,7 @@ import {
 import { reportApiOk, reportDegrade } from './status'
 import type {
   BrainAnswer, ExecutionOverview, ExecutionTool, KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
-  MiddlewareNode, MiddlewareOverview, ModelConfigList, ModelConfigUpsert, ModelProbeResult, ModelUsage, ModelWriteResult, OptimizationSuggestion, SessionContext, SessionInfo, SessionStats,
+  ManagedServiceOverview, MiddlewareNode, MiddlewareOverview, ModelConfigList, ModelConfigUpsert, ModelProbeResult, ModelUsage, ModelWriteResult, OptimizationSuggestion, SessionContext, SessionInfo, SessionStats,
   SuggestionExecution, ToolExecutionResult, ToolImpactReport, TracingOverview,
 } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
@@ -154,6 +154,42 @@ const mockMiddlewareFallback = (): MiddlewareOverview => ({
   ...getMiddlewareOverview(),
   data_source: 'mock',
 })
+// —— 应用服务控制台：BFF 不可达时只展示服务目录，不伪造可控制状态 ——
+function mockServicesFallback(): ManagedServiceOverview {
+  const names: Array<[string, string, string, number]> = [
+    ['gateway-service', 'Gateway', 'API 网关 · JWT / 路由', 8080],
+    ['session-manager', 'Session Manager', '会话状态机 · 编排入口', 8081],
+    ['nlp-service', 'NLP Service', '意图 / 大脑 / RAG', 8000],
+    ['body-service', 'Body Service', '知识库 · 检索 · 重排', 8083],
+    ['tool-executor', 'Tool Executor', '工具执行 · 沙箱 · 审计', 8084],
+    ['collab-bus', 'Collab Bus', '多 Agent 协作总线', 8085],
+    ['wp-bff', 'WP BFF', '工作平台控制面', 8090],
+    ['work-platform', 'Work Platform', 'Vue 3 前台', 3001],
+  ]
+  const items = names.map(([key, name, role, port]) => ({
+    key, name, role, port,
+    state: 'down' as const,
+    controllable: false,
+    controlled: false,
+    control_status: 'disabled' as const,
+    pid: null,
+    metrics: [
+      { label: '探针', value: 'BFF 未连接' },
+      { label: '端口', value: String(port) },
+      { label: '控制', value: '只读降级' },
+    ],
+    last_check: '—',
+  }))
+  return {
+    enabled: false,
+    control_enabled: false,
+    checked_at: '',
+    probe_mode: 'tcp',
+    summary: { total: items.length, up: 0, down: items.length },
+    items,
+    data_source: 'mock',
+  }
+}
 
 // —— 躯体视图不受全局 mock 开关限制：知识量/检索指标必须反映体层真实状态 ——
 // VITE_DATA_SOURCE=mock 或体层不可达时给出演示数据，但一律带 data_source='mock' 标注，
@@ -461,6 +497,29 @@ export const dataProvider = {
     }
   },
 
+
+  async getServices(): Promise<ManagedServiceOverview> {
+    try {
+      const payload = unwrapBody(await api.get('/services'))
+      if (payload && typeof payload === 'object' && 'enabled' in payload) {
+        reportApiOk('services')
+        return { ...payload, data_source: 'live' } as ManagedServiceOverview
+      }
+      reportDegrade('services', '响应缺少 enabled 字段')
+      return mockServicesFallback()
+    } catch (error) {
+      reportDegrade('services', (error as Error)?.message || 'BFF /services 不可达')
+      return mockServicesFallback()
+    }
+  },
+
+  async startService(key: string) {
+    return unwrapBody(await api.post(`/services/${key}/start`))
+  },
+
+  async stopService(key: string) {
+    return unwrapBody(await api.post(`/services/${key}/stop`))
+  },
   async getTracing(): Promise<TracingOverview> {
     if (source === 'mock') return tracingSeed
     const fallback: TracingOverview = { enabled: false, ui_url: '', services: [], recent: [], checked_at: '' }

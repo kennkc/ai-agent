@@ -131,8 +131,8 @@ let startPoll: number | undefined
 let lastAction: 'start' | 'stop' = 'start'
 const batch = ref<{ action: 'start' | 'stop', current: string, done: number, total: number } | null>(null)
 const batchRunning = computed(() => batch.value !== null)
-const upCount = computed(() => overview.value?.summary.up ?? 0)
-const downCount = computed(() => overview.value?.summary.down ?? 0)
+const upCount = computed(() => overview.value?.summary?.up ?? 0)
+const downCount = computed(() => overview.value?.summary?.down ?? 0)
 // live=wp-bff 真实探针数据；false 表示 BFF 不可达、正在展示演示回落数据
 const liveData = computed(() => overview.value?.data_source !== 'mock')
 const upRatio = computed(() => {

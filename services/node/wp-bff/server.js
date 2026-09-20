@@ -34,6 +34,7 @@ const http = require('node:http')
 const net = require('node:net')
 const crypto = require('node:crypto')
 const { spawn: realSpawn } = require('node:child_process')
+const { APP_SERVICES, createAppServiceController } = require('./app-services')
 const fs = require('node:fs')
 const path = require('node:path')
 
@@ -277,6 +278,9 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'GET', path: '/middleware' },
   { method: 'POST', path: '/middleware/{key}/start' },
   { method: 'POST', path: '/middleware/{key}/stop' },
+  { method: 'GET', path: '/services' },
+  { method: 'POST', path: '/services/{key}/start' },
+  { method: 'POST', path: '/services/{key}/stop' },
   { method: 'GET', path: '/tracing' },
   { method: 'GET', path: '/knowledge' },
   { method: 'POST', path: '/knowledge' },
@@ -503,6 +507,9 @@ function createServer(options = {}) {
   const auditPath = options.auditPath || path.join(__dirname, 'logs', 'wp-bff-audit.log')
 
   const ops = new Map()
+  const appServiceController = createAppServiceController({
+    repoRoot, spawnImpl, probeImpl, audit, nowTime, appServices: options.appServices,
+  })
 
   function audit(action, key, detail) {
     const line = `[${new Date().toISOString()}] ${action} ${key || '-'} ${detail || ''}\n`
@@ -676,6 +683,19 @@ function createServer(options = {}) {
         items,
       },
     })
+  }
+
+  async function handleAppServices(req, res) {
+    const body = await appServiceController.servicesResponse()
+    return send(req, res, 200, { data: body })
+  }
+
+  async function handleAppServiceControl(req, res, key, action) {
+    const result = await appServiceController.control(key, action)
+    if (result.error) {
+      return fail(req, res, result.status, result.error.code, result.error.message, result.error.details)
+    }
+    return send(req, res, result.status, { data: result.data })
   }
 
   // 拉取单个服务最近 traces 并聚合统计（limit 内采样口径）
@@ -1911,6 +1931,9 @@ function createServer(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/wp/healthz') return handleHealthz(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/services') return handleAppServices(req, res)
+    const appServiceControl = url.pathname.match(/^\/api\/wp\/services\/([a-z0-9-]+)\/(start|stop)$/)
+    if (req.method === 'POST' && appServiceControl) return handleAppServiceControl(req, res, appServiceControl[1], appServiceControl[2])
     if (req.method === 'GET' && url.pathname === '/api/wp/tracing') return handleTracing(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/knowledge') return handleKnowledge(req, res)
     if (req.method === 'POST' && url.pathname === '/api/wp/knowledge') return handleKnowledgeIngest(req, res)
@@ -2022,6 +2045,7 @@ if (require.main === module) startServer()
 
 module.exports = {
   MIDDLEWARE,
+  APP_SERVICES,
   WHITELIST,
   IMPLEMENTED_ENDPOINTS,
   ROUTE_GUARD,

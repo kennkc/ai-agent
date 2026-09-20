@@ -116,11 +116,12 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:07 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 15:49 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#mc-01-collaboration-bus-hardening-2026-09-20">MC-01 Collaboration Bus Hardening (2026-09-20)</a></li>
+<li><a href="#frontend-tests-service-control-toolchain-baseline-2026-09-20">Frontend Tests / Service Control / Toolchain Baseline (2026-09-20)</a></li>
 <li><a href="#archived-stage-reports">Archived stage reports</a></li>
 <li><a href="#current-milestone">Current milestone</a></li>
 <li><a href="#phase-0">Phase 0</a></li>
@@ -245,6 +246,31 @@ original helper-level slice:</p>
 <p>R-MC01-05 (work-platform collaboration view switching from Mock to the real aggregate) remains a
 follow-up Should item because the current UI still uses a fixed demo domain id. It is recorded
 rather than silently faked.</p>
+<h2 id="frontend-tests-service-control-toolchain-baseline-2026-09-20">Frontend Tests / Service Control / Toolchain Baseline (2026-09-20)<a class="headerlink" href="#frontend-tests-service-control-toolchain-baseline-2026-09-20" title="Permanent link">&para;</a></h2>
+<p>This pass added the operational and verification layer requested in the latest review:</p>
+<ul>
+<li><strong>Frontend functional testing</strong>: Vitest 3.2.7 + Vue Test Utils + jsdom. Six test files and
+  <strong>15/15 tests</strong> now cover theme persistence, routing, degradation state, MiddlewareView,
+  ModelsView and the new ServicesView. The first component run exposed and fixed a real
+  <code>MiddlewareView</code> null-summary crash.</li>
+<li><strong>Frontend test archive</strong>: <code>docs/test-reports/frontend/2026-09-20/</code> contains the
+  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 16.86% lines /
+  78.1% branches; the report explicitly marks this as the MVP baseline, not a full-coverage claim.</li>
+<li><strong>Backend service control</strong>: wp-bff now exposes <code>/api/wp/services</code> plus controlled
+  <code>/start</code> and <code>/stop</code> endpoints for the application-service catalog. Commands are fixed
+  server-side, <code>wp-bff</code> itself is monitor-only, and externally-started processes return 409
+  rather than guessing a PID. wp-bff tests grew from 106 to <strong>110 passed</strong>.</li>
+<li><strong>Work Platform page</strong>: new Vue <code>后台服务</code> page shows Gateway, Session, NLP, Body, Tool,
+  Collab, BFF and Frontend service health with controlled/external/read-only status.</li>
+<li><strong>OpenRouter non-degraded check</strong>: <code>scripts/openrouter-e2e.py</code> is opt-in and reads the key
+  only from <code>OPENROUTER_API_KEY</code>. The gateway path returned <code>degraded=false</code> and
+  <code>generator=model</code>; the free router alias was observed routing to different upstream models,
+  including one <code>None</code> output. The report therefore records <strong>pass_with_warning</strong> and recommends
+  pinning an upstream model for quality evaluation.</li>
+<li><strong>Toolchain/deployment baseline</strong>: <code>versions.lock.json</code>, <code>scripts/check-toolchain.ps1</code>,
+  <code>scripts/check-toolchain.sh</code>, and <code>docs/部署与环境版本基线.md</code> now provide the version matrix,
+  installation checks and IDE-plugin baseline.</li>
+</ul>
 <h2 id="archived-stage-reports">Archived stage reports<a class="headerlink" href="#archived-stage-reports" title="Permanent link">&para;</a></h2>
 <p>Phase 0 / Phase 1 / Phase 2 / Phase 3 stage reports (stage report + execution log + test &amp;
 acceptance report, each with an HTML twin) are archived in

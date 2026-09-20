@@ -135,7 +135,17 @@ jobs:
           npm ci
           npm run typecheck
           npm run build
-
+      - name: 前端功能测试与覆盖率报告
+        working-directory: web/work-platform
+        run: npm run test:report
+      - name: 上传前端测试报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-test-report
+          path: |
+            web/work-platform/test-results/junit.xml
+            web/work-platform/coverage/coverage-summary.json
   contract-check:
     name: 契约 / contract + timeout + proto
     runs-on: ubuntu-latest

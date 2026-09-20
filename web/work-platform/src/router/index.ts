@@ -9,6 +9,7 @@ const TasksView = () => import('../views/TasksView.vue')
 const ChatView = () => import('../views/ChatView.vue')
 const ModuleView = () => import('../views/ModuleView.vue')
 const MiddlewareView = () => import('../views/MiddlewareView.vue')
+const ServicesView = () => import('../views/ServicesView.vue')
 const TracingView = () => import('../views/TracingView.vue')
 const KnowledgeView = () => import('../views/KnowledgeView.vue')
 const ExecutionView = () => import('../views/ExecutionView.vue')
@@ -33,6 +34,7 @@ const router = createRouter({
         { path: 'tasks', name: 'tasks', component: TasksView },
         { path: 'chat', name: 'chat', component: ChatView },
         { path: 'middleware', name: 'middleware', component: MiddlewareView },
+        { path: 'services', name: 'services', component: ServicesView },
         { path: 'knowledge', name: 'knowledge', component: KnowledgeView },
         { path: 'tracing', name: 'tracing', component: TracingView },
         // R-C05(预) 执行视图：工具调用流 / 拦截记录 / 沙箱状态（wp-bff /tools 聚合）

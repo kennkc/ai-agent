@@ -1745,3 +1745,59 @@ test('路由层统一鉴权：来源越权时同样在路由前被拒（403）',
     assert.equal(res.json.code, 'AGENT_FORBIDDEN')
   }, { jsonRequest: async () => ({ ok: true }) })
 })
+
+test('GET /api/wp/services 返回应用服务目录与控制开关', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { method: 'GET', path: '/api/wp/services' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.enabled, true)
+    assert.equal(res.json.data.control_enabled, true)
+    assert.equal(res.json.data.items.length, 8)
+    assert.equal(res.json.data.items.find(item => item.key === 'wp-bff').controllable, false)
+  })
+})
+
+test('应用服务 start 只执行目录内固定命令', async () => {
+  const appServices = {
+    demo: { name: 'Demo', role: '测试服务', port: 65531, kind: 'node', cwd: ['.'], args: ['-e', 'setTimeout(() => {}, 1000)'], can_control: true },
+  }
+  await withServer(async ({ server, spawnCalls }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/services/demo/start',
+      headers: { origin: ALLOWED_ORIGIN, 'x-wp-control-token': TOKEN },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.state, 'starting')
+    assert.equal(spawnCalls.length, 1)
+    assert.deepEqual(spawnCalls[0].args, appServices.demo.args)
+  }, { appServices })
+})
+
+test('外部启动的服务拒绝由 BFF 停止（不猜 PID）', async () => {
+  const appServices = {
+    demo: { name: 'Demo', role: '测试服务', port: 65532, kind: 'node', cwd: ['.'], args: ['server.js'], can_control: true },
+  }
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST',
+      path: '/api/wp/services/demo/stop',
+      headers: { origin: ALLOWED_ORIGIN, 'x-wp-control-token': TOKEN },
+    })
+    assert.equal(res.status, 409)
+    assert.equal(res.json.code, 'AGENT_CONFLICT')
+    assert.equal(res.json.details.reason, 'externally_managed')
+  }, { appServices, probeImpl: async () => ({ up: true, latencyMs: 1 }) })
+})
+
+test('wp-bff 自身不允许通过控制页停止', async () => {
+  const res = await withServer(async ({ server }) => {
+    return request(server, {
+      method: 'POST',
+      path: '/api/wp/services/wp-bff/start',
+      headers: { origin: ALLOWED_ORIGIN, 'x-wp-control-token': TOKEN },
+    })
+  })
+  assert.equal(res.status, 403)
+  assert.equal(res.json.code, 'AGENT_FORBIDDEN')
+})

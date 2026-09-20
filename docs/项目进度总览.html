@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:07 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-20 15:52 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -169,7 +169,11 @@ JetStream <strong>durable pull consumer</strong>、手工 ack/nak、有限重投
 实测 38/38 测试通过（含消费者离线恢复与自动 DLQ），P99 = 4.231ms；GitHub Actions 已加入
 <code>collab-integration</code> 与 <code>collab-bus-check</code> 两个 job。R-MC01-05（协作视图切真实聚合数据）
 仍为 Should 后续项，未用 Mock 冒充完成。</p>
-<p><strong>2026-09-19 Phase 5 复审结论</strong>：<strong>未触碰伪实现红线</strong>。复审时唯一需留意的是<strong>沙箱降级被当作"沙箱验收通过"
+<p><strong>2026-09-20 工程化补强</strong>：前端新增 Vitest 功能测试基线（15/15）并归档 JUnit/覆盖率报告；
+wp-bff 新增 8 个应用服务监控与本地受控启停端点（110/110 测试）；OpenRouter 非降级网关
+路径已验证，但 free router 输出不稳定；<code>versions.lock.json</code> 与部署版本基线文档已落地。
+后台服务控制页已加入工作平台观测区。R-MC01-05 仍是真实协作域 UI 后续项。
+<strong>2026-09-19 Phase 5 复审结论</strong>：<strong>未触碰伪实现红线</strong>。复审时唯一需留意的是<strong>沙箱降级被当作"沙箱验收通过"
 叙述的风险</strong> —— 当时实测 <code>docker_available=false</code>、<code>active_backend=process-restricted</code>、<code>degraded=true</code>。
 <strong>该缺口已于同日收口轮闭合</strong>：构建 <code>agent-sandbox:latest</code> 后重启服务，<code>GET /api/tool/sandbox</code> 回到
 <code>active_backend=docker / isolated=true / degraded=false</code>，逃逸样本取得<strong>内核级证据</strong>
@@ -618,12 +622,12 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>wp-bff</td>
 <td><code>cd services/node/wp-bff &amp;&amp; node --test test/server.test.js</code></td>
-<td><strong>103 通过</strong>（含写路径鉴权反向用例 + 路由层错误语义 + 大脑端点（含决策链 404 反向用例）+ 会话代理 + 驾驶舱指标 + <strong>工具代理（含 <code>POST /tools/execute</code> 控制令牌反向用例）</strong> + <strong>失败原因分类（timeout / unreachable / endpoint_missing / http_error / bad_json）</strong> + <strong>6 条跨服务超时预算不变量</strong> + <strong>WB-10 模型域 13 条（含 401/403 反向、409 透传、503、保留段、405、<code>OVERVIEW_GAPS</code> 不失真）</strong>）</td>
+<td><strong>110 通过</strong>（含写路径鉴权反向用例 + 路由层错误语义 + 大脑端点（含决策链 404 反向用例）+ 会话代理 + 驾驶舱指标 + <strong>工具代理（含 <code>POST /tools/execute</code> 控制令牌反向用例）</strong> + <strong>失败原因分类（timeout / unreachable / endpoint_missing / http_error / bad_json）</strong> + <strong>6 条跨服务超时预算不变量</strong> + <strong>WB-10 模型域 13 条（含 401/403 反向、409 透传、503、保留段、405、<code>OVERVIEW_GAPS</code> 不失真）</strong>）</td>
 </tr>
 <tr>
 <td>前端</td>
-<td><code>cd web/work-platform &amp;&amp; npx vue-tsc --noEmit &amp;&amp; npx vite build</code></td>
-<td>通过</td>
+<td><code>cd web/work-platform &amp;&amp; npm run test:report &amp;&amp; npm run typecheck &amp;&amp; npm run build</code></td>
+<td><strong>15/15 功能测试通过</strong>；typecheck/build 通过</td>
 </tr>
 <tr>
 <td><strong>超时预算（跨服务）</strong></td>

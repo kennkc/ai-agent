@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OpenRouter 非降级模型验证报告</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 15:45 · 源文件 openrouter-non-degraded-report.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 结论</a></li>
+<li><a href="#2">2. 实测记录</a><ul>
+<li><a href="#run-1">Run 1：成功返回预期文本</a></li>
+<li><a href="#run-2">Run 2：非降级成功，但内容未达预期</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 优化建议</a></li>
+<li><a href="#4">4. 复现命令</a></li>
+<li><a href="#5">5. 测试边界</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="openrouter">OpenRouter 非降级模型验证报告<a class="headerlink" href="#openrouter" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>日期</strong>：2026-09-20<br />
+<strong>脚本</strong>：<code>scripts/openrouter-e2e.py</code><br />
+<strong>参数</strong>：<code>base_url=https://openrouter.ai/api/v1</code> · <code>model=openrouter/free</code><br />
+<strong>密钥</strong>：仅通过 <code>OPENROUTER_API_KEY</code> 环境变量传入，未写入仓库或报告</p>
+</blockquote>
+<h2 id="1">1. 结论<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p><code>OpenRouter</code> 的 OpenAI 兼容接口能够被现有 <code>HttpLlmEngine → LlmGateway</code> 路径真实调用：</p>
+<ul>
+<li><code>HttpLlmEngine.available() == true</code></li>
+<li><code>LlmGateway</code> 返回 <code>degraded=false</code></li>
+<li><code>generator=model</code></li>
+<li>返回内容非空（在成功路由的上游模型上）</li>
+</ul>
+<p>因此，<strong>接口连接与网关非降级路径验证通过</strong>。</p>
+<p>但 <code>openrouter/free</code> 是路由别名，不保证固定到同一上游模型。两次实测分别落到不同免费模型，其中一次返回预期文本，另一次返回字面量 <code>None</code>。这说明：</p>
+<ul>
+<li><strong>连通性和非降级状态可用</strong>；</li>
+<li><strong>输出质量不可用 <code>openrouter/free</code> 做稳定评测</strong>；</li>
+<li>生产或评测场景应固定具体上游模型 ID。</li>
+</ul>
+<h2 id="2">2. 实测记录<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="run-1">Run 1：成功返回预期文本<a class="headerlink" href="#run-1" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>上游模型</th>
+<th>结果</th>
+<th style="text-align: right;">延迟</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>直连 <code>/chat/completions</code></td>
+<td><code>nex-agi/nex-n2.5-mini:free</code></td>
+<td><code>OPENROUTER_OK</code></td>
+<td style="text-align: right;">2146ms</td>
+</tr>
+<tr>
+<td><code>HttpLlmEngine → LlmGateway</code></td>
+<td><code>openrouter/free</code></td>
+<td><code>OPENROUTER_OK</code></td>
+<td style="text-align: right;">11640ms</td>
+</tr>
+</tbody>
+</table>
+<p>网关结果：<code>degraded=false</code>，<code>generator=model</code>。</p>
+<h3 id="run-2">Run 2：非降级成功，但内容未达预期<a class="headerlink" href="#run-2" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>路径</th>
+<th>上游模型</th>
+<th>结果</th>
+<th style="text-align: right;">延迟</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>直连 <code>/chat/completions</code></td>
+<td><code>liquid/lfm-2.5-2.6b:free</code></td>
+<td>字面量 <code>None</code></td>
+<td style="text-align: right;">1749ms</td>
+</tr>
+<tr>
+<td><code>HttpLlmEngine → LlmGateway</code></td>
+<td><code>openrouter/free</code></td>
+<td>字面量 <code>None</code></td>
+<td style="text-align: right;">2296ms</td>
+</tr>
+</tbody>
+</table>
+<p>网关结果仍为：<code>degraded=false</code>，<code>generator=model</code>。<br />
+因此该次结果应标记为 <strong>pass_with_warning</strong>，不能把“非降级”误读为“输出质量稳定通过”。</p>
+<h2 id="3">3. 优化建议<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<ol>
+<li>将 <code>openrouter</code> 加入模型供应商字典与默认 Base URL，改善前台配置体验。</li>
+<li>保留 <code>openrouter/free</code> 作为连通性 smoke 测试，不用于质量评测。</li>
+<li>正式评测时固定具体免费模型 ID，例如实测中有效的上游模型；同时记录模型版本和路由结果。</li>
+<li>为 <code>HttpLlmEngine</code> 的 <code>extra</code> 配置增加可选请求头支持：
+   - <code>HTTP-Referer</code>
+   - <code>X-Title</code></li>
+<li>对模型输出增加结构化校验，不仅检查 HTTP 200，还要拒绝空串、<code>None</code>、<code>null</code> 和明显模板占位。</li>
+<li>外部模型测试通过环境变量/CI Secret 注入 Key；本轮报告不包含 Key 明文。</li>
+<li>建议轮换本轮对话中暴露过的 Key，避免继续使用已出现在文本记录中的凭据。</li>
+</ol>
+<h2 id="4">4. 复现命令<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">OPENROUTER_E2E=1 \
+OPENROUTER_API_KEY=... \
+python scripts/openrouter-e2e.py \
+  --base-url https://openrouter.ai/api/v1 \
+  --model openrouter/free \
+  --output docs/test-reports/model/2026-09-20/openrouter-non-degraded.json
+</code></pre>
+<h2 id="5">5. 测试边界<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<ul>
+<li>本测试验证 <strong>chat completion 生成路径</strong>，不覆盖 <code>embed</code> / <code>rerank</code>。</li>
+<li><code>embed</code> 与 <code>rerank</code> 仍需本地 BGE-M3 / reranker，不能使用 <code>openrouter/free</code> 代替。</li>
+<li>外部模型受免费额度、限流、上游路由和网络影响；该测试应保持 opt-in，不作为默认 CI 硬门禁。</li>
+</ul></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

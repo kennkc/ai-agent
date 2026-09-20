@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 09:41 · 源文件 模型接入配置-功能逻辑.md</span>
+  <span class="meta">生成于 2026-09-20 15:55 · 源文件 模型接入配置-功能逻辑.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -160,7 +160,7 @@
 </nav>
   <main class="doc"><h1 id="wb-10">模型接入配置（WB-10）· 功能逻辑说明<a class="headerlink" href="#wb-10" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-20 · <strong>代码基线</strong>：Phase 5 收口线 + WB-10 落地（未提交工作区）
+<p><strong>口径时间</strong>：2026-09-20 · <strong>代码基线</strong>：Phase 5 收口线 + WB-10 落地 + OpenRouter 外部 E2E 验证
 <strong>需求源</strong>：<code>AGENT_CONTEXT/WB-功能融入/WB-P5-需求设计文档.md</code>（WB-10 模型策略可视化管理 + Token 用量看板）
 本文件回答一个问题：<strong>在前台把一个模型配上去，到它真正被某次问答调用，中间到底发生了什么？</strong></p>
 <p>与相邻文档的分工：<code>功能开发流程.md</code> 讲"这类功能该怎么开发"；本文件讲"这个功能现在是怎么运转的"；
@@ -168,6 +168,9 @@
 </blockquote>
 <hr />
 <h2 id="_1">一、要解决的问题<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<blockquote>
+<p><strong>OpenRouter 兼容说明（2026-09-20）</strong>：<code>openai</code> / <code>deepseek</code> / <code>qwen</code> 以及新增的 <code>openrouter</code> 均为 OpenAI 兼容供应商；<code>openrouter</code> 默认 Base URL 为 <code>https://openrouter.ai/api/v1</code>。可先用 <code>custom</code> 配置，也可直接选择 <code>openrouter</code>。</p>
+</blockquote>
 <p>改造前，「换一个模型」这件事要走完 <code>改 .env → 重启服务 → 祈祷环境变量没写错</code> 三步。
 这不是四个独立的小痛点，而是同一个根因的四种表现：</p>
 <table>

@@ -11,6 +11,9 @@
 | GET | `/api/wp/middleware` | 探测 8 个中间件（TCP 探针），返回 `MiddlewareOverview` 契约 |
 | POST | `/api/wp/middleware/:key/start` | 启动中间件：`docker compose up -d <key>` |
 | POST | `/api/wp/middleware/:key/stop` | 终止中间件：`docker compose stop <key>` |
+| GET | `/api/wp/services` | 应用服务 TCP 探针目录（Gateway / Session / NLP / Body / Tool / Collab / BFF / Frontend） |
+| POST | `/api/wp/services/:key/start` | 本地受控启动应用服务（固定命令白名单） |
+| POST | `/api/wp/services/:key/stop` | 仅停止由本 BFF 启动的应用服务；外部进程返回 409，不猜 PID |
 | GET | `/api/wp/tracing` | Jaeger 在线时返回真实服务注册列表与每服务最近 20 条 trace 聚合统计（traces/spans/错误率/P99）及全局最新 12 条链路；Jaeger 未启动时返回 `enabled:false` |
 
 ## 契约一致性（2026-09-16）
@@ -52,6 +55,7 @@ python scripts/contract-check.py --work-platform --openapi contracts/work-platfo
 | `WP_BFF_PORT` | `8090` | 监听端口（固定绑定 `127.0.0.1`） |
 | `WP_BFF_CONTROL_TOKEN` | 启动时随机生成 | 控制端点令牌；生产环境必须显式配置 |
 | `WP_BFF_ALLOWED_ORIGINS` | `http://127.0.0.1:3001,http://localhost:3001,http://[::1]:3001` | 允许的来源，逗号分隔 |
+| `WP_BFF_APP_CONTROL` | `true`（仅本机开发） | 应用服务启动/停止开关；`false` 时服务控制页只读。生产环境应交给 systemd / K8s / 外部 supervisor |
 
 ### 已知边界
 

@@ -1755,6 +1755,38 @@ paths:
         '200': { description: OK }
         '401': { description: 控制令牌缺失或无效 }
         '403': { description: 来源不在白名单或 key 不在白名单 }
+  /services:
+    x-wp-status: implemented
+    get:
+      summary: 应用服务目录与 TCP 探针（Gateway / Session / NLP / Body / Tool / Collab / BFF / Frontend）
+      tags: [observability]
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: { $ref: '#/components/schemas/ApiResponse' }
+  /services/{key}/start:
+    x-wp-status: implemented
+    x-wp-security: origin-allowlist + control-token
+    post:
+      summary: 本地受控启动应用服务（固定命令，key 白名单）
+      tags: [observability, control]
+      responses:
+        '200': { description: OK }
+        '401': { description: 控制令牌缺失或无效 }
+        '403': { description: 来源不在白名单、key 不在白名单或控制已关闭 }
+  /services/{key}/stop:
+    x-wp-status: implemented
+    x-wp-security: origin-allowlist + control-token
+    post:
+      summary: 本地受控停止应用服务（仅允许停止由 wp-bff 启动的进程）
+      tags: [observability, control]
+      responses:
+        '200': { description: OK }
+        '401': { description: 控制令牌缺失或无效 }
+        '403': { description: 来源不在白名单、key 不在白名单或服务不可控 }
+        '409': { description: 外部进程无法安全停止 }
   /tracing:
     x-wp-status: implemented
     get:

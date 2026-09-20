@@ -2,7 +2,7 @@
 
 > 当前基线：Phase 0 / Phase 1 / Phase 2 / Phase 3 / **Phase 4（大脑期）** / **Phase 5（四肢期）** 均已交付并通过验收；
 > VS1 垂直切片、Phase 3 知识闭环、Phase 4 大脑问答链路与 Phase 5 工具执行链路均已打通
-> （**251 Java + 158 Python + 87 wp-bff tests green**，契约校验 0 FAIL，超时预算 0 FAIL（ok=19 · gap=0），
+> （**289 Java + 199 Python(+1 skip) + 110 wp-bff + 15 frontend tests green**，契约校验 0 FAIL，超时预算 0 FAIL（ok=19 · gap=0），
 > 文档一致性 0 FAIL，Java 文档覆盖 160/160）。
 > 另：Phase 4 交付后于 **2026-09-19 完成需求复审与补全**（2 项语义级伪实现已修复 + 3 项跨链路
 > 一致性缺陷已闭合 + 未落地项补齐），详见三件套补记与 `docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md`。

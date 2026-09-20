@@ -62,12 +62,13 @@ ROLE_KEYS: tuple[str, ...] = tuple(role.key for role in ROLES)
 
 TIERS: tuple[str, ...] = ("L1", "L2", "L3")
 PROVIDERS: tuple[str, ...] = (
-    "deepseek", "openai", "qwen", "anthropic", "moonshot", "zhipu", "local", "custom",
+    "deepseek", "openai", "openrouter", "qwen", "anthropic", "moonshot", "zhipu", "local", "custom",
 )
 # 各供应商的 OpenAI 兼容默认地址（仅作表单预填，**不参与运行**）
 PROVIDER_DEFAULT_BASE_URL: dict[str, str] = {
     "deepseek": "https://api.deepseek.com/v1",
     "openai": "https://api.openai.com/v1",
+    "openrouter": "https://openrouter.ai/api/v1",
     "qwen": "https://dashscope.aliyuncs.com/compatible-mode/v1",
     "anthropic": "https://api.anthropic.com/v1",
     "moonshot": "https://api.moonshot.cn/v1",

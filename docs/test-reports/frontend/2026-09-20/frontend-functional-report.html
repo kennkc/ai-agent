@@ -1,0 +1,282 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>前端功能测试报告（MVP）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 15:48 · 源文件 frontend-functional-report.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 结论</a></li>
+<li><a href="#2">2. 覆盖范围</a></li>
+<li><a href="#3">3. 测试发现并修复的问题</a></li>
+<li><a href="#4">4. 覆盖率摘要</a></li>
+<li><a href="#5">5. 报告归档</a></li>
+<li><a href="#6">6. 后续优化建议</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="mvp">前端功能测试报告（MVP）<a class="headerlink" href="#mvp" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>日期</strong>：2026-09-20<br />
+<strong>代码基线</strong>：<code>1461118</code> + 本轮前端测试框架<br />
+<strong>框架</strong>：Vitest 3.2.7 + Vue Test Utils 2.5.1 + jsdom 26.1.0<br />
+<strong>命令</strong>：<code>npm run test:report</code></p>
+</blockquote>
+<h2 id="1">1. 结论<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<ul>
+<li>测试文件：<strong>6 个</strong></li>
+<li>测试用例：<strong>15 passed / 0 failed</strong></li>
+<li>语句覆盖率：<strong>16.86%</strong>（849 / 5035）</li>
+<li>分支覆盖率：<strong>78.1%</strong>（214 / 274）</li>
+<li>函数覆盖率：<strong>40.24%</strong>（33 / 82）</li>
+<li>行覆盖率：<strong>16.86%</strong>（849 / 5035）</li>
+</ul>
+<p>本报告是<strong>前端 MVP 功能测试基线</strong>，不是全量覆盖率验收。当前优先覆盖主题、路由、数据源降级、中间件监控和模型配置页；其余页面与真实 BFF/E2E 仍待后续补充。</p>
+<h2 id="2">2. 覆盖范围<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>测试文件</th>
+<th style="text-align: right;">用例数</th>
+<th>覆盖内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/api/status.test.ts</code></td>
+<td style="text-align: right;">3</td>
+<td>降级记录去重、恢复清理、20 条上限</td>
+</tr>
+<tr>
+<td><code>src/stores/app.test.ts</code></td>
+<td style="text-align: right;">3</td>
+<td>深浅主题切换、偏好持久化、Mock/API 数据源切换</td>
+</tr>
+<tr>
+<td><code>src/router/router.test.ts</code></td>
+<td style="text-align: right;">3</td>
+<td>总览、模型、中间件、协作页及动态模块路由</td>
+</tr>
+<tr>
+<td><code>src/views/MiddlewareView.test.ts</code></td>
+<td style="text-align: right;">2</td>
+<td>真实中间件卡片/健康摘要、观测服务不可用状态</td>
+</tr>
+<tr>
+<td><code>src/views/ModelsView.test.ts</code></td>
+<td style="text-align: right;">2</td>
+<td>模型配置不可用态、OpenRouter 兼容配置渲染与角色装配显示</td>
+</tr>
+<tr>
+<td><code>src/views/ServicesView.test.ts</code></td>
+<td style="text-align: right;">2</td>
+<td>应用服务控制台真实状态、托管/外部区分、BFF 降级只读态</td>
+</tr>
+</tbody>
+</table>
+<h2 id="3">3. 测试发现并修复的问题<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<p>组件测试暴露出 <code>MiddlewareView</code> 在以下响应下会渲染崩溃：</p>
+<pre><code class="language-json">{
+  &quot;enabled&quot;: false,
+  &quot;items&quot;: []
+}
+</code></pre>
+<p>原因是 health summary 为空时直接读取 <code>overview.summary.down</code>。本轮已改为：</p>
+<pre><code class="language-ts">overview.value?.summary?.down ?? 0
+</code></pre>
+<p>并增加“中间件观测服务未启用”回归用例。</p>
+<h2 id="4">4. 覆盖率摘要<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>文件/模块</th>
+<th style="text-align: right;">行覆盖率</th>
+<th style="text-align: right;">分支覆盖率</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>src/api/status.ts</code></td>
+<td style="text-align: right;">100%</td>
+<td style="text-align: right;">100%</td>
+<td>数据源降级状态</td>
+</tr>
+<tr>
+<td><code>src/stores/app.ts</code></td>
+<td style="text-align: right;">94.8%</td>
+<td style="text-align: right;">38.88%</td>
+<td>主题、偏好、数据源</td>
+</tr>
+<tr>
+<td><code>src/router/index.ts</code></td>
+<td style="text-align: right;">100%</td>
+<td style="text-align: right;">100%</td>
+<td>路由表解析</td>
+</tr>
+<tr>
+<td><code>src/views/MiddlewareView.vue</code></td>
+<td style="text-align: right;">53.25%</td>
+<td style="text-align: right;">94.23%</td>
+<td>中间件监控主路径</td>
+</tr>
+<tr>
+<td><code>src/views/ModelsView.vue</code></td>
+<td style="text-align: right;">67.16%</td>
+<td style="text-align: right;">71.12%</td>
+<td>模型配置主路径</td>
+</tr>
+<tr>
+<td><code>src/views/ServicesView.vue</code></td>
+<td style="text-align: right;">76.66%</td>
+<td style="text-align: right;">92.5%</td>
+<td>应用服务监控与启停主路径</td>
+</tr>
+<tr>
+<td><code>src/api/provider.ts</code></td>
+<td style="text-align: right;">0%</td>
+<td style="text-align: right;">0%</td>
+<td>下一步补 API fallback/契约测试</td>
+</tr>
+<tr>
+<td>其他视图</td>
+<td style="text-align: right;">0%</td>
+<td style="text-align: right;">—</td>
+<td>下一步分批补组件/E2E</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5">5. 报告归档<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<ul>
+<li>本报告：<code>docs/test-reports/frontend/2026-09-20/frontend-functional-report.md</code></li>
+<li>JUnit：<code>docs/test-reports/frontend/2026-09-20/junit.xml</code></li>
+<li>覆盖率摘要：<code>docs/test-reports/frontend/2026-09-20/coverage-summary.json</code></li>
+<li>完整 HTML 覆盖率：构建产物 <code>web/work-platform/coverage/index.html</code>，建议由 CI artifact 保存，不提交 Git。</li>
+</ul>
+<h2 id="6">6. 后续优化建议<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<ol>
+<li>增加 <code>provider.ts</code> 的 API/Mock/降级契约测试；</li>
+<li>给总览、知识库、协作总线、远程 IM、Agent 在线页面补组件测试；</li>
+<li>引入 Playwright，覆盖登录、路由、主题、服务启停和真实 BFF 降级；</li>
+<li>设置阶段性覆盖率门槛：先 25%，稳定后提高到 40%；</li>
+<li>为关键按钮和状态补充稳定的 <code>data-testid</code>；</li>
+<li>将 <code>npm run test:report</code> 纳入 GitHub Actions 并上传 JUnit/覆盖率 artifact。</li>
+</ol></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

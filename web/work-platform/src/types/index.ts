@@ -2,7 +2,7 @@ export type ModuleId =
   | 'overview' | 'vitals' | 'brain' | 'senses' | 'evolution' | 'collab'
   | 'tasks' | 'chat' | 'experts' | 'skills' | 'connectors' | 'automation' | 'models' | 'remote'
   | 'cases' | 'approvals'
-  | 'middleware' | 'tracing' | 'knowledge' | 'execution'
+  | 'middleware' | 'services' | 'tracing' | 'knowledge' | 'execution'
 
 export type ModuleGroup = '生命体区' | '工作台区' | '治理区' | '观测区'
 export type ThemeMode = 'dark' | 'light' | 'system'
@@ -490,6 +490,23 @@ export interface MiddlewareOverview {
   summary: { total: number; up: number; down: number }
   checked_at: string
   /** 数据来源：live=wp-bff 真实探针；mock=BFF 不可达时的演示回落（仅前端标注用，BFF 不返回） */
+  data_source?: 'live' | 'mock'
+}
+export interface ManagedService extends Omit<MiddlewareNode, 'state'> {
+  state: 'up' | 'down' | 'starting' | 'stopping'
+  controllable: boolean
+  controlled: boolean
+  control_status: 'controlled' | 'external' | 'disabled'
+  pid?: number | null
+}
+
+export interface ManagedServiceOverview {
+  enabled: boolean
+  control_enabled: boolean
+  probe_mode?: string
+  items: ManagedService[]
+  summary: { total: number; up: number; down: number }
+  checked_at: string
   data_source?: 'live' | 'mock'
 }
 
