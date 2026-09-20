@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 12:38 · 源文件 本地检索模型启用指南.md</span>
+  <span class="meta">生成于 2026-09-20 12:49 · 源文件 本地检索模型启用指南.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -125,6 +125,7 @@
 <li><a href="#3">3. 启用步骤</a><ul>
 <li><a href="#1-2-3-gb">步骤 1 · 安装运行时库（必需，约 2-3 GB）</a></li>
 <li><a href="#11-torch-2026-09-20">步骤 1.1 · ⚠ torch 版本硬约束（2026-09-20 实测，踩了两轮）</a></li>
+<li><a href="#12-python-312-2026-09-20">步骤 1.2 · 本机 Python 版本清单与 3.12 环境验证结果（2026-09-20）</a></li>
 <li><a href="#2_1">步骤 2 · 指向本地权重（必需）</a></li>
 <li><a href="#3_1">步骤 3 · 验证加载</a></li>
 <li><a href="#4">步骤 4 · 全量重索引（切换的必要代价，不可跳过）</a></li>
@@ -259,6 +260,57 @@ BGE-M3 官方仓库只有 <code>.bin</code>（ModelScope 与 hf-mirror 均无 sa
 <p><strong>本机实测结果（torch 2.7.1+cpu）</strong>：</p>
 <pre><code>Embedding: backend=bge-m3            dim=1024  degraded=False
 Reranker : backend=bge-reranker-v2-m3          degraded=False
+</code></pre>
+<h3 id="12-python-312-2026-09-20">步骤 1.2 · 本机 Python 版本清单与 <strong>3.12 环境验证结果</strong>（2026-09-20）<a class="headerlink" href="#12-python-312-2026-09-20" title="Permanent link">&para;</a></h3>
+<p>本机 <code>py</code> launcher 不可用，Python 由 uv 统一管理。实测可用解释器：</p>
+<table>
+<thead>
+<tr>
+<th>解释器</th>
+<th>版本</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>E:\software\anaconda3\python.exe</code></td>
+<td>3.10.9</td>
+<td>PATH 首位，<strong>当前默认</strong>；torch 受 2.6~2.7 夹逼</td>
+</tr>
+<tr>
+<td><code>C:\Users\46973\.local\bin\python3.12.exe</code></td>
+<td><strong>3.12.13</strong></td>
+<td>uv 安装，venv/pip 完整，<strong>推荐</strong></td>
+</tr>
+<tr>
+<td><code>C:\Users\46973\.local\bin\python3.11.exe</code></td>
+<td>3.11.x</td>
+<td>uv 安装（未细验）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>3.12 环境验证结果</strong>（建在仓库外 <code>E:\ai_workspace\project_space\ai-agent-lifeform\venv312</code>，不影响现有环境）：</p>
+<pre><code class="language-text">python : 3.12.13
+torch  : 2.14.0+cpu     ← 3.10 上会 DLL 初始化失败，3.12 正常加载
+tf     : 5.17.0
+st     : 6.1.0
+
+Embedding: bge-m3               dim=1024  degraded=False
+Reranker : bge-reranker-v2-m3             degraded=False
+pytest   : 199 passed / 1 skipped
+</code></pre>
+<p><strong>结论：3.12 是推荐环境</strong> —— 与 CI 完全一致、<strong>无 torch 版本上限</strong>、模型与测试全部通过。
+若继续用 3.10，则必须遵守 §步骤 1.1 的 <code>torch&gt;=2.6,&lt;2.8</code> 约束。</p>
+<p><strong>切换到 3.12 的做法</strong>（验证通过后再执行）：</p>
+<pre><code class="language-powershell"># 1) 建正式 venv（仓库约定路径）
+&amp; &quot;C:\Users\46973\.local\bin\python3.12.exe&quot; -m venv services\python\venv
+# 2) 装依赖（顺序：项目依赖 → sentence-transformers）
+services\python\venv\Scripts\python.exe -m pip install -r services\python\nlp-service\requirements.txt -r services\python\nlp-service\requirements-dev.txt
+services\python\venv\Scripts\python.exe -m pip install sentence-transformers
+# 3) 设本地权重路径并验证
+$env:EMBEDDING_MODEL_PATH = &quot;E:/ai_workspace/project_space/模型权重/bge-m3&quot;
+$env:RERANKER_MODEL_PATH  = &quot;E:/ai_workspace/project_space/模型权重/bge-reranker-v2-m3&quot;
+cd services\python\nlp-service; ..\venv\Scripts\python.exe -m pytest -q
 </code></pre>
 <h3 id="2_1">步骤 2 · 指向本地权重（<strong>必需</strong>）<a class="headerlink" href="#2_1" title="Permanent link">&para;</a></h3>
 <p>代码已支持环境变量覆盖（本指南配套改造）：</p>
