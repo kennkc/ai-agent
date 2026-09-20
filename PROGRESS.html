@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 10:56 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 11:20 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -204,6 +204,7 @@
 <li><a href="#pitfall-recorded">Pitfall recorded</a></li>
 <li><a href="#verification-2026-09-20-pass-4">Verification (2026-09-20, pass 4)</a></li>
 <li><a href="#local-environment-reproducibility-2026-09-20-pass-5">Local environment reproducibility (2026-09-20, pass 5)</a></li>
+<li><a href="#gate-noise-fix-twin-staleness-no-longer-trusts-bare-mtime-2026-09-20">Gate noise fix - twin staleness no longer trusts bare mtime (2026-09-20)</a></li>
 </ul>
 </li>
 <li><a href="#remaining">Remaining</a></li>
@@ -1102,6 +1103,20 @@ generate-sources</code>) and Maven downloads <code>protoc</code> / <code>protoc-
 (63 endpoints / 35 implemented paths) plus work-platform layering <strong>✅ 全部通过</strong>;
 timeout-budget <strong>ok=19 / gap=0 / fail=0</strong>; <code>java-doc-coverage.py</code> <strong>160/160</strong>;
 <code>doc-consistency-check.py</code> <strong>FAIL=0</strong>.</p>
+<h3 id="gate-noise-fix-twin-staleness-no-longer-trusts-bare-mtime-2026-09-20">Gate noise fix - twin staleness no longer trusts bare mtime (2026-09-20)<a class="headerlink" href="#gate-noise-fix-twin-staleness-no-longer-trusts-bare-mtime-2026-09-20" title="Permanent link">&para;</a></h3>
+<p><code>doc-consistency-check.py</code> judged a <code>.md</code>/<code>.html</code> twin "stale" by comparing <code>st_mtime</code>. git rewrites
+working-tree files in arbitrary order during rebase / checkout / stash, so the mtime order says
+nothing about which side is newer: in this session three <em>already-committed and content-synchronised</em>
+twin pairs were reported stale after a rebase, and each time the fix was to re-run <code>md2html</code> and add a
+noise commit - precisely the opposite of what a gate should cost.</p>
+<p>Now (a) the fast path is unchanged when <code>md</code> is not newer, (b) an mtime-newer pair with uncommitted
+changes keeps the mtime verdict, and (c) an mtime-newer pair where <strong>both sides are committed</strong> is
+decided by last-commit time, so twins landed in the same commit count as synchronised. Git state is
+read with two commands total (<code>git status --porcelain</code> and one <code>git log --name-only</code>); per-file git
+calls made the check exceed the 3-minute timeout on Windows, where each <code>git</code> start-up costs 1-2 s.
+Measured: 4.7 s for 60 pairs.</p>
+<p>Regression checked both ways: appending one line to <code>README.md</code> without regenerating <code>README.html</code>
+still FAILs; a rebased, committed, synchronised tree is now 0 FAIL without any regeneration.</p>
 <h2 id="remaining">Remaining<a class="headerlink" href="#remaining" title="Permanent link">&para;</a></h2>
 <ul>
 <li>~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:

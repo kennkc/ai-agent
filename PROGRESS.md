@@ -903,6 +903,24 @@ Verification (2026-09-20, pass 5, full gate replay): Java `mvn test` **251 passe
 timeout-budget **ok=19 / gap=0 / fail=0**; `java-doc-coverage.py` **160/160**;
 `doc-consistency-check.py` **FAIL=0**.
 
+### Gate noise fix - twin staleness no longer trusts bare mtime (2026-09-20)
+
+`doc-consistency-check.py` judged a `.md`/`.html` twin "stale" by comparing `st_mtime`. git rewrites
+working-tree files in arbitrary order during rebase / checkout / stash, so the mtime order says
+nothing about which side is newer: in this session three *already-committed and content-synchronised*
+twin pairs were reported stale after a rebase, and each time the fix was to re-run `md2html` and add a
+noise commit - precisely the opposite of what a gate should cost.
+
+Now (a) the fast path is unchanged when `md` is not newer, (b) an mtime-newer pair with uncommitted
+changes keeps the mtime verdict, and (c) an mtime-newer pair where **both sides are committed** is
+decided by last-commit time, so twins landed in the same commit count as synchronised. Git state is
+read with two commands total (`git status --porcelain` and one `git log --name-only`); per-file git
+calls made the check exceed the 3-minute timeout on Windows, where each `git` start-up costs 1-2 s.
+Measured: 4.7 s for 60 pairs.
+
+Regression checked both ways: appending one line to `README.md` without regenerating `README.html`
+still FAILs; a rebased, committed, synchronised tree is now 0 FAIL without any regeneration.
+
 ## Remaining
 
 - ~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:
