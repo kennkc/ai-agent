@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import hashlib
 import logging
+import os
 import math
 import re
 import time
@@ -63,13 +64,19 @@ class EmbeddingEngine:
         raise NotImplementedError
 
 
+# 本地权重路径可用环境变量覆盖：内网/离线环境下指向已下载的模型目录，
+# 避免运行时联网拉取。例（Windows）：
+#   EMBEDDING_MODEL_PATH=E:/ai_workspace/project_space/模型权重/bge-m3
+_DEFAULT_EMBED_MODEL = os.getenv("EMBEDDING_MODEL_PATH", "BAAI/bge-m3")
+
+
 class BgeM3Engine(EmbeddingEngine):
     """设计选型：BAAI/bge-m3（中文/多语言优）。权重需联网下载，故懒加载 + 可用性探测。"""
 
     name = "bge-m3"
     dim = BGE_M3_DIM
 
-    def __init__(self, model_name: str = "BAAI/bge-m3") -> None:
+    def __init__(self, model_name: str = _DEFAULT_EMBED_MODEL) -> None:
         self.model_name = model_name
         self._model = None
 

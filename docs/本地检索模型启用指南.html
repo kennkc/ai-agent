@@ -1,0 +1,312 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>本地检索模型启用指南（BGE-M3 / bge-reranker）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 11:46 · 源文件 本地检索模型启用指南.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 为什么需要本地检索模型</a></li>
+<li><a href="#2">2. 已下载的权重</a></li>
+<li><a href="#3">3. 启用步骤</a><ul>
+<li><a href="#1-2-3-gb">步骤 1 · 安装运行时库（必需，约 2-3 GB）</a></li>
+<li><a href="#2_1">步骤 2 · 指向本地权重（必需）</a></li>
+<li><a href="#3_1">步骤 3 · 验证加载</a></li>
+<li><a href="#4">步骤 4 · 全量重索引（切换的必要代价，不可跳过）</a></li>
+<li><a href="#5">步骤 5 · 评测回归</a></li>
+</ul>
+</li>
+<li><a href="#4_1">4. 回滚</a></li>
+<li><a href="#5_1">5. 资源占用参考</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="bge-m3-bge-reranker">本地检索模型启用指南（BGE-M3 / bge-reranker）<a class="headerlink" href="#bge-m3-bge-reranker" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>适用</strong>：LLM 走 API、检索用本地模型的部署形态（2026-09-20 决策）
+<strong>权重位置</strong>：<code>E:\ai_workspace\project_space\模型权重\</code>
+<strong>状态</strong>：权重已下载完成，运行时库尚未安装（因此当前仍走确定性降级后端）</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 为什么需要本地检索模型<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p>系统里有两个"模型"，职责完全不同，不要混淆：</p>
+<table>
+<thead>
+<tr>
+<th></th>
+<th>大语言模型（LLM）</th>
+<th>检索模型（本项目要本地跑的）</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>例子</td>
+<td>DeepSeek-V3 / GPT-4o / Qwen-Max</td>
+<td><strong>BGE-M3</strong>（嵌入）、<strong>bge-reranker-v2-m3</strong>（重排）</td>
+</tr>
+<tr>
+<td>作用</td>
+<td>生成回答文本</td>
+<td>把文本转成向量、给候选排序</td>
+</tr>
+<tr>
+<td>规模</td>
+<td>数十亿~数千亿参数</td>
+<td>约 5.68 亿参数</td>
+</tr>
+<tr>
+<td>部署方式</td>
+<td><strong>走 API 接口</strong>（WB-10 前台配置）</td>
+<td><strong>本地</strong>（本指南）</td>
+</tr>
+</tbody>
+</table>
+<p><strong>为什么检索不放 API</strong>：检索是每次提问都要做的高频操作，本地跑零调用成本、低延迟、数据不出境。</p>
+<p><strong>当前降级状态</strong>（未装运行时库时）：</p>
+<table>
+<thead>
+<tr>
+<th>环节</th>
+<th>降级后端</th>
+<th>差异</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>嵌入</td>
+<td>字符 n-gram 哈希（768 维）</td>
+<td><strong>靠字面重叠</strong>，不是语义相似 —— 问"如何提高团队协作"检索不到"改善跨职能配合"</td>
+</tr>
+<tr>
+<td>重排</td>
+<td>词法覆盖率打分</td>
+<td>非交叉编码精排</td>
+</tr>
+</tbody>
+</table>
+<p>两者都会如实上报 <code>degraded=true</code>（DEBT-010 / DEBT-011），<strong>不伪造质量</strong>。</p>
+<h2 id="2">2. 已下载的权重<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<pre><code>E:\ai_workspace\project_space\模型权重\
+├── bge-m3\                     30 文件 · 4,374.8 MB   （嵌入，1024 维）
+└── bge-reranker-v2-m3\         14 文件 · 2,187.3 MB   （重排，CrossEncoder）
+</code></pre>
+<p>下载方式（可复现，走国内 ModelScope 源；hf-mirror 在本机不稳定）：</p>
+<pre><code class="language-powershell"># 1) 安装下载器
+pip install modelscope
+
+# 2) 下载（local_dir 直指目标目录）
+python -c &quot;from modelscope import snapshot_download as d; d('BAAI/bge-m3', local_dir=r'E:\ai_workspace\project_space\模型权重\bge-m3')&quot;
+python -c &quot;from modelscope import snapshot_download as d; d('BAAI/bge-reranker-v2-m3', local_dir=r'E:\ai_workspace\project_space\模型权重\bge-reranker-v2-m3')&quot;
+</code></pre>
+<blockquote>
+<p>实测：ModelScope 首连偶发停滞，重跑即断点续传；若仍卡住，可用 curl 直连：
+<code>curl.exe -L -sS -C - -o &lt;目标文件&gt; "https://modelscope.cn/api/v1/models/BAAI/bge-reranker-v2-m3/repo?Revision=master&amp;FilePath=model.safetensors"</code></p>
+</blockquote>
+<h2 id="3">3. 启用步骤<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<h3 id="1-2-3-gb">步骤 1 · 安装运行时库（<strong>必需</strong>，约 2-3 GB）<a class="headerlink" href="#1-2-3-gb" title="Permanent link">&para;</a></h3>
+<pre><code class="language-powershell">cd services\python\nlp-service
+.\.venv\Scripts\python.exe -m pip install sentence-transformers
+</code></pre>
+<blockquote>
+<p>该库会连带安装 PyTorch（CPU 版约 2.5 GB）。代码用 <code>find_spec("sentence_transformers")</code> 探测，
+<strong>未安装时自动走降级后端</strong>，所以这一步不做也不影响系统运行。</p>
+</blockquote>
+<h3 id="2_1">步骤 2 · 指向本地权重（<strong>必需</strong>）<a class="headerlink" href="#2_1" title="Permanent link">&para;</a></h3>
+<p>代码已支持环境变量覆盖（本指南配套改造）：</p>
+<pre><code class="language-powershell">$env:EMBEDDING_MODEL_PATH  = &quot;E:/ai_workspace/project_space/模型权重/bge-m3&quot;
+$env:RERANKER_MODEL_PATH   = &quot;E:/ai_workspace/project_space/模型权重/bge-reranker-v2-m3&quot;
+</code></pre>
+<p>不设这两个变量时，默认仍按 HF 模型名（<code>BAAI/bge-m3</code>）联网加载 —— 内网环境必须设置。</p>
+<h3 id="3_1">步骤 3 · 验证加载<a class="headerlink" href="#3_1" title="Permanent link">&para;</a></h3>
+<pre><code class="language-powershell">cd services\python\nlp-service
+.\.venv\Scripts\python.exe -c &quot;from app.embedding import EmbeddingService as E; s=E(); print(s.status())&quot;
+</code></pre>
+<p>期望：<code>degraded=False</code>，<code>dim=1024</code>，<code>engine</code> 为 BGE-M3。
+（若仍显示 hash 后端，检查 <code>EMBEDDING_MODEL_PATH</code> 是否正确、sentence-transformers 是否装好。）</p>
+<h3 id="4">步骤 4 · <strong>全量重索引</strong>（切换的必要代价，不可跳过）<a class="headerlink" href="#4" title="Permanent link">&para;</a></h3>
+<p>向量维度会从 <strong>768 → 1024</strong>，Qdrant 集合必须重建：</p>
+<pre><code class="language-bash"># 1) 停 body-service
+# 2) 删除旧集合（维度不兼容）
+# 3) 重启服务，让它按新维度建集合
+# 4) 重新灌入全部知识（旧向量不可复用）
+</code></pre>
+<p><strong>为什么不能省</strong>：新旧向量混存会导致检索结果错乱（不同维度/不同语义空间无法比较），
+而且这种错误<strong>不会报错</strong>，只会让召回质量静默下降。</p>
+<h3 id="5">步骤 5 · 评测回归<a class="headerlink" href="#5" title="Permanent link">&para;</a></h3>
+<ul>
+<li>跑 Phase 3 已登记的评测集，对比切换前后的召回命中率与排序质量</li>
+<li>人工抽查 10-20 个<strong>语义相近但用词不同</strong>的问题（这正是本次切换要改善的场景）</li>
+<li>结果记入 <code>docs/优化日志/</code>，并更新《技术债台账》DEBT-010/011 状态</li>
+</ul>
+<h2 id="4_1">4. 回滚<a class="headerlink" href="#4_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>场景</th>
+<th>动作</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>加载失败 / 内存不足</td>
+<td>取消两个环境变量（回到 HF 名称）或卸载 sentence-transformers → 自动降级回 hash 后端</td>
+</tr>
+<tr>
+<td>重索引中途失败</td>
+<td>保留旧集合快照；恢复后重新灌入</td>
+</tr>
+<tr>
+<td>质量不升反降</td>
+<td>同上回滚；把评测对比结果记为"切换未达标"而不是悄悄回退</td>
+</tr>
+</tbody>
+</table>
+<h2 id="5_1">5. 资源占用参考<a class="headerlink" href="#5_1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>磁盘</th>
+<th>运行时内存</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>BGE-M3（fp32）</td>
+<td>4.37 GB（含 onnx 副本，PyTorch 版约 2.2 GB）</td>
+<td>约 2-3 GB</td>
+</tr>
+<tr>
+<td>bge-reranker（fp32）</td>
+<td>2.19 GB</td>
+<td>约 2-3 GB</td>
+</tr>
+<tr>
+<td>sentence-transformers + torch</td>
+<td>约 2.5 GB</td>
+<td>—</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>首次加载需数秒；CPU 推理可用但较慢，有 GPU 会显著加速。
+若磁盘紧张，可删除 <code>bge-m3</code> 下的 ONNX 副本（<code>model.onnx_data</code>，约 2.1 GB）—— 当前代码用 PyTorch 路径，不需要它。</p>
+</blockquote></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

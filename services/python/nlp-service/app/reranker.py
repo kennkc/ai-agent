@@ -8,6 +8,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import re
 from dataclasses import dataclass
 from importlib.util import find_spec
@@ -46,10 +47,15 @@ class RerankerEngine:
         raise NotImplementedError
 
 
+# 与 EMBEDDING_MODEL_PATH 同约定：指向本地 bge-reranker 权重目录
+#   RERANKER_MODEL_PATH=E:/ai_workspace/project_space/模型权重/bge-reranker-v2-m3
+_DEFAULT_RERANK_MODEL = os.getenv("RERANKER_MODEL_PATH", "BAAI/bge-reranker-v2-m3")
+
+
 class BgeRerankerEngine(RerankerEngine):
     name = "bge-reranker-v2-m3"
 
-    def __init__(self, model_name: str = "BAAI/bge-reranker-v2-m3") -> None:
+    def __init__(self, model_name: str = _DEFAULT_RERANK_MODEL) -> None:
         self.model_name = model_name
         self._model = None
 

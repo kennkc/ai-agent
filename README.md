@@ -203,6 +203,10 @@ python scripts/model-readiness.py
 未就绪时服务走确定性降级后端并如实上报 `degraded=true`（DEBT-010/011），不伪造向量质量；
 启用真实模型的获取命令（含 hf-mirror 国内镜像）与切换注意事项由该脚本直接打印。
 
+> **本地权重路径可用环境变量指定**（内网/离线环境必需）：`EMBEDDING_MODEL_PATH` 与
+> `RERANKER_MODEL_PATH` 指向已下载的模型目录。完整启用流程（安装运行时库 → 指向本地权重 →
+> 全量重索引 → 评测回归）见 [`docs/本地检索模型启用指南.md`](docs/本地检索模型启用指南.md)。
+
 ---
 
 ## 5. 安全基线
