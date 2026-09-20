@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 10:18 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 10:25 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -193,6 +193,7 @@
 <li><a href="#findings-reproduced-not-hypothesized">Findings (reproduced, not hypothesized)</a></li>
 <li><a href="#fixes">Fixes</a></li>
 <li><a href="#verification-2026-09-20-windows-host">Verification (2026-09-20, Windows host)</a></li>
+<li><a href="#follow-up-re-verification-2026-09-20-second-pass">Follow-up re-verification (2026-09-20, second pass)</a></li>
 <li><a href="#not-changed">Not changed</a></li>
 </ul>
 </li>
@@ -988,7 +989,8 @@ gateway (8080) is still unverified at runtime because <strong>Spring WebFlux doe
 <ul>
 <li><code>requirements.txt</code>: Chinese comments replaced with English (file is now pure ASCII); dependency set unchanged.</li>
 <li><code>requirements-dev.txt</code>: added <code>pytest&gt;=8.0</code> and <code>httpx&gt;=0.27.0</code> (TestClient transport).</li>
-<li>New <code>scripts/setup-python-env.ps1</code>: creates <code>services/python/nlp-service/.venv</code>, forces
+<li>New <code>scripts/setup-python-env.ps1</code>: creates <code>services/python/venv</code> (the repo-standard path used by
+  every demo/proto/java-services command, and the one <code>.gitignore</code> ignores; <code>-VenvPath</code> overrides), forces
   <code>PYTHONUTF8=1</code>, installs both requirement files, then runs pytest (<code>-Recreate</code> / <code>-SkipTest</code> supported).</li>
 <li>New <code>scripts/model-readiness.py</code>: checks whether <code>sentence-transformers</code> is importable and whether
   <code>BAAI/bge-m3</code> and <code>BAAI/bge-reranker-v2-m3</code> are present in the HF cache, prints the acquisition
@@ -999,13 +1001,33 @@ gateway (8080) is still unverified at runtime because <strong>Spring WebFlux doe
 <h3 id="verification-2026-09-20-windows-host">Verification (2026-09-20, Windows host)<a class="headerlink" href="#verification-2026-09-20-windows-host" title="Permanent link">&para;</a></h3>
 <ul>
 <li><code>scripts/setup-python-env.ps1</code> run against a <strong>deleted venv</strong>: install succeeded (exit 0).</li>
-<li><code>pytest</code> on that fresh venv: <strong>158 passed / 1 skipped</strong> — matches the documented baseline.</li>
+<li><code>pytest</code> on that fresh venv: <strong>199 passed / 1 skipped</strong> — identical to the long-lived repo venv
+  (<code>services/python/venv</code>), so both environments agree; the count includes the WB-10 suite
+  (<code>test_model_config.py</code> 28 + <code>test_token_usage.py</code> 13).</li>
 <li><code>scripts/model-readiness.py</code>: correctly reports both models missing, with actionable guidance.</li>
-<li>Java <code>mvn test</code>: <strong>252 passed / 0 failures / 0 errors</strong>
-  (gateway 2 · session 43 · sense 53 · body 68 · tool-executor 86).</li>
-<li>wp-bff <code>node --test</code>: <strong>87 passed</strong>; <code>contract-check.py --work-platform</code>: 60 endpoints, 0 FAIL;
+<li>Java <code>mvn test</code>: <strong>251 passed / 0 failures / 0 errors</strong>
+  (gateway 2 · session 43 · sense 53 · body 67 · tool-executor 86).</li>
+<li>wp-bff <code>node --test</code>: <strong>103 passed</strong>; <code>contract-check.py --work-platform</code>: 63 endpoints, 0 FAIL;
   <code>timeout-budget-check.py</code>: ok=19 / gap=0 / fail=0; Vue <code>typecheck</code> + <code>build</code>: passed.</li>
 </ul>
+<h3 id="follow-up-re-verification-2026-09-20-second-pass">Follow-up re-verification (2026-09-20, second pass)<a class="headerlink" href="#follow-up-re-verification-2026-09-20-second-pass" title="Permanent link">&para;</a></h3>
+<p>The same day, this pass was re-checked against the repository's own tooling (repo venv
+<code>services/python/venv</code>, Maven project under <code>services/java</code>, wp-bff Node 22). Three footguns were
+found and corrected:</p>
+<ul>
+<li><code>scripts/setup-python-env.ps1</code> created <code>services/python/nlp-service/.venv</code>, which conflicts with the
+  path used by every other document in the repo (<code>../venv/Scripts/python.exe</code>, 15+ call sites) and by
+  <code>.gitignore</code>. It now targets <code>services/python/venv</code>; <code>-VenvPath</code> still allows an explicit override.</li>
+<li>Baseline figures recorded above were stale relative to the shipped suite and were corrected to the
+  measured values: Python <strong>199 passed / 1 skipped</strong> (reproduced on a freshly created venv as well),
+  wp-bff <strong>103 passed</strong>, <code>contract-check.py --work-platform</code> <strong>63 endpoints</strong>, Java <strong>251</strong>
+  (gateway 2 · session 43 · sense 53 · body <strong>67</strong> · tool-executor 86).</li>
+<li>README 4.4's sample command was switched from <code>.\.venv\Scripts\python.exe</code> to
+  <code>..\venv\Scripts\python.exe</code> to match the rest of the documentation.</li>
+</ul>
+<p>Gate status after this pass: Python 199+1skip · wp-bff 103 · contract 0 FAIL (work-platform) ·
+cross-service 0 FAIL / 3 WARN · timeout budget ok=19 / gap=0 · doc consistency FAIL=0 ·
+Java 251 · Vue <code>typecheck</code> + <code>build</code> clean · <code>java-doc-coverage.py</code> 160/160.</p>
 <h3 id="not-changed">Not changed<a class="headerlink" href="#not-changed" title="Permanent link">&para;</a></h3>
 <ul>
 <li>Element Plus on-demand import and the <code>ModuleView.vue</code> split stay deferred (need a visual

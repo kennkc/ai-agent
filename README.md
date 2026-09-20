@@ -169,19 +169,21 @@ nlp-service 的依赖声明在 `services/python/nlp-service/requirements.txt`（
 `requirements-dev.txt`（测试与 proto 工具）。**不要**用系统 Python 直接装依赖，用一键脚本建立项目 venv：
 
 ```powershell
-pwsh -File scripts/setup-python-env.ps1              # 创建 .venv + 装依赖 + pytest 冒烟
+pwsh -File scripts/setup-python-env.ps1              # 创建 services/python/venv + 装依赖 + pytest 冒烟
 pwsh -File scripts/setup-python-env.ps1 -Recreate    # 丢弃旧 venv 重建
 pwsh -File scripts/setup-python-env.ps1 -SkipTest    # 只装依赖，跳过测试
 ```
 
 脚本要点：自动设置 `PYTHONUTF8=1` —— pip 在中文 Windows 上默认按 GBK 读取依赖文件，遇到非 ASCII
-内容会抛 `UnicodeDecodeError`；同时把依赖装进 `services/python/nlp-service/.venv`，不污染系统 Python。
+内容会抛 `UnicodeDecodeError`；同时把依赖装进 `services/python/venv`（仓库统一路径：`docs/demo/Phase2~Phase5-Demo`、
+`docs/proto契约使用说明`、`docs/java-services` 等处的命令都写作 `../venv/Scripts/python.exe`，
+`.gitignore` 亦按该路径忽略），不污染系统 Python。需要别的位置用 `-VenvPath` 显式指定。
 
 装好后手动跑测试：
 
 ```powershell
 cd services/python/nlp-service
-.\.venv\Scripts\python.exe -m pytest -q        # 基线：158 passed / 1 skipped
+..\venv\Scripts\python.exe -m pytest -q        # 基线：199 passed / 1 skipped
 ```
 
 **模型就绪检查**（嵌入 BGE-M3 与重排 bge-reranker 均为可选项）：
@@ -194,7 +196,6 @@ python scripts/model-readiness.py
 启用真实模型的获取命令（含 hf-mirror 国内镜像）与切换注意事项由该脚本直接打印。
 
 ---
-
 
 ## 5. 安全基线
 

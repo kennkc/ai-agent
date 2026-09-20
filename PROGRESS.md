@@ -782,7 +782,8 @@ Follow-up to a hands-on evaluation on a Windows host: the suite was re-verified 
 
 - `requirements.txt`: Chinese comments replaced with English (file is now pure ASCII); dependency set unchanged.
 - `requirements-dev.txt`: added `pytest>=8.0` and `httpx>=0.27.0` (TestClient transport).
-- New `scripts/setup-python-env.ps1`: creates `services/python/nlp-service/.venv`, forces
+- New `scripts/setup-python-env.ps1`: creates `services/python/venv` (the repo-standard path used by
+  every demo/proto/java-services command, and the one `.gitignore` ignores; `-VenvPath` overrides), forces
   `PYTHONUTF8=1`, installs both requirement files, then runs pytest (`-Recreate` / `-SkipTest` supported).
 - New `scripts/model-readiness.py`: checks whether `sentence-transformers` is importable and whether
   `BAAI/bge-m3` and `BAAI/bge-reranker-v2-m3` are present in the HF cache, prints the acquisition
@@ -793,12 +794,34 @@ Follow-up to a hands-on evaluation on a Windows host: the suite was re-verified 
 ### Verification (2026-09-20, Windows host)
 
 - `scripts/setup-python-env.ps1` run against a **deleted venv**: install succeeded (exit 0).
-- `pytest` on that fresh venv: **158 passed / 1 skipped** — matches the documented baseline.
+- `pytest` on that fresh venv: **199 passed / 1 skipped** — identical to the long-lived repo venv
+  (`services/python/venv`), so both environments agree; the count includes the WB-10 suite
+  (`test_model_config.py` 28 + `test_token_usage.py` 13).
 - `scripts/model-readiness.py`: correctly reports both models missing, with actionable guidance.
-- Java `mvn test`: **252 passed / 0 failures / 0 errors**
-  (gateway 2 · session 43 · sense 53 · body 68 · tool-executor 86).
-- wp-bff `node --test`: **87 passed**; `contract-check.py --work-platform`: 60 endpoints, 0 FAIL;
+- Java `mvn test`: **251 passed / 0 failures / 0 errors**
+  (gateway 2 · session 43 · sense 53 · body 67 · tool-executor 86).
+- wp-bff `node --test`: **103 passed**; `contract-check.py --work-platform`: 63 endpoints, 0 FAIL;
   `timeout-budget-check.py`: ok=19 / gap=0 / fail=0; Vue `typecheck` + `build`: passed.
+
+### Follow-up re-verification (2026-09-20, second pass)
+
+The same day, this pass was re-checked against the repository's own tooling (repo venv
+`services/python/venv`, Maven project under `services/java`, wp-bff Node 22). Three footguns were
+found and corrected:
+
+- `scripts/setup-python-env.ps1` created `services/python/nlp-service/.venv`, which conflicts with the
+  path used by every other document in the repo (`../venv/Scripts/python.exe`, 15+ call sites) and by
+  `.gitignore`. It now targets `services/python/venv`; `-VenvPath` still allows an explicit override.
+- Baseline figures recorded above were stale relative to the shipped suite and were corrected to the
+  measured values: Python **199 passed / 1 skipped** (reproduced on a freshly created venv as well),
+  wp-bff **103 passed**, `contract-check.py --work-platform` **63 endpoints**, Java **251**
+  (gateway 2 · session 43 · sense 53 · body **67** · tool-executor 86).
+- README 4.4's sample command was switched from `.\.venv\Scripts\python.exe` to
+  `..\venv\Scripts\python.exe` to match the rest of the documentation.
+
+Gate status after this pass: Python 199+1skip · wp-bff 103 · contract 0 FAIL (work-platform) ·
+cross-service 0 FAIL / 3 WARN · timeout budget ok=19 / gap=0 · doc consistency FAIL=0 ·
+Java 251 · Vue `typecheck` + `build` clean · `java-doc-coverage.py` 160/160.
 
 ### Not changed
 
