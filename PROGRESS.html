@@ -116,11 +116,11 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 14:15 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 15:07 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
-<li><a href="#mc-01-collaboration-bus-slice-2026-09-20">MC-01 Collaboration Bus Slice (2026-09-20)</a></li>
+<li><a href="#mc-01-collaboration-bus-hardening-2026-09-20">MC-01 Collaboration Bus Hardening (2026-09-20)</a></li>
 <li><a href="#archived-stage-reports">Archived stage reports</a></li>
 <li><a href="#current-milestone">Current milestone</a></li>
 <li><a href="#phase-0">Phase 0</a></li>
@@ -216,32 +216,35 @@
 <blockquote>
 <p>Last updated: 2026-09-20</p>
 </blockquote>
-<h2 id="mc-01-collaboration-bus-slice-2026-09-20">MC-01 Collaboration Bus Slice (2026-09-20)<a class="headerlink" href="#mc-01-collaboration-bus-slice-2026-09-20" title="Permanent link">&para;</a></h2>
-<p>The Phase 6 prerequisite <strong>MC-01 collaboration-bus service</strong> landed as an independent slice.
-R-MC01-01/02/03/04 are implemented; the service lives in <code>services/java/collab-bus</code>, and the
-hub now has:</p>
+<h2 id="mc-01-collaboration-bus-hardening-2026-09-20">MC-01 Collaboration Bus Hardening (2026-09-20)<a class="headerlink" href="#mc-01-collaboration-bus-hardening-2026-09-20" title="Permanent link">&para;</a></h2>
+<p>The Phase 6 prerequisite <strong>MC-01 collaboration-bus service</strong> is now hardened beyond the
+original helper-level slice:</p>
 <ul>
-<li>domain lifecycle + per-domain JetStream stream (<code>collab_domain</code>);</li>
-<li>JetStream publishing + PostgreSQL request-id idempotency + dead-letter handling
-  (<code>collab_seen_request</code>);</li>
-<li>heartbeat ingestion, weighted progress aggregation, 5s throttle signalling and 30s stale
-  detection (<code>collab_member_heartbeat</code>);</li>
-<li>REST contracts for domain/member/heartbeat access in <code>contracts/collab-bus-openapi.yaml</code>.</li>
+<li>domain lifecycle uses <code>creating -&gt; active -&gt; closed</code>, with <code>failed</code> compensation and
+  startup reconciliation;</li>
+<li>reliable delivery uses per-domain <strong>durable pull consumers</strong>, explicit ack/nak,
+  <code>pending / processed / failed / dlq</code> state machine, bounded retry and automatic DLQ;</li>
+<li>heartbeat ingestion uses a 5s write-coalescing window: throttled reports keep the latest
+  value in a pending buffer, queries merge it immediately, and the buffer flushes to PostgreSQL
+  at most once per window;</li>
+<li>health exposes <code>consumer</code> and <code>heartbeat</code> runtime state, not only NATS connectivity;</li>
+<li>dispatch / result / negotiate transport is consumed, but their Phase 6 business handlers
+  remain explicitly reserved rather than being reported as completed.</li>
 </ul>
 <p>Verification on 2026-09-20:</p>
 <ul>
-<li><code>mvn -pl collab-bus -am test</code> with <code>COLLAB_IT=true</code>: <strong>30/30 passed</strong> against real PostgreSQL
-  and NATS (Domain 7 · Delivery 12 · Heartbeat 11).</li>
+<li><code>mvn -pl collab-bus -am test</code> with <code>COLLAB_IT=true</code>: <strong>38/38 passed</strong> against real PostgreSQL
+  and NATS, including consumer-offline recovery and automatic DLQ.</li>
 <li><code>python scripts/collab-bus-check.py --require-jetstream</code>: <strong>10000 round trips, P50=1.240ms,
   P95=2.267ms, P99=3.159ms</strong>, passing the <code>&lt;10ms</code> gate.</li>
 <li><code>python scripts/contract-check.py --collab</code>: <strong>0 FAIL</strong> (5 REST paths · 5 NATS subject
   templates); the existing work-platform contract remains <strong>0 FAIL</strong>.</li>
-<li>GitHub Actions now runs the Java suite and a dedicated <code>collab-bus-check</code> job with NATS
-  JetStream.</li>
+<li>GitHub Actions now has a dedicated <code>collab-integration</code> job with PostgreSQL + NATS and keeps
+  <code>collab-bus-check</code> for the P99 gate.</li>
 </ul>
 <p>R-MC01-05 (work-platform collaboration view switching from Mock to the real aggregate) remains a
-follow-up Should item because the current UI still uses a fixed demo domain id; it is recorded
-rather than being silently faked.</p>
+follow-up Should item because the current UI still uses a fixed demo domain id. It is recorded
+rather than silently faked.</p>
 <h2 id="archived-stage-reports">Archived stage reports<a class="headerlink" href="#archived-stage-reports" title="Permanent link">&para;</a></h2>
 <p>Phase 0 / Phase 1 / Phase 2 / Phase 3 stage reports (stage report + execution log + test &amp;
 acceptance report, each with an HTML twin) are archived in

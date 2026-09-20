@@ -19,11 +19,9 @@ import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
 /**
- * R-MC01-02 集成测试：真实 PG + NATS（本地验证用，CI 默认跳过）。
+ * R-MC01-02 真实 PG + NATS 集成测试。
  *
- * <p>启用方式：{@code set COLLAB_IT=true} 后再跑 `mvn test`。
- * CI 无 PG/NATS 依赖，因此默认不执行；对应的自动化验证以
- * {@link DeliveryTest}（Mockito）为主，TC-03/TC-04 的真实路径依赖本类。
+ * <p>覆盖：publish ack、消费者离线恢复、真实 durable consumer、自动 DLQ 与关闭域拒发。
  */
 @SpringBootTest
 @EnabledIfEnvironmentVariable(named = "COLLAB_IT", matches = "true")
@@ -37,6 +35,9 @@ class DeliveryIntegrationTest {
 
     @Autowired
     IdempotentConsumer consumer;
+
+    @Autowired
+    ReliableConsumer reliableConsumer;
 
     @Autowired
     IdempotencyRepository idempotencyRepository;
@@ -76,6 +77,38 @@ class DeliveryIntegrationTest {
     }
 
     @Test
+    void consumerOfflineRecoversAllMessagesFromDurableStream() throws Exception {
+        String tenant = "it-tenant";
+        String domainId = newDomain(tenant);
+        String[] requestIds = new String[50];
+
+        reliableConsumer.stopDomain(domainId);
+        for (int i = 0; i < requestIds.length; i++) {
+            requestIds[i] = "req-offline-" + i + "-" + UUID.randomUUID();
+            publisher.publish(tenant, domainId, "heartbeat", "agent-offline", requestIds[i],
+                    "{\"progress\":" + (i % 100) + ",\"state\":\"working\"}");
+        }
+
+        reliableConsumer.startDomain(domainId);
+        for (String requestId : requestIds) {
+            awaitStatus(domainId, requestId, "processed", 15000);
+        }
+        assertEquals(50, idempotencyRepository.countByDomain(domainId));
+    }
+
+    @Test
+    void malformedHeartbeatEventuallyReachesDeadLetter() throws Exception {
+        String tenant = "it-tenant";
+        String domainId = newDomain(tenant);
+        String requestId = "req-dlq-" + UUID.randomUUID();
+
+        publisher.publish(tenant, domainId, "heartbeat", "agent-bad", requestId, "not-json");
+        awaitStatus(domainId, requestId, "dlq", 20000);
+
+        assertEquals("dlq", idempotencyRepository.status(domainId, requestId));
+    }
+
+    @Test
     void publishToClosedDomainIsRejected_againstRealPg() {
         String tenant = "it-tenant";
         String domainId = newDomain(tenant);
@@ -95,5 +128,19 @@ class DeliveryIntegrationTest {
 
         assertNotNull(ack.get("seq"));
         assertTrue(String.valueOf(ack.get("subject")).endsWith(".deadletter"));
+    }
+
+    private void awaitStatus(String domainId, String requestId, String expected, long timeoutMs)
+            throws InterruptedException {
+        long deadline = System.currentTimeMillis() + timeoutMs;
+        String actual = "";
+        while (System.currentTimeMillis() < deadline) {
+            actual = idempotencyRepository.status(domainId, requestId);
+            if (expected.equals(actual)) {
+                return;
+            }
+            Thread.sleep(100);
+        }
+        assertEquals(expected, actual, "request_id 未在超时前进入预期状态：" + requestId);
     }
 }

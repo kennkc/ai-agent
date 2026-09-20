@@ -2,12 +2,15 @@ package com.agent.collab.domain;
 
 import com.agent.collab.common.BizException;
 import com.agent.collab.common.ErrorCode;
+import com.agent.collab.delivery.ReliableConsumer;
 import com.agent.collab.nats.NatsConnection;
 import io.nats.client.api.StreamConfiguration;
 import io.nats.client.api.StorageType;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.context.event.ApplicationReadyEvent;
+import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Service;
 
 import java.time.Duration;
@@ -20,14 +23,9 @@ import java.util.UUID;
 /**
  * 协作域服务（R-MC01-01）。
  *
- * <p>职责：域生命周期（创建/关闭/查询）+ 为每个域创建**隔离的 JetStream stream**。
- *
- * <p>主题规范（P0 定稿，本切片落地）：{@code collab.<domain_id>.<type>.<member_id>}，
- * type ∈ dispatch | result | heartbeat | negotiate。按域隔离 stream 的目的：单域消费积压
- * 不拖垮其他域，且便于按域清理。
- *
- * <p>可靠性策略：PG 不可用时**明确失败（503）**，不做内存降级（域元数据是核心状态）；
- * NATS 不可用时同样明确失败 —— 否则会出现"域已建库但没有 stream"的半成品状态。
+ * <p>域生命周期：{@code creating → active → closed}，创建失败进入 {@code failed}。
+ * stream 与 durable consumer 都就绪后才标记 active；失败会停止 consumer、清理 stream
+ * 并标记 failed，避免“有域无总线”的半成品。
  */
 @Service
 public class DomainService {
@@ -35,15 +33,18 @@ public class DomainService {
 
     private final DomainRepository repository;
     private final NatsConnection nats;
+    private final ReliableConsumer consumer;
     private final int defaultConcurrencyLimit;
     private final Duration streamMaxAge;
 
     public DomainService(DomainRepository repository,
                          NatsConnection nats,
+                         ReliableConsumer consumer,
                          @Value("${app.collab.domain-concurrency-limit:8}") int defaultConcurrencyLimit,
                          @Value("${app.collab.stream-max-age-hours:24}") long streamMaxAgeHours) {
         this.repository = repository;
         this.nats = nats;
+        this.consumer = consumer;
         this.defaultConcurrencyLimit = defaultConcurrencyLimit;
         this.streamMaxAge = Duration.ofHours(streamMaxAgeHours);
     }
@@ -52,31 +53,36 @@ public class DomainService {
         requireReady();
         String domainId = "dom-" + UUID.randomUUID().toString().replace("-", "").substring(0, 8);
         CollabDomain domain = new CollabDomain(domainId, tenantId, name == null ? "" : name,
-                CollabDomain.STATE_ACTIVE, defaultConcurrencyLimit, Instant.now(), null);
+                CollabDomain.STATE_CREATING, defaultConcurrencyLimit, Instant.now(), null);
         repository.insert(domain);
         try {
             addStream(domainId);
+            consumer.startDomain(domainId);
+            if (!repository.markActive(tenantId, domainId)) {
+                throw new IllegalStateException("协作域状态未能转为 active");
+            }
+            log.info("协作域已创建：{}（tenant={}）", domainId, tenantId);
+            return get(tenantId, domainId);
         } catch (Exception e) {
-            // stream 创建失败：域记录保留但明确报错，由调用方决定是否清理；
-            // 不静默吞掉 —— 否则会出现"有域无总线"的假成功。
-            log.error("域 {} 的 stream 创建失败：{}", domainId, e.getMessage());
+            consumer.stopDomain(domainId);
+            deleteStreamQuietly(domainId);
+            repository.markFailed(tenantId, domainId);
+            log.error("域 {} 创建失败，已标记 failed：{}", domainId, e.getMessage());
             throw new BizException(ErrorCode.AGENT_COLLAB_BUS_UNAVAILABLE,
-                    "协作域已建库但总线 stream 创建失败：" + e.getMessage(),
-                    Map.of("domain_id", domainId));
+                    "协作域创建失败，已标记 failed：" + e.getMessage(),
+                    Map.of("domain_id", domainId, "state", CollabDomain.STATE_FAILED));
         }
-        log.info("协作域已创建：{}（tenant={}）", domainId, tenantId);
-        return domain;
     }
 
     public CollabDomain close(String tenantId, String domainId) {
-        // 关闭只涉及元数据状态变更、不触碰 stream —— 因此只要求 PG 可用。
-        // 要求 NATS 可用属过度约束：总线故障时仍应允许把域收口（否则域会永久卡在 active）。
+        // 关闭先改 PG 状态，再停止 consumer；NATS 暂时不可用不应阻止域收口。
         requirePg();
         CollabDomain domain = get(tenantId, domainId);
         if (domain.closed()) {
-            return domain; // 幂等：重复关闭返回当前状态，不报错
+            return domain;
         }
         repository.close(tenantId, domainId);
+        consumer.stopDomain(domainId);
         log.info("协作域已关闭：{}（tenant={}）", domainId, tenantId);
         return get(tenantId, domainId);
     }
@@ -91,6 +97,31 @@ public class DomainService {
     public List<CollabDomain> list(String tenantId) {
         requirePg();
         return repository.listByTenant(tenantId);
+    }
+
+    /** 启动时恢复未完成域与 active 域 consumer。 */
+    @EventListener(ApplicationReadyEvent.class)
+    public void recoverIncompleteDomains() {
+        if (!repository.available() || !nats.jetStreamAvailable()) {
+            log.warn("PG/NATS 未就绪，跳过协作域启动对账");
+            return;
+        }
+        for (CollabDomain domain : repository.listAll()) {
+            if (domain.closed() || CollabDomain.STATE_FAILED.equals(domain.state())) {
+                continue;
+            }
+            try {
+                addStream(domain.domainId());
+                consumer.startDomain(domain.domainId());
+                if (CollabDomain.STATE_CREATING.equals(domain.state())) {
+                    repository.markActive(domain.tenantId(), domain.domainId());
+                    log.info("已恢复未完成协作域：{} → active", domain.domainId());
+                }
+            } catch (Exception e) {
+                log.warn("协作域对账失败：domain={} state={} err={}",
+                        domain.domainId(), domain.state(), e.getMessage());
+            }
+        }
     }
 
     /** 域的运行态摘要（供后续心跳聚合与 BFF 使用）。 */
@@ -108,7 +139,7 @@ public class DomainService {
         return row;
     }
 
-    static String streamName(String domainId) {
+    public static String streamName(String domainId) {
         return "COLLAB_" + domainId.toUpperCase().replace("-", "_");
     }
 
@@ -119,7 +150,7 @@ public class DomainService {
     private void addStream(String domainId) throws Exception {
         String name = streamName(domainId);
         if (nats.jetStreamManagement().getStreamNames().contains(name)) {
-            return; // 已存在（重试场景）
+            return;
         }
         StreamConfiguration config = StreamConfiguration.builder()
                 .name(name)
@@ -129,6 +160,14 @@ public class DomainService {
                 .build();
         nats.jetStreamManagement().addStream(config);
         log.info("已为域 {} 创建 stream：{}（subjects={}）", domainId, name, subjectPattern(domainId));
+    }
+
+    private void deleteStreamQuietly(String domainId) {
+        try {
+            nats.jetStreamManagement().deleteStream(streamName(domainId));
+        } catch (Exception e) {
+            log.warn("清理域 {} stream 失败（可启动对账恢复）：{}", domainId, e.getMessage());
+        }
     }
 
     private void requireReady() {

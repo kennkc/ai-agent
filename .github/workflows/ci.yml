@@ -36,6 +36,55 @@ jobs:
           cd ../..
           bash scripts/proto-sync-check.sh java
 
+  collab-integration:
+    name: MC-01 / PG + NATS integration
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: pgvector/pgvector:pg16
+        env:
+          POSTGRES_USER: agent
+          POSTGRES_PASSWORD: agent123
+          POSTGRES_DB: lifeform
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U agent"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          java-version: '21'
+          distribution: temurin
+          cache: maven
+      - name: 启动 NATS JetStream
+        run: |
+          docker run --rm -d --name nats-integration \
+            -p 4222:4222 -p 8222:8222 \
+            nats:2.10-alpine -js -m 8222 --store_dir /data
+      - name: 等待 NATS 健康
+        run: |
+          for i in $(seq 1 30); do
+            if curl -fsS http://127.0.0.1:8222/healthz >/dev/null; then
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "NATS did not become healthy" >&2
+          exit 1
+      - name: 运行 collab-bus 真实集成测试
+        working-directory: services/java
+        env:
+          COLLAB_IT: 'true'
+          PG_URL: jdbc:postgresql://127.0.0.1:5432/lifeform
+          PG_USER: agent
+          PG_PASSWORD: agent123
+          NATS_URL: nats://127.0.0.1:4222
+        run: mvn -B -ntp -pl collab-bus -am test
   python-check:
     name: Python / ruff + pytest
     runs-on: ubuntu-latest

@@ -2,33 +2,36 @@
 
 > Last updated: 2026-09-20
 
-## MC-01 Collaboration Bus Slice (2026-09-20)
+## MC-01 Collaboration Bus Hardening (2026-09-20)
 
-The Phase 6 prerequisite **MC-01 collaboration-bus service** landed as an independent slice.
-R-MC01-01/02/03/04 are implemented; the service lives in `services/java/collab-bus`, and the
-hub now has:
+The Phase 6 prerequisite **MC-01 collaboration-bus service** is now hardened beyond the
+original helper-level slice:
 
-- domain lifecycle + per-domain JetStream stream (`collab_domain`);
-- JetStream publishing + PostgreSQL request-id idempotency + dead-letter handling
-  (`collab_seen_request`);
-- heartbeat ingestion, weighted progress aggregation, 5s throttle signalling and 30s stale
-  detection (`collab_member_heartbeat`);
-- REST contracts for domain/member/heartbeat access in `contracts/collab-bus-openapi.yaml`.
+- domain lifecycle uses `creating -> active -> closed`, with `failed` compensation and
+  startup reconciliation;
+- reliable delivery uses per-domain **durable pull consumers**, explicit ack/nak,
+  `pending / processed / failed / dlq` state machine, bounded retry and automatic DLQ;
+- heartbeat ingestion uses a 5s write-coalescing window: throttled reports keep the latest
+  value in a pending buffer, queries merge it immediately, and the buffer flushes to PostgreSQL
+  at most once per window;
+- health exposes `consumer` and `heartbeat` runtime state, not only NATS connectivity;
+- dispatch / result / negotiate transport is consumed, but their Phase 6 business handlers
+  remain explicitly reserved rather than being reported as completed.
 
 Verification on 2026-09-20:
 
-- `mvn -pl collab-bus -am test` with `COLLAB_IT=true`: **30/30 passed** against real PostgreSQL
-  and NATS (Domain 7 · Delivery 12 · Heartbeat 11).
+- `mvn -pl collab-bus -am test` with `COLLAB_IT=true`: **38/38 passed** against real PostgreSQL
+  and NATS, including consumer-offline recovery and automatic DLQ.
 - `python scripts/collab-bus-check.py --require-jetstream`: **10000 round trips, P50=1.240ms,
   P95=2.267ms, P99=3.159ms**, passing the `<10ms` gate.
 - `python scripts/contract-check.py --collab`: **0 FAIL** (5 REST paths · 5 NATS subject
   templates); the existing work-platform contract remains **0 FAIL**.
-- GitHub Actions now runs the Java suite and a dedicated `collab-bus-check` job with NATS
-  JetStream.
+- GitHub Actions now has a dedicated `collab-integration` job with PostgreSQL + NATS and keeps
+  `collab-bus-check` for the P99 gate.
 
 R-MC01-05 (work-platform collaboration view switching from Mock to the real aggregate) remains a
-follow-up Should item because the current UI still uses a fixed demo domain id; it is recorded
-rather than being silently faked.
+follow-up Should item because the current UI still uses a fixed demo domain id. It is recorded
+rather than silently faked.
 ## Archived stage reports
 
 Phase 0 / Phase 1 / Phase 2 / Phase 3 stage reports (stage report + execution log + test &

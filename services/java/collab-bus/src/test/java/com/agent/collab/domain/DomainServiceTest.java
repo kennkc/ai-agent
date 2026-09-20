@@ -2,6 +2,7 @@ package com.agent.collab.domain;
 
 import com.agent.collab.common.BizException;
 import com.agent.collab.common.ErrorCode;
+import com.agent.collab.delivery.ReliableConsumer;
 import com.agent.collab.nats.NatsConnection;
 import org.junit.jupiter.api.Test;
 
@@ -19,16 +20,15 @@ import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-/**
- * R-MC01-01 单元测试：域生命周期与降级语义（不依赖真实 PG/NATS，CI 可跑）。
- *
- * <p>集成路径（真实 PG + NATS 的创建/关闭）由本地运行验证覆盖，
- * 见 MC-P3-测试设计案例文档 TC-01 / TC-02 / TC-10。
- */
+/** R-MC01-01 单元测试：域生命周期、创建补偿与降级语义。 */
 class DomainServiceTest {
 
     private DomainService service(DomainRepository repo, NatsConnection nats) {
-        return new DomainService(repo, nats, 8, 24);
+        return new DomainService(repo, nats, mock(ReliableConsumer.class), 8, 24);
+    }
+
+    private DomainService service(DomainRepository repo, NatsConnection nats, ReliableConsumer consumer) {
+        return new DomainService(repo, nats, consumer, 8, 24);
     }
 
     @Test
@@ -54,19 +54,36 @@ class DomainServiceTest {
         BizException e = assertThrows(BizException.class, () -> service(repo, nats).create("t1", "demo"));
         assertEquals(ErrorCode.AGENT_COLLAB_BUS_UNAVAILABLE, e.code());
         assertTrue(e.getMessage().contains("JetStream"));
-        // 关键：总线不可用时不得先写库（避免"有域无总线"的半成品）
         verify(repo, never()).insert(any());
+    }
+
+    @Test
+    void streamFailureMarksDomainFailedAndStopsConsumer() {
+        DomainRepository repo = mock(DomainRepository.class);
+        ReliableConsumer consumer = mock(ReliableConsumer.class);
+        NatsConnection nats = mock(NatsConnection.class);
+        when(repo.available()).thenReturn(true);
+        when(nats.jetStreamAvailable()).thenReturn(true);
+        when(nats.jetStreamManagement()).thenThrow(new IllegalStateException("stream unavailable"));
+
+        BizException e = assertThrows(BizException.class,
+                () -> service(repo, nats, consumer).create("t1", "demo"));
+
+        assertEquals(ErrorCode.AGENT_COLLAB_BUS_UNAVAILABLE, e.code());
+        verify(repo).insert(any(CollabDomain.class));
+        verify(consumer).stopDomain(anyString());
+        verify(repo).markFailed(anyString(), anyString());
     }
 
     @Test
     void missingOrCrossTenantDomain_getReturns404() {
         DomainRepository repo = mock(DomainRepository.class);
         when(repo.available()).thenReturn(true);
-        // 跨租户访问在仓储层就查不到（查询按 tenant_id 过滤）
         when(repo.find(anyString(), anyString())).thenReturn(Optional.empty());
         NatsConnection nats = mock(NatsConnection.class);
 
-        BizException e = assertThrows(BizException.class, () -> service(repo, nats).get("other-tenant", "dom-abc"));
+        BizException e = assertThrows(BizException.class,
+                () -> service(repo, nats).get("other-tenant", "dom-abc"));
         assertEquals(ErrorCode.AGENT_COLLAB_DOMAIN_NOT_FOUND, e.code());
         assertEquals(404, e.code().httpStatus());
     }
@@ -74,22 +91,24 @@ class DomainServiceTest {
     @Test
     void closeIsIdempotent_forAlreadyClosedDomain() {
         DomainRepository repo = mock(DomainRepository.class);
+        ReliableConsumer consumer = mock(ReliableConsumer.class);
         when(repo.available()).thenReturn(true);
         CollabDomain closed = new CollabDomain("dom-x", "t1", "demo",
                 CollabDomain.STATE_CLOSED, 8, Instant.now(), Instant.now());
         when(repo.find("t1", "dom-x")).thenReturn(Optional.of(closed));
         NatsConnection nats = mock(NatsConnection.class);
 
-        CollabDomain result = service(repo, nats).close("t1", "dom-x");
+        CollabDomain result = service(repo, nats, consumer).close("t1", "dom-x");
 
         assertEquals(CollabDomain.STATE_CLOSED, result.state());
-        // 幂等：已关闭的域不再触发 UPDATE
         verify(repo, never()).close(anyString(), anyString());
+        verify(consumer, never()).stopDomain(anyString());
     }
 
     @Test
-    void closeTransitionsActiveDomain() {
+    void closeTransitionsActiveDomainAndStopsConsumer() {
         DomainRepository repo = mock(DomainRepository.class);
+        ReliableConsumer consumer = mock(ReliableConsumer.class);
         when(repo.available()).thenReturn(true);
         CollabDomain active = new CollabDomain("dom-y", "t1", "demo",
                 CollabDomain.STATE_ACTIVE, 8, Instant.now(), null);
@@ -98,10 +117,11 @@ class DomainServiceTest {
         when(repo.find("t1", "dom-y")).thenReturn(Optional.of(active)).thenReturn(Optional.of(closed));
         NatsConnection nats = mock(NatsConnection.class);
 
-        CollabDomain result = service(repo, nats).close("t1", "dom-y");
+        CollabDomain result = service(repo, nats, consumer).close("t1", "dom-y");
 
         assertEquals(CollabDomain.STATE_CLOSED, result.state());
         verify(repo).close("t1", "dom-y");
+        verify(consumer).stopDomain("dom-y");
     }
 
     @Test

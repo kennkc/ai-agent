@@ -5,7 +5,10 @@ import com.agent.collab.common.ErrorCode;
 import com.agent.collab.domain.CollabDomain;
 import com.agent.collab.domain.DomainRepository;
 import com.agent.collab.nats.NatsConnection;
+import io.nats.client.PublishOptions;
 import io.nats.client.api.PublishAck;
+import io.nats.client.impl.Headers;
+import io.nats.client.impl.NatsMessage;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -18,24 +21,14 @@ import java.util.Set;
 /**
  * 消息发布器（R-MC01-02 / 接口冻结供 Phase 6 使用）。
  *
- * <p>主题形态：{@code collab.<domain_id>.<type>.<member_id>}，type 限定为
- * dispatch | result | heartbeat | negotiate —— 限定枚举避免主题空间被任意字符串污染。
- *
- * <p>发布前的两个前置校验：
- * <ol>
- *   <li><b>域存在且属于该租户</b>（跨租户/不存在 -> 404，不泄露存在性）</li>
- *   <li><b>域未被关闭</b>（closed -> 409 AGENT_COLLAB_DOMAIN_CLOSED，符合 MC-P3 需求冻结的行为）</li>
- * </ol>
- *
- * <p>幂等职责划分：<b>发布侧允许重复发布</b>（同 request_id 重发不会报错），
- * 去重由消费侧 {@link IdempotentConsumer} 依据 request_id 完成 —— 这样"生产侧重试"
- * 与"消费侧去重"各自单一职责，且重试不会因发布侧拒绝而丢失消息。
+ * <p>消息正文仍是业务 payload；租户、request_id、member_id、type 通过 NATS headers
+ * 随消息传递，并由 JetStream message id 参与服务端去重。消费端必须使用这些 headers
+ * 才能完成幂等与重投状态机。
  */
 @Service
 public class MessagePublisher {
     private static final Logger log = LoggerFactory.getLogger(MessagePublisher.class);
 
-    /** 允许的消息类型（与主题规范一致）。 */
     public static final Set<String> TYPES = Set.of("dispatch", "result", "heartbeat", "negotiate");
     public static final String DEAD_LETTER = "deadletter";
 
@@ -51,10 +44,23 @@ public class MessagePublisher {
     public Map<String, Object> publish(String tenantId, String domainId, String type, String memberId,
                                        String requestId, String payload) {
         CollabDomain domain = requireActiveDomain(tenantId, domainId);
+        String normalizedRequest = requireRequestId(requestId);
         String subject = subject(domainId, type, memberId);
         byte[] body = (payload == null ? "" : payload).getBytes(StandardCharsets.UTF_8);
         try {
-            PublishAck ack = nats.jetStream().publish(subject, body);
+            Headers headers = new Headers()
+                    .add("X-Tenant-Id", tenantId == null || tenantId.isBlank() ? "default" : tenantId)
+                    .add("X-Request-Id", normalizedRequest)
+                    .add("X-Member-Id", memberId == null || memberId.isBlank() ? "-" : memberId)
+                    .add("X-Message-Type", type);
+            NatsMessage message = NatsMessage.builder()
+                    .subject(subject)
+                    .headers(headers)
+                    .data(body)
+                    .build();
+            PublishAck ack = nats.jetStream().publish(message,
+                    PublishOptions.builder().messageId(normalizedRequest).build());
+
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("subject", subject);
             row.put("stream", ack.getStream());
@@ -62,8 +68,8 @@ public class MessagePublisher {
             row.put("domain_id", domain.domainId());
             row.put("type", type);
             row.put("member_id", memberId);
-            row.put("request_id", requestId);
-            row.put("duplicate_publish", true); // 发布侧不判重，去重在消费侧
+            row.put("request_id", normalizedRequest);
+            row.put("duplicate_publish", ack.isDuplicate());
             return row;
         } catch (Exception e) {
             log.error("发布失败 domain={} type={} member={}: {}", domainId, type, memberId, e.getMessage());
@@ -72,9 +78,7 @@ public class MessagePublisher {
         }
     }
 
-    /**
-     * 消费失败达重投上限后落死信主题，**不静默丢弃**（MC-P3 需求冻结）。
-     */
+    /** 消费失败达上限后落死信主题，**不静默丢弃**（MC-P3 需求冻结）。 */
     public Map<String, Object> publishToDeadLetter(String tenantId, String domainId, String requestId,
                                                    String reason, String payload) {
         CollabDomain domain = domains.find(tenantId, domainId)
@@ -84,7 +88,19 @@ public class MessagePublisher {
         String body = "{\"request_id\":\"" + requestId + "\",\"reason\":\"" + String.valueOf(reason).replace("\"", "'")
                 + "\",\"payload\":\"" + String.valueOf(payload).replace("\"", "'") + "\"}";
         try {
-            PublishAck ack = nats.jetStream().publish(subject, body.getBytes(StandardCharsets.UTF_8));
+            // 使用独立 message id，避免与原始消息在同一 stream 内被 JetStream 判重而丢失死信。
+            Headers headers = new Headers()
+                    .add("X-Tenant-Id", tenantId == null || tenantId.isBlank() ? "default" : tenantId)
+                    .add("X-Request-Id", requestId)
+                    .add("X-Message-Type", DEAD_LETTER);
+            NatsMessage message = NatsMessage.builder()
+                    .subject(subject)
+                    .headers(headers)
+                    .data(body.getBytes(StandardCharsets.UTF_8))
+                    .build();
+            PublishAck ack = nats.jetStream().publish(message,
+                    PublishOptions.builder().messageId(requestId + ".dlq").build());
+
             log.warn("消息进入死信：domain={} request_id={} reason={}", domainId, requestId, reason);
             Map<String, Object> row = new LinkedHashMap<>();
             row.put("subject", subject);
@@ -115,6 +131,21 @@ public class MessagePublisher {
             throw new BizException(ErrorCode.AGENT_COLLAB_DOMAIN_CLOSED,
                     "协作域已关闭，拒绝新消息", Map.of("domain_id", domainId, "state", domain.state()));
         }
+        if (!CollabDomain.STATE_ACTIVE.equals(domain.state())) {
+            throw new BizException(ErrorCode.AGENT_COLLAB_BUS_UNAVAILABLE,
+                    "协作域尚未就绪，拒绝新消息", Map.of("domain_id", domainId, "state", domain.state()));
+        }
         return domain;
+    }
+
+    private static String requireRequestId(String requestId) {
+        if (requestId == null || requestId.isBlank()) {
+            throw new BizException(ErrorCode.AGENT_BAD_REQUEST, "request_id 不能为空", Map.of());
+        }
+        String value = requestId.trim();
+        if (value.length() > 128) {
+            throw new BizException(ErrorCode.AGENT_BAD_REQUEST, "request_id 长度不能超过 128", Map.of());
+        }
+        return value;
     }
 }

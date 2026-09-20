@@ -17,8 +17,9 @@ import java.util.Optional;
 /**
  * 协作域仓储（PG 唯一真相源）。
  *
- * <p>策略：<b>PG 不可用即明确失败</b>，不降级到内存 —— 域元数据丢失会让域不可寻址，
- * 比"明确报错"危险得多。{@link #available()} 供健康端点如实暴露。
+ * <p>域状态为 {@code creating | active | failed | closed}。创建域时先落 creating，
+ * 等 JetStream stream 与 durable consumer 都就绪后再转 active；失败转 failed，
+ * 从根源上避免“库里有 active 域、总线里却没有 stream”的半成品。
  */
 @Repository
 public class DomainRepository {
@@ -28,7 +29,7 @@ public class DomainRepository {
             + " domain_id VARCHAR(64) PRIMARY KEY,"
             + " tenant_id VARCHAR(64) NOT NULL DEFAULT 'default',"
             + " name VARCHAR(160) NOT NULL DEFAULT '',"
-            + " state VARCHAR(16) NOT NULL DEFAULT 'active',"
+            + " state VARCHAR(16) NOT NULL DEFAULT 'creating',"
             + " concurrency_limit INTEGER NOT NULL DEFAULT 8,"
             + " created_at TIMESTAMPTZ NOT NULL DEFAULT now(),"
             + " closed_at TIMESTAMPTZ"
@@ -86,11 +87,33 @@ public class DomainRepository {
                 MAPPER, tenantId);
     }
 
-    /** 关闭域：仅当仍为 active 时生效（幂等）。返回是否发生状态变更。 */
+    /** 启动恢复与对账使用：跨租户列出全部域。 */
+    public List<CollabDomain> listAll() {
+        return jdbc.query("SELECT * FROM collab_domain ORDER BY created_at", MAPPER);
+    }
+
+    public boolean markActive(String tenantId, String domainId) {
+        return jdbc.update("UPDATE collab_domain SET state = ?, closed_at = NULL "
+                        + "WHERE tenant_id = ? AND domain_id = ? AND state IN (?, ?)",
+                CollabDomain.STATE_ACTIVE, tenantId, domainId,
+                CollabDomain.STATE_CREATING, CollabDomain.STATE_FAILED) > 0;
+    }
+
+    public boolean markFailed(String tenantId, String domainId) {
+        return jdbc.update("UPDATE collab_domain SET state = ? WHERE tenant_id = ? AND domain_id = ?",
+                CollabDomain.STATE_FAILED, tenantId, domainId) > 0;
+    }
+
+    public boolean delete(String tenantId, String domainId) {
+        return jdbc.update("DELETE FROM collab_domain WHERE tenant_id = ? AND domain_id = ?",
+                tenantId, domainId) > 0;
+    }
+
+    /** 关闭域：非 closed 域均可关闭（含创建失败域）；重复关闭幂等。 */
     public boolean close(String tenantId, String domainId) {
         int updated = jdbc.update("UPDATE collab_domain SET state = ?, closed_at = now() "
-                        + "WHERE tenant_id = ? AND domain_id = ? AND state = ?",
-                CollabDomain.STATE_CLOSED, tenantId, domainId, CollabDomain.STATE_ACTIVE);
+                        + "WHERE tenant_id = ? AND domain_id = ? AND state <> ?",
+                CollabDomain.STATE_CLOSED, tenantId, domainId, CollabDomain.STATE_CLOSED);
         return updated > 0;
     }
 

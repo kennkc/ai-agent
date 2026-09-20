@@ -1,0 +1,256 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>MC-01 可靠性加固与端到端消费闭环（2026-09-20）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 15:06 · 源文件 2026-09-20-MC01可靠性加固与端到端消费闭环.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 本轮修复的问题</a></li>
+<li><a href="#2">2. 关键实现</a></li>
+<li><a href="#3">3. 验证证据</a></li>
+<li><a href="#4">4. 明确保留的后续项</a></li>
+<li><a href="#5">5. 复现命令</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="mc-01-2026-09-20">MC-01 可靠性加固与端到端消费闭环（2026-09-20）<a class="headerlink" href="#mc-01-2026-09-20" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>范围</strong>：MC-01 协作总线独立切片（Phase 6 前置） · <strong>性质</strong>：可靠性缺陷修复 + CI 门禁补强<br />
+<strong>结论</strong>：R-MC01-01~04 从“基础能力完成”推进到“真实 durable consumer 可恢复、可重投、可死信、可 CI 验证”</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 本轮修复的问题<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>修复前风险</th>
+<th>本轮处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>真实 JetStream 消费循环缺失</td>
+<td><code>IdempotentConsumer</code> 只是 helper，消息不会被 ack/nak</td>
+<td>新增每域 durable pull consumer + 虚拟线程拉取循环</td>
+</tr>
+<tr>
+<td>失败重投语义冲突</td>
+<td>先标 seen 且失败不回滚，重投被误判重复，无法进 DLQ</td>
+<td>改为 <code>pending / processed / failed / dlq</code> 状态机</td>
+</tr>
+<tr>
+<td>关键集成测试在 CI 跳过</td>
+<td>离线恢复、幂等、DLQ 只在本地手工验证</td>
+<td>新增 <code>collab-integration</code> job（PostgreSQL + NATS）</td>
+</tr>
+<tr>
+<td>心跳限流只打标记</td>
+<td>高频心跳仍每次写 PG，防风暴未真正生效</td>
+<td>5 秒窗口合并，pending 查询可见，窗口 flush 落库</td>
+</tr>
+<tr>
+<td>域创建半成品</td>
+<td>PG 已写 active、stream/consumer 创建失败时留下孤儿域</td>
+<td>引入 <code>creating → active / failed</code>，失败补偿 + 启动对账</td>
+</tr>
+<tr>
+<td>旧 push consumer 无法恢复</td>
+<td>重启时配置漂移导致无法绑定</td>
+<td>安全迁移为 durable pull；有未处理消息时拒绝自动迁移并显式暴露</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2">2. 关键实现<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>发布协议</strong>：NATS headers 携带 <code>X-Tenant-Id / X-Request-Id / X-Member-Id / X-Message-Type</code>，JetStream message-id 使用 request_id。</li>
+<li><strong>消费状态机</strong>：首次 <code>CLAIMED</code>；失败 <code>RETRY</code>；成功 <code>processed</code>；达到 <code>retry-max + 1</code> 后自动发布 <code>deadletter</code> 并 ack 原消息。</li>
+<li><strong>消费者恢复</strong>：durable pull consumer 从未 ack 位置继续；每域后台拉取，不用固定 deliver subject，重启可重新绑定。</li>
+<li><strong>心跳窗口</strong>：窗口内只覆盖 pending 中最后值；查询合并 pending；默认每 5 秒最多 flush 一次。</li>
+<li><strong>健康可见</strong>：<code>GET /api/collab/health</code> 增加 <code>consumer</code> 与 <code>heartbeat</code> 运行态。</li>
+</ul>
+<h2 id="3">3. 验证证据<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>实测结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>collab-bus 真实集成</td>
+<td><code>COLLAB_IT=true</code>：<strong>38/38 passed</strong></td>
+</tr>
+<tr>
+<td>消费者离线恢复</td>
+<td>停止 consumer → 发布 50 条 → 恢复后 50/50 进入 <code>processed</code></td>
+</tr>
+<tr>
+<td>持续失败收口</td>
+<td>heartbeat 非法 JSON 重投至上限后进入 <code>dlq</code>，原消息 ack</td>
+</tr>
+<tr>
+<td>全量 Java</td>
+<td><strong>289 测试 / 0 失败</strong>（含 collab-bus 38）</td>
+</tr>
+<tr>
+<td>R-MC01-04 P99</td>
+<td>10000 次，<strong>P99 = 4.231ms &lt; 10ms</strong></td>
+</tr>
+<tr>
+<td>契约</td>
+<td>collab-bus 5 端点 + 5 主题模板；work-platform 63 端点；均 0 FAIL</td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><strong>106 passed / 0 failed</strong></td>
+</tr>
+<tr>
+<td>文档一致性</td>
+<td>MD/HTML 孪生过期 0 组</td>
+</tr>
+<tr>
+<td>Ruff</td>
+<td>All checks passed</td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 明确保留的后续项<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>R-MC01-05</strong>：工作平台协作视图从固定 <code>DOM-2048</code> Mock 切换到真实域名选择 + 聚合数据；当前不得以 Mock 冒充完成。</li>
+<li><strong>多实例 consumer 规模验证</strong>：当前是“每域一个虚拟线程拉取循环”，域数量很大时需要验证线程/连接规模，必要时改为共享调度器或批量拉取。</li>
+<li><strong>业务处理器</strong>：dispatch / result / negotiate 的传输已消费，但 Phase 6 业务处理器仍待注册，日志不会把它们描述为业务已完成。</li>
+<li><strong>Prometheus 指标</strong>：consumer lag、重投次数、DLQ 数量、心跳 coalesce 率目前通过 health/日志可见，尚未接 Prometheus。</li>
+</ul>
+<h2 id="5">5. 复现命令<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 真实集成（需要 PG + NATS）
+cd services/java
+COLLAB_IT=true mvn -B -ntp -pl collab-bus -am test
+
+# P99 门禁
+python scripts/collab-bus-check.py --require-jetstream
+
+# 契约
+python scripts/contract-check.py --collab --collab-openapi contracts/collab-bus-openapi.yaml
+python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
+</code></pre></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

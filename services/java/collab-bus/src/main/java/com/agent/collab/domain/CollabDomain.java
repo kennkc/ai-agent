@@ -26,8 +26,14 @@ public record CollabDomain(
         Instant createdAt,
         Instant closedAt) {
 
+    public static final String STATE_CREATING = "creating";
     public static final String STATE_ACTIVE = "active";
+    public static final String STATE_FAILED = "failed";
     public static final String STATE_CLOSED = "closed";
+
+    public boolean active() {
+        return STATE_ACTIVE.equals(state);
+    }
 
     public boolean closed() {
         return STATE_CLOSED.equals(state);
