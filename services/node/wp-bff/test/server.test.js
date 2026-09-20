@@ -30,9 +30,15 @@ const CONTROL_HEADERS = { origin: ALLOWED_ORIGIN, 'x-wp-control-token': TOKEN }
 function request(server, { method = 'GET', path = '/', headers = {}, body = null } = {}) {
   const { port } = server.address()
   const payload = body == null ? null : Buffer.from(JSON.stringify(body), 'utf8')
+  // 写方法默认携带控制面鉴权头（等价于开发环境 Vite 代理的注入行为）。
+  // 一旦用例显式给出 origin 或 x-wp-control-token，就不再注入 ——
+  // 这样「缺令牌 / 来源越权」的鉴权失败用例仍能保持其原始语义。
+  const isWrite = method === 'POST' || method === 'PUT' || method === 'PATCH' || method === 'DELETE'
+  const explicitAuth = 'origin' in headers || 'x-wp-control-token' in headers
+  const authHeaders = isWrite && !explicitAuth ? CONTROL_HEADERS : {}
   const finalHeaders = payload
-    ? { 'Content-Type': 'application/json', 'Content-Length': payload.length, ...headers }
-    : headers
+    ? { 'Content-Type': 'application/json', 'Content-Length': payload.length, ...authHeaders, ...headers }
+    : { ...authHeaders, ...headers }
   return new Promise((resolve, reject) => {
     const req = http.request({ host: '127.0.0.1', port, method, path, headers: finalHeaders }, res => {
       let responseBody = ''
@@ -1686,4 +1692,56 @@ test('ROUTE_GUARD 与固定段派生：/models/reload 只允许 POST，且被登
 test('OVERVIEW_GAPS 不再声称 models 未实现（/models 已落地，留着就是失真）', () => {
   assert.ok(!OVERVIEW_GAPS.includes('models'),
     '/overview 的 gaps 用于告诉前端「该域仍是 Mock」；/models 已实现却仍登记，等于让前端白标降级')
+})
+
+// ─────────── 写端点统一鉴权回归（2026-09-20） ───────────
+// 背景：此前 19 个 POST 端点中只有 2 个自带鉴权校验，模型配置 / 记忆写入等写路径可被
+// 「简单请求」绕过（CSRF）。现在鉴权收敛到路由层唯一入口，以下用例锁定该不变量。
+
+test('路由层统一鉴权：所有写方法在鉴权前不匹配路由（未带令牌 -> 401 而非 404）', async () => {
+  await withServer(async ({ server }) => {
+    // 路径根本不存在，仍必须先被鉴权拦下 —— 证明鉴权发生在路由匹配之前，不泄露路由存在性
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/definitely-not-a-route', headers: { origin: ALLOWED_ORIGIN },
+    })
+    assert.equal(res.status, 401)
+    assert.equal(res.json.code, 'AGENT_UNAUTHORIZED')
+  }, { jsonRequest: async () => ({ ok: true }) })
+})
+
+test('路由层统一鉴权：代表性写端点未带控制令牌时全部被拒（不得出现无鉴权写入后门）', async () => {
+  const writePaths = [
+    '/api/wp/knowledge',
+    '/api/wp/knowledge/search',
+    '/api/wp/brain/ask',
+    '/api/wp/brain/memory/ingest',
+    '/api/wp/brain/memory/compress',
+    '/api/wp/session',
+    '/api/wp/session/sess-1/ask',
+    '/api/wp/models',
+    '/api/wp/models/reload',
+    '/api/wp/models/m-1/test',
+    '/api/wp/tools/execute',
+    '/api/wp/middleware/redis/start',
+  ]
+  await withServer(async ({ server }) => {
+    for (const path of writePaths) {
+      const res = await request(server, {
+        method: 'POST', path, body: {}, headers: { origin: ALLOWED_ORIGIN },
+      })
+      assert.equal(res.status, 401, path + ' 未带控制令牌必须 401')
+      assert.equal(res.json.code, 'AGENT_UNAUTHORIZED', path + ' 错误码必须为 AGENT_UNAUTHORIZED')
+    }
+  }, { jsonRequest: async () => ({ ok: true }) })
+})
+
+test('路由层统一鉴权：来源越权时同样在路由前被拒（403）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/models', body: {},
+      headers: { origin: 'http://evil.example.com', 'x-wp-control-token': TOKEN },
+    })
+    assert.equal(res.status, 403)
+    assert.equal(res.json.code, 'AGENT_FORBIDDEN')
+  }, { jsonRequest: async () => ({ ok: true }) })
 })

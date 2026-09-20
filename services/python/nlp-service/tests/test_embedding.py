@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Phase 3 嵌入与分块测试（R3-02 / R3-03）
 
 嵌入后端按可用性分支断言：BGE-M3 缺失时回落 hash-ngram-768 并标记 degraded
@@ -46,8 +45,8 @@ def test_similar_text_scores_higher_than_unrelated():
     query = EMBEDDING_SERVICE.encode_one("躯体期知识库语义检索性能指标")
     near = EMBEDDING_SERVICE.encode_one("知识库的语义检索性能指标与延迟要求")
     far = EMBEDDING_SERVICE.encode_one("今天中午吃什么比较好呢")
-    cosine_near = sum(a * b for a, b in zip(query, near))
-    cosine_far = sum(a * b for a, b in zip(query, far))
+    cosine_near = sum(a * b for a, b in zip(query, near, strict=False))
+    cosine_far = sum(a * b for a, b in zip(query, far, strict=False))
     assert cosine_near > cosine_far
 
 

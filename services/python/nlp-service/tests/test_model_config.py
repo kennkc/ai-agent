@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """WB-10 模型接入配置测试（2026-09-20 新增）。
 
 覆盖四层：
@@ -24,14 +23,18 @@ import uuid
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app import main, model_config  # noqa: E402
-from app.brain import pg as brain_pg  # noqa: E402
-from app.brain.llm_gateway import (  # noqa: E402
-    L1, L2, LlmEngine, LlmGateway, LlmRequest, TemplateEngine,
+import pytest
+from app import main, model_config
+from app.brain import pg as brain_pg
+from app.brain.llm_gateway import (
+    L1,
+    L2,
+    LlmEngine,
+    LlmGateway,
+    LlmRequest,
+    TemplateEngine,
 )
+from fastapi.testclient import TestClient
 
 ENVELOPE_KEYS = {"code", "message", "details"}
 

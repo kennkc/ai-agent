@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Token 用量计量测试（2026-09-20 新增，WB-10 「Token 用量看板」）。
 
 覆盖三个**真实缺口**的守卫：
@@ -20,11 +19,9 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app import main, token_usage  # noqa: E402
-from app.brain.llm_gateway import (  # noqa: E402
+import pytest
+from app import main, token_usage
+from app.brain.llm_gateway import (
     TOKEN_SOURCE_ESTIMATED,
     TOKEN_SOURCE_PROVIDER,
     LlmGateway,
@@ -34,6 +31,7 @@ from app.brain.llm_gateway import (  # noqa: E402
     TokenUsage,
     _parse_usage,
 )
+from fastapi.testclient import TestClient
 
 ENVELOPE_KEYS = {"code", "message", "details"}
 

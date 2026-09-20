@@ -29,17 +29,16 @@ import os
 import time
 import uuid
 from dataclasses import dataclass, field
-from typing import Any, Optional, TypedDict
+from typing import Any, TypedDict
 
-from langgraph.graph import END, StateGraph
-
-from app.brain.audit import AUDIT_LOG, CHAIN_STEPS, Decision
+from app.brain.audit import AUDIT_LOG, Decision
 from app.brain.gap import COVERAGE_THRESHOLD, GAP_DETECTOR, SOURCE_ANNOTATOR
-from app.brain.llm_gateway import L1, L2, L3, LlmGateway, LlmUnavailable
-from app.brain.planner import PLANNER, CHAT, NEEDS_RETRIEVAL, SUMMARIZE, TEMPLATE_LABELS
+from app.brain.llm_gateway import L1, L2, LlmGateway, LlmUnavailable
+from app.brain.planner import CHAT, PLANNER, SUMMARIZE, TEMPLATE_LABELS
 from app.brain.retrieval import RetrievalUnavailable
 from app.brain.semantic_cache import SEMANTIC_CACHE
 from app.budget import BRAIN_TOTAL_BUDGET_MS, deadline_at, remaining_from
+from langgraph.graph import END, StateGraph
 
 logger = logging.getLogger("nlp-service.brain.pipeline")
 
@@ -150,7 +149,7 @@ class RagPipeline:
 
     def __init__(
         self,
-        gateway: Optional[LlmGateway] = None,
+        gateway: LlmGateway | None = None,
         retriever: Any = None,
         cache: Any = None,
         planner: Any = None,
@@ -177,9 +176,9 @@ class RagPipeline:
         tenant_id: str = "default",
         intent: str = "",
         intent_confidence: float = 1.0,
-        context: Optional[list[dict[str, Any]]] = None,
+        context: list[dict[str, Any]] | None = None,
         use_cache: bool = True,
-        deadline_ms: Optional[int] = None,
+        deadline_ms: int | None = None,
     ) -> RagResult:
         """跑完整条 RAG 决策链。
 
@@ -220,7 +219,7 @@ class RagPipeline:
         return result
 
     # ── 决策链落账（IN3 AuditLog）──
-    def _record(self, result: RagResult) -> Optional[dict]:
+    def _record(self, result: RagResult) -> dict | None:
         try:
             decision = Decision(
                 decision_id=result.decision_id,
@@ -323,7 +322,7 @@ class RagPipeline:
             return {
                 "chunks": [],
                 "retrieval": {"backend": "skipped", "error": reason, "latency_ms": _ms(started)},
-                "degraded_reasons": list(state.get("degraded_reasons", [])) + [reason],
+                "degraded_reasons": [*list(state.get("degraded_reasons", [])), reason],
                 "chain": _step(state, "retrieve", model="skipped", latency_ms=_ms(started),
                                confidence=0.0, io={"reason": reason}),
             }
@@ -344,7 +343,7 @@ class RagPipeline:
                                    "budget_ms": remaining_ms}),
             }
         except RetrievalUnavailable as exc:
-            reasons = list(state.get("degraded_reasons", [])) + [f"retrieval_unavailable: {exc}"]
+            reasons = [*list(state.get("degraded_reasons", [])), f"retrieval_unavailable: {exc}"]
             return {
                 "chunks": [], "retrieval": {"backend": "unavailable", "error": str(exc),
                                             "latency_ms": _ms(started)},
@@ -449,7 +448,7 @@ class RagPipeline:
             # 写死 0.85 会在校准后给出与判定不一致的提示口径。
             f"（阈值 {gap.get('threshold', COVERAGE_THRESHOLD)}）。"
         )
-        reasons = list(state.get("degraded_reasons", [])) + ["information_gap"]
+        reasons = [*list(state.get("degraded_reasons", [])), "information_gap"]
         return {
             "answer": answer, "sources": sources, "generator": "none", "model": "none",
             "tokens": {}, "degraded_reasons": reasons,
@@ -552,7 +551,7 @@ class RagPipeline:
         lines.append("约束: 资料不足时明确说明; 引用来源标注 [来源]")
         return "\n".join(lines)
 
-    def _cache_lookup(self, state: dict[str, Any]) -> Optional[RagResult]:
+    def _cache_lookup(self, state: dict[str, Any]) -> RagResult | None:
         try:
             cached = self.cache.lookup(state["question"], state.get("tenant_id", "default"))
         except Exception as exc:  # noqa: BLE001 - 缓存故障不得阻断主链路

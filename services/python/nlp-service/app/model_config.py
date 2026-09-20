@@ -29,10 +29,9 @@ import threading
 import time
 import urllib.error
 import urllib.request
-import uuid
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Any, Optional
+from typing import Any
 
 from app.brain import pg
 
@@ -107,15 +106,15 @@ DDL: tuple[str, ...] = (
         updated_by            VARCHAR(64)  NOT NULL DEFAULT ''
     )
     """,
-    "CREATE UNIQUE INDEX IF NOT EXISTS uq_llm_model_config_tenant_role_name "
-    "ON llm_model_config (tenant_id, config_key, name)",
-    "CREATE INDEX IF NOT EXISTS idx_llm_model_config_tenant_role "
-    "ON llm_model_config (tenant_id, config_key, enabled)",
+    ("CREATE UNIQUE INDEX IF NOT EXISTS uq_llm_model_config_tenant_role_name "
+    "ON llm_model_config (tenant_id, config_key, name)"),
+    ("CREATE INDEX IF NOT EXISTS idx_llm_model_config_tenant_role "
+    "ON llm_model_config (tenant_id, config_key, enabled)"),
     # 序列校正（幂等）。历史版本用「进程内计数器 + 显式 id」写入，**从不推进 SERIAL 序列**，
     # 于是 `nextval` 会落在 `MAX(id)` 之后。改为由序列分配 id 之前必须先对齐，
     # 否则第一次插入就撞主键（2026-09-20 实测：表里已有 id=10，序列仍停在 1）。
-    "SELECT setval(pg_get_serial_sequence('llm_model_config', 'id'), "
-    "GREATEST(COALESCE((SELECT MAX(id) FROM llm_model_config), 0), 1))",
+    ("SELECT setval(pg_get_serial_sequence('llm_model_config', 'id'), "
+    "GREATEST(COALESCE((SELECT MAX(id) FROM llm_model_config), 0), 1))"),
 )
 
 COLUMNS: tuple[str, ...] = (
@@ -136,7 +135,7 @@ DEFAULT_KEY_FILE = os.getenv(
 class ModelConfigError(RuntimeError):
     """配置层错误。`code` 会被端点转成统一信封，`status` 决定 HTTP 状态码。"""
 
-    def __init__(self, code: str, message: str, status: int = 400, details: Optional[dict] = None) -> None:
+    def __init__(self, code: str, message: str, status: int = 400, details: dict | None = None) -> None:
         super().__init__(message)
         self.code = code
         self.message = message
@@ -173,7 +172,7 @@ def _decode_key(raw: str) -> bytes:
     )
 
 
-def resolve_master_key() -> tuple[Optional[bytes], str]:
+def resolve_master_key() -> tuple[bytes | None, str]:
     """返回 `(key, source)`；无法取得时 key 为 None 且 source 说明原因。"""
     with _key_lock:
         if _key_state["key"] is not None or _key_state["source"] not in ("unresolved", "error"):
@@ -242,7 +241,7 @@ def open_secret(cipher_text: str) -> str:
         return _aesgcm()(key).decrypt(raw[:12], raw[12:], SECRET_AAD).decode("utf-8")
     except ModelConfigError:
         raise
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise ModelConfigError(
             "AGENT_CONFIG_DECRYPT_FAILED",
             f"凭据解密失败（密钥已变更或密文损坏）：{type(exc).__name__}",
@@ -301,7 +300,7 @@ def _jsonable(value: Any) -> Any:
         return None
     if hasattr(value, "isoformat"):
         return value.isoformat()
-    if isinstance(value, float) or isinstance(value, int):
+    if isinstance(value, (float, int)):
         return value
     try:
         from decimal import Decimal
@@ -326,7 +325,7 @@ def _to_public(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def _row_from_pg(values: tuple) -> dict[str, Any]:
-    return dict(zip(COLUMNS, values))
+    return dict(zip(COLUMNS, values, strict=False))
 
 
 # ─────────── 校验 ───────────
@@ -489,10 +488,10 @@ def update_config(tenant_id: str, config_id: int, payload: dict[str, Any], actor
     name = str(payload.get("name", current["name"]) or "").strip()
     if not name:
         raise ModelConfigError("AGENT_BAD_REQUEST", "name 不能为空", details={"field": "name"})
-    if name != current["name"] or role_key != current["config_key"]:
-        if _exists(tenant_id, role_key, name, exclude_id=config_id):
-            raise ModelConfigError("AGENT_CONFLICT", f"角色 {role_key} 下已存在同名配置：{name}",
-                                   status=409, details={"field": "name", "name": name})
+    renamed = name != current["name"] or role_key != current["config_key"]
+    if renamed and _exists(tenant_id, role_key, name, exclude_id=config_id):
+        raise ModelConfigError("AGENT_CONFLICT", f"角色 {role_key} 下已存在同名配置：{name}",
+                               status=409, details={"field": "name", "name": name})
     base_url = _optional_base_url(payload.get("base_url", current["base_url"]))
     model_name = str(payload.get("model", current["model"]) or "").strip()
     enabled = bool(payload.get("enabled", current["enabled"]))
@@ -602,7 +601,7 @@ def probe_config(tenant_id: str, config_id: int, timeout_ms: int = 5000) -> dict
     )
     started = time.time()
     try:
-        with urllib.request.urlopen(request, timeout=max(1, timeout_ms) / 1000.0) as resp:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=max(1, timeout_ms) / 1000.0) as resp:
             body = resp.read(4096).decode("utf-8", errors="replace")
         models = _model_ids(body)
         result.update(ok=True, latency_ms=int((time.time() - started) * 1000), supported=True,
@@ -615,7 +614,7 @@ def probe_config(tenant_id: str, config_id: int, timeout_ms: int = 5000) -> dict
             latency_ms=int((time.time() - started) * 1000),
             supported=supported,
             http_status=exc.code,
-            error=("凭据被拒绝（HTTP %s）" % exc.code) if exc.code in (401, 403)
+            error=(f"凭据被拒绝（HTTP {exc.code}）") if exc.code in (401, 403)
             else (f"HTTP {exc.code}" if supported else "该服务未暴露 /models，无法据此判定连通性"),
         )
     except Exception as exc:  # noqa: BLE001
@@ -651,14 +650,14 @@ def _select(tenant_id: str) -> list[dict[str, Any]]:
         return [dict(item) for item in _memory.values() if item["tenant_id"] == tenant_id]
 
 
-def _find_row(tenant_id: str, config_id: int) -> Optional[dict[str, Any]]:
+def _find_row(tenant_id: str, config_id: int) -> dict[str, Any] | None:
     for row in _select(tenant_id):
         if int(row.get("id") or 0) == int(config_id):
             return row
     return None
 
 
-def _exists(tenant_id: str, role_key: str, name: str, exclude_id: Optional[int] = None) -> bool:
+def _exists(tenant_id: str, role_key: str, name: str, exclude_id: int | None = None) -> bool:
     return any(int(row.get("id") or 0) != int(exclude_id or -1)
                and row["config_key"] == role_key and row["name"] == name
                for row in _select(tenant_id))
@@ -708,10 +707,7 @@ def _insert(row: dict[str, Any]) -> dict[str, Any]:
 
 def _persist(row: dict[str, Any]) -> None:
     assignments = ", ".join(f"{key} = %s" for key in COLUMNS if key != "id")
-    params = tuple(
-        json.dumps(row.get("extra") or {}) if key == "extra" else row.get(key)
-        for key in COLUMNS if key != "id"
-    ) + (int(row["id"]),)
+    params = (*tuple(json.dumps(row.get("extra") or {}) if key == "extra" else row.get(key) for key in COLUMNS if key != "id"), int(row["id"]))
     ok, _ = pg.execute([(f"UPDATE llm_model_config SET {assignments} WHERE id = %s", params)])
     if not ok:
         with _memory_lock:
@@ -730,8 +726,8 @@ def _remove(tenant_id: str, config_id: int) -> None:
 
 def _record_probe(tenant_id: str, config_id: int, result: dict[str, Any]) -> None:
     ok, _ = pg.execute([(
-        "UPDATE llm_model_config SET last_probe_at = NOW(), last_probe_ok = %s, "
-        "last_probe_latency_ms = %s, last_probe_error = %s WHERE tenant_id = %s AND id = %s",
+        ("UPDATE llm_model_config SET last_probe_at = NOW(), last_probe_ok = %s, "
+        "last_probe_latency_ms = %s, last_probe_error = %s WHERE tenant_id = %s AND id = %s"),
         (bool(result.get("ok")), int(result.get("latency_ms") or 0),
          str(result.get("error") or "")[:500], tenant_id, int(config_id)),
     )])

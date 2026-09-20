@@ -1,5 +1,4 @@
 # DEBT-011: 重排默认走词法打分（非 bge-reranker-v2-m3 交叉编码器）— 触发点: 安装 sentence-transformers + reranker 权重后切换
-# -*- coding: utf-8 -*-
 """结果重排（R3-06 躯体期 · Should）
 
 引擎链：bge-reranker-v2-m3（CrossEncoder，设计选型）→ lexical（确定性本地后端）
@@ -10,10 +9,8 @@ from __future__ import annotations
 
 import logging
 import re
-import time
 from dataclasses import dataclass
 from importlib.util import find_spec
-from typing import Optional
 
 from app.embedding import _features
 
@@ -108,9 +105,9 @@ class LexicalRerankerEngine(RerankerEngine):
 
 
 class RerankerService:
-    def __init__(self, engines: Optional[list[RerankerEngine]] = None) -> None:
+    def __init__(self, engines: list[RerankerEngine] | None = None) -> None:
         self.engines = engines if engines is not None else [BgeRerankerEngine(), LexicalRerankerEngine()]
-        self.active: Optional[RerankerEngine] = next((e for e in self.engines if e.available()), None)
+        self.active: RerankerEngine | None = next((e for e in self.engines if e.available()), None)
 
     def status(self) -> dict:
         return {

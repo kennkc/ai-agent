@@ -30,7 +30,9 @@ python-lint:
   stage: build
   image: python:3.12-slim
   script:
-    - pip install ruff
+    # 版本固定：ruff 默认规则集随版本变化，不固定会让 CI 结论与本地漂移
+    # （2026-09-20 实测：未固定版本的 job 从未拦住过任何问题）
+    - pip install ruff==0.16.8
     - cd services/python
     - ruff check .
 

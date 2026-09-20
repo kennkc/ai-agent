@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """L0 轻量意图分类模型（R2-08）
 
 设计取舍：R2-08 要求"轻量分类模型服务（BERT 级别）"，验收指标为
@@ -19,7 +18,6 @@ import math
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
 
 from .corpus import SCENARIO_LABELS, TRAIN_CORPUS
 
@@ -41,17 +39,17 @@ class L0Prediction:
 @dataclass
 class _Centroid:
     intent: str
-    vector: Dict[str, float] = field(default_factory=dict)
+    vector: dict[str, float] = field(default_factory=dict)
     norm: float = 0.0
 
 
 class L0IntentClassifier:
     """字符 n-gram TF-IDF + 最近质心分类器（纯 Python，无第三方依赖）"""
 
-    def __init__(self, corpus: Dict[str, List[str]] | None = None) -> None:
+    def __init__(self, corpus: dict[str, list[str]] | None = None) -> None:
         self.corpus = corpus or TRAIN_CORPUS
-        self._centroids: List[_Centroid] = []
-        self._idf: Dict[str, float] = {}
+        self._centroids: list[_Centroid] = []
+        self._idf: dict[str, float] = {}
         self.trained_samples = 0
         self.train()
 
@@ -60,9 +58,9 @@ class L0IntentClassifier:
     def normalize(text: str) -> str:
         return NORMALIZE_RE.sub("", (text or "").strip().lower())
 
-    def features(self, text: str) -> Dict[str, float]:
+    def features(self, text: str) -> dict[str, float]:
         plain = self.normalize(text)
-        counts: Dict[str, float] = {}
+        counts: dict[str, float] = {}
         if not plain:
             return counts
         # 单字（中文短句信息量高）
@@ -79,26 +77,26 @@ class L0IntentClassifier:
         return counts
 
     def train(self) -> None:
-        documents: List[Tuple[str, Dict[str, float]]] = []
+        documents: list[tuple[str, dict[str, float]]] = []
         for intent, samples in self.corpus.items():
             for sample in samples:
                 documents.append((intent, self.features(sample)))
                 self.trained_samples += 1
 
-        df: Dict[str, int] = {}
+        df: dict[str, int] = {}
         for _, feats in documents:
             for term in feats:
                 df[term] = df.get(term, 0) + 1
         total_docs = max(1, len(documents))
         self._idf = {term: math.log((1 + total_docs) / (1 + count)) + 1.0 for term, count in df.items()}
 
-        grouped: Dict[str, List[Dict[str, float]]] = {}
+        grouped: dict[str, list[dict[str, float]]] = {}
         for intent, feats in documents:
             grouped.setdefault(intent, []).append(self._tfidf(feats))
 
         self._centroids = []
         for intent, vectors in grouped.items():
-            centroid: Dict[str, float] = {}
+            centroid: dict[str, float] = {}
             for vector in vectors:
                 for term, value in vector.items():
                     centroid[term] = centroid.get(term, 0.0) + value
@@ -107,10 +105,10 @@ class L0IntentClassifier:
             norm = math.sqrt(sum(v * v for v in centroid.values())) or 1.0
             self._centroids.append(_Centroid(intent=intent, vector=centroid, norm=norm))
 
-    def _tfidf(self, feats: Dict[str, float]) -> Dict[str, float]:
+    def _tfidf(self, feats: dict[str, float]) -> dict[str, float]:
         return {term: value * self._idf.get(term, 1.0) for term, value in feats.items()}
 
-    def _cosine(self, vector: Dict[str, float], norm: float, centroid: _Centroid) -> float:
+    def _cosine(self, vector: dict[str, float], norm: float, centroid: _Centroid) -> float:
         if not vector:
             return 0.0
         dot = 0.0
@@ -129,7 +127,7 @@ class L0IntentClassifier:
         if not vector or norm == 0:
             return L0Prediction(intent=UNKNOWN_INTENT, confidence=UNKNOWN_CONFIDENCE,
                                 latency_ms=(time.perf_counter() - started) * 1000)
-        scored: List[Tuple[str, float]] = [
+        scored: list[tuple[str, float]] = [
             (centroid.intent, self._cosine(vector, norm, centroid)) for centroid in self._centroids
         ]
         scored.sort(key=lambda kv: kv[1], reverse=True)
@@ -147,10 +145,10 @@ class L0IntentClassifier:
                             runner_up=runner_up, runner_up_confidence=round(runner_score, 4),
                             latency_ms=latency)
 
-    def predict_batch(self, texts: List[str]) -> List[L0Prediction]:
+    def predict_batch(self, texts: list[str]) -> list[L0Prediction]:
         return [self.predict(text) for text in texts]
 
-    def stats(self) -> Dict[str, object]:
+    def stats(self) -> dict[str, object]:
         return {
             "algorithm": "char-ngram-tfidf-nearest-centroid",
             "train_samples": self.trained_samples,
@@ -159,12 +157,12 @@ class L0IntentClassifier:
             "scenario_count": len(self._centroids),
         }
 
-    def accuracy(self, eval_corpus: Dict[str, List[str]]) -> Tuple[float, Dict[str, object]]:
+    def accuracy(self, eval_corpus: dict[str, list[str]]) -> tuple[float, dict[str, object]]:
         """留出集准确率评测（TC-04）"""
         total = 0
         correct = 0
-        per_scenario: Dict[str, Dict[str, object]] = {}
-        latencies: List[float] = []
+        per_scenario: dict[str, dict[str, object]] = {}
+        latencies: list[float] = []
         for intent, samples in eval_corpus.items():
             hit = 0
             for sample in samples:

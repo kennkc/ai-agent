@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """文档分块器（R3-02 躯体期 · Python 侧）
 
 与 Java 侧 `ChunkProcessor` 保持同算法，用于跨语言一致性校验：

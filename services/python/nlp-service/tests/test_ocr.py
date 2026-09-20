@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Phase 2 OCR 通道测试（R2-03）
 
 OCR 引擎（PaddleOCR / Tesseract）在开发机可能未安装，测试按可用性分支断言：

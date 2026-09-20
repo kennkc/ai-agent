@@ -8,17 +8,8 @@ from __future__ import annotations
 import time
 
 import pytest
-from fastapi.testclient import TestClient
-
 from app.brain import pg as brain_pg
-from app.brain.audit import AUDIT_LOG, AuditLog, Decision
-from app.brain.memory_graph import (
-    COMPRESSION_TARGET,
-    EntityExtractor,
-    MEMORY_GRAPH,
-    MemoryGraph,
-    normalize,
-)
+from app.brain.audit import AuditLog, Decision
 from app.brain.gap import GapDetector, SourceAnnotator
 from app.brain.llm_gateway import (
     L1,
@@ -29,12 +20,18 @@ from app.brain.llm_gateway import (
     TemplateEngine,
     estimate_tokens,
 )
+from app.brain.memory_graph import (
+    COMPRESSION_TARGET,
+    EntityExtractor,
+    MemoryGraph,
+    normalize,
+)
 from app.brain.pipeline import RagPipeline
 from app.brain.planner import CHAT, QA, RETRIEVE, SUMMARIZE, SimplePlanner
 from app.brain.retrieval import RetrievalOutcome, RetrievalUnavailable
 from app.brain.semantic_cache import CacheStats, SemanticCache, cosine_similarity
 from app.main import app
-
+from fastapi.testclient import TestClient
 
 # ───────────────────────── R4-03 LLM Gateway ─────────────────────────
 

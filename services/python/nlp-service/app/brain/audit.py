@@ -27,7 +27,7 @@ import logging
 import os
 import time
 from dataclasses import dataclass, field
-from typing import Any, Optional
+from typing import Any
 
 from app.brain import pg
 
@@ -230,7 +230,7 @@ class AuditLog:
         return payload
 
     # ── 回放 ──
-    def replay(self, decision_id: str, tenant_id: str = "default") -> Optional[dict]:
+    def replay(self, decision_id: str, tenant_id: str = "default") -> dict | None:
         """按 decision_id 回放；**查不到返回 None**（调用方应回 404）。"""
         if not decision_id:
             return None

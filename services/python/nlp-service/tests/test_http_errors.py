@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """nlp-service HTTP 层错误语义测试（2026-09-18 新增）
 
 背景：本服务此前**只有算法单测，没有任何 HTTP 层测试** —— 错误出口（未映射路由、
@@ -18,9 +17,8 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app import main  # noqa: E402
+from app import main
+from fastapi.testclient import TestClient
 
 ENVELOPE_KEYS = {"code", "message", "details"}
 

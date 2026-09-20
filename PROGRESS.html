@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 09:49 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 10:18 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -194,6 +194,14 @@
 <li><a href="#fixes">Fixes</a></li>
 <li><a href="#verification-2026-09-20-windows-host">Verification (2026-09-20, Windows host)</a></li>
 <li><a href="#not-changed">Not changed</a></li>
+</ul>
+</li>
+<li><a href="#2026-09-20-security-lint-gate-convergence-pass-4">2026-09-20 Security &amp; Lint Gate Convergence (pass 4)</a><ul>
+<li><a href="#p0-write-endpoint-authentication-converged-to-a-single-entry-point">P0 - Write-endpoint authentication converged to a single entry point</a></li>
+<li><a href="#p0-usage-aggregation-timezone-made-explicit">P0 - Usage aggregation timezone made explicit</a></li>
+<li><a href="#p1-static-check-gate-actually-enforced-223-0">P1 - Static-check gate actually enforced (223 -&gt; 0)</a></li>
+<li><a href="#pitfall-recorded">Pitfall recorded</a></li>
+<li><a href="#verification-2026-09-20-pass-4">Verification (2026-09-20, pass 4)</a></li>
 </ul>
 </li>
 <li><a href="#remaining">Remaining</a></li>
@@ -1004,6 +1012,47 @@ gateway (8080) is still unverified at runtime because <strong>Spring WebFlux doe
   regression baseline).</li>
 <li>The sandbox image build remains an environment step: <code>infra/docker/sandbox/Dockerfile</code> and its
   README already cover it; Docker was not running on this host, so R5-03 was not re-verified here.</li>
+</ul>
+<h2 id="2026-09-20-security-lint-gate-convergence-pass-4">2026-09-20 Security &amp; Lint Gate Convergence (pass 4)<a class="headerlink" href="#2026-09-20-security-lint-gate-convergence-pass-4" title="Permanent link">&para;</a></h2>
+<p>Triggered by a full code review. Three defect classes found and fixed; no new features.</p>
+<h3 id="p0-write-endpoint-authentication-converged-to-a-single-entry-point">P0 - Write-endpoint authentication converged to a single entry point<a class="headerlink" href="#p0-write-endpoint-authentication-converged-to-a-single-entry-point" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Before: only 2 of wp-bff's 19 POST endpoints ran <code>authorizeControl</code> - model-config creation
+  (which stores API keys), memory ingest/compress and session writes were reachable without a
+  control token. Because "simple" cross-site POSTs skip preflight, this was a CSRF-viable path.</li>
+<li>After: <code>WRITE_METHODS = {POST, PUT, PATCH, DELETE}</code> is enforced in the router <strong>before</strong> route
+  matching, so unauthenticated writes get 401 without revealing whether a path exists.</li>
+<li>Regression: 3 new cases (unknown write path -&gt; 401 not 404; 12 representative write paths -&gt;
+  401 + <code>AGENT_UNAUTHORIZED</code>; foreign origin -&gt; 403 + <code>AGENT_FORBIDDEN</code>). wp-bff suite 103 -&gt; 106.</li>
+</ul>
+<h3 id="p0-usage-aggregation-timezone-made-explicit">P0 - Usage aggregation timezone made explicit<a class="headerlink" href="#p0-usage-aggregation-timezone-made-explicit" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>token_usage.py</code> used bare <code>date.today()</code> (process-local timezone): a container on UTC and a
+  developer host on +08:00 recorded the same physical moment into different <code>bucket_date</code> values.</li>
+<li>Now <code>_today()</code> defaults to UTC, honours <code>TOKEN_USAGE_TIMEZONE</code> (IANA) when set, and warns plus
+  falls back to UTC when tzdata is missing - it never silently uses the local timezone.</li>
+</ul>
+<h3 id="p1-static-check-gate-actually-enforced-223-0">P1 - Static-check gate actually enforced (223 -&gt; 0)<a class="headerlink" href="#p1-static-check-gate-actually-enforced-223-0" title="Permanent link">&para;</a></h3>
+<ul>
+<li>New <code>services/python/pyproject.toml</code> pins the rule set and documents the Chinese-project
+  exceptions (<code>RUF001/002/003</code> full-width punctuation are false positives; <code>E501</code> for tables).</li>
+<li>220 findings auto-fixed; <code>F601</code> (duplicate dict key), <code>F402/F811</code> (<code>field</code> shadowing) and
+  <code>ISC004</code> (7 multi-line SQL concatenations) fixed by hand; 7 intentional broad catches annotated
+  with <code># noqa: BLE001 - &lt;reason&gt;</code>.</li>
+<li><code>.gitlab-ci.yml</code> pins <code>ruff==0.16.8</code> - the previous unpinned install meant the job could not pass.</li>
+</ul>
+<h3 id="pitfall-recorded">Pitfall recorded<a class="headerlink" href="#pitfall-recorded" title="Permanent link">&para;</a></h3>
+<p><code>ruff --fix --unsafe-fixes</code> rewrote <code>timezone.utc</code> into <code>datetime.UTC</code> (3.11+), which broke test
+collection on this host's Python 3.10. Rolled back and set <code>target-version = "py310"</code>.
+Lesson: unsafe fixes must always be followed by a full test run.</p>
+<h3 id="verification-2026-09-20-pass-4">Verification (2026-09-20, pass 4)<a class="headerlink" href="#verification-2026-09-20-pass-4" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>ruff check</code> (services/python): <strong>All checks passed</strong></li>
+<li>pytest: <strong>199 passed / 1 skipped</strong></li>
+<li>wp-bff <code>node --test</code>: <strong>106 passed</strong></li>
+<li>contract-check: 63 endpoints, implemented 35 paths, 0 FAIL; timeout-budget: ok=19 / gap=0 / fail=0</li>
+<li>Vue <code>typecheck</code>: passed</li>
+<li>Optimization log: <code>docs/优化日志/2026-09-20-写端点鉴权收敛与静态检查门禁落地.md</code></li>
 </ul>
 <h2 id="remaining">Remaining<a class="headerlink" href="#remaining" title="Permanent link">&para;</a></h2>
 <ul>

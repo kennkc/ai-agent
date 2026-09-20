@@ -1,0 +1,279 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>优化日志 · 2026-09-20 写端点鉴权收敛与静态检查门禁落地</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 10:18 · 源文件 2026-09-20-写端点鉴权收敛与静态检查门禁落地.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 背景：审查发现的三类问题</a></li>
+<li><a href="#2-1">2. 修复 1：写端点鉴权收敛到路由层唯一入口</a></li>
+<li><a href="#3-2">3. 修复 2：用量聚合的时区显式化</a></li>
+<li><a href="#4-3223-0">4. 修复 3：静态检查门禁落地（223 → 0）</a></li>
+<li><a href="#5">5. 过程中的一个坑（值得记录）</a></li>
+<li><a href="#6">6. 验证结果（本机实测）</a></li>
+<li><a href="#7">7. 未处理项</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="2026-09-20">优化日志 · 2026-09-20 写端点鉴权收敛与静态检查门禁落地<a class="headerlink" href="#2026-09-20" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>触发</strong>：项目代码审查（review 审核）
+<strong>范围</strong>：wp-bff 接口安全 · nlp-service 时区与静态检查 · CI 门禁
+<strong>原则</strong>：不新增功能，只修缺陷与门禁；所有改动均带可验证证据</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 背景：审查发现的三类问题<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>严重度</th>
+<th>问题</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>🔴 高</td>
+<td>wp-bff 的 19 个 POST 端点中只有 2 个带控制面鉴权</td>
+<td><code>authorizeControl</code> 仅出现在 <code>handleKnowledgeIngest</code> / <code>handleToolExecute</code></td>
+</tr>
+<tr>
+<td>🟡 中</td>
+<td><code>token_usage.py</code> 用裸 <code>date.today()</code> 分桶</td>
+<td>容器 UTC 与开发机 +08:00 会得出不同的"今日"</td>
+</tr>
+<tr>
+<td>🟡 中</td>
+<td>ruff 报 223 项（含 F601/F811/F402 等真实缺陷），CI 的 python-lint 未固定版本</td>
+<td>实测该 job 若运行必然失败</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2-1">2. 修复 1：写端点鉴权收敛到路由层唯一入口<a class="headerlink" href="#2-1" title="Permanent link">&para;</a></h2>
+<p><strong>改动</strong>（<code>services/node/wp-bff/server.js</code>）：</p>
+<ul>
+<li>新增 <code>WRITE_METHODS = {POST, PUT, PATCH, DELETE}</code> 常量</li>
+<li>在路由分发<strong>之前</strong>统一执行 <code>authorizeControl</code>（来源白名单 + 控制令牌双校验）</li>
+<li>鉴权先于路由匹配：未带令牌访问任意写路径一律 401，<strong>不泄露路由是否存在</strong></li>
+<li>读方法（GET）保持开放，仅受 CORS 白名单约束</li>
+</ul>
+<p><strong>为什么改路由层而不是逐个 handler</strong>：19 个写端点逐个补校验，下一次新增端点仍可能漏；
+收敛到唯一入口后，"漏加鉴权"在结构上不可能发生。</p>
+<p><strong>回归用例</strong>（<code>test/server.test.js</code> 新增 3 条，测试总数 103 → 106）：</p>
+<ol>
+<li>路由层统一鉴权：未带令牌访问不存在的写路径 → 401（而非 404）</li>
+<li>代表性写端点（12 条路径）未带令牌 → 全部 401 + <code>AGENT_UNAUTHORIZED</code></li>
+<li>来源越权 → 403 + <code>AGENT_FORBIDDEN</code></li>
+</ol>
+<h2 id="3-2">3. 修复 2：用量聚合的时区显式化<a class="headerlink" href="#3-2" title="Permanent link">&para;</a></h2>
+<p><strong>改动</strong>（<code>app/token_usage.py</code>）：</p>
+<ul>
+<li>引入 <code>_today()</code>，默认按 UTC 取日；可通过 <code>TOKEN_USAGE_TIMEZONE</code>（IANA 名）切换业务时区</li>
+<li>时区数据缺失时回落 UTC <strong>并告警</strong>，不静默使用进程本地时区</li>
+<li>替换 2 处裸 <code>date.today()</code>（<code>usage_summary</code> 窗口起点、<code>_row</code> 的 bucket_date 默认值）</li>
+</ul>
+<h2 id="4-3223-0">4. 修复 3：静态检查门禁落地（223 → 0）<a class="headerlink" href="#4-3223-0" title="Permanent link">&para;</a></h2>
+<p><strong>新增</strong> <code>services/python/pyproject.toml</code>：固定规则集（E/W/F/I/UP/B/SIM/RUF/BLE/ISC）+ 中文项目必要的忽略项：</p>
+<ul>
+<li><code>RUF001/RUF002/RUF003</code>：全角标点的歧义 Unicode 规则对中文注释/文档字符串是误报（占原报错 90% 以上）</li>
+<li><code>E501</code>：注释中的表格与说明需超长行</li>
+</ul>
+<p><strong>修复</strong>：</p>
+<ul>
+<li>自动修复 220 项（未使用导入、导入排序、无用 noqa 等）</li>
+<li>手工修复 <code>F601</code>（<code>intent/corpus.py</code> 重复字典键）、<code>F402/F811</code>（<code>semantic_cache.py</code> 中 <code>field</code> 遮蔽与重定义）、<code>ISC004</code>（7 处 SQL 跨行隐式拼接改为显式写法）</li>
+<li>为 7 处<strong>有意的</strong>宽泛捕获补 <code># noqa: BLE001 - &lt;理由&gt;</code>（降级路径，均带日志）</li>
+</ul>
+<p><strong>CI</strong>（<code>.gitlab-ci.yml</code>）：<code>pip install ruff</code> → <code>pip install ruff==0.16.8</code>，消除版本漂移。</p>
+<h2 id="5">5. 过程中的一个坑（值得记录）<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<p>执行 <code>ruff --fix --unsafe-fixes</code> 后，UP017 规则把 <code>timezone.utc</code> 改写为 <code>datetime.UTC</code>，
+而本机 Python 是 <strong>3.10</strong>（<code>datetime.UTC</code> 需 3.11+）→ <strong>5 个测试模块直接收集失败</strong>。</p>
+<p>处置：</p>
+<ol>
+<li>回滚为 <code>timezone.utc</code>（兼容 3.10 与 CI 的 3.12）</li>
+<li><code>pyproject.toml</code> 的 <code>target-version</code> 由 <code>py312</code> 改为 <strong><code>py310</code></strong>（按兼容下限约束，避免再次生成 3.11+ 专有语法）</li>
+</ol>
+<p>教训：<strong>unsafe-fixes 必须紧跟一次完整测试</strong>，否则会把"语法现代化"变成"运行时不兼容"。</p>
+<h2 id="6">6. 验证结果（本机实测）<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>验证</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ruff check（services/python）</td>
+<td><strong>All checks passed</strong>（223 → 0）</td>
+</tr>
+<tr>
+<td>Python pytest</td>
+<td><strong>199 passed / 1 skipped</strong></td>
+</tr>
+<tr>
+<td>wp-bff node --test</td>
+<td><strong>106 passed / 0 failed</strong>（含 3 条新回归）</td>
+</tr>
+<tr>
+<td>契约检查</td>
+<td>63 端点 / implemented 35 路径 / <strong>0 FAIL</strong></td>
+</tr>
+<tr>
+<td>超时预算</td>
+<td>ok=19 / gap=0 / fail=0</td>
+</tr>
+<tr>
+<td>前端 typecheck</td>
+<td>通过</td>
+</tr>
+</tbody>
+</table>
+<h2 id="7">7. 未处理项<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>原因</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>本机 Python 3.10 vs CI 3.12</td>
+<td>版本差异已用 <code>target-version = py310</code> 约束；如需统一建议补 <code>.python-version</code> 并在 README 标注</td>
+</tr>
+<tr>
+<td>CI runner 是否真实运行</td>
+<td>本机无法验证，建议确认 GitLab runner 部署状态</td>
+</tr>
+<tr>
+<td>Element Plus 按需导入 / ModuleView 拆分</td>
+<td>仍需视觉回归基线</td>
+</tr>
+<tr>
+<td>沙箱真隔离复验（R5-03）</td>
+<td>需 Docker 环境与 <code>agent-sandbox:latest</code> 镜像</td>
+</tr>
+</tbody>
+</table>
+<hr />
+<p><em>关联：2026-09-20 项目代码审查 · 技术债台账 · <code>contracts/work-platform-bff-openapi.yaml</code> 错误码约定（401 AGENT_UNAUTHORIZED / 403 AGENT_FORBIDDEN）</em></p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

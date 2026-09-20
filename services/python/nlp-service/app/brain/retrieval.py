@@ -16,8 +16,9 @@ import os
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, Callable, Optional
+from typing import Any
 
 from app.budget import RETRIEVAL_BUDGET_MS  # 检索超时唯一口径（GAP-05 合一）
 
@@ -60,7 +61,7 @@ class BodyRetriever:
         self,
         base_url: str = DEFAULT_BODY_BASE_URL,
         timeout: float = DEFAULT_TIMEOUT,
-        transport: Optional[Callable[[str, dict, dict, float], list]] = None,
+        transport: Callable[[str, dict, dict, float], list] | None = None,
     ) -> None:
         self.base_url = (base_url or DEFAULT_BODY_BASE_URL).rstrip("/")
         self.timeout = timeout
@@ -71,7 +72,7 @@ class BodyRetriever:
         query: str,
         tenant_id: str = "default",
         top_k: int = 5,
-        timeout: Optional[float] = None,
+        timeout: float | None = None,
     ) -> RetrievalOutcome:
         """检索。
 
@@ -83,7 +84,7 @@ class BodyRetriever:
         payload = {"query": query, "top_k": top_k, "use_cache": True}
         try:
             rows = self._call(payload, tenant_id, effective)
-        except Exception as exc:  # noqa: BLE001 - 统一转为「检索不可用」
+        except Exception as exc:
             logger.warning("retrieval failed: %s", exc)
             raise RetrievalUnavailable(str(exc)) from exc
         chunks = [dict(row) for row in rows if isinstance(row, dict)]
@@ -94,18 +95,18 @@ class BodyRetriever:
             latency_ms=int((time.time() - started) * 1000),
         )
 
-    def _call(self, payload: dict, tenant_id: str, timeout: Optional[float] = None) -> list:
+    def _call(self, payload: dict, tenant_id: str, timeout: float | None = None) -> list:
         effective = float(timeout) if timeout else self.timeout
         if self._transport is not None:
             return self._transport("/api/body/retrieve", payload, {"X-Tenant-Id": tenant_id}, effective)
         body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
-        request = urllib.request.Request(  # noqa: S310 - 地址来自配置
+        request = urllib.request.Request(
             self.base_url + "/api/body/retrieve",
             data=body,
             headers={"Content-Type": "application/json", "X-Tenant-Id": tenant_id},
             method="POST",
         )
-        with urllib.request.urlopen(request, timeout=effective) as response:  # noqa: S310
+        with urllib.request.urlopen(request, timeout=effective) as response:
             raw = response.read().decode("utf-8")
         data = json.loads(raw)
         return data if isinstance(data, list) else []

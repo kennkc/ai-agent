@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """跨服务预算（deadline）测试 —— REC-01 + GAP-03/04。
 
 背景：超时值分散在各处，各自看都合理，**相遇即错**。2026-09-19 实测到的形状：
@@ -22,16 +21,14 @@ import time
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-import pytest  # noqa: E402
-from fastapi.testclient import TestClient  # noqa: E402
-
-from app import main  # noqa: E402
-from app.brain import pipeline as pipeline_mod  # noqa: E402
-from app.brain.llm_gateway import L1, L2, LlmGateway, LlmRequest, LlmUnavailable, TemplateEngine  # noqa: E402
-from app.brain.pipeline import RagPipeline  # noqa: E402
-from app.brain.retrieval import RetrievalOutcome  # noqa: E402
-from app.brain.semantic_cache import SemanticCache  # noqa: E402
-from app.budget import (  # noqa: E402
+import pytest
+from app import main
+from app.brain import pipeline as pipeline_mod
+from app.brain.llm_gateway import L1, L2, LlmGateway, LlmRequest, LlmUnavailable, TemplateEngine
+from app.brain.pipeline import RagPipeline
+from app.brain.retrieval import RetrievalOutcome
+from app.brain.semantic_cache import SemanticCache
+from app.budget import (
     BRAIN_TOTAL_BUDGET_MS,
     BudgetExceeded,
     Deadline,
@@ -40,7 +37,7 @@ from app.budget import (  # noqa: E402
     remaining_from,
     run_with_budget,
 )
-
+from fastapi.testclient import TestClient
 
 # ───────────────────────── run_with_budget ─────────────────────────
 
@@ -266,7 +263,7 @@ def test_generation_is_stopped_when_retrieval_ate_the_whole_budget(monkeypatch):
         "chain": [], "degraded_reasons": [], "gap": {},
         "deadline_at": pipeline_mod.deadline_at(0), "deadline_ms": 1000,
     }
-    out = pipeline._node_generate(state)  # noqa: SLF001 - 边界守卫，须精确观测该节点
+    out = pipeline._node_generate(state)
     assert calls == [], f"预算耗尽后仍发起了生成调用：{calls}"
     assert out["generator"] == "none"
     last = out["chain"][-1]

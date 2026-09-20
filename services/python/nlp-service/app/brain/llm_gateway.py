@@ -25,8 +25,9 @@ import os
 import time
 import urllib.error
 import urllib.request
+from collections.abc import Callable
 from dataclasses import dataclass, field, replace
-from typing import Any, Callable, Optional
+from typing import Any
 
 from app.budget import Deadline
 
@@ -47,7 +48,7 @@ def estimate_tokens(text: str) -> int:
     """Token 估算（无分词器时的统一口径）。空串记 0。"""
     if not text:
         return 0
-    return max(1, int(round(len(text) / 1.5)))
+    return max(1, round(len(text) / 1.5))
 
 
 # Token 用量的**来源标识**。这个字段比数字本身更重要：
@@ -136,12 +137,12 @@ class LlmEngine:
     model: str = ""
     provider: str = ""
     # 该引擎自带的生成参数；None = 沿用请求里的值
-    max_tokens: Optional[int] = None
-    temperature: Optional[float] = None
-    timeout_ms: Optional[int] = None
+    max_tokens: int | None = None
+    temperature: float | None = None
+    timeout_ms: int | None = None
     # 最近一次 `generate()` 回传的**供应商自报**用量；None = 本次没有（或引擎不回）。
     # 类属性缺省用不可变的 None（不能放 dict 这类易变对象 —— 那会变成跨实例共享的脏状态）。
-    last_usage: Optional[TokenUsage] = None
+    last_usage: TokenUsage | None = None
 
     def available(self) -> bool:  # pragma: no cover - 抽象
         return False
@@ -204,8 +205,8 @@ class HttpLlmEngine(LlmEngine):
 
     def __init__(self, base_url: str = "", api_key: str = "", model: str = "", level: str = L2,
                  role: str = "", name: str = "", provider: str = "",
-                 max_tokens: Optional[int] = None, temperature: Optional[float] = None,
-                 timeout_ms: Optional[int] = None) -> None:
+                 max_tokens: int | None = None, temperature: float | None = None,
+                 timeout_ms: int | None = None) -> None:
         self.base_url = base_url or os.getenv("LLM_BASE_URL", "")
         self.api_key = api_key or os.getenv("LLM_API_KEY", "")
         self.model = model or os.getenv("LLM_MODEL", "")
@@ -220,7 +221,7 @@ class HttpLlmEngine(LlmEngine):
         self.name = name or (f"{role}:{base_name}" if role else base_name)
 
     @classmethod
-    def from_spec(cls, spec: dict) -> "HttpLlmEngine":
+    def from_spec(cls, spec: dict) -> HttpLlmEngine:
         """由 `model_config.resolve_engines()` 的规格构造（凭据已解密）。"""
         return cls(
             base_url=str(spec.get("base_url") or ""),
@@ -240,7 +241,7 @@ class HttpLlmEngine(LlmEngine):
 
     def generate(self, request: LlmRequest, timeout: float) -> str:
         # **每次调用前清空**：重试时读到上一次的残留用量，会把失败的调用算成成功用量。
-        self.last_usage: Optional[TokenUsage] = None
+        self.last_usage: TokenUsage | None = None
         payload = {
             "model": self.model,
             "messages": _to_messages(request),
@@ -255,7 +256,7 @@ class HttpLlmEngine(LlmEngine):
                      **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:  # noqa: S310 - 地址由配置给定
+        with urllib.request.urlopen(req, timeout=timeout) as resp:
             body = _json_loads(resp.read().decode("utf-8"))
         choices = body.get("choices") or []
         if not choices:
@@ -285,12 +286,12 @@ class LlmGateway:
 
     def __init__(
         self,
-        engines: Optional[list[LlmEngine]] = None,
-        timeouts: Optional[dict[str, float]] = None,
+        engines: list[LlmEngine] | None = None,
+        timeouts: dict[str, float] | None = None,
         max_retries: int = 1,
-        stats: Optional[GatewayStats] = None,
-        role_engines: Optional[dict[str, list[LlmEngine]]] = None,
-        usage_sink: Optional[Callable[[dict], Any]] = None,
+        stats: GatewayStats | None = None,
+        role_engines: dict[str, list[LlmEngine]] | None = None,
+        usage_sink: Callable[[dict], Any] | None = None,
     ) -> None:
         self.engines = engines or [TemplateEngine()]
         self.timeouts = dict(_DEFAULT_TIMEOUTS)
@@ -310,10 +311,10 @@ class LlmGateway:
         }
 
     # ── 角色引擎（前台配置侧）──
-    def set_role_engines(self, mapping: Optional[dict[str, list[LlmEngine]]]) -> None:
+    def set_role_engines(self, mapping: dict[str, list[LlmEngine]] | None) -> None:
         self.role_engines = {str(key): list(value) for key, value in (mapping or {}).items()}
 
-    def apply_specs(self, specs: Optional[list[dict]]) -> dict:
+    def apply_specs(self, specs: list[dict] | None) -> dict:
         """由 `model_config.resolve_engines()` 的规格重建角色引擎，返回装配摘要。
 
         `available()` 为假的规格（缺 base_url / model）被**丢弃**而不是注册成
@@ -373,7 +374,7 @@ class LlmGateway:
         return candidates
 
     # ── 路由 ──
-    def route(self, level: str) -> Optional[LlmEngine]:
+    def route(self, level: str) -> LlmEngine | None:
         """选出该层级可用的引擎；没有则向上/向下找最近可用层级。"""
         for candidate in _fallback_chain(level):
             for engine in self.engines:
@@ -423,7 +424,7 @@ class LlmGateway:
         }
 
     # ── 生成 ──
-    def _record_usage(self, engine: Optional[LlmEngine], request: LlmRequest, *,
+    def _record_usage(self, engine: LlmEngine | None, request: LlmRequest, *,
                       ok: bool, prompt_tokens: int, completion_tokens: int,
                       token_source: str, latency_ms: int, error: str = "") -> None:
         """把一次调用的用量交给落账出口。
@@ -447,7 +448,7 @@ class LlmGateway:
         except Exception as exc:  # noqa: BLE001 - 旁路计量不得冒泡
             logger.warning("llm usage sink failed: %s: %s", type(exc).__name__, exc)
 
-    def generate(self, request: LlmRequest, deadline_ms: Optional[int] = None) -> LlmResponse:
+    def generate(self, request: LlmRequest, deadline_ms: int | None = None) -> LlmResponse:
         """按请求层级生成；`deadline_ms` 为**整次级联共享**的总预算。
 
         有 deadline 时，每一级、每一次重试的可用超时都收进「剩余预算」内
@@ -464,12 +465,12 @@ class LlmGateway:
         attempts = 0
         deadline_hit = False
         last_error = ""
-        last_engine: Optional[LlmEngine] = None
+        last_engine: LlmEngine | None = None
         for engine in self._candidates(request):
             last_engine = engine
             level_timeout = engine.effective_timeout(self.timeouts.get(engine.level, 8.0))
             for attempt in range(1, self.max_retries + 2):
-                timeout: Optional[float] = level_timeout
+                timeout: float | None = level_timeout
                 if budget is not None:
                     timeout = budget.clamp(level_timeout)
                     if timeout is None or timeout <= 0:
@@ -623,7 +624,7 @@ def _json_loads(text: str) -> Any:
     return json.loads(text)
 
 
-def _parse_usage(raw: Any) -> Optional[TokenUsage]:
+def _parse_usage(raw: Any) -> TokenUsage | None:
     """把 OpenAI 兼容响应里的 `usage` 转成 `TokenUsage`；拿不到**完整**用量返回 None。
 
     三条口径，都是刻意的：
@@ -645,7 +646,7 @@ def _parse_usage(raw: Any) -> Optional[TokenUsage]:
     return TokenUsage(prompt_tokens=prompt, completion_tokens=completion)
 
 
-def _as_int(value: Any) -> Optional[int]:
+def _as_int(value: Any) -> int | None:
     if isinstance(value, bool) or value is None:
         return None
     try:

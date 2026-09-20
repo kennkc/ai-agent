@@ -12,14 +12,9 @@ import logging
 import time
 from collections import deque
 
-from fastapi import FastAPI, HTTPException, Request
-from fastapi.exceptions import RequestValidationError
-from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
-from starlette.exceptions import HTTPException as StarletteHTTPException
-
+from app import model_config, token_usage
 from app.brain.audit import AUDIT_LOG
-from app.brain.llm_gateway import LlmGateway, LLM_GATEWAY, TemplateEngine
+from app.brain.llm_gateway import LLM_GATEWAY
 from app.brain.memory_graph import MEMORY_GRAPH
 from app.brain.pipeline import RagPipeline
 from app.brain.planner import PLANNER
@@ -27,20 +22,23 @@ from app.brain.retrieval import RETRIEVER
 from app.brain.semantic_cache import SEMANTIC_CACHE
 from app.budget import (
     BRAIN_TOTAL_BUDGET_MS,
-    BudgetExceeded,
     EMBED_BUDGET_MS,
     OCR_BUDGET_MS,
+    BudgetExceeded,
     budget_status,
     run_with_budget,
 )
 from app.chunking import chunk_text
-from app import model_config
-from app import token_usage
 from app.embedding import EMBEDDING_SERVICE
-from app.intent import CASCADE, EVAL_CORPUS, CORE_SCENARIOS
+from app.intent import CASCADE, CORE_SCENARIOS, EVAL_CORPUS
 from app.ocr import OCR_SERVICE
 from app.reranker import RERANKER_SERVICE, RerankCandidate
 from app.tools import FUNCTION_CALLING
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import BaseModel, Field
+from starlette.exceptions import HTTPException as StarletteHTTPException
 
 app = FastAPI(
     title="agent-lifeform nlp-service",
@@ -328,7 +326,7 @@ def latency_percentiles() -> dict:
     if not samples:
         return {"sample_size": 0, "p50_ms": 0, "p95_ms": 0, "p99_ms": 0, "max_ms": 0, "basis": "no_sample"}
     def at(q: float) -> float:
-        index = min(len(samples) - 1, int(round((len(samples) - 1) * q)))
+        index = min(len(samples) - 1, round((len(samples) - 1) * q))
         return float(samples[index])
     return {
         "sample_size": len(samples),

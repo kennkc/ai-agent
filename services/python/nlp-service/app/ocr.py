@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """视觉渠道 OCR 能力（R2-03）
 
 引擎链：PaddleOCR（中文识别优，设计选型）→ pytesseract（轻量备选）→ unavailable（如实上报，渠道降级为 DOWN）
@@ -9,11 +8,10 @@ from __future__ import annotations
 import base64
 import io
 import logging
-from importlib.util import find_spec
-from shutil import which
 import time
 from dataclasses import dataclass
-from typing import Optional
+from importlib.util import find_spec
+from shutil import which
 
 logger = logging.getLogger("nlp.ocr")
 
@@ -105,7 +103,7 @@ class OcrService:
 
     def __init__(self) -> None:
         self.engines = [PaddleOcrEngine(), TesseractOcrEngine()]
-        self.active: Optional[OcrEngine] = next((e for e in self.engines if e.available()), None)
+        self.active: OcrEngine | None = next((e for e in self.engines if e.available()), None)
 
     def status(self) -> dict:
         return {
@@ -119,7 +117,7 @@ class OcrService:
             raise RuntimeError("no OCR engine installed (paddleocr / pytesseract)")
         try:
             payload = base64.b64decode(image_base64, validate=True)
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             raise ValueError(f"invalid base64 image payload: {exc}") from exc
         if not payload:
             raise ValueError("empty image payload")

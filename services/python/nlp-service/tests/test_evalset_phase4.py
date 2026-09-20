@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Phase 4 评测集（开发设计 §10：50 条问答对，意图 + 回答质量）。
 
 评测口径（**不美化**：数字来自实跑，不是设计值）
@@ -18,7 +17,6 @@ import json
 from pathlib import Path
 
 import pytest
-
 from app.brain.pipeline import RagPipeline
 from app.brain.retrieval import RetrievalOutcome
 from app.intent import CASCADE, EVAL_CORPUS

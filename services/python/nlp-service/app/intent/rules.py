@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """规则意图引擎（R2-07）
 
 关键词 + 正则 + 场景映射三路打分：
@@ -11,10 +10,13 @@ from __future__ import annotations
 
 import re
 from dataclasses import dataclass, field
-from typing import Dict, List, Tuple
 
 from .corpus import (
-    EXPLAIN_PREFIXES, OPERATIONAL_INTENTS, OPERATION_DAMPING, RULE_KEYWORDS, RULE_PATTERNS,
+    EXPLAIN_PREFIXES,
+    OPERATION_DAMPING,
+    OPERATIONAL_INTENTS,
+    RULE_KEYWORDS,
+    RULE_PATTERNS,
 )
 
 NORMALIZE_RE = re.compile(r"[\s,，。！!？?、；;：:\"'“”‘’（）()【】\[\]…~]+")
@@ -25,14 +27,14 @@ HIT_THRESHOLD = 0.35
 class RuleHit:
     intent: str
     confidence: float
-    matched: List[str] = field(default_factory=list)
+    matched: list[str] = field(default_factory=list)
 
 
 class RuleIntentEngine:
     """确定性规则引擎：可解释、零依赖、亚毫秒级"""
 
     def __init__(self) -> None:
-        self._compiled: Dict[str, List[Tuple[re.Pattern, float]]] = {}
+        self._compiled: dict[str, list[tuple[re.Pattern, float]]] = {}
         for intent, patterns in RULE_PATTERNS.items():
             self._compiled[intent] = [(re.compile(p, re.IGNORECASE), 1.0) for p in patterns]
 
@@ -40,7 +42,7 @@ class RuleIntentEngine:
     def normalize(text: str) -> str:
         return NORMALIZE_RE.sub("", (text or "").strip().lower())
 
-    def score(self, text: str) -> Dict[str, Tuple[float, List[str]]]:
+    def score(self, text: str) -> dict[str, tuple[float, list[str]]]:
         """返回每个场景的 (综合得分, 命中特征)
 
         综合得分 = 0.7 × 特征强度 + 0.3 × 位置权重
@@ -59,10 +61,10 @@ class RuleIntentEngine:
         # 概念解释问句（「如何理解…」「什么是…」）里出现的操作类关键词属于**被解释的对象**，
         # 不是要执行的动作 —— 对操作类场景打折，避免「…的子图查询」被判成「数据查询」。
         explains_concept = any(prefix in plain for prefix in EXPLAIN_PREFIXES)
-        scores: Dict[str, Tuple[float, List[str]]] = {}
+        scores: dict[str, tuple[float, list[str]]] = {}
         for intent, keywords in RULE_KEYWORDS.items():
             hit_weight = 0.0
-            matched: List[str] = []
+            matched: list[str] = []
             last_end = 0
             for keyword, weight in keywords.items():
                 if not keyword:

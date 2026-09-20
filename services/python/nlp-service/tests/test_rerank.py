@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Phase 3 重排测试（R3-06 · Should）
 
 重排后端按可用性分支断言：bge-reranker-v2-m3 缺失时回落 lexical-coverage 并标记 degraded。

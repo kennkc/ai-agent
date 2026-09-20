@@ -807,6 +807,51 @@ Follow-up to a hands-on evaluation on a Windows host: the suite was re-verified 
 - The sandbox image build remains an environment step: `infra/docker/sandbox/Dockerfile` and its
   README already cover it; Docker was not running on this host, so R5-03 was not re-verified here.
 
+## 2026-09-20 Security & Lint Gate Convergence (pass 4)
+
+Triggered by a full code review. Three defect classes found and fixed; no new features.
+
+### P0 - Write-endpoint authentication converged to a single entry point
+
+- Before: only 2 of wp-bff's 19 POST endpoints ran `authorizeControl` - model-config creation
+  (which stores API keys), memory ingest/compress and session writes were reachable without a
+  control token. Because "simple" cross-site POSTs skip preflight, this was a CSRF-viable path.
+- After: `WRITE_METHODS = {POST, PUT, PATCH, DELETE}` is enforced in the router **before** route
+  matching, so unauthenticated writes get 401 without revealing whether a path exists.
+- Regression: 3 new cases (unknown write path -> 401 not 404; 12 representative write paths ->
+  401 + `AGENT_UNAUTHORIZED`; foreign origin -> 403 + `AGENT_FORBIDDEN`). wp-bff suite 103 -> 106.
+
+### P0 - Usage aggregation timezone made explicit
+
+- `token_usage.py` used bare `date.today()` (process-local timezone): a container on UTC and a
+  developer host on +08:00 recorded the same physical moment into different `bucket_date` values.
+- Now `_today()` defaults to UTC, honours `TOKEN_USAGE_TIMEZONE` (IANA) when set, and warns plus
+  falls back to UTC when tzdata is missing - it never silently uses the local timezone.
+
+### P1 - Static-check gate actually enforced (223 -> 0)
+
+- New `services/python/pyproject.toml` pins the rule set and documents the Chinese-project
+  exceptions (`RUF001/002/003` full-width punctuation are false positives; `E501` for tables).
+- 220 findings auto-fixed; `F601` (duplicate dict key), `F402/F811` (`field` shadowing) and
+  `ISC004` (7 multi-line SQL concatenations) fixed by hand; 7 intentional broad catches annotated
+  with `# noqa: BLE001 - <reason>`.
+- `.gitlab-ci.yml` pins `ruff==0.16.8` - the previous unpinned install meant the job could not pass.
+
+### Pitfall recorded
+
+`ruff --fix --unsafe-fixes` rewrote `timezone.utc` into `datetime.UTC` (3.11+), which broke test
+collection on this host's Python 3.10. Rolled back and set `target-version = "py310"`.
+Lesson: unsafe fixes must always be followed by a full test run.
+
+### Verification (2026-09-20, pass 4)
+
+- `ruff check` (services/python): **All checks passed**
+- pytest: **199 passed / 1 skipped**
+- wp-bff `node --test`: **106 passed**
+- contract-check: 63 endpoints, implemented 35 paths, 0 FAIL; timeout-budget: ok=19 / gap=0 / fail=0
+- Vue `typecheck`: passed
+- Optimization log: `docs/优化日志/2026-09-20-写端点鉴权收敛与静态检查门禁落地.md`
+
 ## Remaining
 
 - ~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:

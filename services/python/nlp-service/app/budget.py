@@ -33,9 +33,10 @@ from __future__ import annotations
 import logging
 import os
 import time
+from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FuturesTimeout
-from typing import Any, Callable, Optional
+from typing import Any
 
 logger = logging.getLogger("nlp-service.budget")
 
@@ -79,7 +80,7 @@ class BudgetExceeded(RuntimeError):
 
 def run_with_budget(
     fn: Callable[[], Any],
-    budget_ms: Optional[int],
+    budget_ms: int | None,
     *,
     operation: str = "operation",
 ) -> Any:
@@ -112,7 +113,7 @@ class Deadline:
     （再乘重试次数）；本对象给出的是**共享上限**，谁先用掉就是谁的，用尽即止。
     """
 
-    def __init__(self, budget_ms: Optional[int], operation: str = "operation") -> None:
+    def __init__(self, budget_ms: int | None, operation: str = "operation") -> None:
         self.budget_ms = int(budget_ms) if budget_ms else None
         self.operation = operation
         self._started = time.monotonic()
@@ -124,7 +125,7 @@ class Deadline:
     def elapsed_ms(self) -> int:
         return int((time.monotonic() - self._started) * 1000)
 
-    def remaining_ms(self) -> Optional[int]:
+    def remaining_ms(self) -> int | None:
         """剩余预算；未设预算时返回 None（表示"不限"）。"""
         if self._deadline is None:
             return None
@@ -134,7 +135,7 @@ class Deadline:
         remaining = self.remaining_ms()
         return remaining is not None and remaining <= 0
 
-    def clamp(self, timeout_s: float) -> Optional[float]:
+    def clamp(self, timeout_s: float) -> float | None:
         """把某个「单步超时」收进剩余预算内，返回实际可用秒数。
 
         返回 <= 0 表示预算已耗尽 —— 调用方**不应再发起调用**，直接走降级。
@@ -160,7 +161,7 @@ class Deadline:
         }
 
 
-def deadline_at(budget_ms: Optional[int]) -> Optional[float]:
+def deadline_at(budget_ms: int | None) -> float | None:
     """把「预算毫秒」换算成 `time.monotonic()` 时间轴上的绝对截止点。
 
     管线需要把截止点放进 LangGraph 的 state 里跨节点传递 ——
@@ -172,7 +173,7 @@ def deadline_at(budget_ms: Optional[int]) -> Optional[float]:
     return time.monotonic() + int(budget_ms) / 1000.0
 
 
-def remaining_from(deadline_at_ts: Optional[float]) -> Optional[int]:
+def remaining_from(deadline_at_ts: float | None) -> int | None:
     """从绝对截止点算剩余毫秒；未设截止则返回 None。"""
     if deadline_at_ts is None:
         return None

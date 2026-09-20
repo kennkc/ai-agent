@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """pytest 全局前置（2026-09-20 新增）。
 
 **必须在任何 `app.*` 导入之前**把测试环境钉死，原因是一个实测踩到的顺序陷阱：
@@ -32,5 +31,5 @@ try:  # pragma: no cover - 导入期不因环境问题阻断收集
     from app.brain import pg as _pg
 
     _pg.PG_ENABLED = False
-except Exception:
+except Exception:  # noqa: BLE001 - 导入期不因环境问题阻断测试收集
     pass

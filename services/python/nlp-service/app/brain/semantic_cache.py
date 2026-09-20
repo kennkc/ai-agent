@@ -22,8 +22,9 @@ import logging
 import os
 import time
 import uuid
-from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from dataclasses import dataclass
+from typing import Any
 
 logger = logging.getLogger("nlp-service.brain.cache")
 
@@ -42,7 +43,7 @@ def cosine_similarity(left: list[float], right: list[float]) -> float:
     dot = 0.0
     norm_l = 0.0
     norm_r = 0.0
-    for a, b in zip(left, right):
+    for a, b in zip(left, right, strict=False):
         dot += a * b
         norm_l += a * a
         norm_r += b * b
@@ -117,7 +118,7 @@ class SemanticCache:
         ttl_seconds: int = DEFAULT_TTL,
         redis_client: Any = "auto",
         encoder: Any = None,
-        stats: Optional[CacheStats] = None,
+        stats: CacheStats | None = None,
         max_entries: int = DEFAULT_MAX_ENTRIES,
     ) -> None:
         """`redis_client="auto"`（默认）自动探测 Redis；显式传 `None` 则强制进程内后端。
@@ -164,14 +165,14 @@ class SemanticCache:
         }
 
     # ── 读写 ──
-    def lookup(self, question: str, tenant_id: str = "default") -> Optional[dict[str, Any]]:
+    def lookup(self, question: str, tenant_id: str = "default") -> dict[str, Any] | None:
         self.stats.lookups += 1
         sparse, norm = self._encode(question)
         if not sparse:
             self.stats.misses += 1
             return None
         best_score = 0.0
-        best_payload: Optional[dict[str, Any]] = None
+        best_payload: dict[str, Any] | None = None
         for entry in self._iter_entries(tenant_id):
             score = sparse_cosine(sparse, norm, entry.vector, entry.norm)
             if score > best_score:
@@ -208,7 +209,7 @@ class SemanticCache:
             bucket.append(entry)
             self._local_prune(tenant_id)
 
-    def clear(self, tenant_id: Optional[str] = None) -> None:
+    def clear(self, tenant_id: str | None = None) -> None:
         if tenant_id is None:
             self._local.clear()
             if self._redis is not None:
@@ -356,7 +357,7 @@ def _encode_entry(entry: _Entry) -> dict:
     }
 
 
-def _decode_entry(field: Any, raw: Any) -> Optional[_Entry]:
+def _decode_entry(field: Any, raw: Any) -> _Entry | None:
     """反序列化；**单条损坏不影响整体**（返回 None 由调用方剔除）。"""
     try:
         data = _loads(raw)

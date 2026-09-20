@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """R3-02 文档分块（Python 侧）验收：与 Java 侧 ChunkProcessor 同算法、同口径。
 
 这些用例同时也是**跨语言一致性**的保护网：Java 侧
@@ -8,7 +7,6 @@
 from __future__ import annotations
 
 import pytest
-
 from app.chunking import DEFAULT_MAX_CHARS, chunk_text
 
 

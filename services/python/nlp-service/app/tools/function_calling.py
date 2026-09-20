@@ -214,7 +214,7 @@ class FunctionCallingAdapter:
                 latency_ms=int((time.time() - started) * 1000),
                 call_id=(detail.get("details") or {}).get("call_id"),
                 audit_id=(detail.get("details") or {}).get("audit_id"))
-        except Exception as error:  # 连接失败：**如实上报不可用**，不冒充成功
+        except Exception as error:  # noqa: BLE001 - 连接失败如实上报不可用，不冒充成功
             logger.warning("tool-executor 不可达：%s", error)
             return ToolExecution(
                 tool=call.tool, arguments=call.arguments, success=False,
@@ -226,7 +226,7 @@ class FunctionCallingAdapter:
     def _read_error(error: urllib.error.HTTPError) -> dict:
         try:
             return json.loads(error.read().decode("utf-8"))
-        except Exception:
+        except Exception:  # noqa: BLE001 - 错误体非 JSON 时按空对象处理
             return {}
 
     # ─────────── 组合任务（R5-06 验收） ───────────
@@ -311,7 +311,7 @@ class FunctionCallingAdapter:
                 payload = json.loads(response.read().decode("utf-8"))
             return {"source": "tool-executor", "available": True,
                     "total": payload.get("total"), "tools": payload.get("tools", [])}
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - 上游不可达时如实返回 available=false
             logger.warning("拉取工具注册表失败：%s", error)
             return {"source": "tool-executor", "available": False, "total": 0, "tools": [],
                     "error": str(error)}
@@ -326,7 +326,7 @@ class FunctionCallingAdapter:
                     "sandbox_degraded": (payload.get("sandbox") or {}).get("degraded"),
                     "audit_backend": (payload.get("audit") or {}).get("backend"),
                     "decider": "rule"}
-        except Exception as error:
+        except Exception as error:  # noqa: BLE001 - 健康检查失败即不可用，不伪造可用
             return {"tool_executor": self.base_url, "available": False, "error": str(error),
                     "decider": "rule"}
 
@@ -337,7 +337,7 @@ def _parse_open_meteo(body: str | None) -> dict | None:
         return None
     try:
         payload = json.loads(body)
-    except Exception:
+    except Exception:  # noqa: BLE001 - 非 JSON 响应按无结果处理，不硬猜
         return None
     weather = payload.get("current_weather") if isinstance(payload, dict) else None
     if not isinstance(weather, dict):

@@ -42,7 +42,7 @@ def test_decide_handles_combined_task():
     assert "http" in tools, "再拆出天气查询调用"
 
     http_call = next(call for call in plan.calls if call.tool == "http")
-    latitude, longitude = CITY_COORDINATES["北京"]
+    latitude, _longitude = CITY_COORDINATES["北京"]
     assert f"latitude={latitude}" in http_call.arguments["url"]
     assert "api.open-meteo.com" in http_call.arguments["url"], "天气查询必须落在白名单域名上"
 

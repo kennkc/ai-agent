@@ -259,6 +259,14 @@ const MIDDLEWARE = {
 const WHITELIST = new Set(Object.keys(MIDDLEWARE))
 
 /**
+ * 需要控制面鉴权的写方法（2026-09-20）。
+ * 所有写操作在路由分发前统一校验「来源白名单 + 控制令牌」，
+ * 避免新增写端点时漏加鉴权（此前 19 个 POST 端点中仅 2 个带校验）。
+ * 读方法（GET/HEAD）保持开放，仅受 CORS 白名单约束。
+ */
+const WRITE_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE'])
+
+/**
  * 本服务实现的端点（路径相对 /api/wp 前缀）。
  * 用途：contract-check.py 依赖此清单校验「实现端点必须在契约中登记」，请与
  * contracts/work-platform-bff-openapi.yaml 的 x-wp-status: implemented 保持一致。
@@ -1890,6 +1898,15 @@ function createServer(options = {}) {
           { guard: 'origin-whitelist' })
       }
       return send(req, res, 204, {})
+    }
+    // 统一写操作鉴权：/api/wp 下的 POST/PUT/PATCH/DELETE 必须通过双校验。
+    // 这是唯一入口，新增写端点无需在 handler 内重复实现。
+    if (WRITE_METHODS.has(req.method) && url.pathname.startsWith('/api/wp/')) {
+      const auth = authorizeControl(req)
+      if (!auth.ok) {
+        audit('REJECT_AUTH', url.pathname, String(auth.message))
+        return fail(req, res, auth.status, auth.code, auth.message, auth.details)
+      }
     }
     if (req.method === 'GET' && url.pathname === '/api/wp/healthz') return handleHealthz(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)

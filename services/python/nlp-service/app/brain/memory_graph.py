@@ -30,7 +30,6 @@ import os
 import re
 import time
 from dataclasses import dataclass, field
-from typing import Any, Iterable, Optional
 
 from app.brain import pg
 
@@ -106,7 +105,7 @@ def normalize(name: str) -> str:
 
 
 def stable_id(tenant_id: str, name: str) -> str:
-    digest = hashlib.sha1(f"{tenant_id}::{normalize(name)}".encode("utf-8")).hexdigest()
+    digest = hashlib.sha1(f"{tenant_id}::{normalize(name)}".encode()).hexdigest()
     return digest[:32]
 
 
@@ -264,7 +263,7 @@ def _rel_of(fragment: str) -> str:
 class MemoryGraph:
     """记忆图谱：抽取 → 落图（PG 邻接表）→ 子图查询（递归 CTE）→ 上下文压缩。"""
 
-    def __init__(self, extractor: Optional[EntityExtractor] = None) -> None:
+    def __init__(self, extractor: EntityExtractor | None = None) -> None:
         self.extractor = extractor or EntityExtractor()
         self._memory_entities: dict[str, dict[str, Entity]] = {}
         self._memory_relations: dict[str, dict[str, Relation]] = {}
@@ -482,8 +481,8 @@ class MemoryGraph:
                 "storage": self.storage(),
             }
         ok, rows = pg.execute([(
-            "SELECT (SELECT COUNT(*) FROM memory_entity WHERE tenant_id = %s),"
-            "       (SELECT COUNT(*) FROM memory_relation WHERE tenant_id = %s)",
+            ("SELECT (SELECT COUNT(*) FROM memory_entity WHERE tenant_id = %s),"
+            "       (SELECT COUNT(*) FROM memory_relation WHERE tenant_id = %s)"),
             (tenant_id, tenant_id),
         )], fetch=True)
         if not ok or not rows:

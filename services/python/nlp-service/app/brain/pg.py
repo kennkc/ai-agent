@@ -13,7 +13,8 @@ from __future__ import annotations
 import logging
 import os
 import threading
-from typing import Any, Iterable, Optional
+from collections.abc import Iterable
+from typing import Any
 
 logger = logging.getLogger("nlp-service.brain.pg")
 
@@ -85,7 +86,7 @@ def ensure_schema(statements: Iterable[str]) -> bool:
             connection.close()
 
 
-def execute(statements: Iterable[str], fetch: bool = False) -> tuple[bool, Optional[list[tuple]]]:
+def execute(statements: Iterable[str], fetch: bool = False) -> tuple[bool, list[tuple] | None]:
     """执行一批语句（同一事务）。
 
     @param statements 形如 `[(sql, params), ...]`
@@ -99,7 +100,7 @@ def execute(statements: Iterable[str], fetch: bool = False) -> tuple[bool, Optio
         logger.warning("brain pg connect failed: %s", exc)
         return False, None
     try:
-        rows: Optional[list[tuple]] = None
+        rows: list[tuple] | None = None
         with connection.cursor() as cursor:
             for sql, params in statements:
                 cursor.execute(sql, params)

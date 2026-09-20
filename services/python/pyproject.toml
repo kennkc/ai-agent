@@ -1,0 +1,25 @@
+# Ruff 配置（2026-09-20 建立）：固定规则集，避免 CI 与本地因 ruff 版本差异得出不同结论。
+# CI 的 python-lint job 从 services/python 运行 `ruff check .`，会向上查找本文件。
+
+[tool.ruff]
+line-length = 120
+target-version = "py310"   # 兼容下限：本机 3.10、CI 3.12 都能跑
+extend-exclude = ["generated", ".venv"]
+
+[tool.ruff.lint]
+# 与代码现状对齐的规则集：E/W（pycodestyle）、F（pyflakes）、I（import 排序）、
+# UP（pyupgrade）、B（bugbear）、SIM（简化）、RUF、BLE（宽泛异常）、ISC（隐式字符串拼接）。
+# 刻意不启用 flake8-bandit(S)：子进程与网络调用集中在校验过的沙箱/HTTP 客户端，
+# 规则噪音会淹没有效信号。
+select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "BLE", "ISC"]
+ignore = [
+  # 中文项目：全角标点与中英混排注释是刻意的书写风格，不是缺陷。
+  "RUF001",  # ambiguous-unicode-character-string
+  "RUF002",  # ambiguous-unicode-character-docstring
+  "RUF003",  # ambiguous-unicode-character-comment
+  "E501",    # 行长由人工控制（注释中的表格/说明常需超长）
+]
+
+[tool.ruff.lint.per-file-ignores]
+# 测试允许宽泛捕获与隐式拼接（构造夹具时更直观）
+"tests/**" = ["BLE001", "S110"]

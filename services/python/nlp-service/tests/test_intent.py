@@ -1,4 +1,3 @@
-# -*- coding: utf-8 -*-
 """Phase 2 意图识别测试（R2-07 / R2-08）
 
 运行：
@@ -13,7 +12,7 @@ import sys
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from app.intent import CASCADE, CORE_SCENARIOS, EVAL_CORPUS, RuleIntentEngine, TRAIN_CORPUS
+from app.intent import CASCADE, CORE_SCENARIOS, EVAL_CORPUS, TRAIN_CORPUS, RuleIntentEngine
 from app.intent.l0_model import L0IntentClassifier
 
 
@@ -62,7 +61,7 @@ def test_l0_accuracy_on_holdout_corpus():
 def test_l0_core_scenario_accuracy():
     model = L0IntentClassifier()
     core_eval = {k: v for k, v in EVAL_CORPUS.items() if k in CORE_SCENARIOS}
-    accuracy, summary = model.accuracy(core_eval)
+    accuracy, _summary = model.accuracy(core_eval)
     assert len(core_eval) == 10, "核心场景应为 10 个"
     assert accuracy >= 85.0, f"核心 10 场景准确率 {accuracy}% 未达 85%"
 
@@ -133,7 +132,7 @@ if __name__ == "__main__":
         try:
             fn()
             print(f"  PASS {name}")
-        except AssertionError as exc:  # noqa: PERF203
+        except AssertionError as exc:
             failures += 1
             print(f"  FAIL {name}: {exc}")
     accuracy, summary = L0IntentClassifier().accuracy(EVAL_CORPUS)

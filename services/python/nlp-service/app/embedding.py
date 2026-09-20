@@ -1,5 +1,4 @@
 # DEBT-010: 嵌入默认走字符 n-gram 哈希后端（非 BGE-M3）— 触发点: 安装 sentence-transformers + BGE-M3 权重后切换
-# -*- coding: utf-8 -*-
 """嵌入服务（R3-03 躯体期）
 
 引擎链：BGE-M3（sentence-transformers，设计选型，1024 维）→ hash-ngram-768（确定性本地后端，768 维）
@@ -18,7 +17,6 @@ import re
 import time
 from dataclasses import dataclass
 from importlib.util import find_spec
-from typing import Optional
 
 logger = logging.getLogger("nlp.embedding")
 
@@ -126,9 +124,9 @@ class HashNgramEngine(EmbeddingEngine):
 class EmbeddingService:
     """引擎链调度：取第一个可用引擎（BGE-M3 优先，缺失时回落哈希后端并标记 degraded）"""
 
-    def __init__(self, engines: Optional[list[EmbeddingEngine]] = None) -> None:
+    def __init__(self, engines: list[EmbeddingEngine] | None = None) -> None:
         self.engines = engines if engines is not None else [BgeM3Engine(), HashNgramEngine()]
-        self.active: Optional[EmbeddingEngine] = next((e for e in self.engines if e.available()), None)
+        self.active: EmbeddingEngine | None = next((e for e in self.engines if e.available()), None)
         self._calls = 0
         self._texts = 0
         self._latencies: list[float] = []

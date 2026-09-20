@@ -20,13 +20,32 @@
 from __future__ import annotations
 
 import logging
+import os
 import threading
-from datetime import date, datetime, timedelta
-from typing import Any, Optional
+from datetime import date, datetime, timedelta, timezone
+from typing import Any
 
 from app.brain import pg
 
 logger = logging.getLogger("nlp-service.token_usage")
+
+# 用量按日聚合的时区口径（显式声明）。
+# 裸 `date.today()` 取进程本地时区：容器通常 UTC、开发机 +08:00，
+# 同一个物理时刻会被记到不同的 bucket_date，看板跨环境对不上账。
+# 需要按业务本地日切分时设置 TOKEN_USAGE_TIMEZONE（IANA 名，如 Asia/Shanghai）。
+USAGE_TZ_NAME = os.getenv("TOKEN_USAGE_TIMEZONE", "UTC")
+
+
+def _today() -> date:
+    """当日（按 USAGE_TZ_NAME 口径）；时区数据缺失时回落 UTC，不静默用本地时区。"""
+    if USAGE_TZ_NAME and USAGE_TZ_NAME.upper() != "UTC":
+        try:
+            from zoneinfo import ZoneInfo
+
+            return datetime.now(ZoneInfo(USAGE_TZ_NAME)).date()
+        except Exception as exc:  # noqa: BLE001 - tzdata 缺失或名称非法时回落 UTC 并告警
+            logger.warning("TOKEN_USAGE_TIMEZONE=%s 不可用（%s），回落 UTC", USAGE_TZ_NAME, exc)
+    return datetime.now(timezone.utc).date()
 
 # 用量表的持有者是本模块；`pg.ensure_schema()` 按**语句级**去重，
 # 因此多个模块各注册自己的 DDL 是安全的（2026-09-20 修的那个缺陷所支撑的能力）。
@@ -50,10 +69,10 @@ DDL: tuple[str, ...] = (
     """,
     # UPSERT 的唯一键。必须与 `_KEY_COLUMNS` 完全一致 —— 不一致时
     # `ON CONFLICT` 会找不到匹配的唯一索引而整条写入失败（且只在写入时才暴露）。
-    "CREATE UNIQUE INDEX IF NOT EXISTS uq_llm_token_usage_bucket "
-    "ON llm_token_usage (tenant_id, bucket_date, role, model, provider, token_source)",
-    "CREATE INDEX IF NOT EXISTS idx_llm_token_usage_tenant_date "
-    "ON llm_token_usage (tenant_id, bucket_date)",
+    ("CREATE UNIQUE INDEX IF NOT EXISTS uq_llm_token_usage_bucket "
+    "ON llm_token_usage (tenant_id, bucket_date, role, model, provider, token_source)"),
+    ("CREATE INDEX IF NOT EXISTS idx_llm_token_usage_tenant_date "
+    "ON llm_token_usage (tenant_id, bucket_date)"),
 )
 
 _KEY_COLUMNS: tuple[str, ...] = (
@@ -96,7 +115,7 @@ def record_usage(
     completion_tokens: int = 0,
     latency_ms: int = 0,
     ok: bool = True,
-    bucket_date: Optional[date] = None,
+    bucket_date: date | None = None,
 ) -> bool:
     """累加一次调用的用量。返回是否**落库成功**（False = 走了进程内降级）。
 
@@ -110,9 +129,8 @@ def record_usage(
             completion_tokens=completion_tokens, latency_ms=latency_ms, ok=ok,
             bucket_date=bucket_date,
         )
-        if ensure_ready():
-            if _upsert(row):
-                return True
+        if ensure_ready() and _upsert(row):
+            return True
         _accumulate_memory(row)
         return False
     except Exception as exc:  # noqa: BLE001 - 计量失败绝不冒泡
@@ -126,7 +144,7 @@ def usage_summary(tenant_id: str = "default", days: int = 7) -> dict[str, Any]:
     # 会被静默换成 7 天）—— 那会让"传了 0 想只看今天"变成"看了一周"。
     window = 7 if days is None else int(days)
     days = max(1, min(window, 90))
-    end = date.today()
+    end = _today()
     start = end - timedelta(days=days - 1)
     ensure_ready()
     sql = (
@@ -167,7 +185,7 @@ def _row(**kwargs: Any) -> dict[str, Any]:
     这个指标就废了；而分开数才能回答"这个模型是在用，还是在一直失败重试"。
     """
     ok = bool(kwargs.get("ok", True))
-    bucket: date = kwargs.get("bucket_date") or date.today()
+    bucket: date = kwargs.get("bucket_date") or _today()
     return {
         "tenant_id": str(kwargs.get("tenant_id") or "default"),
         "bucket_date": bucket,
