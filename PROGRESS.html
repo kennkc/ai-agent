@@ -116,10 +116,11 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 17:20 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 18:21 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#five-priority-optimization-closure-2026-09-20">Five-Priority Optimization Closure (2026-09-20)</a></li>
 <li><a href="#production-hardening-phase-6-pre-design-2026-09-20">Production Hardening &amp; Phase 6 Pre-design (2026-09-20)</a></li>
 <li><a href="#mc-01-collaboration-bus-hardening-2026-09-20">MC-01 Collaboration Bus Hardening (2026-09-20)</a></li>
 <li><a href="#frontend-tests-service-control-toolchain-baseline-2026-09-20">Frontend Tests / Service Control / Toolchain Baseline (2026-09-20)</a></li>
@@ -218,6 +219,31 @@
 <blockquote>
 <p>Last updated: 2026-09-20</p>
 </blockquote>
+<h2 id="five-priority-optimization-closure-2026-09-20">Five-Priority Optimization Closure (2026-09-20)<a class="headerlink" href="#five-priority-optimization-closure-2026-09-20" title="Permanent link">&para;</a></h2>
+<p>This pass executed the five recommended follow-ups:</p>
+<ul>
+<li><strong>Documentation truth</strong>: <code>doc-truth-check.py</code> now also guards technical debt, LLM status,
+  Prometheus/Playwright assets and stale commit references.</li>
+<li><strong>Production route</strong>: gateway-to-wp-bff routing is covered by a real Spring Boot integration
+  test using a local HTTP upstream and JWT tenant injection.</li>
+<li><strong>Observability</strong>: all Java services expose <code>/actuator/prometheus</code>; nlp-service and wp-bff
+  expose <code>/metrics</code>; Prometheus + Alertmanager and initial alert rules are in Compose.</li>
+<li><strong>Playwright E2E</strong>: Chromium smoke tests cover overview loading, dark/light switching,
+  service console navigation and model configuration navigation.</li>
+<li><strong>Red debt closure</strong>: DEBT-006 five-channel integration and DEBT-009 real NATS/Kafka link
+  tests are closed. DEBT-018 Alertmanager port conflict is also closed by moving the host
+  port to 19093.</li>
+</ul>
+<p>Verification:</p>
+<ul>
+<li>gateway-service: <strong>3/3 tests</strong>, including real route and Prometheus endpoint.</li>
+<li>sense-service: <strong>54/54 tests</strong>, including five-channel registry/degradation.</li>
+<li>session-manager: <strong>2/2 real NATS/Kafka integration tests</strong> with local containers.</li>
+<li>nlp-service: <strong>32/32 targeted tests</strong>, including <code>/metrics</code>.</li>
+<li>wp-bff: <strong>114/114 tests</strong>, including <code>/metrics</code>.</li>
+<li>Playwright: <strong>2/2 E2E tests</strong>.</li>
+<li><code>docker compose config</code>: valid.</li>
+</ul>
 <h2 id="production-hardening-phase-6-pre-design-2026-09-20">Production Hardening &amp; Phase 6 Pre-design (2026-09-20)<a class="headerlink" href="#production-hardening-phase-6-pre-design-2026-09-20" title="Permanent link">&para;</a></h2>
 <p>This pass closes the highest-risk production gaps without starting Phase 6 implementation:</p>
 <ul>
@@ -281,8 +307,8 @@ the fixed demo id <code>DOM-2048</code>.</p>
   selection, OverviewView, MiddlewareView, ModelsView and ServicesView. The first component run
   exposed and fixed a real <code>MiddlewareView</code> null-summary crash.</li>
 <li><strong>Frontend test archive</strong>: <code>docs/test-reports/frontend/2026-09-20/</code> contains the
-  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.20% lines /
-  74.94% branches; typecheck and production build pass. The report explicitly marks this as the MVP
+  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.19% lines /
+  74.02% branches; typecheck and production build pass. The report explicitly marks this as the MVP
   baseline, not a full-coverage claim.</li>
 <li><strong>Backend service control</strong>: wp-bff now exposes <code>/api/wp/services</code> plus controlled
   <code>/start</code> and <code>/stop</code> endpoints for the application-service catalog. Commands are fixed

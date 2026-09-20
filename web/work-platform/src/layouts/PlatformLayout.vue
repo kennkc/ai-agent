@@ -71,7 +71,7 @@
             <el-button text circle class="header-icon" @click="notificationVisible = true"><el-icon><Bell /></el-icon></el-button>
           </el-badge>
         </el-tooltip>
-        <el-tooltip content="浅色 / 深色"><el-button text circle class="header-icon" @click="store.toggleTheme"><el-icon><Moon v-if="!store.dark" /><Sunny v-else /></el-icon></el-button></el-tooltip>
+        <el-tooltip content="浅色 / 深色"><el-button text circle class="header-icon" data-testid="theme-toggle" @click="store.toggleTheme"><el-icon><Moon v-if="!store.dark" /><Sunny v-else /></el-icon></el-button></el-tooltip>
         <el-dropdown @command="handleUserCommand">
           <el-avatar :size="34" class="user-avatar">AI</el-avatar>
           <template #dropdown>

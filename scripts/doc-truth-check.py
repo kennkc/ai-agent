@@ -3,10 +3,9 @@
 
 只检查“可机器验证的事实”，不替代人工评审：
   * OpenAPI implemented / planned 路径数；
-  * 当前分支拓扑；
-  * R-MC01-05 / 生产路由 / 模型配置 fail-closed 是否登记；
+  * 当前分支拓扑、MC-01、生产路由、模型配置 fail-closed；
   * 前端 JUnit 用例数与覆盖率报告是否一致；
-  * 已废弃描述是否重新出现。
+  * DEBT-006/009 状态、Prometheus/Playwright 资产与废弃描述。
 """
 from __future__ import annotations
 
@@ -20,18 +19,21 @@ ROOT = Path(__file__).resolve().parents[1]
 OPENAPI = ROOT / "contracts" / "work-platform-bff-openapi.yaml"
 WP_BFF_SERVER = ROOT / "services" / "node" / "wp-bff" / "server.js"
 OVERVIEW = ROOT / "docs" / "项目进度总览.md"
+DEBT = ROOT / "docs" / "技术债台账.md"
+PROGRESS = ROOT / "PROGRESS.md"
 FRONTEND_REPORT = ROOT / "docs" / "test-reports" / "frontend" / "2026-09-20" / "frontend-functional-report.md"
 GENERATED_JUNIT = ROOT / "web" / "work-platform" / "test-results" / "junit.xml"
 GENERATED_COVERAGE = ROOT / "web" / "work-platform" / "coverage" / "coverage-summary.json"
 JUNIT = GENERATED_JUNIT if GENERATED_JUNIT.exists() else ROOT / "docs" / "test-reports" / "frontend" / "2026-09-20" / "junit.xml"
 COVERAGE = GENERATED_COVERAGE if GENERATED_COVERAGE.exists() else ROOT / "docs" / "test-reports" / "frontend" / "2026-09-20" / "coverage-summary.json"
 
-HTTP_METHODS = {"get", "post", "put", "patch", "delete", "options", "head"}
 FORBIDDEN = (
     "Phase 5 的改动（`tool-executor` 新服务 + 文档）**尚未提交**",
     "BFF 契约 30 个 planned 端点",
     "历史分支 `codex/main` / `workbuddy/main` 在本机已不存在",
     "R-MC01-05 仍是真实协作域 UI 后续项",
+    "真实 LLM 引擎未接入",
+    "92a46c1",
 )
 
 
@@ -47,7 +49,11 @@ def main() -> int:
     implemented = sorted(path for path in paths if status.get(path) == "implemented")
     planned = sorted(path for path in paths if status.get(path) == "planned")
     methods = contract_check.count_js_implemented_methods(str(WP_BFF_SERVER))
+
     overview = OVERVIEW.read_text(encoding="utf-8")
+    debt = DEBT.read_text(encoding="utf-8")
+    progress = PROGRESS.read_text(encoding="utf-8")
+    report = FRONTEND_REPORT.read_text(encoding="utf-8")
 
     required = {
         f"{len(implemented)} 个路径 / {methods} 个方法": "BFF 实现规模",
@@ -57,18 +63,40 @@ def main() -> int:
         "R-MC01-05 已闭合": "MC-01 收口状态",
         "WP_BFF_URI": "生产 wp-bff 路由变量",
         "MODEL_CONFIG_REQUIRE_PERSISTENCE": "模型配置生产 fail-closed 变量",
+        "DEBT-006": "五渠道测试债登记",
+        "DEBT-009": "消息链路测试债登记",
+        "Prometheus": "可观测性登记",
+        "Playwright": "E2E 登记",
     }
     for needle, label in required.items():
         if needle not in overview:
             failures.append(f"{label} 缺失：{needle}")
+
     for stale in FORBIDDEN:
-        if stale in overview:
-            failures.append(f"进度总览出现废弃表述：{stale}")
+        if stale in overview or stale in progress or stale in report:
+            failures.append(f"进度文档出现废弃表述：{stale}")
+
+    if "31 个 planned 端点" in debt:
+        failures.append("技术债台账仍写 31 个 planned 端点")
+    if "DEBT-006 / DEBT-009，两者状态标" in debt:
+        failures.append("技术债台账仍把 DEBT-006/009 标为待验")
+    for needle in ("DEBT-006", "DEBT-009", "✅ **已闭合（2026-09-20）**"):
+        if needle not in debt:
+            failures.append(f"技术债台账缺少关闭证据：{needle}")
+
+    required_paths = (
+        ROOT / "infra" / "prometheus" / "prometheus.yml",
+        ROOT / "infra" / "prometheus" / "alerts.yml",
+        ROOT / "web" / "work-platform" / "playwright.config.ts",
+        ROOT / "web" / "work-platform" / "e2e" / "platform-smoke.spec.ts",
+    )
+    for path in required_paths:
+        if not path.exists():
+            failures.append(f"缺少文件：{path.relative_to(ROOT)}")
 
     root = ET.parse(JUNIT).getroot()
     tests = int(root.attrib.get("tests", "0"))
     failures_count = int(root.attrib.get("failures", "0"))
-    report = FRONTEND_REPORT.read_text(encoding="utf-8")
     if tests <= 0 or failures_count != 0:
         failures.append(f"前端 JUnit 异常：tests={tests}, failures={failures_count}")
     if f"{tests} passed / 0 failed" not in report:

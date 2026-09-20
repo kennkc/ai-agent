@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 17:24 · 源文件 部署与环境版本基线.md</span>
+  <span class="meta">生成于 2026-09-20 18:21 · 源文件 部署与环境版本基线.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -134,6 +134,7 @@
 <li><a href="#8">8. 后台服务监控与本地受控启停</a></li>
 <li><a href="#9-bff">9. 生产反向代理与 BFF 路由</a></li>
 <li><a href="#10-fail-closed">10. 模型配置生产 fail-closed</a></li>
+<li><a href="#11-prometheus">11. Prometheus 与告警</a></li>
 </ul>
 </div>
 </nav>
@@ -258,6 +259,14 @@
 <td>0.16.8</td>
 </tr>
 <tr>
+<td>Playwright</td>
+<td>^1.63.0</td>
+</tr>
+<tr>
+<td>prometheus-client</td>
+<td>&gt;=0.20.0</td>
+</tr>
+<tr>
 <td>nats-py</td>
 <td>&gt;=2.9.0</td>
 </tr>
@@ -303,6 +312,14 @@
 <tr>
 <td>Kafka</td>
 <td><code>apache/kafka:3.7.0</code></td>
+</tr>
+<tr>
+<td>Prometheus</td>
+<td><code>prom/prometheus:v2.53.2</code></td>
+</tr>
+<tr>
+<td>Alertmanager</td>
+<td><code>prom/alertmanager:v0.27.0</code></td>
 </tr>
 </tbody>
 </table>
@@ -441,7 +458,46 @@ curl -fsS http://127.0.0.1/api/wp/healthz
 <li>不得写入进程内存储后返回成功；</li>
 <li>本地密钥文件自动生成能力必须关闭；</li>
 <li><code>status()</code> 返回 <code>persistence_required</code>、<code>key_available</code> 与 <code>key_source</code>，供观测页和告警判定。</li>
-</ul></main>
+</ul>
+<h2 id="11-prometheus">11. Prometheus 与告警<a class="headerlink" href="#11-prometheus" title="Permanent link">&para;</a></h2>
+<p>基础设施：</p>
+<pre><code class="language-bash">docker compose up -d prometheus alertmanager
+</code></pre>
+<p>访问：</p>
+<ul>
+<li>Prometheus: <code>http://127.0.0.1:9090</code></li>
+<li>Alertmanager: <code>http://127.0.0.1:19093</code></li>
+</ul>
+<p>抓取端点：</p>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>路径</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Java 服务</td>
+<td><code>/actuator/prometheus</code></td>
+</tr>
+<tr>
+<td>nlp-service</td>
+<td><code>/metrics</code></td>
+</tr>
+<tr>
+<td>wp-bff</td>
+<td><code>/metrics</code></td>
+</tr>
+</tbody>
+</table>
+<p>告警规则位于 <code>infra/prometheus/alerts.yml</code>，当前包含：</p>
+<ul>
+<li><code>LifeformTargetDown</code></li>
+<li><code>LifeformHighHttpP99</code></li>
+<li><code>LifeformHighJvmMemory</code></li>
+</ul>
+<p><code>alertmanager.yml</code> 默认 receiver 不发送外部通知；生产部署必须替换为组织邮件、企业微信、Slack 或其他 webhook。</p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

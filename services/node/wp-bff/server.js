@@ -2005,6 +2005,28 @@ function createServer(options = {}) {
     })
   }
 
+  function handleMetrics(req, res) {
+    const memory = process.memoryUsage()
+    const lines = [
+      '# HELP lifeform_wp_bff_up Process liveness for the work-platform BFF.',
+      '# TYPE lifeform_wp_bff_up gauge',
+      'lifeform_wp_bff_up 1',
+      '# HELP lifeform_wp_bff_uptime_seconds Process uptime in seconds.',
+      '# TYPE lifeform_wp_bff_uptime_seconds gauge',
+      `lifeform_wp_bff_uptime_seconds ${process.uptime().toFixed(3)}`,
+      '# HELP lifeform_wp_bff_resident_memory_bytes Resident memory size in bytes.',
+      '# TYPE lifeform_wp_bff_resident_memory_bytes gauge',
+      `lifeform_wp_bff_resident_memory_bytes ${memory.rss}`,
+      '# HELP lifeform_wp_bff_heap_used_bytes V8 heap used bytes.',
+      '# TYPE lifeform_wp_bff_heap_used_bytes gauge',
+      `lifeform_wp_bff_heap_used_bytes ${memory.heapUsed}`,
+      '',
+    ].join('\n')
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'text/plain; version=0.0.4; charset=utf-8')
+    res.end(lines)
+  }
+
   function handleHealthz(req, res) {
     send(req, res, 200, {
       data: {
@@ -2043,6 +2065,7 @@ function createServer(options = {}) {
       }
     }
     if (req.method === 'GET' && url.pathname === '/api/wp/healthz') return handleHealthz(req, res)
+    if (req.method === 'GET' && url.pathname === '/metrics') return handleMetrics(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/services') return handleAppServices(req, res)

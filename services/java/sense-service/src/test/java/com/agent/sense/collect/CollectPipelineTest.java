@@ -161,6 +161,37 @@ class CollectPipelineTest {
     }
 
     @Test
+    void allFiveChannelsAreRegisteredAndDegradeAcrossRegistry() {
+        ScriptedChannel visual = new ScriptedChannel(SenseChannel.ChannelType.VISUAL, 0, "视觉内容");
+        ScriptedChannel audio = new ScriptedChannel(SenseChannel.ChannelType.AUDIO, 0, "听觉内容");
+        ScriptedChannel nose = new ScriptedChannel(SenseChannel.ChannelType.NOSE, 0, "嗅觉内容");
+        ScriptedChannel taste = new ScriptedChannel(SenseChannel.ChannelType.TASTE, 0, "味觉内容");
+        ScriptedChannel touch = new ScriptedChannel(SenseChannel.ChannelType.TOUCH, 0,
+                "五渠道协同降级后由触觉渠道返回的正文内容，长度满足质检门槛要求。");
+        visual.setAvailable(false);
+        audio.setAvailable(false);
+        nose.setAvailable(false);
+        taste.setAvailable(false);
+
+        List<SenseChannel> channels = List.of(visual, audio, touch, nose, taste);
+        ChannelRegistry registry = new ChannelRegistry(channels);
+        assertEquals(5, registry.size(), "五个感官渠道必须全部注册");
+        assertEquals(5, registry.healthSnapshot().size(), "健康快照必须覆盖五个渠道");
+        assertEquals(1, registry.available().size(), "仅触觉渠道保持可用");
+        assertEquals(SenseChannel.ChannelType.TOUCH, registry.available().get(0).type());
+
+        CollectPipeline pipeline = pipeline(channels);
+        CollectedData data = pipeline.collect(SenseChannel.ChannelType.VISUAL, request());
+        assertTrue(data.isDegraded());
+        assertEquals("TOUCH", data.getSourceChannel());
+        assertEquals(CollectedData.StagingStatus.ACCEPTED, data.getStagingStatus());
+        assertEquals(0, visual.calls());
+        assertEquals(0, audio.calls());
+        assertEquals(0, nose.calls());
+        assertEquals(0, taste.calls());
+    }
+
+    @Test
     void noAvailableChannelFailsFastAndRegistersDeadLetter() {
         ScriptedChannel visual = new ScriptedChannel(SenseChannel.ChannelType.VISUAL, 0, "");
         visual.setAvailable(false);

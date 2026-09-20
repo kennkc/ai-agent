@@ -106,6 +106,15 @@ test('健康自检端点不泄露控制令牌明文', async () => {
     assert.deepEqual(res.json.data.control.allowed_origins, [ALLOWED_ORIGIN])
   })
 })
+test('GET /metrics exposes Prometheus text metrics', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/metrics' })
+    assert.equal(res.status, 200)
+    assert.match(res.body, /lifeform_wp_bff_up 1/)
+    assert.match(res.body, /lifeform_wp_bff_uptime_seconds/)
+    assert.match(res.body, /lifeform_wp_bff_resident_memory_bytes/)
+  })
+})
 
 test('控制端点缺少令牌 -> 401，且不触发任何进程', async () => {
   await withServer(async ({ server, spawnCalls }) => {

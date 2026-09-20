@@ -85,6 +85,32 @@ jobs:
           PG_PASSWORD: agent123
           NATS_URL: nats://127.0.0.1:4222
         run: mvn -B -ntp -pl collab-bus -am test
+      - name: 启动 Kafka 集成 Broker
+        run: |
+          docker run --rm -d --name kafka-integration \
+            -p 9092:9092 \
+            -e KAFKA_NODE_ID=1 \
+            -e KAFKA_PROCESS_ROLES=broker,controller \
+            -e KAFKA_LISTENERS=PLAINTEXT://:9092,CONTROLLER://:9093 \
+            -e KAFKA_ADVERTISED_LISTENERS=PLAINTEXT://127.0.0.1:9092 \
+            -e KAFKA_CONTROLLER_LISTENER_NAMES=CONTROLLER \
+            -e KAFKA_LISTENER_SECURITY_PROTOCOL_MAP=CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT \
+            -e KAFKA_CONTROLLER_QUORUM_VOTERS=1@localhost:9093 \
+            -e KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR=1 \
+            -e KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR=1 \
+            -e KAFKA_TRANSACTION_STATE_LOG_MIN_ISR=1 \
+            -e KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS=0 \
+            apache/kafka:3.7.0
+      - name: 等待 Kafka 健康
+        run: |
+          timeout 60 bash -c 'until (echo > /dev/tcp/127.0.0.1/9092) >/dev/null 2>&1; do sleep 1; done'
+      - name: session/sense 真实消息链路与五渠道集成
+        working-directory: services/java
+        env:
+          SESSION_BUS_IT: 'true'
+          NATS_URL: nats://127.0.0.1:4222
+          KAFKA_BOOTSTRAP: 127.0.0.1:9092
+        run: mvn -B -ntp -pl session-manager,sense-service -am test
   python-check:
     name: Python / ruff + pytest
     runs-on: ubuntu-latest
@@ -138,6 +164,12 @@ jobs:
       - name: 前端功能测试与覆盖率报告
         working-directory: web/work-platform
         run: npm run test:report
+      - name: 安装 Playwright Chromium
+        working-directory: web/work-platform
+        run: npx playwright install --with-deps chromium
+      - name: 前端 E2E 冒烟
+        working-directory: web/work-platform
+        run: npm run test:e2e
       - name: 文档真相源校验（使用当前测试生成物）
         run: python scripts/doc-truth-check.py
       - name: 上传前端测试报告
@@ -148,6 +180,7 @@ jobs:
           path: |
             web/work-platform/test-results/junit.xml
             web/work-platform/coverage/coverage-summary.json
+            web/work-platform/playwright-report/
   contract-check:
     name: 契约 / contract + timeout + proto
     runs-on: ubuntu-latest

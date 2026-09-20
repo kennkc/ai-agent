@@ -499,6 +499,7 @@ export const dataProvider = {
 
 
   async getServices(): Promise<ManagedServiceOverview> {
+    if (source === 'mock') return mockServicesFallback()
     try {
       const payload = unwrapBody(await api.get('/services'))
       if (payload && typeof payload === 'object' && 'enabled' in payload) {

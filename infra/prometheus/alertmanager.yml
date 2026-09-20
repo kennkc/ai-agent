@@ -1,0 +1,10 @@
+route:
+  receiver: default
+  group_by: [alertname, job, instance]
+  group_wait: 10s
+  group_interval: 5m
+  repeat_interval: 2h
+
+receivers:
+  - name: default
+    # 生产环境必须在部署时替换为邮件、企业微信、Slack 或其他 webhook receiver。

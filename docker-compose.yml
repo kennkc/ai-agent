@@ -119,6 +119,33 @@ services:
     volumes:
       - kafka-data:/tmp/kraft-combined-logs
 
+  prometheus:
+    image: prom/prometheus:v2.53.2
+    container_name: lifeform-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./infra/prometheus/alerts.yml:/etc/prometheus/alerts.yml:ro
+      - prometheus-data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+      - --web.enable-lifecycle
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    depends_on:
+      - alertmanager
+
+  alertmanager:
+    image: prom/alertmanager:v0.27.0
+    container_name: lifeform-alertmanager
+    ports:
+      - "19093:9093"
+    volumes:
+      - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
+      - alertmanager-data:/alertmanager
+
 volumes:
   nats-data:
   redis-data:
@@ -126,3 +153,5 @@ volumes:
   qdrant-data:
   minio-data:
   kafka-data:
+  prometheus-data:
+  alertmanager-data:

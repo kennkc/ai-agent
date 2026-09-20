@@ -60,3 +60,9 @@ docker compose down -v
 - WebSocket Upgrade 头已保留，供后续协作/消息流使用。
 
 详见 `infra/nginx/README.md`。
+
+## Prometheus / Alertmanager
+
+- 配置：`infra/prometheus/prometheus.yml`、`alerts.yml`、`alertmanager.yml`。
+- 说明：`infra/prometheus/README.md`。
+- 启动：`docker compose up -d prometheus alertmanager`。

@@ -1,0 +1,218 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>五项优化闭环（2026-09-20）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 18:23 · 源文件 2026-09-20-五项优化闭环.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 文档真相源扩展</a></li>
+<li><a href="#2">2. 生产路由实测</a></li>
+<li><a href="#3-prometheus">3. Prometheus 与告警</a></li>
+<li><a href="#4-playwright-e2e">4. Playwright E2E</a></li>
+<li><a href="#5">5. 红色技术债关闭</a><ul>
+<li><a href="#debt-006">DEBT-006</a></li>
+<li><a href="#debt-009">DEBT-009</a></li>
+</ul>
+</li>
+<li><a href="#6">6. 复现命令</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="2026-09-20">五项优化闭环（2026-09-20）<a class="headerlink" href="#2026-09-20" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>范围</strong>：文档真相源、生产路由实测、Prometheus/告警、Playwright E2E、DEBT-006/009
+<strong>结论</strong>：五项优化均完成；未启动 Phase 6 业务开发。</p>
+</blockquote>
+<h2 id="1">1. 文档真相源扩展<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p><code>scripts/doc-truth-check.py</code> 新增检查：</p>
+<ul>
+<li>OpenAPI implemented / planned 与实际契约一致；</li>
+<li><code>DEBT-006</code> / <code>DEBT-009</code> 关闭证据；</li>
+<li>“真实 LLM 引擎未接入”“31 个 planned”“92a46c1”等废弃口径；</li>
+<li>Prometheus、Alertmanager、Playwright 资产存在。</li>
+</ul>
+<h2 id="2">2. 生产路由实测<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<ul>
+<li>gateway-service 路由：<code>/api/wp/** -&gt; WP_BFF_URI</code>。</li>
+<li>新增 <code>WpBffRouteIntegrationTest</code>：</li>
+<li>启动本地 HTTP 假 wp-bff；</li>
+<li>通过真实 Spring Cloud Gateway 转发；</li>
+<li>验证 JWT tenant 注入到 <code>X-Tenant-Id</code>；</li>
+<li>验证 <code>/actuator/prometheus</code> 返回 JVM 指标。</li>
+<li>结果：<strong>3/3 passed</strong>。</li>
+</ul>
+<h2 id="3-prometheus">3. Prometheus 与告警<a class="headerlink" href="#3-prometheus" title="Permanent link">&para;</a></h2>
+<ul>
+<li>所有 Java 服务加入 <code>micrometer-registry-prometheus</code>，暴露 <code>/actuator/prometheus</code>。</li>
+<li>nlp-service 增加 <code>prometheus-client</code> 与 <code>/metrics</code>。</li>
+<li>wp-bff 增加 <code>/metrics</code>。</li>
+<li><code>infra/prometheus/</code> 新增抓取配置、告警规则与 Alertmanager 配置。</li>
+<li>Compose 新增 Prometheus / Alertmanager。</li>
+<li>Alertmanager 宿主机端口使用 <strong>19093</strong>，避免与 sense-service gRPC 9093 冲突。</li>
+<li><code>docker compose config --quiet</code> 通过。</li>
+<li>容器实测：Prometheus <code>/-/ready</code> = Ready，Alertmanager <code>/-/ready</code> = OK，3 条规则已加载。</li>
+</ul>
+<h2 id="4-playwright-e2e">4. Playwright E2E<a class="headerlink" href="#4-playwright-e2e" title="Permanent link">&para;</a></h2>
+<ul>
+<li>新增 <code>@playwright/test</code>、Chromium 运行时、<code>playwright.config.ts</code> 和 2 条冒烟用例。</li>
+<li><code>.env.test</code> 固定 Mock 数据源，E2E 不依赖后端。</li>
+<li>发现并修复 <code>getServices()</code> 在 Mock 模式下仍请求 BFF 的缺口。</li>
+<li>结果：<strong>2/2 passed</strong>。</li>
+</ul>
+<h2 id="5">5. 红色技术债关闭<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<h3 id="debt-006">DEBT-006<a class="headerlink" href="#debt-006" title="Permanent link">&para;</a></h3>
+<p>新增五渠道测试：</p>
+<ul>
+<li>五渠道全部注册；</li>
+<li>健康快照覆盖五渠道；</li>
+<li>四渠道不可用时降级到 TOUCH；</li>
+<li>不可用渠道不得被调用。</li>
+</ul>
+<p>结果：sense-service <strong>54/54 passed</strong>。</p>
+<h3 id="debt-009">DEBT-009<a class="headerlink" href="#debt-009" title="Permanent link">&para;</a></h3>
+<p>新增真实链路测试：</p>
+<ul>
+<li>NATS 请求/回应经 <code>BusProxy</code>；</li>
+<li>Kafka 发布/消费真实 broker；</li>
+<li>CI 增加 Kafka 服务与 <code>SESSION_BUS_IT=true</code>。</li>
+</ul>
+<p>本地真实容器结果：<strong>2/2 passed</strong>。</p>
+<p>wp-bff 全量回归：<strong>114/114 passed</strong>（新增 <code>/metrics</code> 用例）。</p>
+<h2 id="6">6. 复现命令<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># gateway 生产路由与 Prometheus
+cd services/java
+mvn -B -ntp -pl gateway-service -am test
+
+# 五渠道
+mvn -B -ntp -pl sense-service -am test
+
+# NATS/Kafka
+SESSION_BUS_IT=true NATS_URL=nats://127.0.0.1:4222 KAFKA_BOOTSTRAP=127.0.0.1:9092 \
+  mvn -B -ntp -f session-manager/pom.xml -Dtest=SessionBusLinkTest test
+
+# 前端
+cd web/work-platform
+npm run test:report
+npm run typecheck
+npm run build
+npm run test:e2e
+</code></pre></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

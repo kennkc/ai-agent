@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 16:25 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-20 18:21 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -231,10 +231,10 @@
 <tr>
 <td><strong>DEBT-006</strong></td>
 <td>sense-service（测试缺口）</td>
-<td>仅单渠道单测</td>
+<td>~~仅单渠道单测~~ → <strong>已补五渠道注册/健康/降级测试</strong></td>
 <td>五渠道集成测试</td>
 <td>P2</td>
-<td>🔴</td>
+<td>✅ <strong>已闭合（2026-09-20）</strong></td>
 </tr>
 <tr>
 <td><strong>DEBT-007</strong></td>
@@ -247,10 +247,10 @@
 <tr>
 <td><strong>DEBT-009</strong></td>
 <td>session-manager（测试缺口）</td>
-<td>仅总线代理单测</td>
+<td>~~仅总线代理单测~~ → <strong>已补真实 NATS 请求/回应与 Kafka 发布/消费测试</strong></td>
 <td>消息链路（NATS/Kafka）测试</td>
 <td>P2</td>
-<td>🔴</td>
+<td>✅ <strong>已闭合（2026-09-20）</strong></td>
 </tr>
 <tr>
 <td><strong>DEBT-010</strong></td>
@@ -295,10 +295,10 @@
 <tr>
 <td><strong>DEBT-015</strong></td>
 <td>nlp-service（LLM 生成）</td>
-<td>未接入真实 LLM 引擎，走<strong>确定性模板后端</strong>（<code>generator=template</code>）</td>
+<td>~~未接入真实 LLM 引擎~~ → <strong>OpenAI 兼容 API 路径已由 WB-10 <code>llm_model_config</code> 接通</strong>；本地推理不在当前部署方案</td>
 <td>OpenAI 兼容 / 本地推理引擎</td>
 <td>接入模型权重或 API Key</td>
-<td>🟡</td>
+<td>✅ <strong>API 路径已闭合（2026-09-20）</strong></td>
 </tr>
 <tr>
 <td><strong>DEBT-016</strong></td>
@@ -319,10 +319,10 @@
 <tr>
 <td><strong>DEBT-018</strong></td>
 <td>gRPC Health 端口分配（跨服务）</td>
-<td>原规划的 9091-9094 与基础设施端口区间重叠：<strong>session-manager 9092 ↔ Kafka 9092</strong>（已修，外移 <strong>19092</strong>）；<strong>sense-service 9093 ↔ Alertmanager 9093</strong>（P7 未部署，待处理）</td>
+<td>session-manager 已外移 19092；Alertmanager 宿主机端口已外移 <strong>19093</strong>，不再与 sense-service 9093 冲突</td>
 <td>端口块与《服务注册表》§2 基础设施不重叠</td>
 <td>Alertmanager（P7）部署前</td>
-<td>🟡</td>
+<td>✅ <strong>已闭合（2026-09-20）</strong></td>
 </tr>
 <tr>
 <td><strong>DEBT-019</strong></td>
@@ -343,7 +343,7 @@
 <tr>
 <td><strong>DEBT-021</strong></td>
 <td>tool-executor（执行指标）</td>
-<td>指标为<strong>进程内滑动窗口</strong>（最近 500 次），<strong>未接 Prometheus</strong>，仅对视图/报表供数</td>
+<td>工具专属指标仍为<strong>进程内滑动窗口</strong>（最近 500 次）；服务已接入通用 <code>/actuator/prometheus</code>，但工具指标尚未迁到 Micrometer</td>
 <td>接入 Micrometer / Prometheus 暴露 <code>/actuator/prometheus</code></td>
 <td>需要跨实例聚合或告警时</td>
 <td>🟡</td>
@@ -441,7 +441,7 @@
 <li><strong>触发点</strong>：P2（NATS 接入）</li>
 <li><strong>状态</strong>：🔴 未闭合（触发点已到）</li>
 <li><strong>证据</strong>：<code>services/java/session-manager/src/test/java/com/agent/session/</code> 下无 NATS/Kafka 用例。</li>
-<li>备注：同 DEBT-006，《G1-验证追踪视图》中 C09 数据总线代理的验收方法即本项，状态标 🟡 待验。</li>
+<li>备注：同 DEBT-006，《G1-验证追踪视图》中 C09 数据总线代理验证已于 2026-09-20 执行。</li>
 </ul>
 <h3 id="debt-010-n-gram-bge-m3">DEBT-010 · 嵌入走字符 n-gram 哈希后端（非 BGE-M3）<a class="headerlink" href="#debt-010-n-gram-bge-m3" title="Permanent link">&para;</a></h3>
 <ul>
@@ -516,8 +516,8 @@
 <h3 id="debt-021-prometheus2026-09-19-phase-5">DEBT-021 · 工具执行指标未接 Prometheus（2026-09-19 Phase 5 新开）<a class="headerlink" href="#debt-021-prometheus2026-09-19-phase-5" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>简化实现</strong>：<code>ToolMetrics</code> 用 <code>ConcurrentLinkedDeque</code> 保留最近 <strong>500</strong> 次调用样本，
-  给出 <code>success_rate / p50 / p95 / p99 / blocked_calls / calls_by_tool</code>。<strong>纯进程内</strong>，
-  不暴露 <code>/actuator/prometheus</code>，不跨实例聚合。</li>
+  给出 <code>success_rate / p50 / p95 / p99 / blocked_calls / calls_by_tool</code>。工具专属指标仍为<strong>纯进程内</strong>；
+  tool-executor 已暴露通用 <code>/actuator/prometheus</code>，但该工具指标尚未迁到 Micrometer。</li>
 <li><strong>正式目标</strong>：接入 Micrometer + Prometheus（跨实例聚合、可告警）。</li>
 <li><strong>触发点</strong>：需要跨实例聚合指标或据此配置告警时。</li>
 <li><strong>状态</strong>：🟡 未闭合（触发点未到）。<strong>不影响</strong> DoD「工具成功率 ≥ 90%」「执行 P99 &lt; 2s」的量化验收
@@ -547,7 +547,7 @@
 <td><code>available()=false</code> / <code>healthy()=false</code>，自动标记 DOWN 并隔离</td>
 </tr>
 <tr>
-<td>wp-bff 契约 31 个 planned 端点</td>
+<td>wp-bff 契约 27 个 planned 端点</td>
 <td>分期实现</td>
 <td>契约标 <code>x-wp-status: planned</code>；<code>/overview</code> 用 <code>gaps</code> 列出 15 个未覆盖域，前端标注 Mock</td>
 </tr>
@@ -620,7 +620,7 @@
 <strong>处置</strong>：保留空号不回收，避免与历史文档冲突；后续新债从 <code>DEBT-010</code> 起编。</p>
 <h3 id="45">4.5 验收口径待对齐<a class="headerlink" href="#45" title="Permanent link">&para;</a></h3>
 <p>《G1-验证追踪视图》中 <strong>C09 数据总线代理</strong>、<strong>C16 感官渠道管理器</strong> 的验收方法正是
-DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2 报告已宣告验收通过。
+DEBT-009 / DEBT-006 已于 2026-09-20 补齐真实链路与五渠道测试，待验状态解除。
 <strong>处置</strong>：属"诚实留痕"的正常结果，但建议在 <code>项目进度总览.md</code> 中把这两项<strong>显式登记为验收留有余项</strong>，
 避免"阶段已验收"被读成"所有验证方法都已跑过"。</p>
 <h3 id="46-2026-09-18">4.6 设计选型 ↔ 实现口径差异（2026-09-18 审核新登记）<a class="headerlink" href="#46-2026-09-18" title="Permanent link">&para;</a></h3>
@@ -971,8 +971,8 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <tr>
 <td>LLM 接入（R4-03）</td>
 <td>LiteLLM / 自研 Gateway</td>
-<td><strong>自研 <code>LlmGateway</code></strong>（L1/L2/L3 路由 + 超时重试 + 统计），引擎默认模板降级</td>
-<td>见 DEBT-015</td>
+<td><strong>自研 <code>LlmGateway</code></strong>（L1/L2/L3 路由 + 超时重试 + 统计）；WB-10 外部 OpenAI 兼容 API 已接通，模板仅作降级</td>
+<td>API 路径已闭合，见 DEBT-015</td>
 </tr>
 <tr>
 <td>语义缓存（R4-04）</td>
@@ -1133,8 +1133,8 @@ DEBT-009 / DEBT-006，两者状态标 <strong>🟡 待验</strong>；而 Phase 2
 <td>起 jar <strong>不带任何 <code>GRPC_PORT</code> 覆盖</strong>：<code>Started SessionManagerApplication in 6.482s</code>，<code>netstat</code> 显示 19092 归 session-manager、9092 仍为 Kafka；<code>/actuator/health</code> = <code>UP</code></td>
 </tr>
 <tr>
-<td>遗留</td>
-<td><strong>sense-service 9093 ↔ Alertmanager（P7）9093</strong> 潜在冲突未处理（Alertmanager 未部署）；待 P7 落地前重新分配</td>
+<td>处置补充</td>
+<td><strong>Alertmanager 宿主机端口已改为 19093</strong>，sense-service 保持 9093；冲突关闭（2026-09-20）</td>
 </tr>
 </tbody>
 </table>
@@ -1269,7 +1269,7 @@ GAP-01 / GAP-05 余量比改善但仍未达标（0.91x / 0.80x），
 <li><strong>追踪</strong>：每里程碑（M1/M2/M3）审查一次，更新状态</li>
 <li><strong>关闭</strong>：替换完成且契约测试通过 → 销项（在本文件标注 ✅ 并写明关闭依据与日期）</li>
 <li><strong>红线</strong>：<strong>触发点到达后 2 个迭代内必须替换</strong>，否则升级为风险项（阻断里程碑演示）</li>
-<li><strong>红线现状</strong>：DEBT-006 与 DEBT-009 触发点已到（P2）且尚未闭合，按红线<strong>应升级为风险项</strong>（见 §6-3）</li>
+<li><strong>红线现状</strong>：DEBT-006 与 DEBT-009 已于 2026-09-20 关闭，当前无“触发点已到但未闭合”的红色债务。</li>
 </ul>
 <hr />
 <h2 id="_5">六、待办<a class="headerlink" href="#_5" title="Permanent link">&para;</a></h2>
@@ -1297,9 +1297,9 @@ GAP-01 / GAP-05 余量比改善但仍未达标（0.91x / 0.80x），
 </tr>
 <tr>
 <td>3</td>
-<td>DEBT-006 / DEBT-009 触发点已到</td>
-<td>在其被替换前，按红线升级为风险项并写入总览</td>
-<td>项目侧</td>
+<td>~~DEBT-006 / DEBT-009 触发点已到~~</td>
+<td>✅ 2026-09-20 已补五渠道、NATS/Kafka 真实链路测试并关闭</td>
+<td>已完成</td>
 </tr>
 <tr>
 <td>4</td>
@@ -1411,9 +1411,9 @@ GAP-01 / GAP-05 余量比改善但仍未达标（0.91x / 0.80x），
 </tr>
 <tr>
 <td>22</td>
-<td><strong>sense-service 9093 ↔ Alertmanager（P7）9093 潜在冲突</strong>（DEBT-018，§4.17）：session-manager 已外移 19092 解决问题，但 sense-service 与规划中的 Alertmanager 仍重叠</td>
-<td>Alertmanager 落地前重新分配（建议把整套 gRPC Health 端口块迁出 90xx 基础设施区间，如统一到 1909x）；并给 <code>healthcheck.sh</code> 加"端口归属断言"，避免再出现"探错对象恒判 OK"</td>
-<td>P7 前</td>
+<td>~~sense-service 9093 ↔ Alertmanager（P7）9093 潜在冲突~~（DEBT-018，§4.17）</td>
+<td>✅ 2026-09-20 已将 Alertmanager 宿主机端口改为 19093；冲突关闭</td>
+<td>已完成</td>
 </tr>
 </tbody>
 </table>

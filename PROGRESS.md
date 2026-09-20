@@ -2,6 +2,31 @@
 
 > Last updated: 2026-09-20
 
+## Five-Priority Optimization Closure (2026-09-20)
+
+This pass executed the five recommended follow-ups:
+
+- **Documentation truth**: `doc-truth-check.py` now also guards technical debt, LLM status,
+  Prometheus/Playwright assets and stale commit references.
+- **Production route**: gateway-to-wp-bff routing is covered by a real Spring Boot integration
+  test using a local HTTP upstream and JWT tenant injection.
+- **Observability**: all Java services expose `/actuator/prometheus`; nlp-service and wp-bff
+  expose `/metrics`; Prometheus + Alertmanager and initial alert rules are in Compose.
+- **Playwright E2E**: Chromium smoke tests cover overview loading, dark/light switching,
+  service console navigation and model configuration navigation.
+- **Red debt closure**: DEBT-006 five-channel integration and DEBT-009 real NATS/Kafka link
+  tests are closed. DEBT-018 Alertmanager port conflict is also closed by moving the host
+  port to 19093.
+
+Verification:
+
+- gateway-service: **3/3 tests**, including real route and Prometheus endpoint.
+- sense-service: **54/54 tests**, including five-channel registry/degradation.
+- session-manager: **2/2 real NATS/Kafka integration tests** with local containers.
+- nlp-service: **32/32 targeted tests**, including `/metrics`.
+- wp-bff: **114/114 tests**, including `/metrics`.
+- Playwright: **2/2 E2E tests**.
+- `docker compose config`: valid.
 ## Production Hardening & Phase 6 Pre-design (2026-09-20)
 
 This pass closes the highest-risk production gaps without starting Phase 6 implementation:
@@ -67,8 +92,8 @@ This pass added the operational and verification layer requested in the latest r
   selection, OverviewView, MiddlewareView, ModelsView and ServicesView. The first component run
   exposed and fixed a real `MiddlewareView` null-summary crash.
 - **Frontend test archive**: `docs/test-reports/frontend/2026-09-20/` contains the
-  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.20% lines /
-  74.94% branches; typecheck and production build pass. The report explicitly marks this as the MVP
+  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.19% lines /
+  74.02% branches; typecheck and production build pass. The report explicitly marks this as the MVP
   baseline, not a full-coverage claim.
 - **Backend service control**: wp-bff now exposes `/api/wp/services` plus controlled
   `/start` and `/stop` endpoints for the application-service catalog. Commands are fixed

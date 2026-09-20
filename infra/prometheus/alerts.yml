@@ -1,0 +1,29 @@
+groups:
+  - name: lifeform-availability
+    rules:
+      - alert: LifeformTargetDown
+        expr: up == 0
+        for: 2m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Lifeform target is down"
+          description: "Prometheus target {{ $labels.job }} ({{ $labels.instance }}) has been down for 2 minutes."
+
+      - alert: LifeformHighHttpP99
+        expr: histogram_quantile(0.99, sum by (le, job, uri) (rate(http_server_requests_seconds_bucket[5m]))) > 2
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High HTTP P99 latency"
+          description: "{{ $labels.job }} {{ $labels.uri }} P99 > 2s for 5 minutes."
+
+      - alert: LifeformHighJvmMemory
+        expr: sum by (job) (jvm_memory_used_bytes) / clamp_min(sum by (job) (jvm_memory_max_bytes), 1) > 0.90
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "High JVM memory usage"
+          description: "{{ $labels.job }} JVM memory usage is above 90% for 10 minutes."

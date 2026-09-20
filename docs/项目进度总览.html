@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 17:22 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-20 18:21 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -170,9 +170,11 @@ JetStream <strong>durable pull consumer</strong>、手工 ack/nak、有限重投
 <code>collab-integration</code> 与 <code>collab-bus-check</code> 两个 job。R-MC01-05 已闭合：wp-bff 代理协作域列表/
 详情，工作平台通过 <code>VITE_COLLAB_DOMAIN_ID</code> 或真实列表首项选择协作域，上游不可用时显式降级。</p>
 <p><strong>2026-09-20 工程化补强</strong>：前端新增 Vitest 功能测试基线（19/19）并归档 JUnit/覆盖率报告；
-wp-bff 新增应用服务监控/受控启停与协作域代理端点（113/113 测试）；OpenRouter 固定上游模型
+wp-bff 新增应用服务监控/受控启停、协作域代理与 Prometheus <code>/metrics</code>（114/114 测试）；OpenRouter 固定上游模型
 通过非降级验证，free router 仅保留 smoke 用途；<code>versions.lock.json</code> 与部署版本基线文档已落地。
 后台服务控制页、总览真实协作域选择与降级展示已加入工作平台；R-MC01-05 已闭合。
+Java 服务已接入 <code>/actuator/prometheus</code>，nlp-service / wp-bff 已提供 <code>/metrics</code>，基础设施新增 Prometheus + Alertmanager。
+Playwright 最小 E2E 已落地；DEBT-006（五渠道）、DEBT-009（NATS/Kafka 真实链路）已关闭。
 生产路由已补 gateway-service <code>/api/wp/** -&gt; WP_BFF_URI</code> 与 Nginx 模板；模型配置新增生产 fail-closed 开关（<code>MODEL_CONFIG_REQUIRE_PERSISTENCE=true</code>），
 生产禁止本地密钥文件并以 503 拒绝内存伪成功。前端覆盖率已设置 25%/20%/65% 硬门禁；新增 <code>scripts/doc-truth-check.py</code>
 校验契约计数、分支、文档和当前测试产物。Phase 6 暂不开发，仅冻结 DAG、状态机、工件与验收门接口。
@@ -222,8 +224,8 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 用户确认"按完整需求补齐，可优化不可简化"后<strong>全部修复并补测</strong>，逐条证据见
 <code>docs/优化日志/2026-09-19-Phase4大脑期需求审核与补全.md</code>，登记见《技术债台账》§4.16。</p>
 </blockquote>
-<p>未闭合的验收项（Phase 4 遗留）：<strong>真实 LLM 引擎未接入</strong>，生成器走模板后端并<strong>如实标</strong>
-<code>generator=template</code> + <code>degraded=true</code>（DEBT-015/016）；同理嵌入/重排权重未安装时走确定性降级后端。
+<p>Phase 4 的 LLM 接入已完成 <strong>OpenAI 兼容 API 路径</strong>：WB-10 <code>llm_model_config</code> 装配真实 HTTP 引擎，OpenRouter 固定模型验证通过；模板后端仅作为未配置或故障时的可观测降级。
+嵌入/重排权重未安装时仍走确定性降级后端（DEBT-010/011）。
 另有 Console「会话趋势（近 7 日）」一图为演示值（缺时序聚合接口，界面已标注）。</p>
 <p>唯一未闭合的验收项是 <strong>OCR 端到端</strong>，阻塞原因是需要外部引擎（PaddleOCR / Tesseract）尚未安装 ——
 系统对此<strong>诚实上报</strong> <code>available=false</code>，不伪造结果。同理，真实 BGE-M3 嵌入与交叉编码器重排权重
@@ -630,7 +632,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>前端</td>
 <td><code>cd web/work-platform &amp;&amp; npm run test:report &amp;&amp; npm run typecheck &amp;&amp; npm run build</code></td>
-<td><strong>19/19 功能测试通过</strong>；覆盖率 27.20% 行 / 74.94% 分支；typecheck/build 通过</td>
+<td><strong>19/19 功能测试通过</strong>；覆盖率 27.19% 行 / 74.02% 分支；typecheck/build 通过</td>
 </tr>
 <tr>
 <td><strong>超时预算（跨服务）</strong></td>
@@ -785,9 +787,9 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 </tr>
 <tr>
 <td>6</td>
-<td><strong>Phase 2 两项验证方法仍"待验"</strong></td>
-<td>《G1-验证追踪视图》中 C09 数据总线代理、C16 感官渠道管理器标 🟡 待验</td>
-<td>即 <a href="./技术债台账.md">DEBT-009 / DEBT-006</a>，详见 §6.3 —— <strong>"阶段已验收"不等于"所有验证方法都已跑过"</strong></td>
+<td>~~<strong>Phase 2 两项验证方法仍"待验"</strong>~~ → <strong>已闭合</strong></td>
+<td>C09 数据总线代理、C16 感官渠道管理器已完成测试</td>
+<td>✅ DEBT-009 已用真实 NATS/Kafka 验证；DEBT-006 已补五渠道注册/降级测试</td>
 </tr>
 <tr>
 <td>7</td>
@@ -871,10 +873,10 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>DEBT-006</td>
 <td>sense-service（测试）</td>
-<td>仅单渠道单测</td>
+<td>~~仅单渠道单测~~ → 已补五渠道注册/降级测试</td>
 <td>五渠道集成测试</td>
 <td>P2</td>
-<td>🔴 未闭合</td>
+<td>✅ <strong>已闭合</strong></td>
 </tr>
 <tr>
 <td>DEBT-007</td>
@@ -887,10 +889,10 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>DEBT-009</td>
 <td>session-manager（测试）</td>
-<td>仅总线代理单测</td>
+<td>~~仅总线代理单测~~ → 已补真实 NATS/Kafka 链路测试</td>
 <td>消息链路测试</td>
 <td>P2</td>
-<td>🔴 未闭合</td>
+<td>✅ <strong>已闭合</strong></td>
 </tr>
 <tr>
 <td>DEBT-010</td>
@@ -935,10 +937,10 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>DEBT-015</td>
 <td>nlp-service（LLM）</td>
-<td>未接真实 LLM，走模板后端 <code>generator=template</code></td>
+<td>~~未接真实 LLM~~ → WB-10 OpenAI 兼容 API 路径已接通</td>
 <td>OpenAI 兼容 / 本地推理</td>
 <td>接入权重或 API Key</td>
-<td>🟡 未闭合</td>
+<td>✅ <strong>API 路径已闭合</strong></td>
 </tr>
 <tr>
 <td>DEBT-016</td>
@@ -959,10 +961,10 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>DEBT-018</td>
 <td>跨服务（gRPC 端口）</td>
-<td>session 已外移 19092；<strong>sense 9093 ↔ Alertmanager(P7) 9093</strong> 潜在重叠</td>
-<td>端口块迁出 90xx 基础设施区间</td>
+<td>session 已外移 19092；Alertmanager 宿主机端口外移 <strong>19093</strong></td>
+<td>端口块与基础设施不重叠</td>
 <td>P7 部署前</td>
-<td>🟡 未闭合</td>
+<td>✅ <strong>已闭合</strong></td>
 </tr>
 <tr>
 <td>DEBT-019</td>
@@ -983,8 +985,8 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>DEBT-021</td>
 <td>tool-executor（指标）</td>
-<td>进程内滑动窗口（500 样本），<strong>未接 Prometheus</strong></td>
-<td>Micrometer + Prometheus</td>
+<td>工具专属指标仍为进程内滑动窗口（500 样本）；通用 <code>/actuator/prometheus</code> 已接，但工具指标未迁到 Micrometer</td>
+<td>工具指标 Micrometer/Prometheus 化</td>
 <td>需跨实例聚合或告警时</td>
 <td>🟡 未闭合</td>
 </tr>
@@ -1002,8 +1004,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <p>上表为节选。<strong>2026-09-19 Phase 5 新增 DEBT-019~021</strong>（注册表仅进程内 / 校验器选型差异 / 指标未接
 Prometheus），逐条见《技术债台账》§二与 §4.18。登记率保持 <strong>100%</strong>。</p>
 </blockquote>
-<p><strong>两条红线提醒</strong>（引《D5-1》§5.2「触发点到达后 2 个迭代内必须替换，否则升级为风险项」）：
-DEBT-006 与 DEBT-009 的触发点（P2）<strong>已到</strong>且未闭合 → 按红线应升级为风险项。
+<p><strong>红线状态</strong>：DEBT-006 与 DEBT-009 已于 2026-09-20 关闭，当前无“触发点已到但未闭合”的红色债务。
 DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<strong>不构成验收阻塞</strong>。</p>
 <h3 id="64-2026-09-17">6.4 2026-09-17 闭合的工程项<a class="headerlink" href="#64-2026-09-17" title="Permanent link">&para;</a></h3>
 <table>

@@ -26,13 +26,15 @@
     "vue": "^3.5.13",
     "vite": "^6.0.5",
     "typescript": "^5.7.2",
-    "element_plus": "^2.9.1"
+    "element_plus": "^2.9.1",
+    "playwright": "^1.63.0"
   },
   "python_tooling": {
     "pytest": ">=8.0",
     "httpx": ">=0.27.0",
     "ruff": "0.16.8",
-    "nats_py": ">=2.9.0"
+    "nats_py": ">=2.9.0",
+    "prometheus_client": ">=0.20.0"
   },
   "infrastructure_images": {
     "redis": "redis:7.2-alpine",
@@ -42,7 +44,9 @@
     "nacos": "nacos/nacos-server:v2.3.2",
     "minio": "minio/minio:RELEASE.2024-01-16T16-07-38Z",
     "jaeger": "jaegertracing/all-in-one:1.57",
-    "kafka": "apache/kafka:3.7.0"
+    "kafka": "apache/kafka:3.7.0",
+    "prometheus": "prom/prometheus:v2.53.2",
+    "alertmanager": "prom/alertmanager:v0.27.0"
   },
   "recommended_ide_plugins": {
     "vscode": [
