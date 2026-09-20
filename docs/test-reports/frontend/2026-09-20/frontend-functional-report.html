@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:48 · 源文件 frontend-functional-report.md</span>
+  <span class="meta">生成于 2026-09-20 16:25 · 源文件 frontend-functional-report.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -131,21 +131,23 @@
 </nav>
   <main class="doc"><h1 id="mvp">前端功能测试报告（MVP）<a class="headerlink" href="#mvp" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>日期</strong>：2026-09-20<br />
-<strong>代码基线</strong>：<code>1461118</code> + 本轮前端测试框架<br />
-<strong>框架</strong>：Vitest 3.2.7 + Vue Test Utils 2.5.1 + jsdom 26.1.0<br />
+<p><strong>日期</strong>：2026-09-20
+<strong>代码基线</strong>：<code>92a46c1</code> + 本轮真实协作域接线
+<strong>框架</strong>：Vitest 3.2.7 + Vue Test Utils 2.5.1 + jsdom 26.1.0
 <strong>命令</strong>：<code>npm run test:report</code></p>
 </blockquote>
 <h2 id="1">1. 结论<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
 <ul>
-<li>测试文件：<strong>6 个</strong></li>
-<li>测试用例：<strong>15 passed / 0 failed</strong></li>
-<li>语句覆盖率：<strong>16.86%</strong>（849 / 5035）</li>
-<li>分支覆盖率：<strong>78.1%</strong>（214 / 274）</li>
-<li>函数覆盖率：<strong>40.24%</strong>（33 / 82）</li>
-<li>行覆盖率：<strong>16.86%</strong>（849 / 5035）</li>
+<li>测试文件：<strong>8 个</strong></li>
+<li>测试用例：<strong>19 passed / 0 failed</strong></li>
+<li>语句覆盖率：<strong>27.26%</strong>（1378 / 5054）</li>
+<li>分支覆盖率：<strong>74.94%</strong>（323 / 431）</li>
+<li>函数覆盖率：<strong>26.81%</strong>（48 / 179）</li>
+<li>行覆盖率：<strong>27.26%</strong>（1378 / 5054）</li>
+<li>类型检查：<code>npm run typecheck</code> 通过</li>
+<li>生产构建：<code>npm run build</code> 通过（仅有 Element Plus 主包 &gt;500 kB 的体积提示）</li>
 </ul>
-<p>本报告是<strong>前端 MVP 功能测试基线</strong>，不是全量覆盖率验收。当前优先覆盖主题、路由、数据源降级、中间件监控和模型配置页；其余页面与真实 BFF/E2E 仍待后续补充。</p>
+<p>本报告是<strong>前端 MVP 功能测试基线</strong>，不是全量覆盖率验收。当前优先覆盖主题、路由、数据源降级、真实协作域选择、总览驾驶舱、中间件监控、模型配置和服务控制页；其余页面与真实 BFF/E2E 仍待后续补充。</p>
 <h2 id="2">2. 覆盖范围<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -162,6 +164,11 @@
 <td>降级记录去重、恢复清理、20 条上限</td>
 </tr>
 <tr>
+<td><code>src/api/provider.test.ts</code></td>
+<td style="text-align: right;">2</td>
+<td>优先读取 <code>/collab/domains</code>、真实域替换固定 <code>DOM-2048</code>、无真实域时保留 Mock 且不请求演示域、BFF 映射结果消费</td>
+</tr>
+<tr>
 <td><code>src/stores/app.test.ts</code></td>
 <td style="text-align: right;">3</td>
 <td>深浅主题切换、偏好持久化、Mock/API 数据源切换</td>
@@ -170,6 +177,11 @@
 <td><code>src/router/router.test.ts</code></td>
 <td style="text-align: right;">3</td>
 <td>总览、模型、中间件、协作页及动态模块路由</td>
+</tr>
+<tr>
+<td><code>src/views/OverviewView.test.ts</code></td>
+<td style="text-align: right;">2</td>
+<td>今日摘要/模型监控/OPS 真实数据渲染、加载失败时最近快照与明确告警</td>
 </tr>
 <tr>
 <td><code>src/views/MiddlewareView.test.ts</code></td>
@@ -189,16 +201,11 @@
 </tbody>
 </table>
 <h2 id="3">3. 测试发现并修复的问题<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
-<p>组件测试暴露出 <code>MiddlewareView</code> 在以下响应下会渲染崩溃：</p>
-<pre><code class="language-json">{
-  &quot;enabled&quot;: false,
-  &quot;items&quot;: []
-}
-</code></pre>
-<p>原因是 health summary 为空时直接读取 <code>overview.summary.down</code>。本轮已改为：</p>
-<pre><code class="language-ts">overview.value?.summary?.down ?? 0
-</code></pre>
-<p>并增加“中间件观测服务未启用”回归用例。</p>
+<ol>
+<li>组件测试暴露出 <code>MiddlewareView</code> 在 <code>enabled=false</code> 且无 <code>summary</code> 时会渲染崩溃；已改为安全读取 summary 并增加回归用例。</li>
+<li>真实协作域接线最初在 provider 测试中错误模拟了 collab-bus 原始结构，而 BFF 才是字段映射边界；已改为模拟 BFF 已映射契约，并断言 <code>/collab/domains</code> 与真实域详情均被调用。</li>
+<li><code>provider.ts</code> 的真实域列表解析曾产生隐式 <code>any</code>，已补显式类型，恢复类型检查与生产构建通过。</li>
+</ol>
 <h2 id="4">4. 覆盖率摘要<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
@@ -217,6 +224,12 @@
 <td>数据源降级状态</td>
 </tr>
 <tr>
+<td><code>src/api/provider.ts</code></td>
+<td style="text-align: right;">19.17%</td>
+<td style="text-align: right;">41.02%</td>
+<td>新增真实协作域选择与空列表降级路径；其余 API 分支待扩测</td>
+</tr>
+<tr>
 <td><code>src/stores/app.ts</code></td>
 <td style="text-align: right;">94.8%</td>
 <td style="text-align: right;">38.88%</td>
@@ -227,6 +240,12 @@
 <td style="text-align: right;">100%</td>
 <td style="text-align: right;">100%</td>
 <td>路由表解析</td>
+</tr>
+<tr>
+<td><code>src/views/OverviewView.vue</code></td>
+<td style="text-align: right;">73.24%</td>
+<td style="text-align: right;">77.96%</td>
+<td>今日摘要、模型监控、观测摘要与失败快照</td>
 </tr>
 <tr>
 <td><code>src/views/MiddlewareView.vue</code></td>
@@ -247,12 +266,6 @@
 <td>应用服务监控与启停主路径</td>
 </tr>
 <tr>
-<td><code>src/api/provider.ts</code></td>
-<td style="text-align: right;">0%</td>
-<td style="text-align: right;">0%</td>
-<td>下一步补 API fallback/契约测试</td>
-</tr>
-<tr>
 <td>其他视图</td>
 <td style="text-align: right;">0%</td>
 <td style="text-align: right;">—</td>
@@ -263,18 +276,19 @@
 <h2 id="5">5. 报告归档<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <ul>
 <li>本报告：<code>docs/test-reports/frontend/2026-09-20/frontend-functional-report.md</code></li>
+<li>HTML 版本：<code>docs/test-reports/frontend/2026-09-20/frontend-functional-report.html</code></li>
 <li>JUnit：<code>docs/test-reports/frontend/2026-09-20/junit.xml</code></li>
 <li>覆盖率摘要：<code>docs/test-reports/frontend/2026-09-20/coverage-summary.json</code></li>
 <li>完整 HTML 覆盖率：构建产物 <code>web/work-platform/coverage/index.html</code>，建议由 CI artifact 保存，不提交 Git。</li>
 </ul>
 <h2 id="6">6. 后续优化建议<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
 <ol>
-<li>增加 <code>provider.ts</code> 的 API/Mock/降级契约测试；</li>
-<li>给总览、知识库、协作总线、远程 IM、Agent 在线页面补组件测试；</li>
-<li>引入 Playwright，覆盖登录、路由、主题、服务启停和真实 BFF 降级；</li>
-<li>设置阶段性覆盖率门槛：先 25%，稳定后提高到 40%；</li>
+<li>继续补知识库、协作总线、远程 IM、Agent 在线等高交互页面的组件测试；</li>
+<li>增加 provider 的 Mock/API/超时/404/降级分支覆盖，重点验证“不伪造真实数据”的约束；</li>
+<li>引入 Playwright，覆盖登录、路由、主题、服务启停、协作域切换和真实 BFF 降级；</li>
+<li>保持 25% 行覆盖率门槛，补齐核心页面后提高到 40%；</li>
 <li>为关键按钮和状态补充稳定的 <code>data-testid</code>；</li>
-<li>将 <code>npm run test:report</code> 纳入 GitHub Actions 并上传 JUnit/覆盖率 artifact。</li>
+<li>将 <code>npm run test:report</code> 纳入 CI 并上传 JUnit/覆盖率 artifact。</li>
 </ol></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>

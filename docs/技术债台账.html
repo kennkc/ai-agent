@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:49 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-20 16:25 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -1352,7 +1352,7 @@ GAP-01 / GAP-05 余量比改善但仍未达标（0.91x / 0.80x），
 <tr>
 <td>12</td>
 <td><strong>Phase 3 需求文档 §8/§9 的 IN-01 / IN-05 / WB-03 / WB-05 / ~~MC-01~~ 交付范围</strong></td>
-<td>IN-05 已于 2026-09-18 补交付；<strong>MC-01 已于 2026-09-20 作为 Phase 6 前置独立切片完成 R-MC01-01~04 并完成可靠性加固</strong>（durable pull consumer、ack/nak、重投资状态机、自动 DLQ、心跳窗口合并、P99 与 PG+NATS 集成 CI、独立契约）；IN-01、WB-03、WB-05 仍未实现。R-MC01-05（协作视图切真实数据）属 Should 后续接线项；本轮已补齐应用服务控制台与前端测试基线，但真实协作域 UI 仍未接线，不得以 Mock 冒充完成</td>
+<td>IN-05 已于 2026-09-18 补交付；<strong>MC-01 已于 2026-09-20 作为 Phase 6 前置独立切片完成 R-MC01-01~05 并完成可靠性加固</strong>（durable pull consumer、ack/nak、重投资状态机、自动 DLQ、心跳窗口合并、P99 与 PG+NATS 集成 CI、独立契约、wp-bff 协作域代理与工作平台真实域选择）；IN-01、WB-03、WB-05 仍未实现。R-MC01-05 已闭合，不再列为后续接线项；上游不可用时仍保留可见降级，不以 Mock 冒充真实数据</td>
 <td>规划侧确认剩余项</td>
 </tr>
 <tr>

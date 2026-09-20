@@ -29,31 +29,36 @@ Verification on 2026-09-20:
 - GitHub Actions now has a dedicated `collab-integration` job with PostgreSQL + NATS and keeps
   `collab-bus-check` for the P99 gate.
 
-R-MC01-05 (work-platform collaboration view switching from Mock to the real aggregate) remains a
-follow-up Should item because the current UI still uses a fixed demo domain id. It is recorded
-rather than silently faked.
+R-MC01-05 is now **closed** (2026-09-20): wp-bff exposes tenant-aware
+`GET /api/wp/collab/domains` and `GET /api/wp/collab/{domain_id}` proxies, maps collab-bus
+members into the work-platform collaboration view, and preserves explicit `available=false`
+degradation when the upstream is unreachable. The Vue provider discovers the real domain list,
+honours optional `VITE_COLLAB_DOMAIN_ID`, and otherwise selects the first real domain instead of
+the fixed demo id `DOM-2048`.
 ## Frontend Tests / Service Control / Toolchain Baseline (2026-09-20)
 
 This pass added the operational and verification layer requested in the latest review:
 
-- **Frontend functional testing**: Vitest 3.2.7 + Vue Test Utils + jsdom. Six test files and
-  **15/15 tests** now cover theme persistence, routing, degradation state, MiddlewareView,
-  ModelsView and the new ServicesView. The first component run exposed and fixed a real
-  `MiddlewareView` null-summary crash.
+- **Frontend functional testing**: Vitest 3.2.7 + Vue Test Utils + jsdom. Eight test files and
+  **19/19 tests** now cover theme persistence, routing, degradation state, real collaboration-domain
+  selection, OverviewView, MiddlewareView, ModelsView and ServicesView. The first component run
+  exposed and fixed a real `MiddlewareView` null-summary crash.
 - **Frontend test archive**: `docs/test-reports/frontend/2026-09-20/` contains the
-  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 16.86% lines /
-  78.1% branches; the report explicitly marks this as the MVP baseline, not a full-coverage claim.
+  Markdown/HTML report, JUnit XML and coverage summary. Current coverage is 27.26% lines /
+  74.94% branches; typecheck and production build pass. The report explicitly marks this as the MVP
+  baseline, not a full-coverage claim.
 - **Backend service control**: wp-bff now exposes `/api/wp/services` plus controlled
   `/start` and `/stop` endpoints for the application-service catalog. Commands are fixed
   server-side, `wp-bff` itself is monitor-only, and externally-started processes return 409
-  rather than guessing a PID. wp-bff tests grew from 106 to **110 passed**.
+  rather than guessing a PID. wp-bff tests now stand at **113 passed**, including collaboration-domain proxy coverage.
 - **Work Platform page**: new Vue `后台服务` page shows Gateway, Session, NLP, Body, Tool,
   Collab, BFF and Frontend service health with controlled/external/read-only status.
 - **OpenRouter non-degraded check**: `scripts/openrouter-e2e.py` is opt-in and reads the key
-  only from `OPENROUTER_API_KEY`. The gateway path returned `degraded=false` and
-  `generator=model`; the free router alias was observed routing to different upstream models,
-  including one `None` output. The report therefore records **pass_with_warning** and recommends
-  pinning an upstream model for quality evaluation.
+  only from `OPENROUTER_API_KEY`. A fixed upstream model
+  (`nex-agi/nex-n2.5-mini:free`) passed both direct and gateway checks: `degraded=false`,
+  `generator=model`, expected token present (2843.44 ms direct / 1346 ms gateway). The
+  `openrouter/free` alias is retained for smoke tests only because it can route to different
+  upstream models and once returned literal `None`.
 - **Toolchain/deployment baseline**: `versions.lock.json`, `scripts/check-toolchain.ps1`,
   `scripts/check-toolchain.sh`, and `docs/部署与环境版本基线.md` now provide the version matrix,
   installation checks and IDE-plugin baseline.
@@ -1016,4 +1021,3 @@ still FAILs; a rebased, committed, synchronised tree is now 0 FAIL without any r
   per-module alert).
 - `ModuleView.vue` split and Element Plus on-demand import: assessed, but both need a visual
   regression baseline before execution (see 2026-09-16 section).
-

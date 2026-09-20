@@ -1260,10 +1260,23 @@ paths:
       responses:
         '200':
           description: OK
-  /collab/{domain_id}:
-    x-wp-status: planned
+  /collab/domains:
+    x-wp-status: implemented
     get:
-      summary: 协作域详情（MC）
+      summary: 协作域列表（MC，wp-bff 代理 collab-bus）
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
+  /collab/{domain_id}:
+    x-wp-status: implemented
+    get:
+      summary: 协作域详情（MC，映射为工作平台协作视图）
       parameters:
         - { name: domain_id, in: path, required: true, schema: { type: string } }
       responses:
@@ -1273,6 +1286,8 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/ApiResponse'
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
   /tasks:
     x-wp-status: planned
     get:

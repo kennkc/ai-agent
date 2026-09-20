@@ -1801,3 +1801,53 @@ test('wp-bff 自身不允许通过控制页停止', async () => {
   assert.equal(res.status, 403)
   assert.equal(res.json.code, 'AGENT_FORBIDDEN')
 })
+
+test('GET /api/wp/collab/domains 代理协作域列表', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { method: 'GET', path: '/api/wp/collab/domains' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.total, 1)
+    assert.equal(res.json.data.items[0].domain_id, 'dom-a')
+  }, { jsonRequestMeta: async () => ({ ok: true, data: { data: { total: 1, items: [{ domain_id: 'dom-a' }] } } }) })
+})
+
+test('GET /api/wp/collab/{domain_id} 映射真实聚合为协作视图', async () => {
+  const upstream = {
+    data: {
+      domain_id: 'dom-a', name: 'demo', state: 'active', concurrency_limit: 4,
+      progress: 60, member_count: 4, stale_count: 1, total_weight: 4,
+      updated_at: '2026-09-20T06:00:03Z',
+      members: [
+        { member_id: 'agent-a', progress: 90, state: 'working', weight: 1, reported_at: '2026-09-20T06:00:01Z' },
+        { member_id: 'agent-b', progress: 30, state: 'stale', weight: 1, reported_at: '2026-09-20T05:59:00Z' },
+        { member_id: 'agent-c', progress: 45, state: 'blocked', weight: 1, reported_at: '2026-09-20T06:00:02Z' },
+        { member_id: 'agent-d', progress: 0, state: 'idle', weight: 1, reported_at: '2026-09-20T06:00:03Z' },
+      ],
+    },
+  }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { method: 'GET', path: '/api/wp/collab/dom-a' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.domain_id, 'dom-a')
+    assert.equal(res.json.data.progress, 60)
+    assert.equal(res.json.data.agents.length, 4)
+    assert.equal(res.json.data.messages.length, 4)
+    assert.equal(res.json.data.agents[1].state, 'blocked')
+    assert.equal(res.json.data.agents[2].state, 'blocked')
+    assert.equal(res.json.data.agents[3].state, 'waiting')
+  }, { jsonRequestMeta: async () => ({ ok: true, data: upstream }) })
+})
+
+test('collab-bus 不可用时协作域代理降级可见', async () => {
+  await withServer(async ({ server }) => {
+    const list = await request(server, { method: 'GET', path: '/api/wp/collab/domains' })
+    assert.equal(list.status, 200)
+    assert.equal(list.json.data.available, false)
+    assert.equal(list.json.data.reason, 'unreachable')
+    const one = await request(server, { method: 'GET', path: '/api/wp/collab/dom-a' })
+    assert.equal(one.status, 200)
+    assert.equal(one.json.data.available, false)
+  }, { jsonRequestMeta: async () => ({ ok: false, reason: 'unreachable', data: null }) })
+})

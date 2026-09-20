@@ -1,0 +1,47 @@
+{
+  "status": "pass",
+  "base_url": "https://openrouter.ai/api/v1",
+  "model": "nex-agi/nex-n2.5-mini:free",
+  "api_key_hint": "sk-or-...8198",
+  "checks": {
+    "direct": {
+      "model": "nex-agi/nex-n2.5-mini:free",
+      "content": "OPENROUTER_OK",
+      "latency_ms": 2843.44,
+      "expected_token_present": true,
+      "usage": {
+        "prompt_tokens": 35,
+        "completion_tokens": 8,
+        "total_tokens": 43,
+        "cost": 0,
+        "is_byok": false,
+        "prompt_tokens_details": {
+          "cached_tokens": 0,
+          "cache_write_tokens": 0,
+          "audio_tokens": 0,
+          "video_tokens": 0
+        },
+        "cost_details": {
+          "upstream_inference_cost": 0,
+          "upstream_inference_prompt_cost": 0,
+          "upstream_inference_completions_cost": 0
+        },
+        "completion_tokens_details": {
+          "reasoning_tokens": 1,
+          "image_tokens": 0,
+          "audio_tokens": 0
+        }
+      }
+    },
+    "gateway": {
+      "model": "openrouter-e2e",
+      "content": "OPENROUTER_OK",
+      "latency_ms": 1346,
+      "degraded": false,
+      "generator": "model",
+      "prompt_tokens": 17,
+      "completion_tokens": 8,
+      "expected_token_present": true
+    }
+  }
+}

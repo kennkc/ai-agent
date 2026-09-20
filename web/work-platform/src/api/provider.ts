@@ -749,18 +749,38 @@ export const dataProvider = {
     // 注意：`/models` **不在这里** —— 它已是 WB-10 的模型接入配置端点（返回 `{items, by_role, ...}`
     // 配置真相），语义与这里的"运行态模块数据域"不同。运行态模型池（成本/延迟/流量）BFF 尚未提供，
     // 由 ModelsView 直接用演示数据并显式标注，不走本聚合。
+    // R-MC01-05: 优先从真实协作域列表选取可用域；环境变量可强制指定。
+    let collabPath = ''
+    try {
+      const domainList = unwrapBody(await api.get('/collab/domains'))
+      const items: Array<{ domain_id?: string }> = Array.isArray(domainList?.items) ? domainList.items : []
+      const configured = String(import.meta.env.VITE_COLLAB_DOMAIN_ID || '')
+      const chosen = items.find(item => item.domain_id === configured)?.domain_id || items[0]?.domain_id
+      if (chosen) collabPath = `/collab/${encodeURIComponent(chosen)}`
+      else reportDegrade('collaboration_domains', '暂无可用协作域')
+    } catch (error) {
+      reportDegrade('collaboration_domains', (error as Error)?.message || 'BFF /collab/domains 不可达')
+    }
     const endpoints: Array<[string, string]> = [
       ['vitals', '/vitals'], ['organs', '/organs'], ['brain', '/brain/DEC-20260912-0042'],
-      ['senses', '/senses'], ['evolution', '/evolution'], ['collaboration', '/collab/DOM-2048'],
+      ['senses', '/senses'], ['evolution', '/evolution'], ['collaboration', collabPath],
       ['experts', '/experts'], ['skills', '/skills'], ['connectors', '/connectors'],
       ['automations', '/automations'], ['cases', '/cases'], ['approvals', '/approvals'],
       ['remote_channels', '/remote-im/channels'], ['online_agents', '/agents/online'],
     ]
     const results = await Promise.all(endpoints.map(([scope, path]) =>
-      safe(() => api.get(path), { data: { data: null } }, scope),
+      path
+        ? safe(() => api.get(path), { data: { data: null } }, scope)
+        : Promise.resolve({ data: { data: null } }),
     ))
-    const [vitals, organsData, brain, sensesData, evolutionData, collaborationData, expertsData,
+    let [vitals, organsData, brain, sensesData, evolutionData, collaborationData, expertsData,
       skillsData, connectorsData, automationsData, casesData, approvalsData, remoteChannelsData, onlineAgentsData] = results.map(item => unwrap(item.data))
+    if (!collabPath) {
+      collaborationData = null
+    } else if (collaborationData?.available === false) {
+      reportDegrade('collaboration', String(collaborationData.reason || 'collab-bus 不可用'))
+      collaborationData = null
+    }
 
     return {
       vitals: Array.isArray(vitals) ? vitals : (vitals ? vitalSigns.map(item => ({ ...item, ...vitals[item.key] })) : vitalSigns),

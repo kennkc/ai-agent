@@ -1,76 +1,69 @@
 # 前端功能测试报告（MVP）
 
-> **日期**：2026-09-20  
-> **代码基线**：`1461118` + 本轮前端测试框架  
-> **框架**：Vitest 3.2.7 + Vue Test Utils 2.5.1 + jsdom 26.1.0  
+> **日期**：2026-09-20
+> **代码基线**：`92a46c1` + 本轮真实协作域接线
+> **框架**：Vitest 3.2.7 + Vue Test Utils 2.5.1 + jsdom 26.1.0
 > **命令**：`npm run test:report`
 
 ## 1. 结论
 
-- 测试文件：**6 个**
-- 测试用例：**15 passed / 0 failed**
-- 语句覆盖率：**16.86%**（849 / 5035）
-- 分支覆盖率：**78.1%**（214 / 274）
-- 函数覆盖率：**40.24%**（33 / 82）
-- 行覆盖率：**16.86%**（849 / 5035）
+- 测试文件：**8 个**
+- 测试用例：**19 passed / 0 failed**
+- 语句覆盖率：**27.26%**（1378 / 5054）
+- 分支覆盖率：**74.94%**（323 / 431）
+- 函数覆盖率：**26.81%**（48 / 179）
+- 行覆盖率：**27.26%**（1378 / 5054）
+- 类型检查：`npm run typecheck` 通过
+- 生产构建：`npm run build` 通过（仅有 Element Plus 主包 >500 kB 的体积提示）
 
-本报告是**前端 MVP 功能测试基线**，不是全量覆盖率验收。当前优先覆盖主题、路由、数据源降级、中间件监控和模型配置页；其余页面与真实 BFF/E2E 仍待后续补充。
+本报告是**前端 MVP 功能测试基线**，不是全量覆盖率验收。当前优先覆盖主题、路由、数据源降级、真实协作域选择、总览驾驶舱、中间件监控、模型配置和服务控制页；其余页面与真实 BFF/E2E 仍待后续补充。
 
 ## 2. 覆盖范围
 
 | 测试文件 | 用例数 | 覆盖内容 |
 |---|---:|---|
 | `src/api/status.test.ts` | 3 | 降级记录去重、恢复清理、20 条上限 |
+| `src/api/provider.test.ts` | 2 | 优先读取 `/collab/domains`、真实域替换固定 `DOM-2048`、无真实域时保留 Mock 且不请求演示域、BFF 映射结果消费 |
 | `src/stores/app.test.ts` | 3 | 深浅主题切换、偏好持久化、Mock/API 数据源切换 |
 | `src/router/router.test.ts` | 3 | 总览、模型、中间件、协作页及动态模块路由 |
+| `src/views/OverviewView.test.ts` | 2 | 今日摘要/模型监控/OPS 真实数据渲染、加载失败时最近快照与明确告警 |
 | `src/views/MiddlewareView.test.ts` | 2 | 真实中间件卡片/健康摘要、观测服务不可用状态 |
 | `src/views/ModelsView.test.ts` | 2 | 模型配置不可用态、OpenRouter 兼容配置渲染与角色装配显示 |
 | `src/views/ServicesView.test.ts` | 2 | 应用服务控制台真实状态、托管/外部区分、BFF 降级只读态 |
 
 ## 3. 测试发现并修复的问题
 
-组件测试暴露出 `MiddlewareView` 在以下响应下会渲染崩溃：
-
-```json
-{
-  "enabled": false,
-  "items": []
-}
-```
-
-原因是 health summary 为空时直接读取 `overview.summary.down`。本轮已改为：
-
-```ts
-overview.value?.summary?.down ?? 0
-```
-
-并增加“中间件观测服务未启用”回归用例。
+1. 组件测试暴露出 `MiddlewareView` 在 `enabled=false` 且无 `summary` 时会渲染崩溃；已改为安全读取 summary 并增加回归用例。
+2. 真实协作域接线最初在 provider 测试中错误模拟了 collab-bus 原始结构，而 BFF 才是字段映射边界；已改为模拟 BFF 已映射契约，并断言 `/collab/domains` 与真实域详情均被调用。
+3. `provider.ts` 的真实域列表解析曾产生隐式 `any`，已补显式类型，恢复类型检查与生产构建通过。
 
 ## 4. 覆盖率摘要
 
 | 文件/模块 | 行覆盖率 | 分支覆盖率 | 说明 |
 |---|---:|---:|---|
 | `src/api/status.ts` | 100% | 100% | 数据源降级状态 |
+| `src/api/provider.ts` | 19.17% | 41.02% | 新增真实协作域选择与空列表降级路径；其余 API 分支待扩测 |
 | `src/stores/app.ts` | 94.8% | 38.88% | 主题、偏好、数据源 |
 | `src/router/index.ts` | 100% | 100% | 路由表解析 |
+| `src/views/OverviewView.vue` | 73.24% | 77.96% | 今日摘要、模型监控、观测摘要与失败快照 |
 | `src/views/MiddlewareView.vue` | 53.25% | 94.23% | 中间件监控主路径 |
 | `src/views/ModelsView.vue` | 67.16% | 71.12% | 模型配置主路径 |
 | `src/views/ServicesView.vue` | 76.66% | 92.5% | 应用服务监控与启停主路径 |
-| `src/api/provider.ts` | 0% | 0% | 下一步补 API fallback/契约测试 |
 | 其他视图 | 0% | — | 下一步分批补组件/E2E |
 
 ## 5. 报告归档
 
 - 本报告：`docs/test-reports/frontend/2026-09-20/frontend-functional-report.md`
+- HTML 版本：`docs/test-reports/frontend/2026-09-20/frontend-functional-report.html`
 - JUnit：`docs/test-reports/frontend/2026-09-20/junit.xml`
 - 覆盖率摘要：`docs/test-reports/frontend/2026-09-20/coverage-summary.json`
 - 完整 HTML 覆盖率：构建产物 `web/work-platform/coverage/index.html`，建议由 CI artifact 保存，不提交 Git。
 
 ## 6. 后续优化建议
 
-1. 增加 `provider.ts` 的 API/Mock/降级契约测试；
-2. 给总览、知识库、协作总线、远程 IM、Agent 在线页面补组件测试；
-3. 引入 Playwright，覆盖登录、路由、主题、服务启停和真实 BFF 降级；
-4. 设置阶段性覆盖率门槛：先 25%，稳定后提高到 40%；
+1. 继续补知识库、协作总线、远程 IM、Agent 在线等高交互页面的组件测试；
+2. 增加 provider 的 Mock/API/超时/404/降级分支覆盖，重点验证“不伪造真实数据”的约束；
+3. 引入 Playwright，覆盖登录、路由、主题、服务启停、协作域切换和真实 BFF 降级；
+4. 保持 25% 行覆盖率门槛，补齐核心页面后提高到 40%；
 5. 为关键按钮和状态补充稳定的 `data-testid`；
-6. 将 `npm run test:report` 纳入 GitHub Actions 并上传 JUnit/覆盖率 artifact。
+6. 将 `npm run test:report` 纳入 CI 并上传 JUnit/覆盖率 artifact。

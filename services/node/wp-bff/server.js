@@ -281,6 +281,8 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'GET', path: '/services' },
   { method: 'POST', path: '/services/{key}/start' },
   { method: 'POST', path: '/services/{key}/stop' },
+  { method: 'GET', path: '/collab/domains' },
+  { method: 'GET', path: '/collab/{domain_id}' },
   { method: 'GET', path: '/tracing' },
   { method: 'GET', path: '/knowledge' },
   { method: 'POST', path: '/knowledge' },
@@ -403,6 +405,7 @@ const DEFAULT_NLP_URL = String(process.env.WP_BFF_NLP_URL || 'http://127.0.0.1:8
 const DEFAULT_SESSION_URL = String(process.env.WP_BFF_SESSION_URL || 'http://127.0.0.1:8081').replace(/\/+$/, '')
 /** 四肢层（tool-executor）地址；未启动时 /tools 系列如实返回 available=false */
 const DEFAULT_TOOL_URL = String(process.env.WP_BFF_TOOL_URL || 'http://127.0.0.1:8084').replace(/\/+$/, '')
+const DEFAULT_COLLAB_URL = String(process.env.WP_BFF_COLLAB_URL || 'http://127.0.0.1:8085').replace(/\/+$/, '')
 
 const START_TIMEOUT_MS = 180000
 const STOP_TIMEOUT_MS = 120000
@@ -503,6 +506,7 @@ function createServer(options = {}) {
   const nlpUrl = String(options.nlpUrl || DEFAULT_NLP_URL).replace(/\/+$/, '')
   const sessionUrl = String(options.sessionUrl || DEFAULT_SESSION_URL).replace(/\/+$/, '')
   const toolUrl = String(options.toolUrl || DEFAULT_TOOL_URL).replace(/\/+$/, '')
+  const collabUrl = String(options.collabUrl || DEFAULT_COLLAB_URL).replace(/\/+$/, '')
   const repoRoot = options.repoRoot || path.resolve(__dirname, '..', '..', '..')
   const auditPath = options.auditPath || path.join(__dirname, 'logs', 'wp-bff-audit.log')
 
@@ -762,6 +766,103 @@ function createServer(options = {}) {
    * 总览聚合：只聚合 wp-bff 已具备真实数据源的部分（中间件 + 链路追踪），
    * 其余数据域通过 gaps 显式列出，由前端按降级策略标注为 Mock，不做静默填充。
    */
+  function mapCollabAggregate(raw, nowValue) {
+    const members = Array.isArray(raw?.members) ? raw.members : []
+    const agents = members.map((member, index) => {
+      const progress = Number(member.progress) || 0
+      const state = member.state === 'done'
+        ? 'done'
+        : member.state === 'stale' || member.state === 'blocked'
+          ? 'blocked'
+          : member.state === 'idle'
+            ? 'waiting'
+            : 'running'
+      return {
+        agent_id: member.member_id || `member-${index + 1}`,
+        name: member.member_id || `成员 ${index + 1}`,
+        role: 'Collaboration Member',
+        progress,
+        state,
+        current_task: state === 'done' ? '已完成' : state === 'blocked' ? '阻塞或失联' : state === 'waiting' ? '等待中' : '执行中',
+        use_case: '多 Agent 协作',
+        model: 'MC-P v1',
+        tools: [],
+        artifact_count: 0,
+        confidence: 0,
+        bus_position: progress,
+        bus_message: `${progress}%`,
+        bus_kind: state === 'done' ? 'result' : state === 'blocked' || state === 'waiting' ? 'waiting' : 'running',
+        is_leader: index === 0,
+      }
+    })
+    const nodes = [
+      { id: 'start', label: '协作域', x: 5, y: 42, state: 'done' },
+      ...agents.map((agent, index) => ({
+        id: agent.agent_id,
+        label: agent.name,
+        x: 42,
+        y: 12 + (index % 5) * 18,
+        state: agent.state,
+      })),
+      { id: 'merge', label: '结果汇总', x: 84, y: 42, state: raw?.stale_count ? 'waiting' : 'done' },
+    ]
+    const edges = agents.map(agent => ['start', agent.agent_id]).concat(agents.map(agent => [agent.agent_id, 'merge']))
+    const messages = members.map((member, index) => ({
+      message_id: `heartbeat-${member.member_id || index}`,
+      time: member.reported_at ? new Date(member.reported_at).toLocaleTimeString('zh-CN', { hour12: false }) : nowValue,
+      type: 'heartbeat',
+      from: member.member_id || `成员 ${index + 1}`,
+      to: 'coordinator',
+      text: `进度 ${Number(member.progress) || 0}%`,
+      payload: member,
+    }))
+    return {
+      domain_id: raw?.domain_id || '',
+      task_id: '',
+      mode: 'fanout',
+      mode_label: '扇出 Fan-out',
+      protocol: 'MC-P v1',
+      concurrency_current: members.length,
+      concurrency_limit: Number(raw?.concurrency_limit) || 8,
+      p99_ms: 0,
+      ack_rate: 100,
+      messages_per_sec: 0,
+      updated_at: raw?.updated_at || nowValue,
+      data_source: 'api',
+      progress: Number(raw?.progress) || 0,
+      stale_count: Number(raw?.stale_count) || 0,
+      agents,
+      messages,
+      dag: { nodes, edges },
+      artifacts: [],
+      gates: [],
+    }
+  }
+
+  async function handleCollabDomains(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const outcome = await jsonRequestMeta(`${collabUrl}/api/collab/domains`, {
+      headers: { 'X-Tenant-Id': tenantId }, timeoutMs: 5000,
+    }).catch(() => ({ ok: false, reason: 'unreachable', data: null }))
+    if (!outcome.ok) {
+      return send(req, res, 200, { data: { available: false, total: 0, items: [], reason: outcome.reason, checked_at: nowTime() } })
+    }
+    const payload = outcome.data?.data || outcome.data || {}
+    const items = Array.isArray(payload.items) ? payload.items : []
+    return send(req, res, 200, { data: { available: true, total: payload.total ?? items.length, items, checked_at: nowTime() } })
+  }
+
+  async function handleCollabDomain(req, res, domainId) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const outcome = await jsonRequestMeta(`${collabUrl}/api/collab/domains/${encodeURIComponent(domainId)}`, {
+      headers: { 'X-Tenant-Id': tenantId }, timeoutMs: 5000,
+    }).catch(() => ({ ok: false, reason: 'unreachable', data: null }))
+    if (!outcome.ok) {
+      return send(req, res, 200, { data: { available: false, domain_id: domainId, reason: outcome.reason, checked_at: nowTime() } })
+    }
+    const raw = outcome.data?.data || outcome.data || {}
+    return send(req, res, 200, { data: { available: true, ...mapCollabAggregate(raw, nowTime()) } })
+  }
   async function handleOverview(req, res) {
     const tenantId = String(req.headers['x-tenant-id'] || 'default')
     const entries = await Promise.all(Object.keys(middleware).map(async key => ({ key, probe: await probeState(key) })))
@@ -1932,6 +2033,9 @@ function createServer(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/services') return handleAppServices(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/collab/domains') return handleCollabDomains(req, res)
+    const collabDomain = url.pathname.match(/^\/api\/wp\/collab\/([a-zA-Z0-9_-]{1,64})$/)
+    if (req.method === 'GET' && collabDomain) return handleCollabDomain(req, res, collabDomain[1])
     const appServiceControl = url.pathname.match(/^\/api\/wp\/services\/([a-z0-9-]+)\/(start|stop)$/)
     if (req.method === 'POST' && appServiceControl) return handleAppServiceControl(req, res, appServiceControl[1], appServiceControl[2])
     if (req.method === 'GET' && url.pathname === '/api/wp/tracing') return handleTracing(req, res)
@@ -2055,6 +2159,7 @@ module.exports = {
   DEFAULT_ALLOWED_ORIGINS,
   DEFAULT_BODY_URL,
   DEFAULT_TOOL_URL,
+  DEFAULT_COLLAB_URL,
   createServer,
   startServer,
   resolveControlToken,

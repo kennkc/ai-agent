@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:06 · 源文件 2026-09-20-MC01可靠性加固与端到端消费闭环.md</span>
+  <span class="meta">生成于 2026-09-20 16:21 · 源文件 2026-09-20-MC01可靠性加固与端到端消费闭环.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -233,7 +233,7 @@
 </table>
 <h2 id="4">4. 明确保留的后续项<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
 <ul>
-<li><strong>R-MC01-05</strong>：工作平台协作视图从固定 <code>DOM-2048</code> Mock 切换到真实域名选择 + 聚合数据；当前不得以 Mock 冒充完成。</li>
+<li>~~<strong>R-MC01-05</strong>：工作平台协作视图从固定 <code>DOM-2048</code> Mock 切换到真实域名选择 + 聚合数据~~ —— 已于同日后续轮闭合，见《2026-09-20-R-MC01-05真实协作域接线与前端测试补强》。</li>
 <li><strong>多实例 consumer 规模验证</strong>：当前是“每域一个虚拟线程拉取循环”，域数量很大时需要验证线程/连接规模，必要时改为共享调度器或批量拉取。</li>
 <li><strong>业务处理器</strong>：dispatch / result / negotiate 的传输已消费，但 Phase 6 业务处理器仍待注册，日志不会把它们描述为业务已完成。</li>
 <li><strong>Prometheus 指标</strong>：consumer lag、重投次数、DLQ 数量、心跳 coalesce 率目前通过 health/日志可见，尚未接 Prometheus。</li>

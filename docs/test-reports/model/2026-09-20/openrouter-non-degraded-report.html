@@ -116,46 +116,39 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:45 · 源文件 openrouter-non-degraded-report.md</span>
+  <span class="meta">生成于 2026-09-20 16:25 · 源文件 openrouter-non-degraded-report.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#1">1. 结论</a></li>
-<li><a href="#2">2. 实测记录</a><ul>
-<li><a href="#run-1">Run 1：成功返回预期文本</a></li>
-<li><a href="#run-2">Run 2：非降级成功，但内容未达预期</a></li>
-</ul>
-</li>
-<li><a href="#3">3. 优化建议</a></li>
-<li><a href="#4">4. 复现命令</a></li>
-<li><a href="#5">5. 测试边界</a></li>
+<li><a href="#2">2. 固定模型实测记录</a></li>
+<li><a href="#3-openrouter">3. OpenRouter 路由别名风险</a></li>
+<li><a href="#4">4. 优化建议</a></li>
+<li><a href="#5">5. 复现命令</a></li>
+<li><a href="#6">6. 测试边界</a></li>
 </ul>
 </div>
 </nav>
   <main class="doc"><h1 id="openrouter">OpenRouter 非降级模型验证报告<a class="headerlink" href="#openrouter" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>日期</strong>：2026-09-20<br />
-<strong>脚本</strong>：<code>scripts/openrouter-e2e.py</code><br />
-<strong>参数</strong>：<code>base_url=https://openrouter.ai/api/v1</code> · <code>model=openrouter/free</code><br />
+<p><strong>日期</strong>：2026-09-20
+<strong>脚本</strong>：<code>scripts/openrouter-e2e.py</code>
+<strong>参数</strong>：<code>base_url=https://openrouter.ai/api/v1</code> · <code>model=nex-agi/nex-n2.5-mini:free</code>
 <strong>密钥</strong>：仅通过 <code>OPENROUTER_API_KEY</code> 环境变量传入，未写入仓库或报告</p>
 </blockquote>
 <h2 id="1">1. 结论<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
-<p><code>OpenRouter</code> 的 OpenAI 兼容接口能够被现有 <code>HttpLlmEngine → LlmGateway</code> 路径真实调用：</p>
+<p>固定上游模型 <strong><code>nex-agi/nex-n2.5-mini:free</code></strong> 的直连和现有网关链路均通过：</p>
 <ul>
+<li>直连 <code>/chat/completions</code> 返回 <code>OPENROUTER_OK</code>，延迟 <strong>2843.44 ms</strong></li>
+<li><code>HttpLlmEngine → LlmGateway</code> 返回 <code>OPENROUTER_OK</code>，延迟 <strong>1346 ms</strong></li>
 <li><code>HttpLlmEngine.available() == true</code></li>
 <li><code>LlmGateway</code> 返回 <code>degraded=false</code></li>
 <li><code>generator=model</code></li>
-<li>返回内容非空（在成功路由的上游模型上）</li>
+<li>输出非空，且包含预期校验标记</li>
 </ul>
-<p>因此，<strong>接口连接与网关非降级路径验证通过</strong>。</p>
-<p>但 <code>openrouter/free</code> 是路由别名，不保证固定到同一上游模型。两次实测分别落到不同免费模型，其中一次返回预期文本，另一次返回字面量 <code>None</code>。这说明：</p>
-<ul>
-<li><strong>连通性和非降级状态可用</strong>；</li>
-<li><strong>输出质量不可用 <code>openrouter/free</code> 做稳定评测</strong>；</li>
-<li>生产或评测场景应固定具体上游模型 ID。</li>
-</ul>
-<h2 id="2">2. 实测记录<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
-<h3 id="run-1">Run 1：成功返回预期文本<a class="headerlink" href="#run-1" title="Permanent link">&para;</a></h3>
+<p>因此，<strong>OpenRouter 接口接入、真实模型调用与非降级网关路径验证通过（status=pass）</strong>。</p>
+<p><code>openrouter/free</code> 只能作为路由别名做连通性 smoke test：历史实测两次落到了不同上游，其中一次返回预期文本，另一次返回字面量 <code>None</code>。该别名 <strong>不能用于稳定质量评测</strong>，评测和生产配置应固定具体上游模型 ID。</p>
+<h2 id="2">2. 固定模型实测记录<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
@@ -163,6 +156,8 @@
 <th>上游模型</th>
 <th>结果</th>
 <th style="text-align: right;">延迟</th>
+<th>降级状态</th>
+<th>生成器</th>
 </tr>
 </thead>
 <tbody>
@@ -170,69 +165,68 @@
 <td>直连 <code>/chat/completions</code></td>
 <td><code>nex-agi/nex-n2.5-mini:free</code></td>
 <td><code>OPENROUTER_OK</code></td>
-<td style="text-align: right;">2146ms</td>
+<td style="text-align: right;">2843.44 ms</td>
+<td>—</td>
+<td>上游模型</td>
 </tr>
 <tr>
 <td><code>HttpLlmEngine → LlmGateway</code></td>
-<td><code>openrouter/free</code></td>
+<td><code>nex-agi/nex-n2.5-mini:free</code></td>
 <td><code>OPENROUTER_OK</code></td>
-<td style="text-align: right;">11640ms</td>
+<td style="text-align: right;">1346 ms</td>
+<td><code>false</code></td>
+<td><code>model</code></td>
 </tr>
 </tbody>
 </table>
-<p>网关结果：<code>degraded=false</code>，<code>generator=model</code>。</p>
-<h3 id="run-2">Run 2：非降级成功，但内容未达预期<a class="headerlink" href="#run-2" title="Permanent link">&para;</a></h3>
+<p>直连用量：<code>prompt_tokens=35</code>、<code>completion_tokens=8</code>、<code>total_tokens=43</code>、<code>cost=0</code>。
+网关侧同样完成真实模型调用，未触发任何降级或规则/模板回退。</p>
+<h2 id="3-openrouter">3. OpenRouter 路由别名风险<a class="headerlink" href="#3-openrouter" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>路径</th>
-<th>上游模型</th>
+<th>场景</th>
 <th>结果</th>
-<th style="text-align: right;">延迟</th>
+<th>风险</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td>直连 <code>/chat/completions</code></td>
-<td><code>liquid/lfm-2.5-2.6b:free</code></td>
-<td>字面量 <code>None</code></td>
-<td style="text-align: right;">1749ms</td>
+<td><code>openrouter/free</code> Run 1</td>
+<td>路由到 <code>nex-agi/nex-n2.5-mini:free</code>，返回预期文本</td>
+<td>不可复现上游</td>
 </tr>
 <tr>
-<td><code>HttpLlmEngine → LlmGateway</code></td>
-<td><code>openrouter/free</code></td>
-<td>字面量 <code>None</code></td>
-<td style="text-align: right;">2296ms</td>
+<td><code>openrouter/free</code> Run 2</td>
+<td>路由到 <code>liquid/lfm-2.5-2.6b:free</code>，返回字面量 <code>None</code></td>
+<td>非降级但质量失败</td>
 </tr>
 </tbody>
 </table>
-<p>网关结果仍为：<code>degraded=false</code>，<code>generator=model</code>。<br />
-因此该次结果应标记为 <strong>pass_with_warning</strong>，不能把“非降级”误读为“输出质量稳定通过”。</p>
-<h2 id="3">3. 优化建议<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<p>风险结论：<code>degraded=false</code> 只能证明请求走到了真实模型，<strong>不能单独证明输出质量符合预期</strong>；质量门禁还必须校验内容结构和语义。</p>
+<h2 id="4">4. 优化建议<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
 <ol>
-<li>将 <code>openrouter</code> 加入模型供应商字典与默认 Base URL，改善前台配置体验。</li>
-<li>保留 <code>openrouter/free</code> 作为连通性 smoke 测试，不用于质量评测。</li>
-<li>正式评测时固定具体免费模型 ID，例如实测中有效的上游模型；同时记录模型版本和路由结果。</li>
-<li>为 <code>HttpLlmEngine</code> 的 <code>extra</code> 配置增加可选请求头支持：
-   - <code>HTTP-Referer</code>
-   - <code>X-Title</code></li>
-<li>对模型输出增加结构化校验，不仅检查 HTTP 200，还要拒绝空串、<code>None</code>、<code>null</code> 和明显模板占位。</li>
+<li>正式评测和生产配置固定具体上游模型 ID，并记录模型版本与实际路由结果。</li>
+<li>保留 <code>openrouter/free</code> 仅用于连通性 smoke test，不用于质量、成本或响应格式评测。</li>
+<li>为模型输出增加结构化校验，拒绝空串、<code>None</code>、<code>null</code> 和模板占位，即使 HTTP 状态为 200、<code>degraded=false</code> 也判失败。</li>
+<li>为 <code>HttpLlmEngine</code> 的 <code>extra</code> 配置增加可选请求头支持：<code>HTTP-Referer</code>、<code>X-Title</code>。</li>
 <li>外部模型测试通过环境变量/CI Secret 注入 Key；本轮报告不包含 Key 明文。</li>
-<li>建议轮换本轮对话中暴露过的 Key，避免继续使用已出现在文本记录中的凭据。</li>
+<li>本轮对话中曾暴露过测试 Key，建议立即轮换，后续仅在本地环境变量或密钥管理服务中使用。</li>
+<li><code>embed</code> / <code>rerank</code> 不纳入本次 OpenRouter 生成测试：这两类能力仍使用本地 BGE-M3 / reranker，不能由 chat completion 模型替代。</li>
 </ol>
-<h2 id="4">4. 复现命令<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<h2 id="5">5. 复现命令<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <pre><code class="language-bash">OPENROUTER_E2E=1 \
 OPENROUTER_API_KEY=... \
 python scripts/openrouter-e2e.py \
   --base-url https://openrouter.ai/api/v1 \
-  --model openrouter/free \
-  --output docs/test-reports/model/2026-09-20/openrouter-non-degraded.json
+  --model nex-agi/nex-n2.5-mini:free \
+  --output docs/test-reports/model/2026-09-20/openrouter-fixed-model.json
 </code></pre>
-<h2 id="5">5. 测试边界<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<h2 id="6">6. 测试边界<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
 <ul>
 <li>本测试验证 <strong>chat completion 生成路径</strong>，不覆盖 <code>embed</code> / <code>rerank</code>。</li>
-<li><code>embed</code> 与 <code>rerank</code> 仍需本地 BGE-M3 / reranker，不能使用 <code>openrouter/free</code> 代替。</li>
-<li>外部模型受免费额度、限流、上游路由和网络影响；该测试应保持 opt-in，不作为默认 CI 硬门禁。</li>
+<li>外部模型受免费额度、限流、上游可用性和网络影响；该测试保持 opt-in，不作为默认 CI 硬门禁。</li>
+<li>结果对应 2026-09-20 的免费模型可用状态；后续仍需在 CI 夜检或发布前复测。</li>
 </ul></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>

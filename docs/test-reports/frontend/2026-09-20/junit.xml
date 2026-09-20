@@ -1,21 +1,31 @@
 <?xml version="1.0" encoding="UTF-8" ?>
-<testsuites name="vitest tests" tests="15" failures="0" errors="0" time="1.2820257">
-    <testsuite name="src/api/status.test.ts" timestamp="2026-09-20T07:46:53.221Z" hostname="KennCai" tests="3" failures="0" errors="0" skipped="0" time="0.1211745">
-        <testcase classname="src/api/status.test.ts" name="data source degradation status &gt; deduplicates degradation records by scope" time="0.1004726">
+<testsuites name="vitest tests" tests="19" failures="0" errors="0" time="2.3297629">
+    <testsuite name="src/api/provider.test.ts" timestamp="2026-09-20T08:23:55.396Z" hostname="KennCai" tests="2" failures="0" errors="0" skipped="0" time="0.4279667">
+        <testcase classname="src/api/provider.test.ts" name="dataProvider collaboration wiring &gt; uses the first real domain instead of the fixed DOM-2048 demo id" time="0.368332">
+        </testcase>
+        <testcase classname="src/api/provider.test.ts" name="dataProvider collaboration wiring &gt; keeps the mock collaboration fallback without requesting the fixed demo domain when no real domain exists" time="0.0552013">
+            <system-err>
+[wp-data-source] collaboration_domains 回落到 Mock 数据：暂无可用协作域
+
+            </system-err>
+        </testcase>
+    </testsuite>
+    <testsuite name="src/api/status.test.ts" timestamp="2026-09-20T08:23:55.398Z" hostname="KennCai" tests="3" failures="0" errors="0" skipped="0" time="0.0633546">
+        <testcase classname="src/api/status.test.ts" name="data source degradation status &gt; deduplicates degradation records by scope" time="0.0423558">
             <system-err>
 [wp-data-source] overview 回落到 Mock 数据：timeout
 [wp-data-source] overview 回落到 Mock 数据：HTTP 500
 
             </system-err>
         </testcase>
-        <testcase classname="src/api/status.test.ts" name="data source degradation status &gt; clears one scope when the API recovers" time="0.005067">
+        <testcase classname="src/api/status.test.ts" name="data source degradation status &gt; clears one scope when the API recovers" time="0.0029972">
             <system-err>
 [wp-data-source] models 回落到 Mock 数据：BFF unavailable
 [wp-data-source] overview 回落到 Mock 数据：timeout
 
             </system-err>
         </testcase>
-        <testcase classname="src/api/status.test.ts" name="data source degradation status &gt; keeps at most 20 degradation records" time="0.0120742">
+        <testcase classname="src/api/status.test.ts" name="data source degradation status &gt; keeps at most 20 degradation records" time="0.015063">
             <system-err>
 [wp-data-source] scope-0 回落到 Mock 数据：failed
 [wp-data-source] scope-1 回落到 Mock 数据：failed
@@ -46,38 +56,44 @@
             </system-err>
         </testcase>
     </testsuite>
-    <testsuite name="src/stores/app.test.ts" timestamp="2026-09-20T07:46:53.227Z" hostname="KennCai" tests="3" failures="0" errors="0" skipped="0" time="0.0266221">
-        <testcase classname="src/stores/app.test.ts" name="app store &gt; defaults to dark theme and toggles to light" time="0.0154331">
+    <testsuite name="src/router/router.test.ts" timestamp="2026-09-20T08:23:55.401Z" hostname="KennCai" tests="3" failures="0" errors="0" skipped="0" time="0.016017">
+        <testcase classname="src/router/router.test.ts" name="work-platform routes &gt; resolves the primary functional pages" time="0.0077131">
         </testcase>
-        <testcase classname="src/stores/app.test.ts" name="app store &gt; persists theme and preference changes" time="0.004302">
+        <testcase classname="src/router/router.test.ts" name="work-platform routes &gt; keeps all dynamic module routes reachable" time="0.0031909">
         </testcase>
-        <testcase classname="src/stores/app.test.ts" name="app store &gt; toggles mock/api source without affecting theme" time="0.0029397">
-        </testcase>
-    </testsuite>
-    <testsuite name="src/router/router.test.ts" timestamp="2026-09-20T07:46:53.229Z" hostname="KennCai" tests="3" failures="0" errors="0" skipped="0" time="0.0122944">
-        <testcase classname="src/router/router.test.ts" name="work-platform routes &gt; resolves the primary functional pages" time="0.007187">
-        </testcase>
-        <testcase classname="src/router/router.test.ts" name="work-platform routes &gt; keeps all dynamic module routes reachable" time="0.0015552">
-        </testcase>
-        <testcase classname="src/router/router.test.ts" name="work-platform routes &gt; has a fallback route for unknown paths" time="0.0005474">
+        <testcase classname="src/router/router.test.ts" name="work-platform routes &gt; has a fallback route for unknown paths" time="0.001511">
         </testcase>
     </testsuite>
-    <testsuite name="src/views/MiddlewareView.test.ts" timestamp="2026-09-20T07:46:53.232Z" hostname="KennCai" tests="2" failures="0" errors="0" skipped="0" time="0.1893343">
-        <testcase classname="src/views/MiddlewareView.test.ts" name="MiddlewareView &gt; renders live middleware cards and health summary" time="0.1375955">
+    <testsuite name="src/stores/app.test.ts" timestamp="2026-09-20T08:23:55.403Z" hostname="KennCai" tests="3" failures="0" errors="0" skipped="0" time="0.0204914">
+        <testcase classname="src/stores/app.test.ts" name="app store &gt; defaults to dark theme and toggles to light" time="0.0112975">
         </testcase>
-        <testcase classname="src/views/MiddlewareView.test.ts" name="MiddlewareView &gt; renders explicit disabled state when observation service is unavailable" time="0.0488001">
+        <testcase classname="src/stores/app.test.ts" name="app store &gt; persists theme and preference changes" time="0.0018012">
         </testcase>
-    </testsuite>
-    <testsuite name="src/views/ModelsView.test.ts" timestamp="2026-09-20T07:46:53.234Z" hostname="KennCai" tests="2" failures="0" errors="0" skipped="0" time="0.7828854">
-        <testcase classname="src/views/ModelsView.test.ts" name="ModelsView &gt; renders a clear unavailable state instead of pretending there are no configs" time="0.5022612">
-        </testcase>
-        <testcase classname="src/views/ModelsView.test.ts" name="ModelsView &gt; renders a configured OpenRouter-compatible model and assembled role count" time="0.2768954">
+        <testcase classname="src/stores/app.test.ts" name="app store &gt; toggles mock/api source without affecting theme" time="0.0035142">
         </testcase>
     </testsuite>
-    <testsuite name="src/views/ServicesView.test.ts" timestamp="2026-09-20T07:46:53.236Z" hostname="KennCai" tests="2" failures="0" errors="0" skipped="0" time="0.149715">
-        <testcase classname="src/views/ServicesView.test.ts" name="ServicesView &gt; renders real service state and controlled/external distinction" time="0.1059681">
+    <testsuite name="src/views/MiddlewareView.test.ts" timestamp="2026-09-20T08:23:55.405Z" hostname="KennCai" tests="2" failures="0" errors="0" skipped="0" time="0.2108823">
+        <testcase classname="src/views/MiddlewareView.test.ts" name="MiddlewareView &gt; renders live middleware cards and health summary" time="0.1528563">
         </testcase>
-        <testcase classname="src/views/ServicesView.test.ts" name="ServicesView &gt; renders read-only state when BFF unavailable" time="0.0401995">
+        <testcase classname="src/views/MiddlewareView.test.ts" name="MiddlewareView &gt; renders explicit disabled state when observation service is unavailable" time="0.0553461">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/views/ModelsView.test.ts" timestamp="2026-09-20T08:23:55.405Z" hostname="KennCai" tests="2" failures="0" errors="0" skipped="0" time="0.8051342">
+        <testcase classname="src/views/ModelsView.test.ts" name="ModelsView &gt; renders a clear unavailable state instead of pretending there are no configs" time="0.4761654">
+        </testcase>
+        <testcase classname="src/views/ModelsView.test.ts" name="ModelsView &gt; renders a configured OpenRouter-compatible model and assembled role count" time="0.3264608">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/views/OverviewView.test.ts" timestamp="2026-09-20T08:23:55.406Z" hostname="KennCai" tests="2" failures="0" errors="0" skipped="0" time="0.6189554">
+        <testcase classname="src/views/OverviewView.test.ts" name="OverviewView &gt; renders today summary, model monitoring and observability from the API payload" time="0.402241">
+        </testcase>
+        <testcase classname="src/views/OverviewView.test.ts" name="OverviewView &gt; keeps the last available snapshot and marks the load failure explicitly" time="0.2144844">
+        </testcase>
+    </testsuite>
+    <testsuite name="src/views/ServicesView.test.ts" timestamp="2026-09-20T08:23:55.407Z" hostname="KennCai" tests="2" failures="0" errors="0" skipped="0" time="0.1669613">
+        <testcase classname="src/views/ServicesView.test.ts" name="ServicesView &gt; renders real service state and controlled/external distinction" time="0.119294">
+        </testcase>
+        <testcase classname="src/views/ServicesView.test.ts" name="ServicesView &gt; renders read-only state when BFF unavailable" time="0.0445081">
         </testcase>
     </testsuite>
 </testsuites>

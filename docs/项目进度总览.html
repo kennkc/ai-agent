@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 15:52 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-20 16:25 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -167,12 +167,12 @@ Kafka 旁路）+ <strong>IN-06 工具契约治理</strong>（semver + schema 指
 JetStream <strong>durable pull consumer</strong>、手工 ack/nak、有限重投与自动 DLQ、
 心跳 5 秒窗口合并/stale、P99 &lt; 10ms 门禁；契约登记在 <code>contracts/collab-bus-openapi.yaml</code>。
 实测 38/38 测试通过（含消费者离线恢复与自动 DLQ），P99 = 4.231ms；GitHub Actions 已加入
-<code>collab-integration</code> 与 <code>collab-bus-check</code> 两个 job。R-MC01-05（协作视图切真实聚合数据）
-仍为 Should 后续项，未用 Mock 冒充完成。</p>
-<p><strong>2026-09-20 工程化补强</strong>：前端新增 Vitest 功能测试基线（15/15）并归档 JUnit/覆盖率报告；
-wp-bff 新增 8 个应用服务监控与本地受控启停端点（110/110 测试）；OpenRouter 非降级网关
-路径已验证，但 free router 输出不稳定；<code>versions.lock.json</code> 与部署版本基线文档已落地。
-后台服务控制页已加入工作平台观测区。R-MC01-05 仍是真实协作域 UI 后续项。
+<code>collab-integration</code> 与 <code>collab-bus-check</code> 两个 job。R-MC01-05 已闭合：wp-bff 代理协作域列表/
+详情，工作平台通过 <code>VITE_COLLAB_DOMAIN_ID</code> 或真实列表首项选择协作域，上游不可用时显式降级。</p>
+<p><strong>2026-09-20 工程化补强</strong>：前端新增 Vitest 功能测试基线（19/19）并归档 JUnit/覆盖率报告；
+wp-bff 新增应用服务监控/受控启停与协作域代理端点（113/113 测试）；OpenRouter 固定上游模型
+通过非降级验证，free router 仅保留 smoke 用途；<code>versions.lock.json</code> 与部署版本基线文档已落地。
+后台服务控制页、总览真实协作域选择与降级展示已加入工作平台；R-MC01-05 已闭合。
 <strong>2026-09-19 Phase 5 复审结论</strong>：<strong>未触碰伪实现红线</strong>。复审时唯一需留意的是<strong>沙箱降级被当作"沙箱验收通过"
 叙述的风险</strong> —— 当时实测 <code>docker_available=false</code>、<code>active_backend=process-restricted</code>、<code>degraded=true</code>。
 <strong>该缺口已于同日收口轮闭合</strong>：构建 <code>agent-sandbox:latest</code> 后重启服务，<code>GET /api/tool/sandbox</code> 回到
@@ -627,7 +627,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>前端</td>
 <td><code>cd web/work-platform &amp;&amp; npm run test:report &amp;&amp; npm run typecheck &amp;&amp; npm run build</code></td>
-<td><strong>15/15 功能测试通过</strong>；typecheck/build 通过</td>
+<td><strong>19/19 功能测试通过</strong>；覆盖率 27.26% 行 / 74.94% 分支；typecheck/build 通过</td>
 </tr>
 <tr>
 <td><strong>超时预算（跨服务）</strong></td>
@@ -781,7 +781,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <td>7</td>
 <td><strong>Phase 3 阶段范围缺口：IN-01 / WB-03 / WB-05 / ~~MC-01~~ 仍未实现（MC-01 已闭合）</strong></td>
 <td>Phase 3 需求文档 §8/§9 列有其需求与验收标准，但阶段报告「需求范围」只声明 <code>R3-01~R3-09 + R-C03</code></td>
-<td>技能包模型（MinIO+etcd）、专家中心、技能市场仍各需独立服务；<strong>MC-01 已于 2026-09-20 作为 Phase 6 前置独立切片完成 R-MC01-01~04</strong>（R-MC01-05 为后续 Should 项）</td>
+<td>技能包模型（MinIO+etcd）、专家中心、技能市场仍各需独立服务；<strong>MC-01 已于 2026-09-20 作为 Phase 6 前置独立切片完成 R-MC01-01~05</strong>（含工作平台真实协作域接线）</td>
 </tr>
 <tr>
 <td>8</td>

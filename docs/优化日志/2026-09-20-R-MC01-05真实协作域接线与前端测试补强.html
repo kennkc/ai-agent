@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>R-MC01-05 真实协作域接线与前端测试补强（2026-09-20）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-20 16:28 · 源文件 2026-09-20-R-MC01-05真实协作域接线与前端测试补强.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 本轮解决的问题</a></li>
+<li><a href="#2">2. 关键实现</a><ul>
+<li><a href="#21-bff">2.1 BFF 协作域代理</a></li>
+<li><a href="#22">2.2 前端自动选域</a></li>
+<li><a href="#23">2.3 测试补强</a></li>
+</ul>
+</li>
+<li><a href="#3">3. 验证证据</a></li>
+<li><a href="#4">4. 归档产物</a></li>
+<li><a href="#5">5. 明确保留的后续项</a></li>
+<li><a href="#6">6. 复现命令</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="r-mc01-05-2026-09-20">R-MC01-05 真实协作域接线与前端测试补强（2026-09-20）<a class="headerlink" href="#r-mc01-05-2026-09-20" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>范围</strong>：MC-01 协作总线独立切片收口 · <strong>性质</strong>：真实数据接线 + 前端测试补强 + 契约/报告同步
+<strong>结论</strong>：R-MC01-05 已闭合；工作平台不再把固定 <code>DOM-2048</code> 当作真实协作域，上游不可用时仍保留可见降级。</p>
+</blockquote>
+<hr />
+<h2 id="1">1. 本轮解决的问题<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>问题</th>
+<th>修复前风险</th>
+<th>本轮处置</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>工作平台协作视图仍使用固定演示域 <code>DOM-2048</code></td>
+<td>即使 collab-bus 已有真实域，页面仍展示演示数据</td>
+<td>provider 先调用 <code>/collab/domains</code>，优先 <code>VITE_COLLAB_DOMAIN_ID</code>，否则使用真实列表首项</td>
+</tr>
+<tr>
+<td>wp-bff 未代理 collab-bus 协作域</td>
+<td>前端跨服务直连，协议映射散落前端</td>
+<td>新增 <code>/api/wp/collab/domains</code> 与 <code>/api/wp/collab/{domain_id}</code>，由 BFF 统一映射成员/进度/拓扑</td>
+</tr>
+<tr>
+<td>上游不可达可能被渲染成“没有协作域”</td>
+<td>故障与服务空态混淆</td>
+<td>返回 200 + <code>available=false</code> + <code>reason</code>，前端登记 <code>collaboration_domains</code> 降级并保留 Mock</td>
+</tr>
+<tr>
+<td>前端缺少 provider 与总览页测试</td>
+<td>真实域接线缺少回归保护</td>
+<td>新增 provider 真实域选择测试、OverviewView 真实摘要/降级快照测试</td>
+</tr>
+<tr>
+<td>OpenRouter free router 输出不稳定</td>
+<td>可能把非降级误报成质量通过</td>
+<td>固定上游模型复测并判定 <code>pass</code>；<code>openrouter/free</code> 仅保留 smoke 用途</td>
+</tr>
+</tbody>
+</table>
+<h2 id="2">2. 关键实现<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h3 id="21-bff">2.1 BFF 协作域代理<a class="headerlink" href="#21-bff" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>GET /api/wp/collab/domains</code>：透传 <code>X-Tenant-Id</code>，返回 <code>available/total/items/reason/checked_at</code>。</li>
+<li><code>GET /api/wp/collab/{domain_id}</code>：把 collab-bus 的 <code>members/progress/stale_count</code> 映射为工作平台协作视图的 <code>agents/messages/dag/...</code>；<code>stale/blocked -&gt; blocked</code>、<code>idle -&gt; waiting</code>，不把阻塞或空闲成员误报为执行中。</li>
+<li>collab-bus 不可达时不伪造成功：返回 200 + <code>available=false</code>，由前端显式降级。</li>
+<li>BFF 是唯一字段映射边界；前端 provider 不再复制 collab-bus 原始结构解析逻辑。</li>
+</ul>
+<h3 id="22">2.2 前端自动选域<a class="headerlink" href="#22" title="Permanent link">&para;</a></h3>
+<ol>
+<li>先读取 <code>/collab/domains</code>；</li>
+<li>若 <code>VITE_COLLAB_DOMAIN_ID</code> 存在且列表命中，则使用该域；</li>
+<li>否则使用真实列表首项；</li>
+<li>域列表为空或请求失败时登记 <code>collaboration_domains</code> 降级；</li>
+<li>禁止继续把 <code>DOM-2048</code> 作为真实数据路径。</li>
+</ol>
+<h3 id="23">2.3 测试补强<a class="headerlink" href="#23" title="Permanent link">&para;</a></h3>
+<ul>
+<li>provider：断言先请求 <code>/collab/domains</code>，再请求真实域详情，不再请求固定演示域。</li>
+<li>OverviewView：覆盖今日摘要、模型监控、OPS 观测摘要真实数据渲染，以及接口异常时“最近一次可用快照 + 明确告警”。</li>
+<li>wp-bff：新增协作域列表代理、真实聚合映射、上游不可达降级 3 条回归。</li>
+<li>契约：<code>/collab/domains</code> 与 <code>/collab/{domain_id}</code> 均标记 <code>implemented</code>。</li>
+</ul>
+<h2 id="3">3. 验证证据<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>实测结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>wp-bff <code>node --test</code></td>
+<td><strong>113 passed / 0 failed</strong></td>
+</tr>
+<tr>
+<td>前端 <code>npm test</code></td>
+<td><strong>8 个测试文件 / 19 passed / 0 failed</strong></td>
+</tr>
+<tr>
+<td>前端覆盖率</td>
+<td><strong>行 27.26% / 分支 74.94% / 函数 26.81%</strong></td>
+</tr>
+<tr>
+<td>前端类型检查</td>
+<td><code>npm run typecheck</code> 通过</td>
+</tr>
+<tr>
+<td>前端生产构建</td>
+<td><code>npm run build</code> 通过（仅 Element Plus 主包体积提示）</td>
+</tr>
+<tr>
+<td>work-platform 契约</td>
+<td>67 个端点 / 40 个 implemented 路径 / 43 个方法 / <strong>0 FAIL</strong></td>
+</tr>
+<tr>
+<td>collab-bus 契约</td>
+<td>5 个 REST 端点 + 5 个 NATS 主题模板 / <strong>0 FAIL</strong></td>
+</tr>
+<tr>
+<td>文档一致性</td>
+<td>MD/HTML 孪生过期 <strong>0 组</strong></td>
+</tr>
+<tr>
+<td>OpenRouter 固定模型</td>
+<td><code>nex-agi/nex-n2.5-mini:free</code>：直连 2843.44ms、网关 1346ms、<code>degraded=false</code>、<code>generator=model</code>、<strong>status=pass</strong></td>
+</tr>
+<tr>
+<td>OpenRouter 路由别名</td>
+<td><code>openrouter/free</code> 仅保留 smoke；历史实测可能路由到不同上游并出现 <code>None</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="4">4. 归档产物<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<ul>
+<li>前端测试报告：<code>docs/test-reports/frontend/2026-09-20/</code></li>
+<li>OpenRouter 模型报告：<code>docs/test-reports/model/2026-09-20/openrouter-non-degraded-report.md</code></li>
+<li>OpenRouter 固定模型原始结果：<code>docs/test-reports/model/2026-09-20/openrouter-fixed-model.json</code></li>
+<li>MC-P3 设计文档：知识库 <code>AGENT_CONTEXT/MC-多Agent协作/MC-P3-*</code></li>
+</ul>
+<h2 id="5">5. 明确保留的后续项<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
+<ul>
+<li>dispatch / result / negotiate 的 Phase 6 业务处理器仍未注册；当前只完成传输与可靠消费基础设施。</li>
+<li>多实例 consumer 规模、Prometheus consumer lag/重投/DLQ 指标仍未实现。</li>
+<li>provider 其余 API 分支、知识库/协作总线/远程 IM/Agent 在线页面仍待补组件测试。</li>
+<li>Playwright E2E 与 CI artifact 上传仍待接入。</li>
+<li>本轮对话中曾暴露过 OpenRouter 测试 Key，建议立即轮换；仓库与报告只保留掩码，不保存明文。</li>
+</ul>
+<h2 id="6">6. 复现命令<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash"># 前端门禁
+cd web/work-platform
+npm test
+npm run test:report
+npm run typecheck
+npm run build
+
+# wp-bff 回归
+cd services/node/wp-bff
+node --test
+
+# 契约与文档门禁
+cd ../../..
+python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml
+python scripts/contract-check.py --collab --collab-openapi contracts/collab-bus-openapi.yaml
+python scripts/doc-consistency-check.py
+</code></pre></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>
