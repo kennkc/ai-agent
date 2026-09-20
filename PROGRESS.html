@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 22:41 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-20 09:49 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -187,6 +187,13 @@
 <li><a href="#2-doc-figure-consistency-pass-8ba5544">2 · Doc-figure consistency pass (8ba5544)</a></li>
 <li><a href="#3-exception-flow-consolidation-unified-error-envelope-6616616-d4a114b">3 · Exception-flow consolidation &amp; unified error envelope (6616616 + d4a114b)</a></li>
 <li><a href="#verification-2026-09-18-post-closure">Verification (2026-09-18, post-closure)</a></li>
+</ul>
+</li>
+<li><a href="#2026-09-20-environment-reproducibility-fix-optimization-pass-3">2026-09-20 Environment Reproducibility Fix (optimization pass 3)</a><ul>
+<li><a href="#findings-reproduced-not-hypothesized">Findings (reproduced, not hypothesized)</a></li>
+<li><a href="#fixes">Fixes</a></li>
+<li><a href="#verification-2026-09-20-windows-host">Verification (2026-09-20, Windows host)</a></li>
+<li><a href="#not-changed">Not changed</a></li>
 </ul>
 </li>
 <li><a href="#remaining">Remaining</a></li>
@@ -956,6 +963,48 @@ gateway (8080) is still unverified at runtime because <strong>Spring WebFlux doe
 <code>body-service/target/surefire-reports/com.agent.body.store.BodyStoreTest.txt</code> from 2026-09-13
 (its test class was removed long ago) inflates the sum to 131.</p>
 </blockquote>
+<h2 id="2026-09-20-environment-reproducibility-fix-optimization-pass-3">2026-09-20 Environment Reproducibility Fix (optimization pass 3)<a class="headerlink" href="#2026-09-20-environment-reproducibility-fix-optimization-pass-3" title="Permanent link">&para;</a></h2>
+<p>Follow-up to a hands-on evaluation on a Windows host: the suite was re-verified end to end and three
+<strong>environment-level</strong> defects were found and fixed. No business logic changed.</p>
+<h3 id="findings-reproduced-not-hypothesized">Findings (reproduced, not hypothesized)<a class="headerlink" href="#findings-reproduced-not-hypothesized" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>pip install -r requirements.txt</code> <strong>crashes on a Chinese Windows host</strong>:
+  <code>UnicodeDecodeError: 'gbk' codec can't decode byte 0x80</code> — pip reads requirement files using the
+  system locale (GBK) while the file was UTF-8 with Chinese comments (96 non-ASCII bytes).</li>
+<li><code>requirements-dev.txt</code> <strong>did not declare pytest</strong>, although every documented verification step runs
+  <code>python -m pytest</code>; installing both requirement files still left pytest missing.</li>
+<li>No venv existed in the repo and the system interpreter lacked <code>langgraph</code>/<code>redis</code>, so four
+  brain-stage test modules could not even be collected.</li>
+</ul>
+<h3 id="fixes">Fixes<a class="headerlink" href="#fixes" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>requirements.txt</code>: Chinese comments replaced with English (file is now pure ASCII); dependency set unchanged.</li>
+<li><code>requirements-dev.txt</code>: added <code>pytest&gt;=8.0</code> and <code>httpx&gt;=0.27.0</code> (TestClient transport).</li>
+<li>New <code>scripts/setup-python-env.ps1</code>: creates <code>services/python/nlp-service/.venv</code>, forces
+  <code>PYTHONUTF8=1</code>, installs both requirement files, then runs pytest (<code>-Recreate</code> / <code>-SkipTest</code> supported).</li>
+<li>New <code>scripts/model-readiness.py</code>: checks whether <code>sentence-transformers</code> is importable and whether
+  <code>BAAI/bge-m3</code> and <code>BAAI/bge-reranker-v2-m3</code> are present in the HF cache, prints the acquisition
+  commands (including the hf-mirror endpoint) and the re-index warning. Turns DEBT-010/011 from a
+  note into a checkable state.</li>
+<li>README 4.4 documents the workflow.</li>
+</ul>
+<h3 id="verification-2026-09-20-windows-host">Verification (2026-09-20, Windows host)<a class="headerlink" href="#verification-2026-09-20-windows-host" title="Permanent link">&para;</a></h3>
+<ul>
+<li><code>scripts/setup-python-env.ps1</code> run against a <strong>deleted venv</strong>: install succeeded (exit 0).</li>
+<li><code>pytest</code> on that fresh venv: <strong>158 passed / 1 skipped</strong> — matches the documented baseline.</li>
+<li><code>scripts/model-readiness.py</code>: correctly reports both models missing, with actionable guidance.</li>
+<li>Java <code>mvn test</code>: <strong>252 passed / 0 failures / 0 errors</strong>
+  (gateway 2 · session 43 · sense 53 · body 68 · tool-executor 86).</li>
+<li>wp-bff <code>node --test</code>: <strong>87 passed</strong>; <code>contract-check.py --work-platform</code>: 60 endpoints, 0 FAIL;
+  <code>timeout-budget-check.py</code>: ok=19 / gap=0 / fail=0; Vue <code>typecheck</code> + <code>build</code>: passed.</li>
+</ul>
+<h3 id="not-changed">Not changed<a class="headerlink" href="#not-changed" title="Permanent link">&para;</a></h3>
+<ul>
+<li>Element Plus on-demand import and the <code>ModuleView.vue</code> split stay deferred (need a visual
+  regression baseline).</li>
+<li>The sandbox image build remains an environment step: <code>infra/docker/sandbox/Dockerfile</code> and its
+  README already cover it; Docker was not running on this host, so R5-03 was not re-verified here.</li>
+</ul>
 <h2 id="remaining">Remaining<a class="headerlink" href="#remaining" title="Permanent link">&para;</a></h2>
 <ul>
 <li>~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:

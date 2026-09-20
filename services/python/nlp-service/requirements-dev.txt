@@ -1,3 +1,6 @@
+# Tooling required by the verification commands documented in PROGRESS.md / README.md
+pytest>=8.0
+httpx>=0.27.0
 grpcio-tools>=1.65.0
 grpcio>=1.65.0
 protobuf>=4.25.0

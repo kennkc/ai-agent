@@ -163,7 +163,38 @@ API 模式下观测区两页展示真实数据：**中间件监控**（8 容器�
 
 **中间件控制面需要令牌**：`POST /api/wp/middleware/:key/start|stop` 必须同时满足「来源白名单」与「控制令牌」两项校验。令牌优先取环境变量 `WP_BFF_CONTROL_TOKEN`，未配置时由 wp-bff 启动时随机生成到 `services/node/wp-bff/logs/wp-bff-control-token`；开发期 Vite 代理在服务端读取该文件并注入请求头，令牌不会进入浏览器。局域网 IP 访问开发服务器时需把该来源加入 `WP_BFF_ALLOWED_ORIGINS`。详见 `services/node/wp-bff/README.md`。
 
+### 4.4 Python 依赖与环境（nlp-service）
+
+nlp-service 的依赖声明在 `services/python/nlp-service/requirements.txt`（运行时）与
+`requirements-dev.txt`（测试与 proto 工具）。**不要**用系统 Python 直接装依赖，用一键脚本建立项目 venv：
+
+```powershell
+pwsh -File scripts/setup-python-env.ps1              # 创建 .venv + 装依赖 + pytest 冒烟
+pwsh -File scripts/setup-python-env.ps1 -Recreate    # 丢弃旧 venv 重建
+pwsh -File scripts/setup-python-env.ps1 -SkipTest    # 只装依赖，跳过测试
+```
+
+脚本要点：自动设置 `PYTHONUTF8=1` —— pip 在中文 Windows 上默认按 GBK 读取依赖文件，遇到非 ASCII
+内容会抛 `UnicodeDecodeError`；同时把依赖装进 `services/python/nlp-service/.venv`，不污染系统 Python。
+
+装好后手动跑测试：
+
+```powershell
+cd services/python/nlp-service
+.\.venv\Scripts\python.exe -m pytest -q        # 基线：158 passed / 1 skipped
+```
+
+**模型就绪检查**（嵌入 BGE-M3 与重排 bge-reranker 均为可选项）：
+
+```powershell
+python scripts/model-readiness.py
+```
+
+未就绪时服务走确定性降级后端并如实上报 `degraded=true`（DEBT-010/011），不伪造向量质量；
+启用真实模型的获取命令（含 hf-mirror 国内镜像）与切换注意事项由该脚本直接打印。
+
 ---
+
 
 ## 5. 安全基线
 

@@ -1,12 +1,12 @@
-# NLP 服务依赖（Phase 0 最小骨架，Phase 2 引入模型）
+# NLP service dependencies (Phase 0 minimal skeleton; models introduced in Phase 2)
 fastapi>=0.110.0
 uvicorn[standard]>=0.29.0
 pydantic>=2.6.0
-# Phase 4 大脑期：LangGraph 编排（R4-06）+ 语义缓存 Redis 客户端（R4-04）
+# Phase 4 brain stage: LangGraph orchestration (R4-06) + Redis client for semantic cache (R4-04)
 langgraph>=0.2
 redis>=5.0
-# Phase 6 / WB-10：模型接入配置的凭据加密（AES-256-GCM）
+# Phase 6 / WB-10: credential encryption for model-access configuration (AES-256-GCM)
 cryptography>=42.0.0
-# 大脑层 Postgres 底座（审计 IN3 / 记忆图谱 IN-02 / 模型配置 WB-10）。
-# 原为隐式依赖（app/brain/pg.py 延迟导入），此处显式声明以便一次装齐。
+# Brain-layer Postgres base (audit IN3 / memory graph IN-02 / model config WB-10).
+# Was an implicit dependency (lazy import in app/brain/pg.py); declared explicitly so one install covers it.
 psycopg2-binary>=2.9.9

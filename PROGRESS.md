@@ -763,6 +763,50 @@ gateway (8080) is still unverified at runtime because **Spring WebFlux does not 
 > `body-service/target/surefire-reports/com.agent.body.store.BodyStoreTest.txt` from 2026-09-13
 > (its test class was removed long ago) inflates the sum to 131.
 
+## 2026-09-20 Environment Reproducibility Fix (optimization pass 3)
+
+Follow-up to a hands-on evaluation on a Windows host: the suite was re-verified end to end and three
+**environment-level** defects were found and fixed. No business logic changed.
+
+### Findings (reproduced, not hypothesized)
+
+- `pip install -r requirements.txt` **crashes on a Chinese Windows host**:
+  `UnicodeDecodeError: 'gbk' codec can't decode byte 0x80` — pip reads requirement files using the
+  system locale (GBK) while the file was UTF-8 with Chinese comments (96 non-ASCII bytes).
+- `requirements-dev.txt` **did not declare pytest**, although every documented verification step runs
+  `python -m pytest`; installing both requirement files still left pytest missing.
+- No venv existed in the repo and the system interpreter lacked `langgraph`/`redis`, so four
+  brain-stage test modules could not even be collected.
+
+### Fixes
+
+- `requirements.txt`: Chinese comments replaced with English (file is now pure ASCII); dependency set unchanged.
+- `requirements-dev.txt`: added `pytest>=8.0` and `httpx>=0.27.0` (TestClient transport).
+- New `scripts/setup-python-env.ps1`: creates `services/python/nlp-service/.venv`, forces
+  `PYTHONUTF8=1`, installs both requirement files, then runs pytest (`-Recreate` / `-SkipTest` supported).
+- New `scripts/model-readiness.py`: checks whether `sentence-transformers` is importable and whether
+  `BAAI/bge-m3` and `BAAI/bge-reranker-v2-m3` are present in the HF cache, prints the acquisition
+  commands (including the hf-mirror endpoint) and the re-index warning. Turns DEBT-010/011 from a
+  note into a checkable state.
+- README 4.4 documents the workflow.
+
+### Verification (2026-09-20, Windows host)
+
+- `scripts/setup-python-env.ps1` run against a **deleted venv**: install succeeded (exit 0).
+- `pytest` on that fresh venv: **158 passed / 1 skipped** — matches the documented baseline.
+- `scripts/model-readiness.py`: correctly reports both models missing, with actionable guidance.
+- Java `mvn test`: **252 passed / 0 failures / 0 errors**
+  (gateway 2 · session 43 · sense 53 · body 68 · tool-executor 86).
+- wp-bff `node --test`: **87 passed**; `contract-check.py --work-platform`: 60 endpoints, 0 FAIL;
+  `timeout-budget-check.py`: ok=19 / gap=0 / fail=0; Vue `typecheck` + `build`: passed.
+
+### Not changed
+
+- Element Plus on-demand import and the `ModuleView.vue` split stay deferred (need a visual
+  regression baseline).
+- The sandbox image build remains an environment step: `infra/docker/sandbox/Dockerfile` and its
+  README already cover it; Docker was not running on this host, so R5-03 was not re-verified here.
+
 ## Remaining
 
 - ~~Full Docker/Jaeger runtime smoke test requires Docker daemon.~~ Done on 2026-09-13:
