@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 22:40 · 源文件 功能开发流程.md</span>
+  <span class="meta">生成于 2026-09-20 09:41 · 源文件 功能开发流程.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -444,6 +444,12 @@
 <li><strong>中间件卡片不受全局 <code>VITE_DATA_SOURCE</code> 限制</strong>：始终优先真实探针，BFF 不可达才回落并标注 <code>data_source='mock'</code></li>
 <li><strong>执行视图（R-C05/R-C09，Phase 5）</strong>：<code>src/views/ExecutionView.vue</code> 消费 <code>/api/wp/tools*</code>，展示工具清单 / 注册表 /
     指标 / 沙箱 / 审计；<strong>工具执行（写路径）走 <code>plannedEndpointError()</code> 式的显式错误，不伪造成功</strong></li>
+<li><strong>模型接入视图（WB-10，2026-09-20）</strong>：<code>src/views/ModelsView.vue</code> 消费 <code>/api/wp/models*</code>，按<strong>功能角色</strong>分组做
+    模型配置 CRUD + 连通性探测 + 引擎重载。三条硬约定：
+    ① <strong>编辑弹窗不回填明文密钥</strong>（不回填才说明库里存的是密文）；
+    ② 运行态看板（<code>ManagedModel</code> / <code>ModelRoute</code> / <code>ModelTokenTrend</code>）BFF 尚未提供，界面上必须显式标「演示数据」；
+    ③ 写路径（保存 / 删除 / 探测 / 重载）在 mock 数据源下<strong>直接拒绝</strong>，BFF 的 4xx 信封映射成可行动的中文提示。
+    <code>/models</code> 已从 <code>getWorkbenchData()</code> 的聚合端点中<strong>移除</strong> —— 它现在是"配置清单"，不是"某个模块的运行态"</li>
 <li><strong>分片缺失原因码必须翻成人话</strong>（2026-09-19）：<code>ExecutionView.vue</code> 的 <code>PARTIAL_REASON_LABELS</code>
     把 <code>sandbox_timeout</code> 渲染为「沙箱状态读取超时（慢，非缺失）」。<strong>禁止把 raw code 直接打到界面</strong></li>
 <li><strong>代理目标可达性自检</strong>（2026-09-19）：<code>vite.config.ts</code> 的 <code>bffReachabilityGate()</code> 在启动时探活
@@ -459,7 +465,8 @@
 <li><strong>端点清单</strong>：<code>GET /healthz</code> · <code>GET /overview</code> · <code>GET /middleware</code> · <code>POST /middleware/:key/start|stop</code> ·
   <code>GET /tracing</code> · <strong><code>GET /knowledge</code></strong> · <strong><code>POST /knowledge/search</code></strong> ·
   <strong><code>GET /tools</code> / <code>/tools/registry</code> / <code>/tools/audit</code> / <code>/tools/audit/stats</code> / <code>/tools/metrics</code> / <code>/tools/sandbox</code></strong> ·
-  <strong><code>POST /tools/execute</code></strong>（均登记进 <code>IMPLEMENTED_ENDPOINTS</code>）</li>
+  <strong><code>POST /tools/execute</code></strong> ·
+  <strong><code>GET /models</code> · <code>POST /models</code> · <code>POST /models/reload</code> · <code>PATCH /models/{id}</code> · <code>DELETE /models/{id}</code> · <code>POST /models/{id}/test</code></strong>（均登记进 <code>IMPLEMENTED_ENDPOINTS</code>）</li>
 <li><strong>关键约定</strong>：</li>
 <li>控制端点（<code>start</code>/<code>stop</code>）<strong>必须同时</strong>过来源检查（<code>WP_BFF_ALLOWED_ORIGINS</code>）与
     控制令牌（<code>X-WP-Control-Token</code>，<code>timingSafeEqual</code> 比较）；缺失/错误 → 401，外来来源 → 403，
@@ -474,7 +481,15 @@
     路由层分流 —— 路径不存在 → 404 <code>AGENT_NOT_FOUND</code>，路径存在但方法不支持 → <strong>405 <code>AGENT_METHOD_NOT_ALLOWED</code> + <code>Allow</code> 头</strong>。
     该分流由 <code>ROUTE_GUARD</code> 实现，<strong>由 <code>IMPLEMENTED_ENDPOINTS</code> 派生</strong>（不另立第三份端点真相），
     因此<strong>新增端点只需登记一处</strong>。完整异常语义见 <code>docs/异常流程归纳.md</code> §2.2</li>
-<li><strong>测试</strong>：<code>node --test</code> <strong>81 项</strong>（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据、躯体读端点与降级、<strong>知识写路径鉴权反向用例</strong>、<strong>404/405 错误语义与 <code>ROUTE_GUARD</code> 同源性</strong>、<strong>Phase 5 工具域读端点与执行代理</strong>、<strong>子请求失败原因分类 <code>timeout</code> / <code>unreachable</code> / <code>endpoint_missing</code> / <code>http_error</code> / <code>bad_json</code></strong>）</li>
+<li><strong>固定段必须排在参数路由之前</strong>（<code>/tools/{name}</code> 与 <code>/models/{model_id}</code> 同一类陷阱）：
+    <code>POST /models/reload</code> 会被 <code>/models/{model_id}</code> 吃掉 → 保留段清单由
+    <code>MODEL_RESERVED_SEGMENTS</code> <strong>从 <code>IMPLEMENTED_ENDPOINTS</code> 派生</strong>，不手工维护第二份</li>
+<li><strong>4xx 响应体必须原样透出</strong>：模型写路径用 <code>httpRequestJsonDetailed()</code> 而非普通 <code>httpRequestJson()</code>，
+    好让上游的 <code>409 AGENT_CONFLICT</code> 完整到达前端（"哪个字段冲突"不能被吞成通用 500）</li>
+<li><strong>测试</strong>：<code>node --test test/server.test.js</code> <strong>100 项</strong>（鉴权、CSRF、白名单、命令形状、幂等、CORS、链路回落、采样元数据、躯体读端点与降级、<strong>知识写路径鉴权反向用例</strong>、<strong>404/405 错误语义与 <code>ROUTE_GUARD</code> 同源性</strong>、<strong>Phase 5 工具域读端点与执行代理</strong>、<strong>子请求失败原因分类 <code>timeout</code> / <code>unreachable</code> / <code>endpoint_missing</code> / <code>http_error</code> / <code>bad_json</code></strong>、<strong>WB-10 模型域读写（401/403 反向用例、409 透传、503、保留段、405、<code>OVERVIEW_GAPS</code> 不失真）</strong>）<blockquote>
+<p>⚠️ 必须传文件路径（<code>node --test test/server.test.js</code>）。传目录 <code>node --test test/</code> 会 <code>MODULE_NOT_FOUND</code>。</p>
+</blockquote>
+</li>
 <li><strong>开发步骤</strong>：①改契约（<code>x-wp-status</code>）②改 <code>server.js</code> ③补回归用例 ④<code>node --test</code> ⑤实测 <code>curl</code> 一次真实端点</li>
 </ul>
 <h3 id="39-docker-composeyml-scripts">3.9 基础设施编排（<code>docker-compose.yml</code> + <code>scripts/</code>）<a class="headerlink" href="#39-docker-composeyml-scripts" title="Permanent link">&para;</a></h3>
@@ -556,8 +571,8 @@
      <strong>默认生命周期不调 protoc</strong>（插件在本机清理目录时会原生阻塞、构建永久卡死）；
      契约变更时 Java 用 <code>-Pproto-gen</code>、Python 用 <code>scripts/proto-gen.sh</code> 重新生成
      → 逐条使用说明与变更流程见 <code>docs/proto契约使用说明.md</code>
-  2. <strong>工作平台 BFF OpenAPI</strong>：<code>contracts/work-platform-bff-openapi.yaml</code>（扫描 <strong>60 端点</strong>，
-     implemented <strong>30 路径 / 31 方法</strong> / planned 30；<strong>工具域 schema 基线</strong> <code>contracts/tool-schema-baseline.json</code>；
+  2. <strong>工作平台 BFF OpenAPI</strong>：<code>contracts/work-platform-bff-openapi.yaml</code>（扫描 <strong>63 端点</strong>，
+     implemented <strong>35 路径 / 38 方法</strong> / planned 28；<strong>工具域 schema 基线</strong> <code>contracts/tool-schema-baseline.json</code>；
      口径以 <code>contract-check.py --work-platform</code> 输出为准）</li>
 <li><strong>门禁规则（<code>contract-check.py</code> 三条）</strong>：
   1. 实现端点必须已登记且标记 <code>implemented</code>
@@ -679,7 +694,7 @@
 [ ] 3. 实现：单模块最小改动，不夹带其他阶段内容
 [ ] 4. 测试：单测 + 覆盖本次修复的回归用例
 [ ] 5. 文档：PROGRESS.md / 阶段文档 / docs 索引 / java-services 登记
-[ ] 6. 验证：Java 248 + Python 158 + wp-bff 87 + 契约 0 FAIL + 超时预算 0 FAIL + 文档一致性 0 FAIL + Vue typecheck/build + 文档覆盖率 158/158
+[ ] 6. 验证：Java 251 + Python 199(+1 skip) + wp-bff 103 + 契约 0 FAIL + 超时预算 0 FAIL + 文档一致性 0 FAIL + Vue typecheck/build + 文档覆盖率 160/160
 [ ] 7. 提交：一句话说清「改了什么、为什么」，中文
 [ ] 8. 对齐：三分支 ff-only，推送前先 fetch 并等用户授权
 </code></pre>

@@ -12,10 +12,13 @@ const MiddlewareView = () => import('../views/MiddlewareView.vue')
 const TracingView = () => import('../views/TracingView.vue')
 const KnowledgeView = () => import('../views/KnowledgeView.vue')
 const ExecutionView = () => import('../views/ExecutionView.vue')
+// WB-10 模型接入配置：有真实写路径（CRUD），与只读模块面板拆开，避免写逻辑混进大而全的 ModuleView
+const ModelsView = () => import('../views/ModelsView.vue')
 
+// 'models' 不在其中：它有独立视图与真实写路径（见上方 ModelsView）
 const moduleRoutes = [
   'vitals', 'brain', 'senses', 'evolution', 'collab', 'experts', 'skills',
-  'connectors', 'automation', 'models', 'remote', 'cases', 'approvals',
+  'connectors', 'automation', 'remote', 'cases', 'approvals',
 ] as ModuleId[]
 
 const router = createRouter({
@@ -34,6 +37,8 @@ const router = createRouter({
         { path: 'tracing', name: 'tracing', component: TracingView },
         // R-C05(预) 执行视图：工具调用流 / 拦截记录 / 沙箱状态（wp-bff /tools 聚合）
         { path: 'execution', name: 'execution', component: ExecutionView },
+        // WB-10 多模型管理面板：按功能角色配置大模型接入（wp-bff /models 真实 CRUD）
+        { path: 'models', name: 'models', component: ModelsView },
         ...moduleRoutes.map(id => ({
           path: id,
           name: id,

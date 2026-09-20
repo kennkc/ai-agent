@@ -345,47 +345,6 @@
         </el-card>
       </template>
 
-      <!-- 多模型管理 -->
-      <template v-else-if="moduleId === 'models'">
-        <div class="metric-grid model-kpi-grid">
-          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">本月 Token 消耗</div><div class="metric-value">8.42<span class="metric-unit">M</span></div><div class="metric-trend">较上月 -12% · 预算内</div></el-card>
-          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">路由成本节省</div><div class="metric-value">¥6,180</div><div class="metric-trend">70/20/10 分流</div></el-card>
-          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">模型健康度</div><div class="metric-value">99.2<span class="metric-unit">%</span></div><div class="metric-trend">无漂移告警</div></el-card>
-          <el-card class="section-card metric-card" shadow="never"><div class="metric-label">活跃模型</div><div class="metric-value">{{ activeModelCount }}<span class="metric-unit">/ {{ modelData.length }}</span></div><div class="metric-trend">多源路由在线</div></el-card>
-        </div>
-        <el-card class="section-card" shadow="never">
-          <template #header><strong>模型池与运行状态</strong><span class="header-meta">按成本 / 质量 / 延迟动态路由</span></template>
-          <div class="managed-model-grid">
-            <article v-for="model in modelData" :key="model.model_id" class="managed-model-card" :class="model.state">
-              <div class="model-card-head"><div><span class="model-tier">{{ model.tier }}</span><strong>{{ model.name }}</strong><small>{{ model.provider }} · {{ model.model_id }}</small></div><el-tag :type="modelStateType(model.state)">{{ modelStateLabel(model.state) }}</el-tag></div>
-              <div class="model-card-stats"><span>成本<strong>{{ model.cost_per_1k ? `¥${model.cost_per_1k}/1K` : '免费' }}</strong></span><span>延迟<strong>{{ model.latency_ms }}ms</strong></span><span>质量<strong>{{ model.quality }}</strong></span><span>流量<strong>{{ model.share }}%</strong></span></div>
-              <div class="tag-line"><el-tag v-for="task in model.task_types" :key="task" size="small" type="info">{{ task }}</el-tag></div>
-              <div class="model-card-foot"><small>{{ model.quota }}</small><el-button v-if="model.state !== 'active'" size="small" type="primary" @click="activateModel(model)">设为活跃</el-button><el-tag v-else type="success" effect="plain">当前活跃</el-tag></div>
-            </article>
-          </div>
-        </el-card>
-        <div class="two-column model-route-layout">
-          <el-card class="section-card" shadow="never">
-            <template #header><strong>模型路由策略</strong><span class="header-meta">70/20/10 分流</span></template>
-            <el-table :data="modelRouteData" size="small">
-              <el-table-column prop="task_type" label="任务类型" min-width="130" />
-              <el-table-column prop="model_name" label="模型" min-width="180" />
-              <el-table-column label="流量" width="100"><template #default="{ row }"><el-progress :percentage="row.share" :show-text="false" /><small>{{ row.share }}%</small></template></el-table-column>
-              <el-table-column prop="cost" label="成本" width="100" />
-              <el-table-column prop="note" label="策略" width="110" />
-            </el-table>
-          </el-card>
-          <el-card class="section-card" shadow="never">
-            <template #header><strong>Token 用量趋势</strong><span class="header-meta">近 6 周 · 缓存命中持续提升</span></template>
-            <div class="token-trend">
-              <div v-for="item in modelTrendData" :key="item.week" class="token-column">
-                <span>{{ item.tokens }}M</span><div class="token-bar"><i :style="{ height: `${item.tokens / 10 * 100}%` }" /></div><strong>{{ item.week }}</strong><small>缓存 {{ item.cache }}%</small>
-              </div>
-            </div>
-          </el-card>
-        </div>
-      </template>
-
       <!-- 远程 IM 遥控 -->
       <template v-else-if="moduleId === 'remote'">
         <div class="metric-grid remote-kpi-grid">
@@ -558,15 +517,15 @@ import { dataSourceStatus } from '../api/status'
 import {
   approvals as mockApprovals, automations as mockAutomations, brainChain, brainDecision,
   cases as mockCases, collaboration as mockCollaboration, connectors as mockConnectors,
-  evolution as mockEvolution, experts as mockExperts, managedModels as mockManagedModels,
-  modelRoutes as mockModelRoutes, modelTokenTrend as mockModelTokenTrend, organs as mockOrgans,
+  evolution as mockEvolution, experts as mockExperts, 
+  organs as mockOrgans,
   remoteChannels as mockRemoteChannels, remoteFlow as mockRemoteFlow,
   senses as mockSenses, skills as mockSkills, vitalSigns as mockVitalSigns,
 } from '../api/mock'
 import { moduleMap } from '../config/modules'
 import type {
   ApprovalItem, AutomationItem, CaseItem, CollaborationAgent, ConnectorItem, ExpertProfile, HealingRecord,
-  ManagedModel, ModelRoute, ModuleId, OrganHealth, RemoteChannel, RemoteFlowEvent, SenseChannel, SkillItem, VitalSign,
+  ModuleId, OrganHealth, RemoteChannel, RemoteFlowEvent, SenseChannel, SkillItem, VitalSign,
 } from '../types'
 
 const route = useRoute()
@@ -601,9 +560,6 @@ const connectorData = ref<ConnectorItem[]>(mockConnectors.map(item => ({ ...item
 const automationData = ref<AutomationItem[]>(mockAutomations.map(item => ({ ...item, push: [...item.push] })))
 const caseData = ref<CaseItem[]>(mockCases.map(item => ({ ...item })))
 const approvalData = ref<ApprovalItem[]>(mockApprovals.map(item => ({ ...item, approved_by: [...item.approved_by], parameters: { ...item.parameters } })))
-const modelData = ref<ManagedModel[]>(mockManagedModels.map(item => ({ ...item, task_types: [...item.task_types] })))
-const modelRouteData = ref<ModelRoute[]>(mockModelRoutes.map(item => ({ ...item })))
-const modelTrendData = ref(mockModelTokenTrend.map(item => ({ ...item })))
 const remoteChannelData = ref<RemoteChannel[]>(mockRemoteChannels.map(item => ({ ...item, capabilities: [...item.capabilities] })))
 const remoteFlowData = ref<RemoteFlowEvent[]>(mockRemoteFlow.map(item => ({ ...item })))
 const remoteCommand = ref('')
@@ -665,7 +621,6 @@ const pendingApprovalCount = computed(() => approvalData.value.filter(item => it
 const filteredCollabMessages = computed(() => messageFilter.value === 'all' ? collaborationData.value.messages : collaborationData.value.messages.filter((item: any) => item.type === messageFilter.value))
 const activeMode = computed(() => busModes.find(mode => mode.id === busMode.value) || busModes[0])
 const activeModeLabel = computed(() => activeMode.value.label)
-const activeModelCount = computed(() => modelData.value.filter(item => item.state === 'active').length)
 const onlineRemoteChannels = computed(() => remoteChannelData.value.filter(item => item.state === 'online').length)
 const prettyDetail = computed(() => pretty(detailPayload.value))
 
@@ -686,9 +641,6 @@ async function loadWorkbench() {
     if (Array.isArray(data.automations)) automationData.value = data.automations
     if (Array.isArray(data.cases)) caseData.value = data.cases
     if (Array.isArray(data.approvals)) approvalData.value = data.approvals
-    if (Array.isArray(data.models)) modelData.value = data.models
-    if (Array.isArray(data.model_routes)) modelRouteData.value = data.model_routes
-    if (Array.isArray(data.model_token_trend)) modelTrendData.value = data.model_token_trend
     if (Array.isArray(data.remote_channels)) remoteChannelData.value = data.remote_channels
     if (Array.isArray(data.remote_flow)) remoteFlowData.value = data.remote_flow
   } catch {
@@ -768,19 +720,6 @@ function openDetail(title: string, payload: unknown) {
   detailIsJson.value = typeof payload === 'object' && payload !== null
   detailContent.value = typeof payload === 'string' ? payload : ''
   detailVisible.value = true
-}
-
-function modelStateType(state: ManagedModel['state']) {
-  return { active: 'success', standby: 'info', degraded: 'warning', disabled: 'danger' }[state] as 'success' | 'info' | 'warning' | 'danger'
-}
-
-function modelStateLabel(state: ManagedModel['state']) {
-  return { active: '活跃', standby: '待命', degraded: '降级', disabled: '停用' }[state]
-}
-
-function activateModel(model: ManagedModel) {
-  modelData.value.forEach(item => { item.state = item.model_id === model.model_id ? 'active' : (item.state === 'degraded' ? 'degraded' : 'standby') })
-  ElMessage.success(`${model.name} 已设为活跃模型`)
 }
 
 function channelStateType(state: RemoteChannel['state']) {

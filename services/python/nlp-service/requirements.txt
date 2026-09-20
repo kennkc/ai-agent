@@ -5,3 +5,8 @@ pydantic>=2.6.0
 # Phase 4 大脑期：LangGraph 编排（R4-06）+ 语义缓存 Redis 客户端（R4-04）
 langgraph>=0.2
 redis>=5.0
+# Phase 6 / WB-10：模型接入配置的凭据加密（AES-256-GCM）
+cryptography>=42.0.0
+# 大脑层 Postgres 底座（审计 IN3 / 记忆图谱 IN-02 / 模型配置 WB-10）。
+# 原为隐式依赖（app/brain/pg.py 延迟导入），此处显式声明以便一次装齐。
+psycopg2-binary>=2.9.9

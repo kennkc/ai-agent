@@ -908,3 +908,152 @@ export interface ToolImpactReport {
   /** 前端本地标注（非上游字段） */
   data_source?: 'live' | 'mock'
 }
+
+// ─────────── WB-10 模型接入配置（前台可配的大模型接口）───────────
+//
+// 真相源是 nlp-service 的 `llm_model_config` 表，BFF 只做代理。
+// **密钥口径**：响应里只会出现 `api_key_hint`（`sk-***last4`），
+// 明文与密文都不出接口 —— 前端也**不得**把 api_key 回填到表单里冒充已有值。
+
+/** 功能角色（决定该模型被哪些链路调用） */
+export type ModelRoleKey = 'intent' | 'embed' | 'rerank' | 'generate' | 'plan' | 'code'
+
+export interface ModelRole {
+  key: ModelRoleKey | string
+  label: string
+  default_tier: string
+  default_timeout_ms: number
+  description: string
+}
+
+export interface ModelProvider {
+  key: string
+  default_base_url: string
+}
+
+export interface ModelConfig {
+  id: number
+  tenant_id: string
+  config_key: string
+  role_label: string
+  name: string
+  provider: string
+  base_url: string
+  model: string
+  /** 脱敏后的密钥（`sk-***last4`）；空串表示未配置凭据 */
+  api_key_hint: string
+  has_api_key: boolean
+  tier: string
+  max_tokens: number | null
+  temperature: number | null
+  timeout_ms: number | null
+  routing_weight: number
+  enabled: boolean
+  extra?: Record<string, unknown>
+  last_probe_at?: string | null
+  last_probe_ok?: boolean | null
+  last_probe_latency_ms?: number | null
+  last_probe_error?: string | null
+  created_at?: string
+  updated_at?: string
+}
+
+/** 创建/局部更新的请求体。`api_key` 省略 = 保留原凭据；空串 = 清空。 */
+export interface ModelConfigUpsert {
+  config_key?: string
+  name?: string
+  provider?: string
+  base_url?: string
+  model?: string
+  api_key?: string
+  tier?: string
+  max_tokens?: number | null
+  temperature?: number | null
+  timeout_ms?: number | null
+  routing_weight?: number | null
+  enabled?: boolean
+  extra?: Record<string, unknown>
+}
+
+/** 配置改动后的引擎重载摘要 —— 没有它就分不清「配了没生效」还是「模型侧有问题」 */
+export interface ModelReloadBrief {
+  ok: boolean
+  roles: string[]
+  count: number
+  error: string
+}
+
+export interface ModelConfigList {
+  available: boolean
+  tenant_id?: string
+  reason?: string
+  items: ModelConfig[]
+  by_role: Record<string, ModelConfig[]>
+  total?: number
+  enabled?: number
+  roles?: ModelRole[]
+  providers?: ModelProvider[]
+  storage?: {
+    backend?: string
+    degraded?: boolean
+    reason?: string
+    dsn?: string
+    key_source?: string
+    key_source_warning?: string
+    applied_ddl?: number
+  }
+  /** 当前**实际装配**的角色引擎（与配置可能不同步，reload 后才一致） */
+  llm?: { role_configured: string[]; engines: Record<string, Array<Record<string, unknown>>> }
+}
+
+export interface ModelProbeResult {
+  available?: boolean
+  id?: number
+  name?: string
+  role?: string
+  supported: boolean
+  ok: boolean
+  latency_ms?: number | null
+  detail?: string
+  reason?: string
+  status?: number | null
+  checked_at?: string
+}
+
+/** 用量分桶计数（calls 只记成功；failures 单列，两者相加才是尝试次数） */
+export interface ModelUsageCounters {
+  calls: number
+  failures: number
+  prompt_tokens: number
+  completion_tokens: number
+  latency_ms_sum: number
+}
+
+export interface ModelUsageDaily extends ModelUsageCounters {
+  date: string
+}
+
+/** Token 用量看板数据（WB-10 后半句）。`estimated_share` 是**诚实度指标**：
+ *  不为 0 时上面的 token 数只能当趋势看，不能当账单看。 */
+export interface ModelUsage {
+  available: boolean
+  tenant_id?: string
+  reason?: string
+  window?: { days: number; start?: string; end?: string }
+  totals?: ModelUsageCounters & { tokens?: number; attempts?: number; success_rate?: number | null }
+  by_role?: Record<string, ModelUsageCounters>
+  by_model?: Record<string, ModelUsageCounters>
+  by_token_source?: Record<string, number>
+  estimated_share?: number
+  daily?: ModelUsageDaily[]
+  storage?: { degraded?: boolean; backend?: string; reason?: string; note?: string }
+}
+
+/** 写路径结果（统一信封：成功回传 item/reload，失败带 code） */
+export interface ModelWriteResult {
+  ok: boolean
+  data?: Record<string, unknown>
+  code?: string
+  message?: string
+  details?: Record<string, unknown>
+}

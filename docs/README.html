@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 15:39 · 源文件 README.md</span>
+  <span class="meta">生成于 2026-09-20 07:44 · 源文件 README.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -171,26 +171,31 @@
 </tr>
 <tr>
 <td>6</td>
+<td><strong><code>模型接入配置-功能逻辑.md</code></strong></td>
+<td>前台配一个模型到被真正调用，中间经过了什么？密钥怎么存？角色怎么装配？</td>
+</tr>
+<tr>
+<td>7</td>
 <td><code>java-services/</code></td>
 <td>每个 Java 源文件是干什么的？改这里要注意什么？</td>
 </tr>
 <tr>
-<td>7</td>
+<td>8</td>
 <td><code>项目进度日志报告/</code></td>
 <td>每个阶段具体做了哪些事、遇到什么问题、怎么解决的？</td>
 </tr>
 <tr>
-<td>8</td>
+<td>9</td>
 <td><code>demo/</code></td>
 <td>怎么把系统跑起来、怎么亲眼看到效果？</td>
 </tr>
 <tr>
-<td>9</td>
+<td>10</td>
 <td><code>优化日志/</code></td>
 <td>每轮工程化加固改了什么、为什么改？</td>
 </tr>
 <tr>
-<td>10</td>
+<td>11</td>
 <td><code>../db/</code></td>
 <td>数据存在哪？表/键/向量集合结构是什么？怎么备份恢复？</td>
 </tr>
@@ -231,6 +236,11 @@
 <td><code>proto契约使用说明.md</code> · <code>.html</code></td>
 <td><strong>proto 契约使用说明与现状</strong>：6 份契约清单、gRPC 引用矩阵（实证）、Java/Python 双侧生成链路与本机坑、变更 6 步流程、<code>contract-check.py</code> 覆盖范围、<strong>产物同步门禁 <code>proto-sync-check.sh</code></strong>、与 OpenAPI 分工、10 项缺口登记</td>
 <td>契约增删改或接入方变化时</td>
+</tr>
+<tr>
+<td><code>模型接入配置-功能逻辑.md</code> · <code>.html</code></td>
+<td><strong>WB-10 多模型接入的功能逻辑</strong>：唯一真相源与四层职责、<code>llm_model_config</code> 表、AES-256-GCM 凭据落库与主密钥来源链、六个功能角色的引擎装配与「角色优先 / 层级兜底」候选序、三条关键时序、BFF 安全边界、降级矩阵、验收口径与未闭合项</td>
+<td>模型接入逻辑变化时</td>
 </tr>
 <tr>
 <td><code>项目进度日志报告/</code></td>

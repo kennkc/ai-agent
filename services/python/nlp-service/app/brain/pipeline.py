@@ -53,6 +53,11 @@ SYSTEM_PROMPT = (
 # 与缺口阈值同源 —— 阈值随嵌入/重排后端校准（见 gap.py 顶部注释与台账 §4.14）。
 GROUNDEDNESS_FLOOR = float(os.getenv("GAP_GROUNDEDNESS_FLOOR", "0.25"))
 
+# 生成步的功能角色键（与 `app/model_config.py` 的 ROLES 字典同源）。
+# 这里用字面量而不是 import：编排层不该为了一个键去依赖配置层，
+# 否则"数据库 + 加密"会顺着导入链进入纯编排模块。
+GENERATE_ROLE = "generate"
+
 
 class RagState(TypedDict, total=False):
     """LangGraph 状态通道（显式声明，避免 dict 模式下返回值整体覆盖状态）。"""
@@ -395,7 +400,12 @@ class RagPipeline:
             from app.brain.llm_gateway import LlmRequest
 
             response = self.gateway.generate(
-                LlmRequest(prompt=prompt, system=self.system_prompt, level=level),
+                # role="generate" 让本步优先使用前台为「内容生成」角色配置的模型
+                # （见 app/model_config.py 的 ROLES）；未配置时自动落回 level 级联。
+                # tenant_id 只用于**用量落账**：没有它，多租户的用量会全部记到 default 上，
+                # 看板上的租户维度就成了假维度。
+                LlmRequest(prompt=prompt, system=self.system_prompt, level=level, role=GENERATE_ROLE,
+                           tenant_id=state.get("tenant_id", "default")),
                 deadline_ms=remaining_ms,
             )
             answer_text = response.text

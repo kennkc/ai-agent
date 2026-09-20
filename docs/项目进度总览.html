@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 22:40 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-20 09:41 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -149,7 +149,7 @@
 </nav>
   <main class="doc"><h1 id="agent-lifeform">Agent-Lifeform 项目进度总览<a class="headerlink" href="#agent-lifeform" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-19（Phase 5 四肢期落地 + Phase 5 复审收口） · <strong>代码基线</strong>：<code>dev</code>（Phase 5 代码收口）
+<p><strong>口径时间</strong>：2026-09-20（Phase 5 收口 + WB-10 多模型接入配置落地轮） · <strong>代码基线</strong>：<code>dev</code>（Phase 5 收口 + WB-10 落地，已提交推送）
 <strong>数据来源</strong>：仓库 <code>PROGRESS.md</code>、<code>docs/项目进度日志报告/</code>、<code>docs/优化日志/</code>、各服务源码实测统计
 <strong>诚实声明</strong>：凡未经实测的数字均标注口径时间；历史归档中的旧口径（如 54/73/61/106/162 项测试）<strong>不回改</strong>，以本文件为准。</p>
 </blockquote>
@@ -188,6 +188,20 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <strong><code>19092</code></strong>（原值与 Kafka 宿主端口 <code>9092</code> 冲突，导致启动失败），<code>healthcheck.sh</code> 同步改探 19092；
 起 jar 已<strong>无需再传 <code>GRPC_PORT</code> 覆盖</strong>。潜在项 <code>sense-service 9093 ↔ Alertmanager(P7) 9093</code>
 已登记为 <strong>DEBT-018</strong>（见《技术债台账》§4.17）。服务注册表 §5 与相关文档口径已同步。</p>
+<p><strong>2026-09-20 WB-10 多模型接入配置落地（前后端全链路）</strong>：模型配置从环境变量搬进
+PG 表 <strong><code>llm_model_config</code></strong>，前台可增删改查；凭据 <strong>AES-256-GCM 加密落库</strong>，
+对外只回 <code>sk-***last4</code>；按 <strong>6 个功能角色</strong>（intent / embed / rerank / generate / plan / code）
+组装引擎，调用时<strong>角色优先、层级兜底</strong>；支持<strong>不重启进程热重载</strong>。
+新增 <code>work-platform/ModelsView</code> 独立视图（从 <code>ModuleView</code> 通用模板迁出）、
+wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>implemented</code>。
+同轮修复两处既有缺陷：<strong><code>llm_model_config</code> 主键分配错位</strong>（id 取自进程内计数器，
+库中已有行时必撞主键并<strong>静默降级导致"保存成功、重启丢失"</strong>；已改由序列 <code>RETURNING id</code> 分配
+并补幂等序列校正）、<strong>测试隔离失效</strong>（缺 <code>tests/conftest.py</code>，<code>BRAIN_PG_ENABLED=false</code> 的设置
+因导入顺序永远晚一步，测试实际连了真实库并污染数据）。
+功能逻辑全文见 <a href="./模型接入配置-功能逻辑.md"><code>docs/模型接入配置-功能逻辑.md</code></a>。
+测试基线随之更新为 <strong>Java 251 · Python 199(+1 skip) · wp-bff 103</strong>（共 553；Python/wp-bff 为
+2026-09-20 09:39 复测口径 —— 较本轮文档首稿的 186 / 100 多出 <code>tests/test_token_usage.py</code> 13 项
+与 wp-bff 补测 3 项，文档首稿成于该两项落地之前）。</p>
 <p><strong>⚠️ Phase 4 复审补全（2026-09-19）</strong>：首次验收后<strong>通读实现</strong>又查出 5 项"单测与验收报告都抓不到"的
 问题 —— 2 项<strong>语义级伪实现</strong>（语义缓存声称 Redis 后端实只写内存；决策链回放端点对任意 id 都返
 <code>200 + 空链</code>）+ 1 项跨服务租户口径不一致 + 1 项入库不失效检索热缓存 + 1 项记忆图谱"有边无点"。
@@ -564,7 +578,7 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 </table>
 <hr />
 <h2 id="_4">四、测试与验证基线<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
-<p><strong>口径：2026-09-19 Phase 5 四肢期落地 + 真实链路打通轮的实测值</strong>（历史归档中的 54 / 73 / 61 / 114 / 162 / 244 项是当时口径）</p>
+<p><strong>口径：2026-09-20 WB-10 模型接入配置落地轮的实测值</strong>（历史归档中的 54 / 73 / 61 / 114 / 162 / 244 / 158 / 87 项是当时口径）</p>
 <table>
 <thead>
 <tr>
@@ -582,7 +596,7 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td>Python</td>
 <td><code>../venv/Scripts/python.exe -m pytest</code>（nlp-service 下）</td>
-<td><strong>158 通过 / 1 跳过</strong>（意图 15 + HTTP 层错误语义 10 + OCR 4 + 分块 12 + 嵌入 13 + 重排 8 + <strong>函数调用</strong> + <strong>大脑层</strong> + <strong>记忆图谱</strong> + <strong>跨服务预算/预算传播 20</strong> + <strong>Phase4 评测集</strong>）</td>
+<td><strong>199 通过 / 1 跳过</strong>（意图 15 + HTTP 层错误语义 10 + OCR 4 + 分块 12 + 嵌入 13 + 重排 8 + 函数调用 15 + 大脑层（含记忆图谱）56 + 跨服务预算/预算传播 20 + Phase4 评测集 6 + <strong>WB-10 模型接入配置 28</strong> + <strong>WB-10 用量计量 13</strong>）</td>
 </tr>
 <tr>
 <td>契约（跨服务）</td>
@@ -592,12 +606,12 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td>契约（工作平台）</td>
 <td><code>python scripts/contract-check.py --work-platform --openapi contracts/work-platform-bff-openapi.yaml</code></td>
-<td>60 端点，implemented <strong>30 路径 / 31 方法</strong> / planned 30，<strong>0 FAIL</strong>；<strong>工具契约基线：3 个工具 ↔ <code>ToolBootstrap</code> 注册 3 个</strong></td>
+<td>63 端点，implemented <strong>35 路径 / 38 方法</strong> / planned 28，<strong>0 FAIL</strong>；<strong>工具契约基线：3 个工具 ↔ <code>ToolBootstrap</code> 注册 3 个</strong></td>
 </tr>
 <tr>
 <td>wp-bff</td>
-<td><code>cd services/node/wp-bff &amp;&amp; node --test</code></td>
-<td><strong>87 通过</strong>（含写路径鉴权反向用例 + 路由层错误语义 + 大脑端点（含决策链 404 反向用例）+ 会话代理 + 驾驶舱指标 + <strong>工具代理（含 <code>POST /tools/execute</code> 控制令牌反向用例）</strong> + <strong>失败原因分类（timeout / unreachable / endpoint_missing / http_error / bad_json）</strong> + <strong>6 条跨服务超时预算不变量</strong>）</td>
+<td><code>cd services/node/wp-bff &amp;&amp; node --test test/server.test.js</code></td>
+<td><strong>103 通过</strong>（含写路径鉴权反向用例 + 路由层错误语义 + 大脑端点（含决策链 404 反向用例）+ 会话代理 + 驾驶舱指标 + <strong>工具代理（含 <code>POST /tools/execute</code> 控制令牌反向用例）</strong> + <strong>失败原因分类（timeout / unreachable / endpoint_missing / http_error / bad_json）</strong> + <strong>6 条跨服务超时预算不变量</strong> + <strong>WB-10 模型域 13 条（含 401/403 反向、409 透传、503、保留段、405、<code>OVERVIEW_GAPS</code> 不失真）</strong>）</td>
 </tr>
 <tr>
 <td>前端</td>
@@ -612,7 +626,7 @@ work-platform 对话界面与 Console 大脑视图/交互终端均切真实数�
 <tr>
 <td><strong>文档一致性</strong></td>
 <td><code>python scripts/doc-consistency-check.py</code></td>
-<td><strong>0 FAIL</strong>：异常编号 35 条无撞号 · 章节号 20 个无重复 · md↔html 孪生 54 组无过期（无需 <code>--no-twin</code>）</td>
+<td><strong>0 FAIL</strong>：异常编号 35 条无撞号 · 章节号 20 个无重复 · md↔html 孪生 57 组无过期（无需 <code>--no-twin</code>）</td>
 </tr>
 <tr>
 <td>端到端（Docker）</td>

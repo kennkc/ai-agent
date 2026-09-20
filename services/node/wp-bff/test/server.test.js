@@ -12,8 +12,9 @@ const { EventEmitter } = require('node:events')
 
 const {
   createServer, MIDDLEWARE, IMPLEMENTED_ENDPOINTS, ROUTE_GUARD, TOOL_RESERVED_SEGMENTS,
+  MODEL_RESERVED_SEGMENTS, OVERVIEW_GAPS,
   resolveAllowedOrigins, queryTerms, buildSnippet,
-  httpRequestJson, httpRequestJsonMeta, TIMEOUT_TIERS,
+  httpRequestJson, httpRequestJsonMeta, httpRequestJsonDetailed, TIMEOUT_TIERS,
 } = require('../server')
 
 const TOKEN = 'test-control-token-0123456789'
@@ -1404,4 +1405,285 @@ test('生成档与读型档必须真的分开（防止两档被合并成同一�
     gen.timeoutMs > read.timeoutMs,
     `生成档 ${gen.timeoutMs}ms 必须大于读型档 ${read.timeoutMs}ms —— 两者相等意味着分档已失效`,
   )
+})
+
+// ═══════════════════ WB-10 模型接入配置（/api/wp/models）═══════════════════
+//
+// 覆盖三类风险：
+//   1. **安全边界**：读路径免令牌，写路径必须来源白名单 + 控制令牌。
+//      给只读路径加写方法却不补校验 = 一条「任何人可改线上模型指向」的后门。
+//   2. **语义正确**：`/models/reload` 是固定段，不能被 `/models/{model_id}` 吃掉。
+//   3. **诚实降级**：读路径可 200 + available:false；写路径必须 503，绝不 200 假装成功。
+
+/** 记录完整出入参（含 body）的假传输 —— 模型域需要断言真实转发体 */
+function recordingModelsRequest(handler) {
+  const calls = []
+  const jsonRequest = async (url, opts = {}) => {
+    const call = {
+      url: String(url),
+      method: opts.method || 'GET',
+      body: opts.body,
+      headers: opts.headers || {},
+      timeoutMs: opts.timeoutMs,
+    }
+    calls.push(call)
+    return handler(call)
+  }
+  return { calls, jsonRequest }
+}
+
+/** 构造一个带 HTTP 状态与响应体的上游错误（模拟 httpRequestJsonDetailed 的失败态） */
+function upstreamError(status, payload) {
+  const error = new Error(`upstream ${status}`)
+  error.status = status
+  error.payload = payload
+  return error
+}
+
+test('/api/wp/models 读路径：大脑层可用 → 200 + available:true 且清单原样透传', async () => {
+  const payload = {
+    items: [{ id: 1, config_key: 'generate', name: '主模型', api_key_hint: 'sk-***mnop', enabled: true }],
+    by_role: { generate: [{ id: 1 }] },
+    total: 1,
+    enabled: 1,
+    roles: [{ key: 'generate', label: '内容生成' }],
+  }
+  const rec = recordingModelsRequest(() => payload)
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/models', headers: { 'x-tenant-id': 'acme' } })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.total, 1)
+    assert.equal(res.json.data.items[0].api_key_hint, 'sk-***mnop', '脱敏值应原样透传')
+    assert.equal(res.json.data.tenant_id, 'acme')
+  }, { jsonRequest: rec.jsonRequest })
+
+  assert.equal(rec.calls.length, 1)
+  assert.ok(rec.calls[0].url.endsWith('/api/nlp/models'), '读路径应代理到 nlp-service /api/nlp/models')
+  assert.equal(rec.calls[0].headers['X-Tenant-Id'], 'acme', '租户应透传给上游')
+})
+
+test('/api/wp/models 读路径：大脑层不可达 → 200 + available:false（不把读不到渲染成「没有配置」）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/models' })
+    assert.equal(res.status, 200, '读路径不可达走降级，不是故障码')
+    assert.equal(res.json.data.available, false)
+    assert.deepEqual(res.json.data.items, [])
+    assert.ok(String(res.json.data.reason).includes('大脑层不可用'), '必须说明是大脑层不可用')
+  }, { jsonRequest: async () => null })
+})
+
+test('/api/wp/models/usage 读路径：窗口参数透传 + 租户头带上，用量原样回传', async () => {
+  const payload = {
+    tenant_id: 'acme',
+    window: { days: 3, start: '2026-09-18', end: '2026-09-20' },
+    totals: { calls: 12, failures: 1, prompt_tokens: 900, completion_tokens: 300, tokens: 1200 },
+    by_role: { generate: { calls: 12 } },
+    by_token_source: { provider: 9, estimated: 3 },
+    estimated_share: 0.25,
+    daily: [{ date: '2026-09-20', calls: 12 }],
+  }
+  const rec = recordingModelsRequest(() => payload)
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      path: '/api/wp/models/usage?days=3', headers: { 'x-tenant-id': 'acme' },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.totals.tokens, 1200)
+    // `estimated_share` 必须一路透到前端：它是判断"这行数字能不能当账单看"的唯一依据
+    assert.equal(res.json.data.estimated_share, 0.25)
+  }, { jsonRequest: rec.jsonRequest })
+
+  assert.equal(rec.calls.length, 1)
+  assert.ok(rec.calls[0].url.includes('/api/nlp/models/usage?days=3'),
+    `窗口参数应透传到上游，实际 ${rec.calls[0].url}`)
+  assert.equal(rec.calls[0].headers['X-Tenant-Id'], 'acme', '用量必须按租户取，否则多租户看板是假维度')
+})
+
+test('/api/wp/models/usage 窗口参数越界 → 收敛到 [1, 90]，不把非法值转给上游', async () => {
+  const rec = recordingModelsRequest(() => ({ totals: {} }))
+  await withServer(async ({ server }) => {
+    await request(server, { path: '/api/wp/models/usage?days=9999' })
+    await request(server, { path: '/api/wp/models/usage?days=-5' })
+    await request(server, { path: '/api/wp/models/usage' })
+  }, { jsonRequest: rec.jsonRequest })
+  assert.ok(rec.calls[0].url.endsWith('/usage?days=90'), `上界应收敛，实际 ${rec.calls[0].url}`)
+  assert.ok(rec.calls[1].url.endsWith('/usage?days=1'), `下界应收敛，实际 ${rec.calls[1].url}`)
+  assert.ok(rec.calls[2].url.endsWith('/usage?days=7'), `缺省应为 7 天，实际 ${rec.calls[2].url}`)
+})
+
+test('/api/wp/models/usage 读路径：大脑层不可达 → 200 + available:false（不把读不到渲染成「零用量」）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/models/usage' })
+    assert.equal(res.status, 200, '读路径不可达走降级，不是故障码')
+    assert.equal(res.json.data.available, false)
+    assert.deepEqual(res.json.data.daily, [])
+    assert.ok(String(res.json.data.reason).includes('大脑层不可用'), '必须说明是大脑层不可用')
+    // 关键：降级时**不回** `totals: {calls: 0}` —— 那会被页面渲染成"这周没人用"，
+    // 与"读不到"是两件事。前端据 `available` 决定显示降级提示还是数字。
+    assert.ok(!('calls' in (res.json.data.totals || {})), '降级不得伪造零用量')
+  }, { jsonRequest: async () => null })
+})
+
+test('/api/wp/models 写路径缺控制令牌 → 401，且绝不触达上游', async () => {
+  const rec = recordingModelsRequest(() => ({ item: { id: 1 } }))
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/models',
+      headers: { origin: ALLOWED_ORIGIN },
+      body: { config_key: 'generate', name: 'x', enabled: true },
+    })
+    assert.equal(res.status, 401)
+    assert.equal(res.json.code, 'AGENT_UNAUTHORIZED')
+    assert.equal(res.json.details.guard, 'control-token')
+  }, { jsonRequest: rec.jsonRequest })
+  assert.equal(rec.calls.length, 0, '鉴权失败必须在下游之前拦住，不能先写库再报 401')
+})
+
+test('/api/wp/models 写路径来源不在白名单 → 403，且绝不触达上游', async () => {
+  const rec = recordingModelsRequest(() => ({ item: { id: 1 } }))
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/models',
+      headers: { origin: 'http://evil.example.com', 'x-wp-control-token': TOKEN },
+      body: { config_key: 'generate', name: 'x', enabled: true },
+    })
+    assert.equal(res.status, 403)
+    assert.equal(res.json.code, 'AGENT_FORBIDDEN')
+    assert.equal(res.json.details.guard, 'origin-whitelist')
+  }, { jsonRequest: rec.jsonRequest })
+  assert.equal(rec.calls.length, 0, '来源非法必须在下游之前拦住')
+})
+
+test('POST /api/wp/models 带令牌 → 转发请求体并回传 reload 摘要', async () => {
+  const created = { id: 7, config_key: 'generate', name: '主模型', enabled: true }
+  const rec = recordingModelsRequest(() => ({ item: created, reload: { ok: true, roles: ['generate'], count: 1 } }))
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/models',
+      headers: { 'x-tenant-id': 'acme', 'x-actor': 'alice', ...CONTROL_HEADERS },
+      body: {
+        config_key: 'generate', name: '主模型',
+        base_url: 'https://api.deepseek.com/v1', model: 'deepseek-chat',
+        api_key: 'sk-secret', enabled: true,
+      },
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.item.id, 7)
+    assert.equal(res.json.data.reload.count, 1, '必须回传 reload 摘要，否则「配了没生效」无从判断')
+  }, { jsonRequest: rec.jsonRequest })
+
+  const call = rec.calls[0]
+  assert.equal(call.method, 'POST')
+  assert.ok(call.url.endsWith('/api/nlp/models'), '创建应打到 /api/nlp/models')
+  assert.equal(call.body.api_key, 'sk-secret', '凭据应透传给上游（由上游加密落库）')
+  assert.equal(call.headers['X-Tenant-Id'], 'acme')
+  assert.equal(call.headers['X-Actor'], 'alice', '操作者应透传，便于审计归属')
+})
+
+test('PATCH /api/wp/models/{id} 只转发明示字段（BFF 不补默认值，否则会清空 base_url）', async () => {
+  const rec = recordingModelsRequest(() => ({ item: { id: 12, enabled: false } }))
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'PATCH', path: '/api/wp/models/12',
+      headers: CONTROL_HEADERS,
+      body: { enabled: false },
+    })
+    assert.equal(res.status, 200)
+  }, { jsonRequest: rec.jsonRequest })
+
+  const call = rec.calls[0]
+  assert.equal(call.method, 'PATCH')
+  assert.ok(call.url.endsWith('/api/nlp/models/12'), `应打到 nlp 配置详情，实际 ${call.url}`)
+  assert.deepEqual(Object.keys(call.body), ['enabled'],
+    '局部更新必须原样转发；BFF 若补上 base_url/model 默认值会把既有配置清空')
+})
+
+test('POST /api/wp/models/reload 必须走固定段，不能被 {model_id} 参数路由当成 id=reload', async () => {
+  const rec = recordingModelsRequest(() => ({ reload: { ok: true }, llm: {} }))
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/models/reload', headers: CONTROL_HEADERS, body: {},
+    })
+    assert.equal(res.status, 200)
+  }, { jsonRequest: rec.jsonRequest })
+
+  assert.equal(rec.calls.length, 1)
+  assert.ok(rec.calls[0].url.endsWith('/api/nlp/models/reload'),
+    `重载必须打到 /models/reload，实际 ${rec.calls[0].url} —— 被参数路由吃掉会发出一个必然失败的更新请求`)
+})
+
+test('POST /api/wp/models/{id}/test 透传 timeout_ms 并使用探测档预算', async () => {
+  const rec = recordingModelsRequest(() => ({ supported: true, ok: true, latency_ms: 42 }))
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/models/12/test?timeout_ms=3000',
+      headers: CONTROL_HEADERS, body: {},
+    })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.latency_ms, 42)
+  }, { jsonRequest: rec.jsonRequest })
+
+  const call = rec.calls[0]
+  assert.ok(call.url.includes('/api/nlp/models/12/test?timeout_ms=3000'), `探测参数未透传：${call.url}`)
+  assert.ok(call.timeoutMs > 3000, 'BFF 出站预算应大于上游探测预算，否则本地先超时而上游还在正常等待')
+})
+
+test('上游业务拒绝（409 角色内重名）原样透传 409 + code，不压成 503', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/models',
+      headers: CONTROL_HEADERS,
+      body: { config_key: 'generate', name: '主模型', enabled: true },
+    })
+    assert.equal(res.status, 409, '业务拒绝必须保留原状态码，前端才能区分「重名」与「服务挂了」')
+    assert.equal(res.json.code, 'AGENT_DUPLICATE')
+    assert.equal(res.json.details.source, 'nlp-service')
+  }, {
+    jsonRequest: async () => {
+      throw upstreamError(409, {
+        code: 'AGENT_DUPLICATE',
+        message: '同一角色下已存在同名配置：主模型',
+        details: { config_key: 'generate' },
+      })
+    },
+  })
+})
+
+test('写路径上游不可达 → 503（绝不 200 假装配置成功）', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, {
+      method: 'POST', path: '/api/wp/models',
+      headers: CONTROL_HEADERS,
+      body: { config_key: 'generate', name: '主模型', enabled: true },
+    })
+    assert.equal(res.status, 503, '写路径静默返回 200 会让「配了没生效」变成不可见的故障')
+    assert.equal(res.json.code, 'AGENT_BUS_UNAVAILABLE')
+    assert.equal(res.json.details.source, 'nlp-service')
+  }, { jsonRequest: async () => null })
+})
+
+test('GET /api/wp/models/{id} → 405 且 Allow 头只列出 PATCH/DELETE', async () => {
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/models/12' })
+    assert.equal(res.status, 405, '路径存在但方法不支持 → 405（不是 404）')
+    assert.equal(res.json.code, 'AGENT_METHOD_NOT_ALLOWED')
+    assert.equal(res.headers.allow, 'PATCH, DELETE')
+  }, { jsonRequest: async () => ({}) })
+})
+
+test('ROUTE_GUARD 与固定段派生：/models/reload 只允许 POST，且被登记为保留段', () => {
+  assert.deepEqual(ROUTE_GUARD.allowedMethods('/api/wp/models/reload'), ['POST'])
+  assert.ok(MODEL_RESERVED_SEGMENTS.has('reload'), 'reload 必须登记为保留段，否则会被参数路由吃掉')
+  // `/models/usage` 是**只读固定段**，与 reload 同一类陷阱：不登记为保留段时，
+  // `POST /models/usage` 会被当作"更新 id=usage 的配置"发出去，而 ROUTE_GUARD 判 405。
+  assert.deepEqual(ROUTE_GUARD.allowedMethods('/api/wp/models/usage'), ['GET'])
+  assert.ok(MODEL_RESERVED_SEGMENTS.has('usage'), 'usage 必须登记为保留段，否则会被参数路由吃掉')
+})
+
+test('OVERVIEW_GAPS 不再声称 models 未实现（/models 已落地，留着就是失真）', () => {
+  assert.ok(!OVERVIEW_GAPS.includes('models'),
+    '/overview 的 gaps 用于告诉前端「该域仍是 Mock」；/models 已实现却仍登记，等于让前端白标降级')
 })

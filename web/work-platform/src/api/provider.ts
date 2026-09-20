@@ -10,7 +10,7 @@ import {
 import { reportApiOk, reportDegrade } from './status'
 import type {
   BrainAnswer, ExecutionOverview, ExecutionTool, KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
-  MiddlewareNode, MiddlewareOverview, OptimizationSuggestion, SessionContext, SessionInfo, SessionStats,
+  MiddlewareNode, MiddlewareOverview, ModelConfigList, ModelConfigUpsert, ModelProbeResult, ModelUsage, ModelWriteResult, OptimizationSuggestion, SessionContext, SessionInfo, SessionStats,
   SuggestionExecution, ToolExecutionResult, ToolImpactReport, TracingOverview,
 } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
@@ -68,6 +68,51 @@ function plannedEndpointError(scope: string, method: string, path: string, cause
   const reason = status ? `HTTP ${status}` : ((cause as Error)?.message || 'request failed')
   reportDegrade(scope, `端点未实现（planned）：${method} ${path}（${reason}）`)
   return new Error(`${method} ${path} 尚未实现（契约标记 planned），操作未生效`)
+}
+
+/**
+ * 模型配置读路径不可用时的**如实空态**。
+ *
+ * 关键：`items` 给空数组，但**同时给出 `available:false` 与 `reason`** ——
+ * 界面据此区分"读不到"与"尚未配置任何模型"。只给空数组，会把一次服务不可用
+ * 渲染成"你还没有配过模型"，用户会去重复新建，而真正的问题没人看见。
+ */
+function mockModelConfigUnavailable(reason: string): ModelConfigList {
+  return { available: false, items: [], by_role: {}, reason }
+}
+
+/**
+ * 用量不可读时的返回。**刻意不给 `totals.calls = 0`** ——
+ * 那会被看板渲染成"这周没人用"，与"读不到"是两件完全不同的事。
+ * 只给 `available:false` + `reason`，让界面必须显式表达降级。
+ */
+function mockModelUsageUnavailable(reason: string): ModelUsage {
+  return { available: false, reason, daily: [], by_role: {}, by_model: {}, by_token_source: {} }
+}
+
+/**
+ * 写路径失败的统一收口：把 BFF 的错误信封转成可操作原因。
+ *
+ * BFF 对 4xx 会**透传上游信封**（400 角色非法 / 404 配置不存在 / 409 角色内同名），
+ * 这里把它们原样交给界面；只有 401/403/503 才按守卫/可用性归类。
+ * 绝不返回"成功"。
+ */
+function modelWriteFailure(scope: string, action: string, error: unknown): ModelWriteResult {
+  const response = (error as { response?: { status?: number; data?: unknown } })?.response
+  const status = response?.status
+  const envelope = (response?.data && typeof response.data === 'object')
+    ? response.data as { code?: string; message?: string; details?: Record<string, unknown> }
+    : null
+  const code = envelope?.code || (status ? `HTTP_${status}` : 'NETWORK_ERROR')
+  let message = envelope?.message || (error as Error)?.message || '请求失败'
+  if (!envelope?.message) {
+    if (status === 401 || status === 403) message = `${action}失败（HTTP ${status}）：控制令牌缺失或来源不在白名单`
+    else if (status === 503) message = `${action}失败：大脑层不可用（nlp-service 未启动或返回异常），配置未生效`
+    else if (status === 404) message = `${action}失败：目标不存在（可能已被其他会话删除）`
+    else if (status === 409) message = `${action}失败：同一角色下已存在同名配置`
+  }
+  reportDegrade(scope, `${action}：${message}`)
+  return { ok: false, code, message, details: envelope?.details }
 }
 
 const mockWorkbench = {
@@ -641,18 +686,22 @@ export const dataProvider = {
     if (source === 'mock') return mockWorkbench
 
     // 每个端点单独登记降级 scope，便于界面精确指出"哪个模块仍在用 Mock 数据"
+    //
+    // 注意：`/models` **不在这里** —— 它已是 WB-10 的模型接入配置端点（返回 `{items, by_role, ...}`
+    // 配置真相），语义与这里的"运行态模块数据域"不同。运行态模型池（成本/延迟/流量）BFF 尚未提供，
+    // 由 ModelsView 直接用演示数据并显式标注，不走本聚合。
     const endpoints: Array<[string, string]> = [
       ['vitals', '/vitals'], ['organs', '/organs'], ['brain', '/brain/DEC-20260912-0042'],
       ['senses', '/senses'], ['evolution', '/evolution'], ['collaboration', '/collab/DOM-2048'],
       ['experts', '/experts'], ['skills', '/skills'], ['connectors', '/connectors'],
       ['automations', '/automations'], ['cases', '/cases'], ['approvals', '/approvals'],
-      ['models', '/models'], ['remote_channels', '/remote-im/channels'], ['online_agents', '/agents/online'],
+      ['remote_channels', '/remote-im/channels'], ['online_agents', '/agents/online'],
     ]
     const results = await Promise.all(endpoints.map(([scope, path]) =>
       safe(() => api.get(path), { data: { data: null } }, scope),
     ))
     const [vitals, organsData, brain, sensesData, evolutionData, collaborationData, expertsData,
-      skillsData, connectorsData, automationsData, casesData, approvalsData, modelsData, remoteChannelsData, onlineAgentsData] = results.map(item => unwrap(item.data))
+      skillsData, connectorsData, automationsData, casesData, approvalsData, remoteChannelsData, onlineAgentsData] = results.map(item => unwrap(item.data))
 
     return {
       vitals: Array.isArray(vitals) ? vitals : (vitals ? vitalSigns.map(item => ({ ...item, ...vitals[item.key] })) : vitalSigns),
@@ -676,7 +725,7 @@ export const dataProvider = {
       automations: automationsData || automations,
       cases: casesData || cases,
       approvals: approvalsData || approvals,
-      models: modelsData || managedModels,
+      models: managedModels,
       model_routes: modelRoutes,
       model_token_trend: modelTokenTrend,
       remote_channels: remoteChannelsData || remoteChannels,
@@ -698,6 +747,151 @@ export const dataProvider = {
 
   async getNotifications() {
     return notifications
+  },
+
+  // ─────────── WB-10 模型接入配置（前台可配的大模型接口）───────────
+  //
+  // 与模块页其他域的区别：这是**唯一有真实写路径的数据域**。三条硬约束：
+  //   1. 写路径**绝不回落到 Mock** —— 伪造"保存成功"会让"配了没生效"变成不可见故障；
+  //   2. 失败必须带**可操作原因**（BFF 透传上游信封：400 角色非法 / 404 不存在 / 409 同名）；
+  //   3. 密钥**只以 `api_key_hint` 出现**，编辑表单绝不把 hint 当作已填值回传（会把 `sk-***1234`
+  //      当真实密钥存进库里）。
+  async getModels(): Promise<ModelConfigList> {
+    if (source === 'mock') return mockModelConfigUnavailable('mock 数据源不提供模型配置')
+    try {
+      const payload = unwrapBody(await api.get('/models')) as ModelConfigList
+      if (!payload || typeof payload !== 'object' || !('available' in payload)) {
+        reportDegrade('models', '响应缺少 available 字段')
+        return { ...mockModelConfigUnavailable('响应结构不符合契约'), available: false }
+      }
+      if (payload.available === false) {
+        reportDegrade('models', String(payload.reason || '大脑层不可用'))
+      } else {
+        reportApiOk('models')
+        if (payload.storage?.degraded) {
+          reportDegrade('models_storage', `配置存储降级为 ${payload.storage.backend || 'memory'}：${payload.storage.reason || '原因未知'}`)
+        }
+      }
+      return {
+        ...payload,
+        items: Array.isArray(payload.items) ? payload.items : [],
+        by_role: payload.by_role && typeof payload.by_role === 'object' ? payload.by_role : {},
+      }
+    } catch (error) {
+      const reason = (error as Error)?.message || 'BFF /models 不可达'
+      reportDegrade('models', reason)
+      return mockModelConfigUnavailable(`BFF /models 不可达（${reason}）`)
+    }
+  },
+
+  /**
+   * Token 用量看板（WB-10 后半句）。
+   *
+   * 语义与 `getModels` 一致：读路径不可达 → `available:false` + 说明，
+   * **不回 `totals:{calls:0}`** —— "读不到"和"这周没人用"是两件事，
+   * 把前者渲染成后者会让看板安静地撒谎。
+   */
+  async getModelUsage(days = 7): Promise<ModelUsage> {
+    if (source === 'mock') return mockModelUsageUnavailable('mock 数据源不提供用量数据')
+    try {
+      const payload = unwrapBody(await api.get('/models/usage', { params: { days } })) as ModelUsage
+      if (!payload || typeof payload !== 'object' || !('available' in payload)) {
+        reportDegrade('models_usage', '响应缺少 available 字段')
+        return mockModelUsageUnavailable('响应结构不符合契约')
+      }
+      if (payload.available === false) {
+        reportDegrade('models_usage', String(payload.reason || '大脑层不可用'))
+      } else {
+        reportApiOk('models_usage')
+        if (payload.storage?.degraded) {
+          reportDegrade('models_usage_storage',
+            `计量降级：PG 不可用，期间的用量未计入（${payload.storage.note || payload.storage.reason || '原因未知'}）`)
+        }
+      }
+      return {
+        ...payload,
+        daily: Array.isArray(payload.daily) ? payload.daily : [],
+        by_role: payload.by_role && typeof payload.by_role === 'object' ? payload.by_role : {},
+        by_model: payload.by_model && typeof payload.by_model === 'object' ? payload.by_model : {},
+      }
+    } catch (error) {
+      const reason = (error as Error)?.message || 'BFF /models/usage 不可达'
+      reportDegrade('models_usage', reason)
+      return mockModelUsageUnavailable(`BFF /models/usage 不可达（${reason}）`)
+    }
+  },
+
+  /**
+   * 写路径统一收口。返回 `{ok:false, code, message}` 而不是抛异常，
+   * 让调用方**必须**处理失败分支；同时登记降级，保证失败在顶栏可见。
+   */
+  async saveModel(payload: ModelConfigUpsert, id?: number): Promise<ModelWriteResult> {
+    if (source !== 'api') {
+      const message = '当前为 Mock 数据源，模型配置不可写；请切换 VITE_DATA_SOURCE=api 后重试'
+      reportDegrade('models_save', message)
+      return { ok: false, code: 'MOCK_READONLY', message }
+    }
+    try {
+      const body = id === undefined
+        ? unwrapBody(await api.post('/models', payload))
+        : unwrapBody(await api.patch(`/models/${id}`, payload))
+      reportApiOk('models_save')
+      return { ok: true, data: (body || {}) as Record<string, unknown> }
+    } catch (error) {
+      return modelWriteFailure('models_save', id === undefined ? '保存模型配置' : '更新模型配置', error)
+    }
+  },
+
+  async deleteModel(id: number): Promise<ModelWriteResult> {
+    if (source !== 'api') {
+      const message = '当前为 Mock 数据源，模型配置不可写；请切换 VITE_DATA_SOURCE=api 后重试'
+      reportDegrade('models_delete', message)
+      return { ok: false, code: 'MOCK_READONLY', message }
+    }
+    try {
+      const body = unwrapBody(await api.delete(`/models/${id}`))
+      reportApiOk('models_delete')
+      return { ok: true, data: (body || {}) as Record<string, unknown> }
+    } catch (error) {
+      return modelWriteFailure('models_delete', '删除模型配置', error)
+    }
+  },
+
+  /**
+   * 连通性探测。**注意口径**：`supported:false` 表示"该供应商不提供 `GET /models` 探测路径"，
+   * 与"连接失败"是两回事 —— 界面必须分开表达，否则会把一次成功的配置判成坏的。
+   */
+  async testModel(id: number, timeoutMs = 5000): Promise<ModelProbeResult> {
+    if (source !== 'api') {
+      return { supported: false, ok: false, reason: '当前为 Mock 数据源，无法发起真实探测' }
+    }
+    try {
+      const body = unwrapBody(await api.post(`/models/${id}/test`, {}, { params: { timeout_ms: timeoutMs } }))
+      if (body && body.ok === false && !body.supported) reportDegrade('models_test', String(body.detail || '探测不可用'))
+      else reportApiOk('models_test')
+      const probe = (body || {}) as ModelProbeResult
+      // 显式键放在展开之后：既避免 TS2783（重复指定），也让"上游缺字段时的兜底"一目了然
+      return { ...probe, supported: probe.supported !== false, ok: probe.ok === true }
+    } catch (error) {
+      const result = modelWriteFailure('models_test', '探测模型连通性', error)
+      return { supported: false, ok: false, reason: result.message, code: result.code } as ModelProbeResult & { code?: string }
+    }
+  },
+
+  /** 不重启进程重载角色引擎（核对"配置已改但引擎未更新"）。 */
+  async reloadModels(): Promise<ModelWriteResult> {
+    if (source !== 'api') {
+      const message = '当前为 Mock 数据源，无引擎可重载'
+      reportDegrade('models_reload', message)
+      return { ok: false, code: 'MOCK_READONLY', message }
+    }
+    try {
+      const body = unwrapBody(await api.post('/models/reload', {}))
+      reportApiOk('models_reload')
+      return { ok: true, data: (body || {}) as Record<string, unknown> }
+    } catch (error) {
+      return modelWriteFailure('models_reload', '重载模型引擎', error)
+    }
   },
 
   // ─────────── 写路径（契约中多数字段仍为 planned）───────────

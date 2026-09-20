@@ -430,6 +430,62 @@ components:
         quality: { type: number }
         share: { type: number }
         quota: { type: string }
+    # ── WB-10 模型接入配置（llm_model_config 表的对外投影）──
+    #
+    # 与上面的 `ManagedModel` 刻意分开：`ManagedModel` 是**运行态视图**（成本/延迟/质量/流量份额，
+    # 属于观测域，当前仍为 Mock）；`ModelConfig` 是**配置真相**（接哪个供应商、哪个模型、
+    # 用哪个角色的密钥）。把两者合并会让"配置改了但运行态没变"这类问题无处表达。
+    ModelConfig:
+      type: object
+      required: [id, config_key, name, provider, base_url, model, tier, enabled]
+      properties:
+        id: { type: integer, description: 配置 ID }
+        tenant_id: { type: string }
+        config_key:
+          type: string
+          description: 绑定的功能角色
+          enum: [intent, embed, rerank, generate, plan, code]
+        role_label: { type: string, description: 角色中文名（前台展示用） }
+        name: { type: string, description: 同一角色下的显示名，角色内唯一 }
+        provider: { type: string, example: deepseek }
+        base_url: { type: string, example: 'https://api.deepseek.com/v1' }
+        model: { type: string, example: deepseek-chat }
+        api_key_hint:
+          type: string
+          description: 脱敏后的密钥（形如 `sk-***last4`）。**明文与密文都不出接口。**
+          example: sk-***mnop
+        has_api_key: { type: boolean, description: 是否已配置凭据 }
+        tier: { type: string, enum: [L1, L2, L3], description: 层级（参与降级链） }
+        max_tokens: { type: integer, nullable: true }
+        temperature: { type: number, nullable: true }
+        timeout_ms: { type: integer, nullable: true }
+        routing_weight: { type: integer, description: 角色内优先级（大者优先） }
+        enabled: { type: boolean, description: 未启用的配置不进入角色引擎，也不参与路由 }
+        extra: { type: object, additionalProperties: true }
+        last_probe_at: { type: string, nullable: true }
+        last_probe_ok: { type: boolean, nullable: true }
+        last_probe_detail: { type: string, nullable: true }
+        created_at: { type: string }
+        updated_at: { type: string }
+    ModelConfigUpsert:
+      type: object
+      description: |
+        创建/局部更新的请求体。PATCH 只处理**显式出现**的字段：
+        `api_key` 省略 = 保留原凭据，空串 = 清空（明文永不出现在响应中）。
+      properties:
+        config_key: { type: string, enum: [intent, embed, rerank, generate, plan, code] }
+        name: { type: string }
+        provider: { type: string, default: custom }
+        base_url: { type: string }
+        model: { type: string }
+        api_key: { type: string, nullable: true }
+        tier: { type: string, enum: [L1, L2, L3, ''] }
+        max_tokens: { type: integer, nullable: true }
+        temperature: { type: number, nullable: true }
+        timeout_ms: { type: integer, nullable: true }
+        routing_weight: { type: integer, nullable: true }
+        enabled: { type: boolean, default: false }
+        extra: { type: object, additionalProperties: true }
     ModelRoute:
       type: object
       required: [route_id, task_type, model_id, share]
@@ -1408,19 +1464,207 @@ paths:
         '200':
           description: OK
   /models:
-    x-wp-status: planned
+    x-wp-status: implemented
     get:
-      summary: 多模型池与运行状态（WB-10）
-      responses:
-        '200': { description: OK }
-  /models/{model_id}:
-    x-wp-status: planned
-    patch:
-      summary: 更新模型启停与路由状态
+      summary: 多模型配置与运行状态（WB-10）
+      description: >
+        按**功能角色**（intent/embed/rerank/generate/plan/code）分组的模型接入配置清单。
+        唯一真相源是 nlp-service 的 `llm_model_config` 表；BFF 只做代理，不落第二份配置。
+        密钥**只以脱敏形式**出现（`api_key_hint`，形如 `sk-***last4`）——
+        明文与密文都不得出现在任何响应中。
+        大脑层不可达时返回 200 + `available:false`（如实降级），不返回空数组冒充"没有配置"。
       parameters:
-        - { name: model_id, in: path, required: true, schema: { type: string } }
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
       responses:
-        '200': { description: OK }
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [available]
+                    properties:
+                      available: { type: boolean }
+                      tenant_id: { type: string }
+                      items:
+                        type: array
+                        description: 配置条目（密钥为 api_key_hint 脱敏值）
+                        items: { $ref: '#/components/schemas/ModelConfig' }
+                      by_role:
+                        type: object
+                        description: 按功能角色分组的配置条目（key = 角色）
+                        additionalProperties: { type: array, items: { $ref: '#/components/schemas/ModelConfig' } }
+                      total: { type: integer }
+                      enabled: { type: integer }
+                      roles: { type: array, items: { type: object } }
+                      providers: { type: array, items: { type: object } }
+                      storage: { type: object, description: 存储后端与主密钥来源（含降级原因） }
+                      llm:
+                        type: object
+                        description: 当前**实际装配**的角色引擎（与配置可能不同步，reload 后一致）
+                        properties:
+                          role_configured: { type: array, items: { type: string } }
+                          engines: { type: object, additionalProperties: true }
+                      reason: { type: string, description: available=false 时的原因 }
+    post:
+      summary: 新建模型接入配置（WB-10 写路径）
+      description: >
+        **写路径，需来源白名单 + 控制令牌**（与 `/knowledge` POST、`/middleware/{key}/start` 同级）。
+        创建后立即重载角色引擎，返回体含 `reload` 摘要 —— 否则"前台配好了但不生效"，
+        排障方向会被误导到模型侧，而真正原因是没重载。
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModelConfigUpsert' }
+      responses:
+        '200': { description: "OK（返回 item 与 reload 摘要）" }
+        '400': { $ref: '#/components/responses/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/ErrorEnvelope' }
+        '409': { $ref: '#/components/responses/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ErrorEnvelope' }
+  /models/usage:
+    x-wp-status: implemented
+    get:
+      summary: 模型用量看板数据源（WB-10 计量口径）
+      description: >
+        按**功能角色 / 模型 / token 来源**聚合的用量统计，供前台"模型用量"卡片与看板使用。
+        与 `GET /models` 同为**免令牌读路径** —— 它读的是**计量结果**而非配置，故不涉及写边界。
+        `days` 为统计窗口天数，越界值由 BFF 收敛到 `[1, 90]`，**不把非法值转给上游**。
+        降级口径与 `GET /models` 一致：大脑层不可达时返回 200 + `available:false`，
+        不把读不到渲染成"零用量"（否则看板会把上一次的数字留在页面上继续冒充当前值）。
+      parameters:
+        - name: days
+          in: query
+          required: false
+          description: 统计窗口天数（BFF 收敛到 [1,90]，默认 7）
+          schema: { type: integer, default: 7, minimum: 1, maximum: 90 }
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                required: [data]
+                properties:
+                  data:
+                    type: object
+                    required: [available]
+                    properties:
+                      available: { type: boolean }
+                      tenant_id: { type: string }
+                      window:
+                        type: object
+                        properties:
+                          days: { type: integer }
+                      totals: { type: object, description: 窗口内总量（调用数 / token / 成本） }
+                      by_role: { type: object, description: 按功能角色聚合, additionalProperties: true }
+                      by_model: { type: object, description: 按模型配置聚合, additionalProperties: true }
+                      by_token_source: { type: object, description: 按 token 来源（真实/估算）聚合, additionalProperties: true }
+                      daily: { type: array, items: { type: object }, description: 按日序列 }
+                      reason: { type: string, description: available=false 时的原因 }
+  /models/reload:
+    x-wp-status: implemented
+    post:
+      summary: 重载模型角色引擎（不重启进程）
+      description: >
+        **写路径，需来源白名单 + 控制令牌。** 把库中配置重新装配成角色引擎，
+        用于核对"配置已改但引擎未更新"的场景。
+      parameters:
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      responses:
+        '200': { description: "OK（返回 reload 摘要与已装配角色引擎）" }
+        '401': { $ref: '#/components/responses/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ErrorEnvelope' }
+  /models/{model_id}:
+    x-wp-status: implemented
+    patch:
+      summary: 局部更新模型配置（WB-10 写路径）
+      description: >
+        **写路径，需来源白名单 + 控制令牌。** 局部更新语义由上游实现：只处理请求里
+        **显式出现**的字段。BFF 只转发、不补齐默认值 —— 若在此补默认值，
+        前端"只改一个开关"的请求会顺手清空 base_url / model。
+        `api_key` 省略 = 保留原凭据；空串 = 清空。
+      parameters:
+        - { name: model_id, in: path, required: true, schema: { type: string }, description: 配置 ID（整数） }
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: '#/components/schemas/ModelConfigUpsert' }
+      responses:
+        '200': { description: "OK（返回 item 与 reload 摘要）" }
+        '400': { $ref: '#/components/responses/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/ErrorEnvelope' }
+        '404': { $ref: '#/components/responses/ErrorEnvelope' }
+        '409': { $ref: '#/components/responses/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ErrorEnvelope' }
+    delete:
+      summary: 删除模型配置（WB-10 写路径）
+      description: '**写路径，需来源白名单 + 控制令牌。** 删除后立即重载角色引擎。'
+      parameters:
+        - { name: model_id, in: path, required: true, schema: { type: string }, description: 配置 ID（整数） }
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      responses:
+        '200': { description: "OK（返回 deleted / name 与 reload 摘要）" }
+        '401': { $ref: '#/components/responses/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/ErrorEnvelope' }
+        '404': { $ref: '#/components/responses/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ErrorEnvelope' }
+  /models/{model_id}/test:
+    x-wp-status: implemented
+    post:
+      summary: 模型连通性探测（不消耗 token）
+      description: >
+        **写路径，需来源白名单 + 控制令牌**（会向配置的 base_url 发起真实外呼）。
+        上游口径：调用 `GET {base_url}/models`；供应商不支持该路径时**如实报告
+        unsupported**，不把"探测方式不适用"伪造成"连接失败"。
+      parameters:
+        - { name: model_id, in: path, required: true, schema: { type: string }, description: 配置 ID（整数） }
+        - name: timeout_ms
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1000, maximum: 30000, default: 5000 }
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      responses:
+        '200': { description: OK（探测结果，含 supported / latency_ms / detail） }
+        '401': { $ref: '#/components/responses/ErrorEnvelope' }
+        '403': { $ref: '#/components/responses/ErrorEnvelope' }
+        '404': { $ref: '#/components/responses/ErrorEnvelope' }
+        '503': { $ref: '#/components/responses/ErrorEnvelope' }
   /remote-im/channels:
     x-wp-status: planned
     get:

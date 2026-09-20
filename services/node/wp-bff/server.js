@@ -138,6 +138,54 @@ async function httpRequestJson(url, opts = {}) {
   return outcome.ok ? outcome.data : null
 }
 
+/**
+ * 出站请求的**带全量响应**版本（WB-10 模型配置写路径专用）。
+ *
+ * 与 `httpRequestJsonMeta` 的唯一差别：**非 2xx 也把响应体解析出来回传**。
+ * 为什么必须这样：模型配置的写路径需要把上游的结构化错误信封
+ * （400 角色非法 / 404 配置不存在 / 409 角色内重名）原样交给前端。
+ * 若沿用 `httpRequestJsonMeta`，这些错误会被压成 `reason:'http_error'`，
+ * 前端只能显示「上游报错」，拿不到「同一角色下已存在同名配置」这类可操作原因 ——
+ * 用户会反复重试同一个必然失败的请求。
+ */
+function httpRequestJsonDetailed(url, { method = 'GET', headers = {}, body = null, timeoutMs = READ_TIMEOUT_MS } = {}) {
+  return new Promise(resolve => {
+    const payload = body == null ? null : Buffer.from(JSON.stringify(body), 'utf8')
+    let settled = false
+    const finish = outcome => { if (!settled) { settled = true; resolve(outcome) } }
+    const request = http.request(url, {
+      method,
+      timeout: timeoutMs,
+      headers: {
+        ...(payload ? { 'Content-Type': 'application/json', 'Content-Length': payload.length } : {}),
+        ...headers,
+      },
+    }, response => {
+      const status = response.statusCode
+      let raw = ''
+      response.on('data', chunk => { raw += chunk })
+      response.on('end', () => {
+        let parsed = null
+        let parsedOk = false
+        if (String(raw).trim()) {
+          try { parsed = JSON.parse(raw); parsedOk = true } catch { parsedOk = false }
+        }
+        const ok = status >= 200 && status < 300
+        finish({
+          ok,
+          status,
+          data: parsed,
+          reason: ok ? (parsedOk ? null : 'bad_json') : (parsedOk ? 'http_error' : 'http_error_unparsed'),
+        })
+      })
+    })
+    request.on('timeout', () => { request.destroy(); finish({ ok: false, status: 0, data: null, reason: 'timeout' }) })
+    request.on('error', () => finish({ ok: false, status: 0, data: null, reason: 'unreachable' }))
+    if (payload) request.write(payload)
+    request.end()
+  })
+}
+
 /** 读取请求体 JSON（带体积上限，避免超大请求拖垮 BFF） */
 function readJsonBody(req, limit = 64 * 1024) {
   return new Promise((resolve, reject) => {
@@ -248,6 +296,14 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'POST', path: '/session/{session_id}/ask' },
   { method: 'GET', path: '/session/{session_id}/context' },
   { method: 'DELETE', path: '/session/{session_id}' },
+  // WB-10 多模型管理面板：前台可配置不同功能角色的大模型接口（nlp-service /api/nlp/models）
+  { method: 'GET', path: '/models' },
+  { method: 'GET', path: '/models/usage' },
+  { method: 'POST', path: '/models' },
+  { method: 'POST', path: '/models/reload' },
+  { method: 'PATCH', path: '/models/{model_id}' },
+  { method: 'DELETE', path: '/models/{model_id}' },
+  { method: 'POST', path: '/models/{model_id}/test' },
 ]
 
 /**
@@ -308,11 +364,25 @@ const TOOL_RESERVED_SEGMENTS = new Set(
     .filter(segment => segment && !segment.startsWith('{')),
 )
 
+/**
+ * `/api/wp/models` 下的**固定子路径段**（reload），由 `IMPLEMENTED_ENDPOINTS` 派生。
+ * 与 `/tools/{name}` 同一类陷阱：参数路由若先拦截，`POST /models/reload` 会被当成
+ * 「更新 id 为 reload 的配置」并向上游发出一个必然失败的请求，
+ * 而 ROUTE_GUARD 判定的是 405 —— 同一请求两种语义，分流形同虚设。
+ */
+const MODEL_RESERVED_SEGMENTS = new Set(
+  IMPLEMENTED_ENDPOINTS
+    .map(item => item.path)
+    .filter(routePath => routePath.startsWith('/models/'))
+    .map(routePath => routePath.slice('/models/'.length).split('/')[0])
+    .filter(segment => segment && !segment.startsWith('{')),
+)
+
 /** 总览页仍待 BFF 实现的聚合数据域，透传给前端用于降级展示 */
 const OVERVIEW_GAPS = [
   'vitals', 'organs', 'senses', 'evolution', 'collaboration',
   'experts', 'skills', 'connectors', 'automations', 'cases', 'approvals',
-  'models', 'remote_im', 'agents',
+  'remote_im', 'agents',
 ]
 
 /** 体层（body-service）地址；未启动时 /knowledge 端点如实返回 available=false */
@@ -382,6 +452,29 @@ function createServer(options = {}) {
   const probeImpl = options.probeImpl || probeTcp
   const fetchJson = options.fetchJson || httpGetJson
   const jsonRequest = options.jsonRequest || httpRequestJson
+  // 带全量响应的出站请求（WB-10 写路径：需要把上游错误信封原样交给前端）。
+  // 注入了 jsonRequest 的测试用假传输没有响应体，只能给出 status + 抛出的 payload；
+  // 生产路径走 httpRequestJsonDetailed，能拿到真实的 400/404/409 响应体。
+  const jsonRequestDetailed = options.jsonRequestDetailed || (
+    options.jsonRequest
+      ? async (url, opts) => {
+        try {
+          const data = await options.jsonRequest(url, opts)
+          return data == null
+            ? { ok: false, status: 0, data: null, reason: 'unreachable' }
+            : { ok: true, status: 200, data, reason: null }
+        } catch (error) {
+          const status = Number(error && error.status) || 0
+          return {
+            ok: false,
+            status,
+            data: (error && error.payload) || null,
+            reason: status ? 'http_error' : 'unreachable',
+          }
+        }
+      }
+      : httpRequestJsonDetailed
+  )
   // 带原因的出站请求（工具域聚合与代理用）。注入假传输的测试没有原因信息，
   // 只能退回通用 reason='unreachable' —— 不假装知道细节，生产路径才拿得到 timeout/404 级区分。
   const jsonRequestMeta = options.jsonRequestMeta || (
@@ -1011,6 +1104,162 @@ function createServer(options = {}) {
       })
     }
     return send(req, res, 200, { data: { available: true, ...result } })
+  }
+
+  // ─────────── WB-10 模型接入配置（代理 nlp-service /api/nlp/models）───────────
+  //
+  // 与其余代理端点的关键差别：这里**有写路径**。安全边界**按方法判定**，
+  // 与 `/knowledge` POST、`/middleware/{key}/start`、`/tools/execute` 同级 ——
+  // 来源白名单 + 控制令牌。给一个免令牌的只读路径加写方法却不补校验，
+  // 等于开出一条"任何人可改线上模型指向"的后门（阶段复审已踩过同类坑）。
+  //
+  // 降级口径（两种路径**刻意不同**）：
+  //   - 读 GET /models：大脑层不可达 → 200 + `available:false`（如实降级，界面可渲染）
+  //   - 写 POST/PATCH/DELETE/test/reload：大脑层不可达 → **503**，绝不 200 假装成功。
+  //     前台配好了却没生效、界面还显示成功，比直接报错危险得多。
+  const MODEL_WRITE_TIMEOUT_MS = Number(process.env.WP_BFF_MODEL_WRITE_TIMEOUT_MS || 8000)
+  const MODEL_PROBE_TIMEOUT_MS = Number(process.env.WP_BFF_MODEL_PROBE_TIMEOUT_MS || 12000)
+
+  const modelsTarget = suffix => `${nlpUrl}/api/nlp/models${suffix}`
+
+  /** 写路径失败：4xx 原样透传上游信封（保留可操作原因），其余归为 503 上游不可用。 */
+  function upstreamModelsFailure(req, res, scope, outcome) {
+    const status = Number(outcome && outcome.status) || 0
+    const envelope = (outcome && outcome.data && typeof outcome.data === 'object') ? outcome.data : null
+    if (status >= 400 && status < 500) {
+      const code = String((envelope && envelope.code) || 'AGENT_BAD_REQUEST')
+      const message = String((envelope && envelope.message) || `上游拒绝请求：HTTP ${status}`)
+      audit('MODEL_REJECT', scope, `${status} ${code}`)
+      return send(req, res, status, {
+        code,
+        message,
+        details: {
+          ...((envelope && envelope.details) || {}),
+          source: 'nlp-service',
+          upstream_status: status,
+        },
+      })
+    }
+    const reason = String((outcome && outcome.reason) || 'unreachable')
+    audit('MODEL_FAIL', scope, reason)
+    return fail(req, res, 503, 'AGENT_BUS_UNAVAILABLE',
+      '大脑层不可用：模型配置未生效（nlp-service 未启动或返回异常）',
+      { source: 'nlp-service', reason, guard: scope })
+  }
+
+  /** 写路径统一入口：鉴权 → 组请求 → 转发 → 错误透传。`spec.method` 省略时视为 POST。 */
+  async function modelsWrite(req, res, scope, spec, timeoutMs = MODEL_WRITE_TIMEOUT_MS) {
+    const auth = authorizeControl(req)
+    if (!auth.ok) {
+      audit('REJECT_AUTH', 'models', `${scope} ${auth.message}`)
+      return fail(req, res, auth.status, auth.code, auth.message, auth.details)
+    }
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const outcome = await jsonRequestDetailed(modelsTarget(spec.path), {
+      method: spec.method || 'POST',
+      headers: {
+        'X-Tenant-Id': tenantId,
+        'X-Actor': String(req.headers['x-actor'] || 'wp-platform').slice(0, 64),
+      },
+      body: spec.body === undefined ? null : spec.body,
+      timeoutMs,
+    })
+    if (!outcome.ok || !outcome.data) return upstreamModelsFailure(req, res, scope, outcome)
+    audit('MODEL_WRITE', scope, `HTTP ${outcome.status}`)
+    return send(req, res, 200, { data: { available: true, tenant_id: tenantId, ...outcome.data } })
+  }
+
+  /** WB-10 模型配置清单：按功能角色分组（密钥仅 `api_key_hint` 脱敏形式）。 */
+  async function handleModels(req, res) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const outcome = await jsonRequestDetailed(modelsTarget(''), { headers: { 'X-Tenant-Id': tenantId } })
+    if (!outcome.ok || !outcome.data) {
+      const reason = String(outcome.reason || 'unreachable')
+      audit('MODEL_DOWN', 'list', reason)
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          tenant_id: tenantId,
+          items: [],
+          by_role: {},
+          reason: `大脑层不可用：模型配置不可读（nlp-service 未启动或返回异常，reason=${reason}）`,
+        },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, tenant_id: tenantId, ...outcome.data } })
+  }
+
+  /**
+   * Token 用量看板数据源（WB-10 后半句）。**只读** —— 与 `/models` 同为免令牌读路径，
+   * 但它读的是**计量结果**，不是配置，故不涉及写边界。
+   *
+   * 降级口径与 `GET /models` 一致（200 + `available:false`）：看板需要"知道读不到"，
+   * 而不是收到 500 后把上一次的数字留在页面上继续冒充当前值。
+   */
+  async function handleModelUsage(req, res, days) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const window = Math.max(1, Math.min(Number(days) || 7, 90))
+    const outcome = await jsonRequestDetailed(modelsTarget(`/usage?days=${window}`),
+      { headers: { 'X-Tenant-Id': tenantId } })
+    if (!outcome.ok || !outcome.data) {
+      const reason = String(outcome.reason || 'unreachable')
+      audit('MODEL_DOWN', 'usage', reason)
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          tenant_id: tenantId,
+          window: { days: window },
+          totals: {}, by_role: {}, by_model: {}, by_token_source: {}, daily: [],
+          reason: `大脑层不可用：用量不可读（nlp-service 未启动或返回异常，reason=${reason}）`,
+        },
+      })
+    }
+    return send(req, res, 200, { data: { available: true, tenant_id: tenantId, ...outcome.data } })
+  }
+
+  async function handleModelCreate(req, res) {
+    let payload
+    try {
+      payload = await readJsonBody(req)
+    } catch (error) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', String((error && error.message) || '请求体不合法'))
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', '请求体必须是 JSON 对象')
+    }
+    return modelsWrite(req, res, 'create', { path: '', method: 'POST', body: payload })
+  }
+
+  async function handleModelUpdate(req, res, modelId) {
+    let payload
+    try {
+      payload = await readJsonBody(req)
+    } catch (error) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', String((error && error.message) || '请求体不合法'))
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', '请求体必须是 JSON 对象')
+    }
+    // 局部更新语义由上游实现（exclude_unset）—— BFF 只转发，不补齐默认值。
+    // 若在这里补默认值，前端"只改一个开关"的请求会顺手清空 base_url / model。
+    return modelsWrite(req, res, 'update', { path: `/${encodeURIComponent(modelId)}`, method: 'PATCH', body: payload })
+  }
+
+  async function handleModelDelete(req, res, modelId) {
+    return modelsWrite(req, res, 'delete', { path: `/${encodeURIComponent(modelId)}`, method: 'DELETE', body: null })
+  }
+
+  /** 连通性探测：真实调用模型供应商 `GET {base_url}/models`，不消耗 token。 */
+  async function handleModelTest(req, res, modelId, timeoutMs) {
+    const budget = Math.max(1000, Math.min(Number(timeoutMs) || 5000, 30000))
+    return modelsWrite(req, res, 'test',
+      { path: `/${encodeURIComponent(modelId)}/test?timeout_ms=${budget}`, method: 'POST', body: null },
+      MODEL_PROBE_TIMEOUT_MS)
+  }
+
+  /** 不重启进程重载角色引擎（配置改动后前台可手动触发核对）。 */
+  async function handleModelsReload(req, res) {
+    return modelsWrite(req, res, 'reload', { path: '/reload', method: 'POST', body: null })
   }
 
   // ─────────── 会话链路（代理 session-manager，R4-01/02 + R-C04）───────────
@@ -1685,6 +1934,23 @@ function createServer(options = {}) {
     }
     const sessionOne = url.pathname.match(/^\/api\/wp\/session\/([a-z0-9-]{8,64})$/)
     if (req.method === 'DELETE' && sessionOne) return handleSessionClose(req, res, sessionOne[1])
+    // WB-10 模型接入配置。固定段 `/models/reload` 必须排在 `/models/{model_id}` 之前
+    // （同 /tools 的既定约定，见 MODEL_RESERVED_SEGMENTS 注释）
+    if (req.method === 'GET' && url.pathname === '/api/wp/models') return handleModels(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/models/usage') {
+      return handleModelUsage(req, res, url.searchParams.get('days'))
+    }
+    if (req.method === 'POST' && url.pathname === '/api/wp/models') return handleModelCreate(req, res)
+    if (req.method === 'POST' && url.pathname === '/api/wp/models/reload') return handleModelsReload(req, res)
+    const modelTest = url.pathname.match(/^\/api\/wp\/models\/([a-z0-9-]{1,64})\/test$/)
+    if (req.method === 'POST' && modelTest) {
+      return handleModelTest(req, res, modelTest[1], url.searchParams.get('timeout_ms'))
+    }
+    const modelOne = url.pathname.match(/^\/api\/wp\/models\/([a-z0-9-]{1,64})$/)
+    if (modelOne && !MODEL_RESERVED_SEGMENTS.has(modelOne[1])) {
+      if (req.method === 'PATCH') return handleModelUpdate(req, res, modelOne[1])
+      if (req.method === 'DELETE') return handleModelDelete(req, res, modelOne[1])
+    }
     const decisionMatch = url.pathname.match(/^\/api\/wp\/brain\/([a-z0-9-]{8,64})$/)
     if (req.method === 'GET' && decisionMatch) return handleBrainDecision(req, res, decisionMatch[1])
     if (req.method === 'POST' && match) return handleControl(req, res, match[1], match[2])
@@ -1743,6 +2009,7 @@ module.exports = {
   IMPLEMENTED_ENDPOINTS,
   ROUTE_GUARD,
   TOOL_RESERVED_SEGMENTS,
+  MODEL_RESERVED_SEGMENTS,
   OVERVIEW_GAPS,
   DEFAULT_ALLOWED_ORIGINS,
   DEFAULT_BODY_URL,
@@ -1759,6 +2026,7 @@ module.exports = {
   readJsonBody,
   httpRequestJson,
   httpRequestJsonMeta,
+  httpRequestJsonDetailed,
   // 超时档位（权威登记表：contracts/timeout-budget.yaml）。
   // 导出给单测用于**镜像生产默认值** —— 注入替身若不补默认值，读型调用会录到 undefined，
   // 用例就只能断言「有没有传」，而断言不了「档位对不对」。

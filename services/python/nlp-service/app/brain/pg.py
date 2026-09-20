@@ -26,6 +26,9 @@ PG_ENABLED = os.getenv("BRAIN_PG_ENABLED", "true").lower() != "false"
 
 _lock = threading.Lock()
 _state: dict[str, Any] = {"initialized": False, "degraded": True, "reason": "not initialized"}
+# 已执行过的 DDL 语句（规范化文本）。**按语句去重，而不是按「首次调用」去重** ——
+# 见 ensure_schema 的注释：多模块共用底座时，"只跑第一个调用者的 DDL" 是错的。
+_applied: set[str] = set()
 
 
 def dsn() -> str:
@@ -41,13 +44,23 @@ def _connect():
 
 
 def ensure_schema(statements: Iterable[str]) -> bool:
-    """建表（幂等）。成功返回 True；失败记录降级原因并返回 False。"""
+    """建表（幂等）。成功返回 True；失败记录降级原因并返回 False。
+
+    **每个调用模块的 DDL 都会被真正执行**（2026-09-20 修复）。
+
+    修复前的缺陷：函数在**首次调用**后就靠 `_state['initialized']` 短路返回，
+    于是「谁先调用，谁的 DDL 生效」—— `audit.py` 与 `memory_graph.py` 都调用本函数，
+    但只有一个模块的表会被创建，另一个模块的写入静默失败并降级到进程内存储。
+    这类"看起来只是降级、其实是表根本没建"的问题最难排查，故按**语句集合**去重：
+    所有 DDL 都是 `CREATE TABLE IF NOT EXISTS`，重复执行本身是安全的。
+    """
     global _state
     if not PG_ENABLED:
         _state = {"initialized": True, "degraded": True, "reason": "brain pg disabled by config"}
         return False
+    pending = [text for text in (str(item).strip() for item in statements) if text and text not in _applied]
     with _lock:
-        if _state.get("initialized"):
+        if _state.get("initialized") and not pending:
             return not _state.get("degraded", True)
         try:
             connection = _connect()
@@ -57,9 +70,10 @@ def ensure_schema(statements: Iterable[str]) -> bool:
             return False
         try:
             with connection.cursor() as cursor:
-                for statement in statements:
+                for statement in pending:
                     cursor.execute(statement)
             connection.commit()
+            _applied.update(pending)
             _state = {"initialized": True, "degraded": False, "reason": ""}
             return True
         except Exception as exc:  # noqa: BLE001
@@ -107,6 +121,8 @@ def status() -> dict:
         "degraded": bool(_state.get("degraded", True)),
         "reason": str(_state.get("reason", "")),
         "dsn": f"{PG_HOST}:{PG_PORT}/{PG_DB}",
+        # 已应用的 DDL 条数：多个模块各自建表，这个数字能一眼看出"是不是只跑了一份"
+        "applied_ddl": len(_applied),
     }
 
 
@@ -114,3 +130,4 @@ def reset_for_test() -> None:
     """单测用：重置初始化状态，便于切换后端。"""
     global _state
     _state = {"initialized": False, "degraded": True, "reason": "not initialized"}
+    _applied.clear()

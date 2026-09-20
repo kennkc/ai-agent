@@ -34,6 +34,8 @@ from app.budget import (
     run_with_budget,
 )
 from app.chunking import chunk_text
+from app import model_config
+from app import token_usage
 from app.embedding import EMBEDDING_SERVICE
 from app.intent import CASCADE, EVAL_CORPUS, CORE_SCENARIOS
 from app.ocr import OCR_SERVICE
@@ -51,6 +53,35 @@ BRAIN_PIPELINE = RagPipeline(gateway=LLM_GATEWAY, cache=SEMANTIC_CACHE)
 
 # 问答耗时滑动窗口（DoD 要求 **P99 < 3s**，不能用单次耗时代言）
 LATENCY_WINDOW: deque = deque(maxlen=500)
+
+# ─────────── WB-10 角色引擎装载 ───────────
+# 从 `llm_model_config` 表读出「哪个角色用哪个模型」并装配到网关。
+# 设计取舍：
+# * **不是"启动时一次性装载"** —— 服务与 PG 的启动顺序不保证，PG 晚于本服务就绪时
+#   一次性装载会让整个进程在生命周期内都停在模板降级态。
+# * **也不是"每次请求都查库"** —— PG 不可用时每次都要等连接超时，会把问答拖慢。
+# * 取中间：懒加载 + 30s 退避重试。写配置后由端点 `force=True` 立即重载。
+_role_engines: dict = {"loaded": False, "last_attempt": 0.0, "result": {}}
+_ROLE_RETRY_INTERVAL_SECONDS = 30.0
+
+
+def ensure_role_engines(force: bool = False) -> dict:
+    """确保角色引擎已从配置装载；返回装载结果摘要（幂等，可安全重复调用）。"""
+    now = time.time()
+    if not force:
+        if _role_engines["loaded"]:
+            return _role_engines["result"]
+        if now - float(_role_engines["last_attempt"] or 0) < _ROLE_RETRY_INTERVAL_SECONDS:
+            return _role_engines["result"]
+    _role_engines["last_attempt"] = now
+    result = LLM_GATEWAY.reload_from_model_config()
+    _role_engines["loaded"] = bool(result.get("ok"))
+    _role_engines["result"] = result
+    if result.get("ok"):
+        logger.info("llm role engines loaded: %s", sorted(result.get("roles", {}).keys()))
+    else:
+        logger.warning("llm role engines not loaded: %s", result.get("error", ""))
+    return result
 
 logger = logging.getLogger("nlp-service")
 
@@ -125,6 +156,9 @@ def healthz():
             "embedding": EMBEDDING_SERVICE.status()["backend"],
             "reranker": RERANKER_SERVICE.status()["backend"],
             "planner": "rule(SimplePlanner)", "llm": BRAIN_PIPELINE.gateway.health()["engines"],
+            # 前台配置的角色引擎：哪些角色配了模型（空 = 全部走层级级联/模板降级）
+            "llm_roles": BRAIN_PIPELINE.gateway.health()["role_configured"],
+            "model_config": model_config.status(),
             "semantic_cache": SEMANTIC_CACHE.backend,
             # 具名预算口径（REC-01）：运维一眼看到「这次请求最多能跑多久」
             "budget": budget_status()}
@@ -201,8 +235,10 @@ def brain_plan(req: BrainPlanRequest):
 @app.get("/api/nlp/brain/health")
 def brain_health():
     """大脑层健康：LLM 路由 / 语义缓存 / 规划器（降级状态必须可见）。"""
+    ensure_role_engines()
     return {
         "llm": BRAIN_PIPELINE.gateway.health(),
+        "model_config": model_config.status(),
         "semantic_cache": SEMANTIC_CACHE.health(),
         "planner": {"name": "SimplePlanner", "engine": "rule"},
         "retrieval": {"base_url": RETRIEVER.base_url, "timeout": RETRIEVER.timeout},
@@ -580,3 +616,154 @@ def chunk(req: ChunkRequest):
         "chunks": [{"index": c.index, "heading": c.heading, "content": c.content,
                     "chars": len(c.content)} for c in chunks],
     }
+
+
+# ─────────── WB-10 模型接入配置（前台可配置的大模型接口）───────────
+#
+# 口径（与全局约定一致）：
+# * **唯一真相源**是 `llm_model_config` 表（见 `app/model_config.py`）；
+# * 响应**只回 `api_key_hint`**（`sk-***last4`），明文与密文都不出接口；
+# * 任何写操作后**立即 reload 角色引擎** —— 否则"前台配好了但不生效"，
+#   排障方向会被误导到模型侧，而真正的原因是没重载。
+class ModelConfigUpsert(BaseModel):
+    """创建/更新模型配置的请求体（字段命名 snake_case，对齐 D5-2）。"""
+
+    config_key: str = Field("", description="功能角色：intent/embed/rerank/generate/plan/code")
+    name: str = Field("", description="同一角色下的显示名，角色内唯一")
+    provider: str = "custom"
+    base_url: str = ""
+    model: str = ""
+    api_key: str | None = Field(None, description="留空/省略 = 不改动已有凭据；空串 = 清空")
+    tier: str = ""
+    max_tokens: int | None = None
+    temperature: float | None = None
+    timeout_ms: int | None = None
+    routing_weight: int | None = None
+    enabled: bool = False
+    extra: dict = Field(default_factory=dict)
+
+
+def _config_error(exc: "model_config.ModelConfigError") -> JSONResponse:
+    """配置层错误 → 统一信封（**保留配置层的原始 code**）。
+
+    若走 `HTTPException`，会被全局处理器按状态码反查成 `AGENT_BUS_UNAVAILABLE`
+    之类的位置相近但语义不符的码 —— 排查时会指向错误的子系统。
+    """
+    return JSONResponse(status_code=exc.status,
+                        content=_envelope(exc.code, exc.message, exc.details))
+
+
+def _reload_brief(result: dict) -> dict:
+    return {
+        "ok": bool(result.get("ok")),
+        "roles": sorted((result.get("roles") or {}).keys()),
+        "count": int(result.get("count") or 0),
+        "error": str(result.get("error") or ""),
+    }
+
+
+@app.get("/api/nlp/models")
+def list_models(request: Request):
+    """模型配置列表（按功能角色分组）。密钥仅以脱敏形式出现。"""
+    ensure_role_engines()
+    try:
+        payload = model_config.list_configs(resolve_tenant(request))
+    except model_config.ModelConfigError as exc:
+        return _config_error(exc)
+    payload["llm"] = {
+        "role_configured": sorted(BRAIN_PIPELINE.gateway.role_engines.keys()),
+        "engines": BRAIN_PIPELINE.gateway.role_summary(),
+    }
+    return payload
+
+
+@app.get("/api/nlp/models/roles")
+def list_model_roles():
+    """功能角色 / 供应商 / 层级字典（前台表单预填用，避免把字典硬编码在前端）。"""
+    return {
+        "roles": [
+            {"key": role.key, "label": role.label, "default_tier": role.default_tier,
+             "default_timeout_ms": role.default_timeout_ms, "description": role.description}
+            for role in model_config.ROLES
+        ],
+        "providers": [
+            {"key": key, "default_base_url": model_config.PROVIDER_DEFAULT_BASE_URL.get(key, "")}
+            for key in model_config.PROVIDERS
+        ],
+        "tiers": list(model_config.TIERS),
+        "storage": model_config.status(),
+    }
+
+
+@app.post("/api/nlp/models/reload")
+def reload_models():
+    """把库里的配置重新装配成角色引擎（**不重启进程**）。"""
+    result = ensure_role_engines(force=True)
+    return {"reload": _reload_brief(result), "llm": BRAIN_PIPELINE.gateway.health()["roles"]}
+
+
+@app.get("/api/nlp/models/usage")
+def model_usage(request: Request, days: int = 7):
+    """Token 用量看板数据源（WB-10 后半句）。
+
+    **口径必须与页面上的数字同源**：token 数按 `token_source` 分开累计，
+    `provider` 是供应商自报的真实值、`estimated` 是字符估算（DEBT-016）。
+    `estimated_share` 一览估算占比 —— 不为 0 时这些 token 只能当趋势看，不能当账单看。
+    """
+    ensure_role_engines()
+    return token_usage.usage_summary(resolve_tenant(request), days=days)
+
+
+@app.post("/api/nlp/models")
+def create_model(request: Request, payload: ModelConfigUpsert):
+    tenant = resolve_tenant(request, payload.extra.get("tenant_id", "") if isinstance(payload.extra, dict) else "")
+    try:
+        created = model_config.create_config(tenant, payload.model_dump(), actor=_actor(request))
+    except model_config.ModelConfigError as exc:
+        return _config_error(exc)
+    return {"item": created, "reload": _reload_brief(ensure_role_engines(force=True))}
+
+
+@app.patch("/api/nlp/models/{config_id:int}")
+def update_model(request: Request, config_id: int, payload: ModelConfigUpsert):
+    """局部更新：**只处理请求里显式出现的字段**（`exclude_unset`）。
+
+    若把未提供的字段按默认值一并写入，会把 `base_url` 之类的既有值清成空串 ——
+    前端"只改一个开关"的请求会顺手拆掉整条配置。
+    """
+    tenant = resolve_tenant(request)
+    try:
+        updated = model_config.update_config(tenant, config_id, payload.model_dump(exclude_unset=True),
+                                            actor=_actor(request))
+    except model_config.ModelConfigError as exc:
+        return _config_error(exc)
+    return {"item": updated, "reload": _reload_brief(ensure_role_engines(force=True))}
+
+
+@app.delete("/api/nlp/models/{config_id:int}")
+def delete_model(request: Request, config_id: int):
+    tenant = resolve_tenant(request)
+    try:
+        removed = model_config.delete_config(tenant, config_id)
+    except model_config.ModelConfigError as exc:
+        return _config_error(exc)
+    removed["reload"] = _reload_brief(ensure_role_engines(force=True))
+    return removed
+
+
+@app.post("/api/nlp/models/{config_id:int}/test")
+def test_model(request: Request, config_id: int, timeout_ms: int = 5000):
+    """连通性探测（`GET {base_url}/models`，不消耗 token）。见 model_config.probe_config 的口径说明。"""
+    tenant = resolve_tenant(request)
+    try:
+        return model_config.probe_config(tenant, config_id, timeout_ms=max(1000, min(timeout_ms, 30000)))
+    except model_config.ModelConfigError as exc:
+        return _config_error(exc)
+
+
+def _actor(request: Request) -> str:
+    return str(request.headers.get("x-actor") or "wp-platform")[:64]
+
+
+# 进程启动即尝试装载（PG 尚未就绪时会退避重试，见 ensure_role_engines）
+ensure_role_engines()
