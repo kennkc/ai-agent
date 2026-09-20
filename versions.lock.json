@@ -1,0 +1,64 @@
+{
+  "baseline_date": "2026-09-20",
+  "host_reference": {
+    "os": "Windows 11",
+    "java": "21.0.7",
+    "maven": "3.9.11",
+    "python": "3.12.13",
+    "node": "24.20.0",
+    "npm": "11.19.0",
+    "git": "2.45.2.windows.1",
+    "docker": "29.6.2",
+    "docker_compose": "v5.3.1"
+  },
+  "required_runtime": {
+    "java": ">=21 <22",
+    "maven": ">=3.9 <4",
+    "python": ">=3.12 <3.13",
+    "node": ">=20",
+    "npm": ">=10"
+  },
+  "build_baseline": {
+    "spring_boot": "3.3.4",
+    "spring_cloud": "2023.0.3",
+    "grpc": "1.65.1",
+    "protobuf": "3.25.3",
+    "vue": "^3.5.13",
+    "vite": "^6.0.5",
+    "typescript": "^5.7.2",
+    "element_plus": "^2.9.1"
+  },
+  "python_tooling": {
+    "pytest": ">=8.0",
+    "httpx": ">=0.27.0",
+    "ruff": "0.16.8",
+    "nats_py": ">=2.9.0"
+  },
+  "infrastructure_images": {
+    "redis": "redis:7.2-alpine",
+    "postgres": "pgvector/pgvector:pg16",
+    "qdrant": "qdrant/qdrant:v1.12.4",
+    "nats": "nats:2.10-alpine",
+    "nacos": "nacos/nacos-server:v2.3.2",
+    "minio": "minio/minio:RELEASE.2024-01-16T16-07-38Z",
+    "jaeger": "jaegertracing/all-in-one:1.57",
+    "kafka": "apache/kafka:3.7.0"
+  },
+  "recommended_ide_plugins": {
+    "vscode": [
+      "Vue - Official",
+      "Extension Pack for Java",
+      "Python",
+      "Pylance",
+      "Docker",
+      "YAML",
+      "EditorConfig for VS Code"
+    ],
+    "intellij": [
+      "Vue.js",
+      "Spring Boot",
+      "Docker",
+      "Database Tools and SQL"
+    ]
+  }
+}
