@@ -1,0 +1,33 @@
+{
+  "status": "pass",
+  "domains_created": 20,
+  "created_domains": [
+    "dom-4bca5880",
+    "dom-7996c7bd",
+    "dom-d41607ef",
+    "dom-ba5b50ae",
+    "dom-664ac797",
+    "dom-b1654d57",
+    "dom-f814bd1b",
+    "dom-0070b35e",
+    "dom-75972fbe",
+    "dom-28a863e6",
+    "dom-8408af25",
+    "dom-3df487d0",
+    "dom-8b8b07cc",
+    "dom-ffad5c98",
+    "dom-32b8d071",
+    "dom-3c6d3f04",
+    "dom-1d3c3d74",
+    "dom-9eaa19c4",
+    "dom-d00e03a5",
+    "dom-78d12fe4"
+  ],
+  "owner_only": 20,
+  "peer_only": 20,
+  "duplicate_owners": [],
+  "missing_owners": [],
+  "takeover_missing": [],
+  "owner_lease_owner": "c817fc38-d539-4e9d-a9b9-bbeb4800c20e",
+  "peer_lease_owner": "c817fc38-d539-4e9d-a9b9-bbeb4800c20e"
+}

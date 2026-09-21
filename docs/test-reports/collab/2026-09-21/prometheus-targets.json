@@ -1,0 +1,14 @@
+{
+  "status": "pass",
+  "expected_jobs": [
+    "body-service",
+    "collab-bus",
+    "gateway-service",
+    "nlp-service",
+    "sense-service",
+    "session-manager",
+    "tool-executor",
+    "wp-bff"
+  ],
+  "down": []
+}

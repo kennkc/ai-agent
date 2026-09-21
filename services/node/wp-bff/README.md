@@ -1,6 +1,6 @@
 # wp-bff（work-platform BFF · 最小 Ops 子集）
 
-前端工作平台的轻量后端服务。当前实现中间件观测与控制、链路追踪观测共四个端点，后续 BFF 端点按阶段逐步迁入。
+前端工作平台的轻量 BFF。当前已覆盖观测、服务控制、知识 / 大脑 / 工具代理、Alertmanager 接收、协作域和 Phase 6 Blocking 最小闭环；未接入真实注册表的数据域明确降级，不伪造成功。
 
 ## 端点
 
@@ -11,10 +11,18 @@
 | GET | `/api/wp/middleware` | 探测 8 个中间件（TCP 探针），返回 `MiddlewareOverview` 契约 |
 | POST | `/api/wp/middleware/:key/start` | 启动中间件：`docker compose up -d <key>` |
 | POST | `/api/wp/middleware/:key/stop` | 终止中间件：`docker compose stop <key>` |
-| GET | `/api/wp/services` | 应用服务 TCP 探针目录（Gateway / Session / NLP / Body / Tool / Collab / BFF / Frontend） |
+| GET | `/api/wp/services` | 应用服务 TCP 探针目录（Gateway / Session / Sense / NLP / Body / Tool / Collab / BFF / Frontend） |
 | POST | `/api/wp/services/:key/start` | 本地受控启动应用服务（固定命令白名单） |
 | POST | `/api/wp/services/:key/stop` | 仅停止由本 BFF 启动的应用服务；外部进程返回 409，不猜 PID |
 | GET | `/api/wp/tracing` | Jaeger 在线时返回真实服务注册列表与每服务最近 20 条 trace 聚合统计（traces/spans/错误率/P99）及全局最新 12 条链路；Jaeger 未启动时返回 `enabled:false` |
+| GET | `/api/wp/alerts` | 查询最近接收的 Alertmanager 投递；内存保留最近 200 条，JSONL 真实归档 |
+| POST | `/api/wp/alerts/alertmanager` | Alertmanager webhook 接收端；Bearer 令牌独立于控制令牌，默认落盘到 `logs/wp-bff-alerts.jsonl` |
+| GET | `/api/wp/agents/online` | Phase 6：由 collab-bus 心跳真实派生在线 Agent，不伪造模型延迟 |
+| GET/POST | `/api/wp/tasks` | Phase 6：把协作域映射为任务；POST 会创建真实协作域，不返回伪任务 ID |
+| GET | `/api/wp/tasks/{task_id}` | Phase 6：任务详情与协作 DAG/成员映射 |
+| GET | `/api/wp/results/{task_id}` | Phase 6：结果端点；工件注册表未接入时返回空列表并标记 `artifact_source_connected=false` |
+| GET | `/api/wp/experts` · `/api/wp/approvals` | Phase 6：注册表未接入时 `available=false`，不返回伪造数据 |
+| POST | `/api/wp/approvals/{approval_id}/decision` | 审批写路径 fail-closed；注册表未接入时返回 503，`side_effects=false` |
 
 ## 契约一致性（2026-09-16）
 
@@ -56,6 +64,7 @@ python scripts/contract-check.py --work-platform --openapi contracts/work-platfo
 | `WP_BFF_CONTROL_TOKEN` | 启动时随机生成 | 控制端点令牌；生产环境必须显式配置 |
 | `WP_BFF_ALLOWED_ORIGINS` | `http://127.0.0.1:3001,http://localhost:3001,http://[::1]:3001` | 允许的来源，逗号分隔 |
 | `WP_BFF_APP_CONTROL` | `true`（仅本机开发） | 应用服务启动/停止开关；`false` 时服务控制页只读。生产环境应交给 systemd / K8s / 外部 supervisor |
+| `WP_BFF_ALERT_TOKEN` | `lifeform-local-alertmanager` | Alertmanager webhook 的 Bearer 令牌；如修改，必须同步 `infra/prometheus/alertmanager.yml` |
 
 ### 已知边界
 
@@ -80,11 +89,11 @@ python scripts/contract-check.py --work-platform --openapi contracts/work-platfo
 node services/node/wp-bff/server.js
 # 默认端口 8090，可用 WP_BFF_PORT 覆盖
 
-# 控制面安全回归测试（Node 内置 test runner，14 个用例）
+# 控制面与 Phase 6/告警回归测试（Node 内置 test runner，118 个用例）
 cd services/node/wp-bff && node --test
 ```
 
-测试覆盖：只读端点契约、令牌缺失/错误、来源越权（CSRF）、合法控制请求的命令形态、非白名单 key、CORS 收紧、预检请求、Jaeger 未启动降级、tracing 采样口径标注。
+测试覆盖：只读端点契约、令牌缺失/错误、来源越权（CSRF）、固定命令、CORS、上游降级、模型/工具/协作代理、Alertmanager 独立令牌投递，以及 Phase 6 Blocking 的真实派生与 fail-closed 语义。
 
 前置条件：根目录需有 `.env`（复制 `.env.example`），其中 `MINIO_ROOT_USER` 等为 `docker compose` 必需变量；
 目录名变更后还需沿用既有 `COMPOSE_PROJECT_NAME`，否则会与存量容器/数据卷命名冲突。

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-21 09:00 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-21 09:33 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -169,7 +169,7 @@
 </nav>
   <main class="doc"><h1 id="debt-registry">技术债台账（DEBT Registry）<a class="headerlink" href="#debt-registry" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>口径时间</strong>：2026-09-18（Phase 3 躯体期落地后复核 · 含 Phase 3 审核补全） · <strong>代码基线</strong>：<code>a5e0cd5</code>（Phase 3 代码收口）+ 审核补全轮
+<p><strong>口径时间</strong>：2026-09-21（五项最终优化收口） · <strong>代码基线</strong>：<code>codex/main</code>
 <strong>来源</strong>：设计文档《D5-冻结前收尾/D5-1-简化版演进规范》§5.1 清单 —— 本文件是<strong>仓库内的权威副本</strong></p>
 </blockquote>
 <h2 id="_1">为什么把台账搬进仓库<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
@@ -415,13 +415,11 @@
 </ul>
 <h3 id="debt-006">DEBT-006 · 五渠道集成测试缺口<a class="headerlink" href="#debt-006" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>简化实现</strong>：感官测试只有 <code>TouchChannelTest</code>（单渠道）、<code>CollectPipelineTest</code>、
-  <code>ChannelHealthMonitorTest</code> —— <strong>没有覆盖五渠道协同的路由/降级集成测试</strong>。</li>
-<li><strong>正式目标</strong>：五渠道集成测试（含隔离渠道自动降级到可用渠道的端到端验证）</li>
+<li><strong>简化实现</strong>：~~感官测试只有单渠道与分散测试，没有五渠道协同覆盖。~~</li>
+<li><strong>正式目标</strong>：五渠道集成测试（含隔离渠道自动降级到可用渠道的验证）</li>
 <li><strong>触发点</strong>：P2</li>
-<li><strong>状态</strong>：🔴 未闭合（触发点已到，Phase 2 已宣告验收）</li>
-<li><strong>证据</strong>：<code>services/java/sense-service/src/test/java/com/agent/sense/</code> 下无五渠道协同用例。</li>
-<li>备注：《G1-验证追踪视图》中 C16 感官渠道管理器的验收方法即本项，状态标 🟡 待验（见 §4.5）。</li>
+<li><strong>状态</strong>：✅ <strong>已闭合（2026-09-20）</strong></li>
+<li><strong>关闭证据</strong>：<code>CollectPipelineTest#allFiveChannelsAreRegisteredAndDegradeAcrossRegistry</code> 覆盖五渠道注册、健康快照与降级；sense-service <strong>54/54 passed</strong>。</li>
 </ul>
 <h3 id="debt-007-l0-bert">DEBT-007 · L0 意图模型为统计分类器（非 BERT）<a class="headerlink" href="#debt-007-l0-bert" title="Permanent link">&para;</a></h3>
 <ul>
@@ -435,13 +433,11 @@
 </ul>
 <h3 id="debt-009">DEBT-009 · 消息链路测试缺口<a class="headerlink" href="#debt-009" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>简化实现</strong>：会话侧只有 <code>BusProxyTest</code> 单测；<strong>无 NATS / Kafka 真实链路测试</strong>
-  （发布—订阅、应答、断连重试、死信等）。</li>
-<li><strong>正式目标</strong>：消息链路测试</li>
+<li><strong>简化实现</strong>：~~会话侧只有 <code>BusProxyTest</code> 单测，无真实 NATS/Kafka 链路。~~</li>
+<li><strong>正式目标</strong>：消息链路测试（NATS 请求/回应、Kafka 发布/消费）</li>
 <li><strong>触发点</strong>：P2（NATS 接入）</li>
-<li><strong>状态</strong>：🔴 未闭合（触发点已到）</li>
-<li><strong>证据</strong>：<code>services/java/session-manager/src/test/java/com/agent/session/</code> 下无 NATS/Kafka 用例。</li>
-<li>备注：同 DEBT-006，《G1-验证追踪视图》中 C09 数据总线代理验证已于 2026-09-20 执行。</li>
+<li><strong>状态</strong>：✅ <strong>已闭合（2026-09-20）</strong></li>
+<li><strong>关闭证据</strong>：<code>SessionBusLinkTest</code> 使用真实 NATS/Kafka 容器验证请求/回应和发布/消费，本地 <strong>2/2 passed</strong>；CI 已加入 <code>SESSION_BUS_IT=true</code>。</li>
 </ul>
 <h3 id="debt-010-n-gram-bge-m3">DEBT-010 · 嵌入走字符 n-gram 哈希后端（非 BGE-M3）<a class="headerlink" href="#debt-010-n-gram-bge-m3" title="Permanent link">&para;</a></h3>
 <ul>
@@ -515,14 +511,13 @@
 </ul>
 <h3 id="debt-021-prometheus2026-09-19-2026-09-21">DEBT-021 · 工具执行指标未接 Prometheus（2026-09-19 新开，2026-09-21 关闭）<a class="headerlink" href="#debt-021-prometheus2026-09-19-2026-09-21" title="Permanent link">&para;</a></h3>
 <ul>
-<li><strong>简化实现</strong>：<code>ToolMetrics</code> 用 <code>ConcurrentLinkedDeque</code> 保留最近 <strong>500</strong> 次调用样本，
-  给出 <code>success_rate / p50 / p95 / p99 / blocked_calls / calls_by_tool</code>。工具专属指标仍为<strong>纯进程内</strong>；
-  tool-executor 已暴露通用 <code>/actuator/prometheus</code>，但该工具指标尚未迁到 Micrometer。</li>
+<li><strong>实现</strong>：<code>ToolMetrics</code> 保留最近 500 次样本供视图 P99 使用，同时同步写出
+  <code>lifeform_tool_calls_total</code>、<code>lifeform_tool_execution_seconds</code>、
+  <code>lifeform_tool_blocked_total</code>、<code>lifeform_tool_circuit_open_total</code>。</li>
 <li><strong>正式目标</strong>：接入 Micrometer + Prometheus（跨实例聚合、可告警）。</li>
 <li><strong>触发点</strong>：需要跨实例聚合指标或据此配置告警时。</li>
-<li><strong>状态</strong>：🟡 未闭合（触发点未到）。<strong>不影响</strong> DoD「工具成功率 ≥ 90%」「执行 P99 &lt; 2s」的量化验收
-  —— 当前指标正是这两条验收的数据来源（视图 <code>/metrics</code> 可读）。</li>
-<li><strong>证据</strong>：<code>services/java/tool-executor/src/main/java/com/agent/tool/exec/ToolMetrics.java:17</code>。</li>
+<li><strong>状态</strong>：✅ <strong>已闭合（2026-09-21）</strong></li>
+<li><strong>关闭证据</strong>：tool-executor 已暴露 <code>/actuator/prometheus</code>，并加入失败率与熔断告警。</li>
 </ul>
 <hr />
 <h2 id="_4">三、关联未实现项（<strong>不属于技术债</strong>，但常被一起问到）<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
@@ -547,9 +542,9 @@
 <td><code>available()=false</code> / <code>healthy()=false</code>，自动标记 DOWN 并隔离</td>
 </tr>
 <tr>
-<td>wp-bff 契约 27 个 planned 端点</td>
+<td>wp-bff 契约 20 个 planned 端点</td>
 <td>分期实现</td>
-<td>契约标 <code>x-wp-status: planned</code>；<code>/overview</code> 用 <code>gaps</code> 列出 15 个未覆盖域，前端标注 Mock</td>
+<td>已实现 49 路径 / 53 方法；Phase 6 Blocking 最小闭环完成，未接入注册表显式 unavailable / 503</td>
 </tr>
 <tr>
 <td>~~body-service 缺 OTLP 配置、未接入统一错误码~~</td>

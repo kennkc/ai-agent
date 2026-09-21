@@ -13,3 +13,8 @@ receivers:
     webhook_configs:
       - url: https://replace-with-your-alert-webhook.example/path
         send_resolved: true
+        http_config:
+          # 生产环境应通过只读 secret 文件注入，禁止把通知渠道凭据提交到仓库。
+          authorization:
+            type: Bearer
+            credentials_file: /etc/alertmanager/secrets/production-alert-token

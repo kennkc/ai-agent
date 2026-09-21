@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2026-09-21 最终五项优化收口</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-21 09:33 · 源文件 2026-09-21-最终五项优化收口.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">范围</a></li>
+<li><a href="#_2">实测结果</a></li>
+<li><a href="#_3">关键边界</a></li>
+<li><a href="#_4">后续建议</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="2026-09-21">2026-09-21 最终五项优化收口<a class="headerlink" href="#2026-09-21" title="Permanent link">&para;</a></h1>
+<h2 id="_1">范围<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<p>本轮只执行已完成评估的最终五项优化，不启动 Phase 6 完整业务开发：</p>
+<ol>
+<li>collab-bus 多实例调度与故障接管；</li>
+<li>技术债详细状态一致性修复；</li>
+<li>完整服务栈与 Prometheus target 健康检查；</li>
+<li>Alertmanager 真实本地投递链；</li>
+<li>Phase 6 Blocking 端点最小闭环。</li>
+</ol>
+<h2 id="_2">实测结果<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>项目</th>
+<th>结果</th>
+<th>证据</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>collab-bus 多实例</td>
+<td>20 域单 owner；停止 A 后 B 接管，无缺失 owner</td>
+<td><code>docs/test-reports/collab/2026-09-21/multi-instance-*.json</code></td>
+</tr>
+<tr>
+<td>collab-bus 回归</td>
+<td>38 项，0 失败，9 个条件集成用例跳过</td>
+<td>Maven surefire</td>
+</tr>
+<tr>
+<td>技术债一致性</td>
+<td>DEBT-006/009/021 总表与详细章节均闭合，门禁覆盖</td>
+<td><code>scripts/doc-truth-check.py</code></td>
+</tr>
+<tr>
+<td>服务栈 + Prometheus</td>
+<td>8/8 expected jobs <code>up</code>，down 为空</td>
+<td><code>docs/test-reports/collab/2026-09-21/prometheus-targets.json</code></td>
+</tr>
+<tr>
+<td>告警投递</td>
+<td>本次唯一 <code>run_id</code> 经 Alertmanager 到达 wp-bff，<code>delivered=true</code></td>
+<td><code>docs/test-reports/collab/2026-09-21/alertmanager-delivery.json</code></td>
+</tr>
+<tr>
+<td>Phase 6 Blocking</td>
+<td>任务 / 心跳 / Agent / 结果空态 / 审批 fail-closed 全部通过</td>
+<td><code>docs/test-reports/collab/2026-09-21/phase6-blocking-minimal.json</code></td>
+</tr>
+<tr>
+<td>wp-bff 回归</td>
+<td>118/118 通过</td>
+<td><code>node --test test/server.test.js</code></td>
+</tr>
+<tr>
+<td>契约</td>
+<td>implemented 49 路径 / 53 方法，planned 20，0 FAIL</td>
+<td><code>scripts/contract-check.py --work-platform</code></td>
+</tr>
+</tbody>
+</table>
+<h2 id="_3">关键边界<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<ul>
+<li>告警默认通道是<strong>本地可验证投递链</strong>，不是企业微信 / 邮件 / Slack；生产必须替换
+  <code>alertmanager.production.yml.example</code> 的 URL 并注入 secret。</li>
+<li>Phase 6 <code>experts</code> / <code>approvals</code> 注册表未接入，读路径返回 <code>available=false</code>，审批决策返回 503；
+  这不是功能完成，而是可部署、可告警、可测试的 fail-closed 边界。</li>
+<li>工件注册表未接入，<code>/results/{task_id}</code> 返回空列表并标注 <code>artifact_source_connected=false</code>。</li>
+<li>collab-bus 租约表不可用时拒绝启动 consumer，避免“无 owner 但看似 active”的静默丢消息风险。</li>
+</ul>
+<h2 id="_4">后续建议<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<ol>
+<li>Phase 6 解冻前先完成专家 / 审批 / 工件存储方案评审；</li>
+<li>将生产告警 URL 与 secret 注入纳入部署验收清单；</li>
+<li>增加多实例持续混沌测试，覆盖 PG 短暂不可用恢复；</li>
+<li>将前端对 <code>available=false</code> 的统一提示复用到 Phase 6 注册表页面。</li>
+</ol></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

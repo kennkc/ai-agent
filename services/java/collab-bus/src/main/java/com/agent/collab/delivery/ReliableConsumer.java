@@ -26,8 +26,13 @@ import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
 import java.time.Duration;
 import java.util.List;
+import java.util.HashSet;
 import java.util.Map;
+import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
@@ -47,11 +52,19 @@ public class ReliableConsumer {
     private final HeartbeatService heartbeatService;
     private final ObjectMapper objectMapper;
     private final CollabBusMetrics metrics;
+    private final DomainLeaseRepository leases;
     private final String durablePrefix;
     private final long retryDelayMs;
     private final long ackWaitMs;
     private final int batchSize;
     private final long pollTimeoutMs;
+    private final long leaseMs;
+    private final long reconcileIntervalMs;
+    private final ScheduledExecutorService reconciler = Executors.newSingleThreadScheduledExecutor(task -> {
+        Thread thread = new Thread(task, "collab-domain-reconciler");
+        thread.setDaemon(true);
+        return thread;
+    });
 
     private final Map<String, ConsumerLoop> handles = new ConcurrentHashMap<>();
 
@@ -61,39 +74,78 @@ public class ReliableConsumer {
                             HeartbeatService heartbeatService,
                             ObjectMapper objectMapper,
                             CollabBusMetrics metrics,
+                            DomainLeaseRepository leases,
                             @Value("${app.collab.consumer-durable-prefix:collab-worker}") String durablePrefix,
                             @Value("${app.collab.retry-delay-ms:500}") long retryDelayMs,
                             @Value("${app.collab.ack-wait-ms:30000}") long ackWaitMs,
                             @Value("${app.collab.consumer-batch-size:32}") int batchSize,
-                            @Value("${app.collab.consumer-poll-timeout-ms:500}") long pollTimeoutMs) {
+                            @Value("${app.collab.consumer-poll-timeout-ms:500}") long pollTimeoutMs,
+                            @Value("${app.collab.domain-lease-ms:30000}") long leaseMs,
+                            @Value("${app.collab.domain-reconcile-interval-ms:5000}") long reconcileIntervalMs) {
         this.nats = nats;
         this.domains = domains;
         this.consumer = consumer;
         this.heartbeatService = heartbeatService;
         this.objectMapper = objectMapper;
         this.metrics = metrics;
+        this.leases = leases;
         this.durablePrefix = durablePrefix;
         this.retryDelayMs = Math.max(100, retryDelayMs);
         this.ackWaitMs = Math.max(1000, ackWaitMs);
         this.batchSize = Math.max(1, batchSize);
         this.pollTimeoutMs = Math.max(100, pollTimeoutMs);
+        this.leaseMs = Math.max(3000, leaseMs);
+        this.reconcileIntervalMs = Math.max(1000, reconcileIntervalMs);
     }
 
     @EventListener(ApplicationReadyEvent.class)
     public void startAll() {
+        reconcile();
+        reconciler.scheduleWithFixedDelay(this::reconcileSafe,
+                reconcileIntervalMs, reconcileIntervalMs, TimeUnit.MILLISECONDS);
+    }
+
+    private void reconcileSafe() {
+        try {
+            reconcile();
+        } catch (Exception e) {
+            log.warn("协作域租约对账失败：{}", e.getMessage());
+        }
+    }
+
+    /**
+     * Periodically discover active domains and claim ownership leases.
+     * A failed instance loses its PG leases; another instance takes over on the next pass.
+     */
+    public synchronized void reconcile() {
+        if (!leases.available()) {
+            log.error("协作域租约后端不可用，拒绝启动 consumer（fail-closed）：{}", leases.lastError());
+            return;
+        }
         if (!domains.available()) {
             log.warn("PG 不可用，跳过协作域 consumer 恢复");
             return;
         }
+        Set<String> active = new HashSet<>();
         for (CollabDomain domain : domains.listAll()) {
-            if (domain.closed() || CollabDomain.STATE_FAILED.equals(domain.state())) {
-                continue;
+            if (!domain.closed() && !CollabDomain.STATE_FAILED.equals(domain.state())) {
+                active.add(domain.domainId());
             }
-            try {
-                startDomain(domain.domainId());
-            } catch (Exception e) {
-                log.warn("协作域 consumer 启动失败：domain={} state={} err={}",
-                        domain.domainId(), domain.state(), e.getMessage());
+        }
+        for (String domainId : handles.keySet().toArray(String[]::new)) {
+            if (!active.contains(domainId)) {
+                stopDomain(domainId);
+            }
+        }
+        for (String domainId : active) {
+            if (handles.containsKey(domainId)) {
+                leases.renew(domainId, leaseMs);
+            } else {
+                try {
+                    startDomain(domainId);
+                } catch (Exception e) {
+                    log.warn("协作域 consumer 启动失败：domain={} err={}", domainId, e.getMessage());
+                }
             }
         }
     }
@@ -103,6 +155,14 @@ public class ReliableConsumer {
         if (handles.containsKey(domainId)) {
             return;
         }
+        if (!leases.available()) {
+            throw new IllegalStateException("协作域租约后端不可用，拒绝启动 consumer：" + leases.lastError());
+        }
+        if (!leases.tryAcquire(domainId, leaseMs)) {
+            log.debug("协作域由其他实例持有，跳过：domain={} owner={}", domainId, leases.ownerId());
+            return;
+        }
+        try {
         String stream = DomainService.streamName(domainId);
         String filter = "collab." + domainId + ".*.*";
         String durable = durablePrefix + "-" + domainId;
@@ -160,6 +220,10 @@ public class ReliableConsumer {
         handles.put(domainId, new ConsumerLoop(subscription, running, thread));
         metrics.activeDomainsChanged(handles.size());
         log.info("协作域 pull consumer 已启动：domain={} stream={} durable={}", domainId, stream, durable);
+        } catch (Exception e) {
+            leases.release(domainId);
+            throw e;
+        }
     }
 
     /** 关闭域时停止拉取；durable consumer 保留未 ack 进度，供恢复继续消费。 */
@@ -167,6 +231,7 @@ public class ReliableConsumer {
         ConsumerLoop handle = handles.remove(domainId);
         metrics.activeDomainsChanged(handles.size());
         if (handle == null) {
+            leases.release(domainId);
             return;
         }
         handle.running().set(false);
@@ -177,13 +242,15 @@ public class ReliableConsumer {
         }
         handle.thread().interrupt();
         heartbeatService.forgetDomain(domainId);
+        leases.release(domainId);
         log.info("协作域 pull consumer 已停止：domain={}", domainId);
     }
 
     public Map<String, Object> status() {
         long active = handles.values().stream().filter(handle -> handle.running().get()).count();
         return Map.of("active_domains", active, "domain_ids",
-                handles.keySet().stream().sorted().toList());
+                handles.keySet().stream().sorted().toList(),
+                "lease_owner", leases.ownerId(), "lease_backend_available", leases.available());
     }
 
     private void pullLoop(String domainId, JetStreamSubscription subscription, AtomicBoolean running) {
@@ -266,6 +333,7 @@ public class ReliableConsumer {
 
     @PreDestroy
     public synchronized void stopAll() {
+        reconciler.shutdownNow();
         for (String domainId : handles.keySet().toArray(String[]::new)) {
             stopDomain(domainId);
         }

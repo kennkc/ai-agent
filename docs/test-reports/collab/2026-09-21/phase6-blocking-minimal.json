@@ -1,0 +1,49 @@
+{
+  "status": "pass",
+  "task_id": "dom-1df76fda",
+  "checks": {
+    "create_task": {
+      "status": 201,
+      "code": null
+    },
+    "heartbeat": {
+      "status": 200,
+      "code": null
+    },
+    "tasks": {
+      "status": 200,
+      "matched": true
+    },
+    "task_detail": {
+      "status": 200,
+      "agents": 1
+    },
+    "results": {
+      "status": 200,
+      "items": 0,
+      "artifact_source_connected": false,
+      "reason": "phase6_artifact_store_not_connected"
+    },
+    "agents_online": {
+      "status": 200,
+      "matched": true
+    },
+    "experts": {
+      "status": 200,
+      "available": false
+    },
+    "approvals": {
+      "status": 200,
+      "available": false
+    },
+    "approval_decision": {
+      "status": 503,
+      "code": "AGENT_UPSTREAM_UNAVAILABLE",
+      "side_effects": false
+    },
+    "cleanup": {
+      "status": 200
+    }
+  },
+  "errors": []
+}

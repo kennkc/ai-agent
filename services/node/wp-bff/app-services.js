@@ -6,6 +6,7 @@ const fs = require('node:fs')
 const APP_SERVICES = {
   'gateway-service': { name: 'Gateway', role: 'API 网关 · JWT / 路由', port: 8080, kind: 'maven', cwd: ['services', 'java'], args: ['-pl', 'gateway-service', 'spring-boot:run'], can_control: true },
   'session-manager': { name: 'Session Manager', role: '会话状态机 · 编排入口', port: 8081, kind: 'maven', cwd: ['services', 'java'], args: ['-pl', 'session-manager', 'spring-boot:run'], can_control: true },
+  'sense-service': { name: 'Sense Service', role: '五感渠道 · 采集', port: 8082, kind: 'maven', cwd: ['services', 'java'], args: ['-pl', 'sense-service', 'spring-boot:run'], can_control: true },
   'nlp-service': { name: 'NLP Service', role: '意图 / 大脑 / RAG', port: 8000, kind: 'python', cwd: ['services', 'python', 'nlp-service'], args: ['-m', 'uvicorn', 'app.main:app', '--host', '127.0.0.1', '--port', '8000'], can_control: true },
   'body-service': { name: 'Body Service', role: '知识库 · 检索 · 重排', port: 8083, kind: 'maven', cwd: ['services', 'java'], args: ['-pl', 'body-service', 'spring-boot:run'], can_control: true },
   'tool-executor': { name: 'Tool Executor', role: '工具执行 · 沙箱 · 审计', port: 8084, kind: 'maven', cwd: ['services', 'java'], args: ['-pl', 'tool-executor', 'spring-boot:run'], can_control: true },

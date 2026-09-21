@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # Agent-Lifeform - local start script
-# Phase 0/1 hardening + VS1 + Vue work-platform + Phase 5 四肢期（tool-executor / wp-bff）
+# Phase 0/1 hardening + VS1 + Vue work-platform + Phase 5 四肢期 + MC-01 collab-bus / wp-bff
 #
 # 端口单一来源：WP_BFF_PORT 只定义一次，WP_BFF_URL（Vite 代理目标）由它派生。
 # 两个变量互不校验时，端口一错前端就静默回落 Mock（见 web/work-platform/vite.config.ts 的启动自检）。
@@ -48,7 +48,7 @@ preflight() {
   fi
 }
 
-JAVA_SERVICES="gateway-service session-manager sense-service body-service tool-executor"
+JAVA_SERVICES="gateway-service session-manager sense-service body-service tool-executor collab-bus"
 
 start_infra() { echo "[1/6] infrastructure..."; docker compose -f "$ROOT/docker-compose.yml" up -d; sleep 15; docker compose -f "$ROOT/docker-compose.yml" ps; }
 

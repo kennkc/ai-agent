@@ -1298,7 +1298,8 @@ paths:
         '405':
           $ref: '#/components/responses/ErrorEnvelope'
   /tasks:
-    x-wp-status: planned
+    x-wp-status: implemented
+    x-wp-minimal-closure: 协作域列表/创建真实映射；专家编排与审批策略仍在 Phase 6 完整开发范围
     get:
       summary: 任务列表（WB-01）
       parameters:
@@ -1327,7 +1328,8 @@ paths:
         '201':
           description: Created
   /tasks/{task_id}:
-    x-wp-status: planned
+    x-wp-status: implemented
+    x-wp-minimal-closure: 协作域详情真实映射；DAG/artifacts/gates 未接入项保持空值并标注
     get:
       summary: 任务详情（WB-01）
       parameters:
@@ -1354,7 +1356,8 @@ paths:
         '200':
           description: OK
   /results/{task_id}:
-    x-wp-status: planned
+    x-wp-status: implemented
+    x-wp-minimal-closure: 端点可达但工件注册表未接入；items=[]，artifact_source_connected=false
     get:
       summary: 结果工作区产物（WB-02，Artifact 列表）
       parameters:
@@ -1363,7 +1366,8 @@ paths:
         '200':
           description: OK
   /experts:
-    x-wp-status: planned
+    x-wp-status: implemented
+    x-wp-minimal-closure: 端点可达；专家注册表未接入时 available=false，不返回伪造专家
     get:
       summary: 专家列表（WB-03）
       responses:
@@ -1460,7 +1464,8 @@ paths:
         '201':
           description: 已创建任务
   /approvals:
-    x-wp-status: planned
+    x-wp-status: implemented
+    x-wp-minimal-closure: 端点可达；审批注册表未接入时 available=false，不返回伪造审批
     get:
       summary: 审批队列（IN4）
       parameters:
@@ -1469,7 +1474,8 @@ paths:
         '200':
           description: OK
   /approvals/{approval_id}/decision:
-    x-wp-status: planned
+    x-wp-status: implemented
+    x-wp-minimal-closure: 注册表未接入时 503 fail-closed，side_effects=false
     post:
       summary: 审批决策（IN4，L4 双人复核）
       parameters:
@@ -1702,7 +1708,8 @@ paths:
       responses:
         '202': { description: Accepted }
   /agents/online:
-    x-wp-status: planned
+    x-wp-status: implemented
+    x-wp-minimal-closure: collab-bus 心跳真实派生；模型字段未接入时返回 -
     get:
       summary: Agent 在线状态与当前任务
       responses:
@@ -1738,6 +1745,25 @@ paths:
       responses:
         '200':
           description: OK
+
+  /alerts:
+    x-wp-status: implemented
+    get:
+      summary: 最近接收的 Alertmanager 投递（内存最近 200 条，JSONL 真实归档）
+      tags: [observability, alerts]
+      responses:
+        '200': { description: OK }
+  /alerts/alertmanager:
+    x-wp-status: implemented
+    x-wp-security: bearer alertmanager token
+    post:
+      summary: 接收 Alertmanager webhook 并落盘；本地真实投递通道而非第三方通知
+      tags: [observability, alerts]
+      security: []
+      responses:
+        '200': { description: Accepted }
+        '400': { $ref: '#/components/responses/ErrorEnvelope' }
+        '401': { $ref: '#/components/responses/ErrorEnvelope' }
 
   # 观测区 / 最小 Ops 子集（2026-09-16 登记：wp-bff 已实现，服务端口 8090）
   /healthz:
@@ -1782,7 +1808,7 @@ paths:
   /services:
     x-wp-status: implemented
     get:
-      summary: 应用服务目录与 TCP 探针（Gateway / Session / NLP / Body / Tool / Collab / BFF / Frontend）
+      summary: 应用服务目录与 TCP 探针（Gateway / Session / Sense / NLP / Body / Tool / Collab / BFF / Frontend）
       tags: [observability]
       responses:
         '200':

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 18:21 · 源文件 frontend-functional-report.md</span>
+  <span class="meta">生成于 2026-09-21 09:36 · 源文件 frontend-functional-report.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -131,7 +131,7 @@
 </nav>
   <main class="doc"><h1 id="mvp">前端功能测试报告（MVP）<a class="headerlink" href="#mvp" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>日期</strong>：2026-09-20
+<p><strong>日期</strong>：2026-09-20（2026-09-21 回归更新）
 <strong>代码基线</strong>：以 <code>docs/项目进度总览.md</code> 登记的最新 <code>codex/main</code> 为准
 <strong>框架</strong>：Vitest 3.2.7 + Vue Test Utils 2.5.1 + jsdom 26.1.0
 <strong>命令</strong>：<code>npm run test:report</code></p>
@@ -140,10 +140,10 @@
 <ul>
 <li>测试文件：<strong>8 个</strong></li>
 <li>测试用例：<strong>19 passed / 0 failed</strong></li>
-<li>语句覆盖率：<strong>27.19%</strong>（1378 / 5068）</li>
-<li>分支覆盖率：<strong>74.02%</strong>（323 / 434）</li>
-<li>函数覆盖率：<strong>26.81%</strong>（48 / 179）</li>
-<li>行覆盖率：<strong>27.19%</strong>（1378 / 5068）</li>
+<li>语句覆盖率：<strong>27.33%</strong>（1388 / 5077）</li>
+<li>分支覆盖率：<strong>73.92%</strong>（326 / 441）</li>
+<li>函数覆盖率：<strong>27.22%</strong>（49 / 180）</li>
+<li>行覆盖率：<strong>27.33%</strong>（1388 / 5077）</li>
 <li>覆盖率门禁：行/语句 25% · 函数 20% · 分支 65% · <code>npm run test:report</code> 强制执行</li>
 <li>类型检查：<code>npm run typecheck</code> 通过</li>
 <li>生产构建：<code>npm run build</code> 通过（仅有 Element Plus 主包 &gt;500 kB 的体积提示）</li>
@@ -221,19 +221,19 @@
 <tr>
 <td><code>src/api/status.ts</code></td>
 <td style="text-align: right;">100%</td>
-<td style="text-align: right;">100%</td>
+<td style="text-align: right;">90%</td>
 <td>数据源降级状态</td>
 </tr>
 <tr>
 <td><code>src/api/provider.ts</code></td>
-<td style="text-align: right;">19.15%</td>
-<td style="text-align: right;">39.02%</td>
-<td>新增真实协作域选择与空列表降级路径；其余 API 分支待扩测</td>
+<td style="text-align: right;">20.14%</td>
+<td style="text-align: right;">42.55%</td>
+<td>新增 Phase 6 <code>available=false</code> 到空列表的诚实降级；其余 API 分支待扩测</td>
 </tr>
 <tr>
 <td><code>src/stores/app.ts</code></td>
 <td style="text-align: right;">94.8%</td>
-<td style="text-align: right;">38.88%</td>
+<td style="text-align: right;">35%</td>
 <td>主题、偏好、数据源</td>
 </tr>
 <tr>

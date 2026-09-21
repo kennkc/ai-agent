@@ -1,10 +1,18 @@
 route:
-  receiver: default
-  group_by: [alertname, job, instance]
+  receiver: local-wp-bff
+  group_by: [alertname, severity, job, instance, run_id]
   group_wait: 10s
   group_interval: 5m
   repeat_interval: 2h
 
 receivers:
-  - name: default
-    # 生产环境必须在部署时替换为邮件、企业微信、Slack 或其他 webhook receiver。
+  - name: local-wp-bff
+    # 真实本地投递链：Alertmanager -> wp-bff -> memory + JSONL 归档。
+    # 它不是企业微信/邮件/Slack；生产必须替换为组织现有的真实通知渠道。
+    webhook_configs:
+      - url: http://host.docker.internal:8090/api/wp/alerts/alertmanager
+        send_resolved: true
+        http_config:
+          authorization:
+            type: Bearer
+            credentials: lifeform-local-alertmanager

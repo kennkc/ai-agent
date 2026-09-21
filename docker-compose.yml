@@ -145,6 +145,8 @@ services:
     volumes:
       - ./infra/prometheus/alertmanager.yml:/etc/alertmanager/alertmanager.yml:ro
       - alertmanager-data:/alertmanager
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
 
 volumes:
   nats-data:

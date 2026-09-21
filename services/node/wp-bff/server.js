@@ -283,6 +283,18 @@ const IMPLEMENTED_ENDPOINTS = [
   { method: 'POST', path: '/services/{key}/stop' },
   { method: 'GET', path: '/collab/domains' },
   { method: 'GET', path: '/collab/{domain_id}' },
+  // Phase 6 Blocking 最小闭环：可派生数据返回真实值，未接入注册表显式降级。
+  { method: 'GET', path: '/agents/online' },
+  { method: 'GET', path: '/tasks' },
+  { method: 'POST', path: '/tasks' },
+  { method: 'GET', path: '/tasks/{task_id}' },
+  { method: 'GET', path: '/results/{task_id}' },
+  { method: 'GET', path: '/experts' },
+  { method: 'GET', path: '/approvals' },
+  { method: 'POST', path: '/approvals/{approval_id}/decision' },
+  // 本地 Alertmanager 到 wp-bff 的真实投递/查收通道；默认落盘，不冒充第三方通知。
+  { method: 'GET', path: '/alerts' },
+  { method: 'POST', path: '/alerts/alertmanager' },
   { method: 'GET', path: '/tracing' },
   { method: 'GET', path: '/knowledge' },
   { method: 'POST', path: '/knowledge' },
@@ -406,6 +418,7 @@ const DEFAULT_SESSION_URL = String(process.env.WP_BFF_SESSION_URL || 'http://127
 /** 四肢层（tool-executor）地址；未启动时 /tools 系列如实返回 available=false */
 const DEFAULT_TOOL_URL = String(process.env.WP_BFF_TOOL_URL || 'http://127.0.0.1:8084').replace(/\/+$/, '')
 const DEFAULT_COLLAB_URL = String(process.env.WP_BFF_COLLAB_URL || 'http://127.0.0.1:8085').replace(/\/+$/, '')
+const DEFAULT_ALERT_TOKEN = String(process.env.WP_BFF_ALERT_TOKEN || 'lifeform-local-alertmanager')
 
 const START_TIMEOUT_MS = 180000
 const STOP_TIMEOUT_MS = 120000
@@ -507,6 +520,9 @@ function createServer(options = {}) {
   const sessionUrl = String(options.sessionUrl || DEFAULT_SESSION_URL).replace(/\/+$/, '')
   const toolUrl = String(options.toolUrl || DEFAULT_TOOL_URL).replace(/\/+$/, '')
   const collabUrl = String(options.collabUrl || DEFAULT_COLLAB_URL).replace(/\/+$/, '')
+  const alertToken = String(options.alertToken || DEFAULT_ALERT_TOKEN)
+  const alertPath = options.alertPath || path.join(__dirname, 'logs', 'wp-bff-alerts.jsonl')
+  const recentAlerts = []
   const repoRoot = options.repoRoot || path.resolve(__dirname, '..', '..', '..')
   const auditPath = options.auditPath || path.join(__dirname, 'logs', 'wp-bff-audit.log')
 
@@ -619,6 +635,87 @@ function createServer(options = {}) {
    */
   function fail(req, res, status, code, message, details = {}) {
     return send(req, res, status, { code, message, details })
+  }
+
+  function authorizeAlertmanager(req) {
+    const authorization = String(req.headers.authorization || '')
+    const bearer = authorization.replace(/^Bearer\s+/i, '')
+    const presented = req.headers['x-alertmanager-token'] || bearer
+    if (!presented || !timingSafeEqual(presented, alertToken)) {
+      return {
+        ok: false,
+        status: 401,
+        code: 'AGENT_UNAUTHORIZED',
+        message: 'Alertmanager 投递令牌缺失或无效',
+        details: { guard: 'alertmanager-token' },
+      }
+    }
+    return { ok: true }
+  }
+
+  async function handleAlertmanagerWebhook(req, res) {
+    const auth = authorizeAlertmanager(req)
+    if (!auth.ok) {
+      audit('REJECT_ALERTMANAGER', req.url, auth.message)
+      return fail(req, res, auth.status, auth.code, auth.message, auth.details)
+    }
+    let payload
+    try {
+      payload = await readJsonBody(req, 1024 * 1024)
+    } catch (error) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', String(error.message || error))
+    }
+    if (!payload || typeof payload !== 'object' || Array.isArray(payload)) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'Alertmanager webhook 请求体必须是 JSON 对象')
+    }
+    const rawAlerts = Array.isArray(payload.alerts) ? payload.alerts : []
+    const event = {
+      event_id: crypto.randomUUID(),
+      received_at: new Date().toISOString(),
+      status: String(payload.status || 'unknown'),
+      group_key: String(payload.groupKey || ''),
+      common_labels: payload.commonLabels && typeof payload.commonLabels === 'object' ? payload.commonLabels : {},
+      common_annotations: payload.commonAnnotations && typeof payload.commonAnnotations === 'object' ? payload.commonAnnotations : {},
+      alerts: rawAlerts.slice(0, 100).map(alert => ({
+        status: String(alert?.status || 'unknown'),
+        fingerprint: String(alert?.fingerprint || ''),
+        starts_at: alert?.startsAt || null,
+        ends_at: alert?.endsAt || null,
+        labels: alert?.labels && typeof alert.labels === 'object' ? alert.labels : {},
+        annotations: alert?.annotations && typeof alert.annotations === 'object' ? alert.annotations : {},
+      })),
+    }
+    recentAlerts.unshift(event)
+    if (recentAlerts.length > 200) recentAlerts.length = 200
+    try {
+      fs.mkdirSync(path.dirname(alertPath), { recursive: true })
+      fs.appendFileSync(alertPath, JSON.stringify(event) + '\n', 'utf8')
+    } catch (error) {
+      audit('ALERT_SINK_WRITE_FAIL', event.event_id, String(error.message || error))
+    }
+    audit('ALERTMANAGER_DELIVERY', event.status, `alerts=${event.alerts.length} event=${event.event_id}`)
+    return send(req, res, 200, {
+      data: {
+        accepted: true,
+        event_id: event.event_id,
+        received_at: event.received_at,
+        alert_count: event.alerts.length,
+        sink: 'wp-bff-jsonl',
+      },
+    })
+  }
+
+  function handleAlerts(req, res, limit) {
+    const normalized = Math.max(1, Math.min(200, Number(limit) || 20))
+    return send(req, res, 200, {
+      data: {
+        available: true,
+        total: recentAlerts.length,
+        items: recentAlerts.slice(0, normalized),
+        storage: { backend: 'memory+jsonl', path: alertPath, note: '内存仅保留最近 200 条；JSONL 为本地真实投递归档。' },
+        checked_at: nowTime(),
+      },
+    })
   }
 
   function authorizeControl(req) {
@@ -852,29 +949,242 @@ function createServer(options = {}) {
     }
   }
 
-  async function handleCollabDomains(req, res) {
+  function mapTaskFromDomain(raw) {
+    const domainId = String(raw?.domain_id || '')
+    const progress = Math.max(0, Math.min(100, Number(raw?.progress) || 0))
+    const state = raw?.closed || String(raw?.state || '').toLowerCase() === 'closed'
+      ? 'archived'
+      : String(raw?.state || '').toLowerCase() === 'failed'
+        ? 'failed'
+        : String(raw?.state || '').toLowerCase() === 'active'
+          ? (progress >= 100 ? 'done' : 'running')
+          : 'pending'
+    const memberCount = Number(raw?.member_count) || 0
+    return {
+      task_id: domainId,
+      title: String(raw?.name || domainId || '未命名协作任务'),
+      type: 'collab_domain',
+      state,
+      progress,
+      priority: 'P1',
+      agent: memberCount ? `${memberCount} Agents` : 'Coordinator',
+      updated_at: raw?.updated_at || nowTime(),
+    }
+  }
+
+  function mapOnlineAgents(raw, domainId) {
+    const members = Array.isArray(raw?.members) ? raw.members : []
+    return members.map(member => {
+      const memberId = String(member.member_id || 'member')
+      const rawState = String(member.state || member.reported_state || 'idle').toLowerCase()
+      const state = rawState === 'working' ? 'run' : rawState === 'idle' ? 'idle' : 'wait'
+      return {
+        agent_id: `${domainId}:${memberId}`,
+        name: memberId,
+        role: 'Collaboration Member',
+        state,
+        task: domainId,
+        model: '-',
+        latency_ms: 0,
+      }
+    })
+  }
+
+  async function loadCollabDomains(req) {
     const tenantId = String(req.headers['x-tenant-id'] || 'default')
     const outcome = await jsonRequestMeta(`${collabUrl}/api/collab/domains`, {
       headers: { 'X-Tenant-Id': tenantId }, timeoutMs: 5000,
     }).catch(() => ({ ok: false, reason: 'unreachable', data: null }))
-    if (!outcome.ok) {
-      return send(req, res, 200, { data: { available: false, total: 0, items: [], reason: outcome.reason, checked_at: nowTime() } })
-    }
+    if (!outcome.ok) return { ok: false, reason: outcome.reason || 'unreachable', items: [], total: 0 }
     const payload = outcome.data?.data || outcome.data || {}
     const items = Array.isArray(payload.items) ? payload.items : []
-    return send(req, res, 200, { data: { available: true, total: payload.total ?? items.length, items, checked_at: nowTime() } })
+    return { ok: true, total: Number(payload.total ?? items.length), items }
   }
 
-  async function handleCollabDomain(req, res, domainId) {
+  async function loadCollabDomain(req, domainId) {
     const tenantId = String(req.headers['x-tenant-id'] || 'default')
     const outcome = await jsonRequestMeta(`${collabUrl}/api/collab/domains/${encodeURIComponent(domainId)}`, {
       headers: { 'X-Tenant-Id': tenantId }, timeoutMs: 5000,
     }).catch(() => ({ ok: false, reason: 'unreachable', data: null }))
+    if (!outcome.ok) return { ok: false, reason: outcome.reason || 'unreachable', raw: null }
+    return { ok: true, raw: outcome.data?.data || outcome.data || {} }
+  }
+
+  async function handleCollabDomains(req, res) {
+    const loaded = await loadCollabDomains(req)
+    if (!loaded.ok) {
+      return send(req, res, 200, { data: { available: false, total: 0, items: [], reason: loaded.reason, checked_at: nowTime() } })
+    }
+    return send(req, res, 200, { data: { available: true, total: loaded.total, items: loaded.items, checked_at: nowTime() } })
+  }
+
+  async function handleCollabDomain(req, res, domainId) {
+    const loaded = await loadCollabDomain(req, domainId)
+    if (!loaded.ok) {
+      return send(req, res, 200, { data: { available: false, domain_id: domainId, reason: loaded.reason, checked_at: nowTime() } })
+    }
+    return send(req, res, 200, { data: { available: true, ...mapCollabAggregate(loaded.raw, nowTime()) } })
+  }
+
+  async function handleAgentsOnline(req, res) {
+    const loaded = await loadCollabDomains(req)
+    if (!loaded.ok) {
+      return send(req, res, 200, {
+        data: { available: false, total: 0, items: [], reason: loaded.reason, checked_at: nowTime() },
+      })
+    }
+    const active = loaded.items
+      .filter(item => !item.closed && String(item.state || '').toLowerCase() !== 'failed')
+      .slice(0, 50)
+    const details = await Promise.all(active.map(async domain => {
+      const domainId = String(domain.domain_id || '')
+      const detail = await loadCollabDomain(req, domainId)
+      return detail.ok
+        ? { domain_id: domainId, raw: detail.raw, reason: null }
+        : { domain_id: domainId, raw: null, reason: detail.reason }
+    }))
+    const items = details.flatMap(detail => detail.raw ? mapOnlineAgents(detail.raw, detail.domain_id) : [])
+    const partialReasons = details.filter(detail => detail.reason).map(detail => `${detail.domain_id}:${detail.reason}`)
+    return send(req, res, 200, {
+      data: {
+        available: true,
+        total: items.length,
+        items,
+        partial: partialReasons.length > 0,
+        partial_reasons: partialReasons,
+        data_quality: { source: 'collab-bus-heartbeat', model: 'phase6_model_registry_not_connected' },
+        checked_at: nowTime(),
+      },
+    })
+  }
+
+  async function handleTasks(req, res, stateFilter) {
+    const loaded = await loadCollabDomains(req)
+    if (!loaded.ok) {
+      return send(req, res, 200, {
+        data: { available: false, total: 0, items: [], reason: loaded.reason, checked_at: nowTime() },
+      })
+    }
+    const wanted = String(stateFilter || '').trim().toLowerCase()
+    const items = loaded.items.map(mapTaskFromDomain).filter(item => !wanted || item.state === wanted)
+    return send(req, res, 200, {
+      data: { available: true, total: items.length, items, source: 'collab-bus-domain', checked_at: nowTime() },
+    })
+  }
+
+  async function handleTaskCreate(req, res) {
+    let body
+    try {
+      body = await readJsonBody(req)
+    } catch (error) {
+      return fail(req, res, 400, 'AGENT_BAD_REQUEST', String(error.message || error))
+    }
+    const title = String(body?.title || '').trim()
+    if (!title) return fail(req, res, 400, 'AGENT_BAD_REQUEST', 'title 不能为空', { field: 'title' })
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const outcome = await jsonRequestMeta(`${collabUrl}/api/collab/domains`, {
+      method: 'POST',
+      headers: { 'X-Tenant-Id': tenantId },
+      body: { name: title },
+      timeoutMs: WRITE_TIMEOUT_MS,
+    }).catch(() => ({ ok: false, reason: 'unreachable', data: null }))
     if (!outcome.ok) {
-      return send(req, res, 200, { data: { available: false, domain_id: domainId, reason: outcome.reason, checked_at: nowTime() } })
+      return fail(req, res, 503, 'AGENT_UPSTREAM_UNAVAILABLE', '协作总线不可用，任务未创建', {
+        reason: outcome.reason || 'unreachable',
+      })
     }
     const raw = outcome.data?.data || outcome.data || {}
-    return send(req, res, 200, { data: { available: true, ...mapCollabAggregate(raw, nowTime()) } })
+    return send(req, res, 201, { data: mapTaskFromDomain(raw) })
+  }
+
+  async function handleTaskDetail(req, res, taskId) {
+    const loaded = await loadCollabDomain(req, taskId)
+    if (!loaded.ok) {
+      if (loaded.reason === 'endpoint_missing') {
+        return fail(req, res, 404, 'AGENT_NOT_FOUND', `任务不存在：${taskId}`, { task_id: taskId })
+      }
+      return fail(req, res, 503, 'AGENT_UPSTREAM_UNAVAILABLE', '协作总线不可用，任务详情暂不可读', {
+        task_id: taskId, reason: loaded.reason,
+      })
+    }
+    const view = mapCollabAggregate(loaded.raw, nowTime())
+    return send(req, res, 200, {
+      data: {
+        ...view,
+        task: mapTaskFromDomain(loaded.raw),
+        task_id: taskId,
+        available: true,
+        data_quality: view.data_quality,
+      },
+    })
+  }
+
+  async function handleResults(req, res, taskId) {
+    const loaded = await loadCollabDomain(req, taskId)
+    if (!loaded.ok) {
+      if (loaded.reason === 'endpoint_missing') {
+        return fail(req, res, 404, 'AGENT_NOT_FOUND', `任务不存在：${taskId}`, { task_id: taskId })
+      }
+      return fail(req, res, 503, 'AGENT_UPSTREAM_UNAVAILABLE', '协作总线不可用，结果暂不可读', {
+        task_id: taskId, reason: loaded.reason,
+      })
+    }
+    const view = mapCollabAggregate(loaded.raw, nowTime())
+    const items = (view.artifacts || []).map((artifact, index) => ({
+      artifact_id: String(artifact.artifact_id || `artifact-${index + 1}`),
+      name: String(artifact.title || artifact.name || `artifact-${index + 1}`),
+      type: String(artifact.kind || 'document'),
+      state: String(artifact.state || 'ready'),
+      size: String(artifact.size || '-'),
+      updated_at: String(artifact.updated_at || view.updated_at),
+      preview: String(artifact.preview || ''),
+    }))
+    return send(req, res, 200, {
+      data: {
+        available: true,
+        task_id: taskId,
+        total: items.length,
+        items,
+        artifacts: view.artifacts,
+        gates: view.gates,
+        artifact_source_connected: false,
+        reason: 'phase6_artifact_store_not_connected',
+        checked_at: nowTime(),
+      },
+    })
+  }
+
+  function handleExperts(req, res) {
+    return send(req, res, 200, {
+      data: {
+        available: false,
+        total: 0,
+        items: [],
+        reason: 'phase6_expert_registry_not_connected',
+        checked_at: nowTime(),
+      },
+    })
+  }
+
+  function handleApprovals(req, res, stateFilter) {
+    return send(req, res, 200, {
+      data: {
+        available: false,
+        total: 0,
+        items: [],
+        state_filter: stateFilter || null,
+        reason: 'phase6_approval_registry_not_connected',
+        checked_at: nowTime(),
+      },
+    })
+  }
+
+  function handleApprovalDecision(req, res, approvalId) {
+    return fail(req, res, 503, 'AGENT_UPSTREAM_UNAVAILABLE', '审批注册表未接入，决策未生效', {
+      approval_id: approvalId,
+      reason: 'phase6_approval_registry_not_connected',
+      side_effects: false,
+    })
   }
   async function handleOverview(req, res) {
     const tenantId = String(req.headers['x-tenant-id'] || 'default')
@@ -2047,6 +2357,7 @@ function createServer(options = {}) {
   return http.createServer((req, res) => {
     const url = new URL(req.url, `http://127.0.0.1:${req.socket.localPort || DEFAULT_PORT}`)
     const match = url.pathname.match(/^\/api\/wp\/middleware\/([a-z0-9-]+)\/(start|stop)$/)
+    const alertmanagerWebhook = req.method === 'POST' && url.pathname === '/api/wp/alerts/alertmanager'
     if (req.method === 'OPTIONS') {
       const verdict = originVerdict(req, allowedOrigins)
       if (verdict === false) {
@@ -2057,19 +2368,40 @@ function createServer(options = {}) {
     }
     // 统一写操作鉴权：/api/wp 下的 POST/PUT/PATCH/DELETE 必须通过双校验。
     // 这是唯一入口，新增写端点无需在 handler 内重复实现。
-    if (WRITE_METHODS.has(req.method) && url.pathname.startsWith('/api/wp/')) {
+    if (WRITE_METHODS.has(req.method) && url.pathname.startsWith('/api/wp/') && !alertmanagerWebhook) {
       const auth = authorizeControl(req)
       if (!auth.ok) {
         audit('REJECT_AUTH', url.pathname, String(auth.message))
         return fail(req, res, auth.status, auth.code, auth.message, auth.details)
       }
     }
+    if (alertmanagerWebhook) return handleAlertmanagerWebhook(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/healthz') return handleHealthz(req, res)
     if (req.method === 'GET' && url.pathname === '/metrics') return handleMetrics(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/services') return handleAppServices(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/collab/domains') return handleCollabDomains(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/alerts') {
+      return handleAlerts(req, res, url.searchParams.get('limit'))
+    }
+    if (req.method === 'GET' && url.pathname === '/api/wp/agents/online') return handleAgentsOnline(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/tasks') {
+      return handleTasks(req, res, url.searchParams.get('state'))
+    }
+    if (req.method === 'POST' && url.pathname === '/api/wp/tasks') return handleTaskCreate(req, res)
+    const taskOne = url.pathname.match(/^\/api\/wp\/tasks\/([a-zA-Z0-9_-]{1,64})$/)
+    if (req.method === 'GET' && taskOne) return handleTaskDetail(req, res, taskOne[1])
+    const taskResults = url.pathname.match(/^\/api\/wp\/results\/([a-zA-Z0-9_-]{1,64})$/)
+    if (req.method === 'GET' && taskResults) return handleResults(req, res, taskResults[1])
+    if (req.method === 'GET' && url.pathname === '/api/wp/experts') return handleExperts(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/approvals') {
+      return handleApprovals(req, res, url.searchParams.get('state'))
+    }
+    const approvalDecision = url.pathname.match(/^\/api\/wp\/approvals\/([a-zA-Z0-9_-]{1,64})\/decision$/)
+    if (req.method === 'POST' && approvalDecision) {
+      return handleApprovalDecision(req, res, approvalDecision[1])
+    }
     const collabDomain = url.pathname.match(/^\/api\/wp\/collab\/([a-zA-Z0-9_-]{1,64})$/)
     if (req.method === 'GET' && collabDomain) return handleCollabDomain(req, res, collabDomain[1])
     const appServiceControl = url.pathname.match(/^\/api\/wp\/services\/([a-z0-9-]+)\/(start|stop)$/)

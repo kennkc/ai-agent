@@ -1,0 +1,9 @@
+{
+  "status": "pass",
+  "alertmanager_url": "http://127.0.0.1:19093",
+  "wp_bff_url": "http://127.0.0.1:8090",
+  "alertname": "LifeformAlertDeliveryCheck",
+  "fingerprint_hint": "lifeform-delivery-1789954295",
+  "delivered": true,
+  "last_error": ""
+}

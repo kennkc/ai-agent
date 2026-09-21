@@ -1,6 +1,6 @@
 phase: 6
-status: frozen
-decision: 暂不开发 Phase 6，仅冻结 required planned endpoints
+status: blocking-minimal-closed
+decision: Phase 6 完整业务开发继续冻结；Blocking 端点已完成最小闭环，可派生数据返回真实值，未接入注册表明确降级
 tiers:
   blocking:
     - /agents/online
@@ -30,6 +30,28 @@ tiers:
     - /skills/{skill_id}/install
     - /tasks/{task_id}/retry
     - /chat/{task_id}
+blocking_closure:
+  /agents/online:
+    mode: real-derived
+    source: collab-bus heartbeat
+  /tasks:
+    mode: real-derived
+    source: collaboration domain list/create
+  /tasks/{task_id}:
+    mode: real-derived
+    source: collaboration domain detail
+  /results/{task_id}:
+    mode: honest-empty
+    source: artifact registry not connected; no fabricated artifacts
+  /experts:
+    mode: honest-unavailable
+    source: expert registry not connected
+  /approvals:
+    mode: honest-unavailable
+    source: approval registry not connected
+  /approvals/{approval_id}/decision:
+    mode: fail-closed
+    source: write rejected with 503; side_effects=false
 entry_conditions:
   - MC-01 多域/多实例规模验证完成
   - Prometheus 业务指标与告警接收完成

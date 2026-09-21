@@ -11,7 +11,7 @@ const http = require('node:http')
 const { EventEmitter } = require('node:events')
 
 const {
-  createServer, MIDDLEWARE, IMPLEMENTED_ENDPOINTS, ROUTE_GUARD, TOOL_RESERVED_SEGMENTS,
+  createServer, APP_SERVICES, MIDDLEWARE, IMPLEMENTED_ENDPOINTS, ROUTE_GUARD, TOOL_RESERVED_SEGMENTS,
   MODEL_RESERVED_SEGMENTS, OVERVIEW_GAPS,
   resolveAllowedOrigins, queryTerms, buildSnippet,
   httpRequestJson, httpRequestJsonMeta, httpRequestJsonDetailed, TIMEOUT_TIERS,
@@ -1761,7 +1761,8 @@ test('GET /api/wp/services 返回应用服务目录与控制开关', async () =>
     assert.equal(res.status, 200)
     assert.equal(res.json.data.enabled, true)
     assert.equal(res.json.data.control_enabled, true)
-    assert.equal(res.json.data.items.length, 8)
+    assert.equal(res.json.data.items.length, 9)
+    assert.equal(res.json.data.items.find(item => item.key === 'sense-service').port, 8082)
     assert.equal(res.json.data.items.find(item => item.key === 'wp-bff').controllable, false)
   })
 })
@@ -1862,4 +1863,137 @@ test('collab-bus 不可用时协作域代理降级可见', async () => {
     assert.equal(one.status, 200)
     assert.equal(one.json.data.available, false)
   }, { jsonRequestMeta: async () => ({ ok: false, reason: 'unreachable', data: null }) })
+})
+
+test('Alertmanager webhook 使用独立令牌落盘并可查询最近告警', async () => {
+  const alertPath = `${OS_TMP}/wp-bff-alert-test-${Date.now()}.jsonl`
+  const payload = {
+    status: 'firing',
+    groupKey: 'test-group',
+    commonLabels: { alertname: 'LifeformAlertDeliveryCheck', severity: 'info' },
+    alerts: [{
+      status: 'firing',
+      fingerprint: 'fp-test-1',
+      startsAt: '2026-09-21T10:00:00Z',
+      labels: { alertname: 'LifeformAlertDeliveryCheck', severity: 'info' },
+      annotations: { summary: 'real local alert delivery' },
+    }],
+  }
+  await withServer(async ({ server }) => {
+    const denied = await request(server, { method: 'POST', path: '/api/wp/alerts/alertmanager', body: payload })
+    assert.equal(denied.status, 401)
+    assert.equal(denied.json.code, 'AGENT_UNAUTHORIZED')
+
+    const accepted = await request(server, {
+      method: 'POST', path: '/api/wp/alerts/alertmanager', body: payload,
+      headers: { authorization: 'Bearer test-alert-token' },
+    })
+    assert.equal(accepted.status, 200)
+    assert.equal(accepted.json.data.accepted, true)
+    assert.equal(accepted.json.data.alert_count, 1)
+    assert.equal(accepted.json.data.sink, 'wp-bff-jsonl')
+
+    const recent = await request(server, { path: '/api/wp/alerts?limit=5' })
+    assert.equal(recent.status, 200)
+    assert.equal(recent.json.data.total, 1)
+    assert.equal(recent.json.data.items[0].alerts[0].labels.alertname, 'LifeformAlertDeliveryCheck')
+  }, { alertPath, alertToken: 'test-alert-token' })
+})
+
+test('Phase 6 Blocking：在线 Agent 从真实协作心跳派生', async () => {
+  const jsonRequestMeta = async (url, opts = {}) => {
+    const parsed = new URL(url)
+    if (parsed.pathname === '/api/collab/domains') {
+      return { ok: true, data: { total: 1, items: [{ domain_id: 'dom-a', name: 'demo', state: 'active', progress: 60 }] } }
+    }
+    if (parsed.pathname === '/api/collab/domains/dom-a' && (!opts.method || opts.method === 'GET')) {
+      return {
+        ok: true,
+        data: {
+          data: {
+            domain_id: 'dom-a', name: 'demo', state: 'active', progress: 60, member_count: 2,
+            members: [
+              { member_id: 'agent-a', progress: 90, state: 'working', weight: 1 },
+              { member_id: 'agent-b', progress: 30, state: 'stale', weight: 1 },
+            ],
+          },
+        },
+      }
+    }
+    throw new Error('unexpected upstream: ' + parsed.pathname)
+  }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/agents/online' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.total, 2)
+    assert.equal(res.json.data.items[0].state, 'run')
+    assert.equal(res.json.data.items[1].state, 'wait')
+    assert.equal(res.json.data.items[0].task, 'dom-a')
+  }, { jsonRequestMeta })
+})
+
+test('Phase 6 Blocking：任务列表/创建/详情与结果按协作域真实映射', async () => {
+  const domain = {
+    domain_id: 'dom-a', name: '真实任务', state: 'active', progress: 60, member_count: 2,
+    updated_at: '2026-09-21T10:00:00Z',
+    members: [
+      { member_id: 'agent-a', progress: 60, state: 'working', weight: 1 },
+      { member_id: 'agent-b', progress: 60, state: 'working', weight: 1 },
+    ],
+  }
+  const jsonRequestMeta = async (url, opts = {}) => {
+    const parsed = new URL(url)
+    if (parsed.pathname === '/api/collab/domains' && (!opts.method || opts.method === 'GET')) {
+      return { ok: true, data: { total: 1, items: [domain] } }
+    }
+    if (parsed.pathname === '/api/collab/domains' && opts.method === 'POST') {
+      return { ok: true, data: { data: { ...domain, domain_id: 'dom-created', name: opts.body.name } } }
+    }
+    if (parsed.pathname === '/api/collab/domains/dom-a') return { ok: true, data: { data: domain } }
+    throw new Error('unexpected upstream: ' + parsed.pathname)
+  }
+  await withServer(async ({ server }) => {
+    const list = await request(server, { path: '/api/wp/tasks?state=running' })
+    assert.equal(list.status, 200)
+    assert.equal(list.json.data.items[0].task_id, 'dom-a')
+    assert.equal(list.json.data.items[0].state, 'running')
+
+    const created = await request(server, { method: 'POST', path: '/api/wp/tasks', body: { title: '新任务' } })
+    assert.equal(created.status, 201)
+    assert.equal(created.json.data.task_id, 'dom-created')
+    assert.equal(created.json.data.title, '新任务')
+
+    const detail = await request(server, { path: '/api/wp/tasks/dom-a' })
+    assert.equal(detail.status, 200)
+    assert.equal(detail.json.data.task.task_id, 'dom-a')
+    assert.equal(detail.json.data.agents.length, 2)
+
+    const results = await request(server, { path: '/api/wp/results/dom-a' })
+    assert.equal(results.status, 200)
+    assert.equal(results.json.data.items.length, 0)
+    assert.equal(results.json.data.artifact_source_connected, false)
+    assert.equal(results.json.data.reason, 'phase6_artifact_store_not_connected')
+  }, { jsonRequestMeta })
+})
+
+test('Phase 6 Blocking：专家/审批注册表未接入时不伪造成功', async () => {
+  await withServer(async ({ server }) => {
+    const experts = await request(server, { path: '/api/wp/experts' })
+    assert.equal(experts.status, 200)
+    assert.equal(experts.json.data.available, false)
+    assert.equal(experts.json.data.reason, 'phase6_expert_registry_not_connected')
+
+    const approvals = await request(server, { path: '/api/wp/approvals' })
+    assert.equal(approvals.status, 200)
+    assert.equal(approvals.json.data.available, false)
+    assert.equal(approvals.json.data.reason, 'phase6_approval_registry_not_connected')
+
+    const decision = await request(server, {
+      method: 'POST', path: '/api/wp/approvals/A-1/decision', body: { decision: 'approved' },
+    })
+    assert.equal(decision.status, 503)
+    assert.equal(decision.json.code, 'AGENT_UPSTREAM_UNAVAILABLE')
+    assert.equal(decision.json.details.side_effects, false)
+  })
 })

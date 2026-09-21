@@ -50,6 +50,7 @@ services/python/nlp-service/.model-config-key
 
 # 感官采集运行时目录（服务工作目录为 services/java，故相对路径带前缀）
 services/java/data/
+services/java/sense-service/data/
 
 # Python 工具缓存（本地生成，不入库）
 .pytest_cache/

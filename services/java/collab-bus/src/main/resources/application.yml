@@ -45,6 +45,9 @@ app:
     domain-concurrency-limit: ${COLLAB_DOMAIN_CONCURRENCY_LIMIT:8}
     # 域关闭后 stream 清理保留期
     stream-retention-after-close-ms: ${COLLAB_STREAM_RETENTION_MS:604800000}
+    # 多实例域租约：每域同一时间仅一个实例持有 consumer；实例故障后由其他实例接管
+    domain-lease-ms: ${COLLAB_DOMAIN_LEASE_MS:30000}
+    domain-reconcile-interval-ms: ${COLLAB_DOMAIN_RECONCILE_INTERVAL_MS:5000}
 
 logging:
   level:

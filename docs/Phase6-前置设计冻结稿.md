@@ -1,9 +1,9 @@
 # Phase 6 并发编排 · 前置设计冻结稿
 
-> **状态**：设计冻结候选稿，**不包含 Phase 6 代码实现**
-> **日期**：2026-09-20
+> **状态**：完整 Phase 6 继续冻结；Blocking 端点已完成最小闭环，本节只记录边界与证据
+> **日期**：2026-09-20（2026-09-21 补 Blocking 最小闭环）
 > **依赖**：MC-01 R-MC01-01~05、Phase 5 工具执行与审计、WB-10 模型配置
-> **决策**：暂不启动 Phase 6 开发，先冻结编排输入输出契约、状态语义和验收边界。
+> **决策**：暂不启动 Phase 6 完整开发；Blocking 端点允许真实派生或显式 fail-closed，不得伪造 planner / 工件 / 审批结果。
 
 ## 1. 目标与非目标
 
@@ -209,4 +209,17 @@ pending -> passed
 5. 工件与验收门存储方案完成设计评审；
 6. DAG 状态机形成契约测试。
 
-**结论**：本稿只冻结设计输入，不构成 Phase 6 开工声明。
+**结论**：本稿只冻结设计输入，不构成 Phase 6 完整开工声明。
+
+## 9. Blocking 端点最小闭环（2026-09-21）
+
+| 端点 | 当前能力 | 诚实边界 |
+|---|---|---|
+| `GET /agents/online` | 从 collab-bus 真实心跳聚合成员 | 模型 / 延迟未接入注册表时返回 `- / 0`，并标注数据质量 |
+| `GET /tasks`、`POST /tasks` | 协作域映射任务；创建任务会真实创建协作域 | 不声称已具备 planner / expert routing |
+| `GET /tasks/{task_id}` | 协作域详情、成员、DAG 映射 | 调度状态仍未实现 |
+| `GET /results/{task_id}` | 端点存在并校验任务 | `artifact_source_connected=false`，无工件时返回空列表 |
+| `GET /experts`、`GET /approvals` | 固定响应契约 | 注册表未接入时 `available=false` |
+| `POST /approvals/{approval_id}/decision` | fail-closed 写路径 | 注册表未接入时 503，`side_effects=false` |
+
+真实验收脚本：`scripts/phase6-blocking-check.py`；报告：`docs/test-reports/collab/2026-09-21/phase6-blocking-minimal.json`。

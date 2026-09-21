@@ -18,6 +18,9 @@ describe('dataProvider collaboration wiring', () => {
       if (path === '/collab/domains') {
         return { data: { data: { available: true, total: 1, items: [{ domain_id: 'dom-real' }] } } }
       }
+      if (path === '/experts') return { data: { data: { available: false, total: 0, items: [], reason: 'phase6_expert_registry_not_connected' } } }
+      if (path === '/approvals') return { data: { data: { available: false, total: 0, items: [], reason: 'phase6_approval_registry_not_connected' } } }
+      if (path === '/agents/online') return { data: { data: { available: false, total: 0, items: [], reason: 'collab-bus unavailable' } } }
       if (path === '/collab/dom-real') {
         // BFF 已完成 collab-bus -> 工作平台视图映射；provider 只消费已映射契约。
         return { data: { data: {
@@ -59,6 +62,9 @@ describe('dataProvider collaboration wiring', () => {
     expect(result.collaboration.progress).toBe(66)
     expect(result.collaboration.agents[0].agent_id).toBe('agent-a')
     expect(result.collaboration.data_quality.synthetic_fields).toContain('artifacts')
+    expect(result.experts).toEqual([])
+    expect(result.approvals).toEqual([])
+    expect(result.online_agents).toEqual([])
   })
 
   it('keeps the mock collaboration fallback without requesting the fixed demo domain when no real domain exists', async () => {

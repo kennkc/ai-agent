@@ -77,6 +77,15 @@ def main() -> int:
         if stale in overview or stale in progress or stale in report:
             failures.append(f"进度文档出现废弃表述：{stale}")
 
+    for debt_id in ("DEBT-006", "DEBT-009", "DEBT-021"):
+        marker = f"### {debt_id}"
+        if marker not in debt:
+            failures.append(f"技术债详细章节缺失：{debt_id}")
+            continue
+        section = debt.split(marker, 1)[1].split("\n### ", 1)[0]
+        if "✅" not in section or "已闭合" not in section:
+            failures.append(f"技术债详细章节状态未闭合：{debt_id}")
+
     if "31 个 planned 端点" in debt:
         failures.append("技术债台账仍写 31 个 planned 端点")
     if "DEBT-006 / DEBT-009，两者状态标" in debt:

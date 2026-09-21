@@ -16,7 +16,7 @@ start_infra() {
 start_java() {
   cd "$ROOT/services/java"
   mvn clean package -DskipTests -q
-  for svc in gateway-service session-manager sense-service body-service tool-executor; do
+  for svc in gateway-service session-manager sense-service body-service tool-executor collab-bus; do
     (cd "$svc" && nohup java -jar target/*.jar > "/tmp/$svc.log" 2>&1 &)
   done
 }

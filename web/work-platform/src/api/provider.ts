@@ -34,6 +34,22 @@ const asArray = (payload: any) => {
   const value = unwrap(payload)
   return Array.isArray(value) ? value : (value.items || value.list || [])
 }
+
+/**
+ * Phase 6 读路径统一收口。
+ * 新端点使用 `{available:false, items:[]}` 表达“注册表未接入”，不能把它渲染成
+ * “已存在但为空”，也不能继续静默回落到 Mock 数据。
+ */
+const collectionFromPayload = (payload: any, scope: string) => {
+  if (Array.isArray(payload)) return payload
+  if (payload && typeof payload === 'object') {
+    if (payload.available === false) {
+      reportDegrade(scope, String(payload.reason || '上游数据源未接入'))
+    }
+    if (Array.isArray(payload.items)) return payload.items
+  }
+  return payload
+}
 /**
  * API 模式下的一次请求。
  * 成功即清除该 scope 的降级记录；失败则登记降级后再返回 fallback——
@@ -314,7 +330,7 @@ export const dataProvider = {
    */
   async getTasks() {
     if (source === 'mock') return tasks
-    return safe(() => api.get('/tasks').then(asArray), tasks, 'tasks')
+    return safe(async () => collectionFromPayload(unwrapBody(await api.get('/tasks')), 'tasks'), tasks, 'tasks')
   },
 
   async getChat(taskId = 'T-1042') {
@@ -324,7 +340,7 @@ export const dataProvider = {
 
   async getResults(taskId = 'T-1042') {
     if (source === 'mock') return resultArtifacts
-    return safe(() => api.get(`/results/${taskId}`).then(asArray), resultArtifacts, 'results')
+    return safe(async () => collectionFromPayload(unwrapBody(await api.get(`/results/${taskId}`)), 'results'), resultArtifacts, 'results')
   },
 
   /**
@@ -799,18 +815,18 @@ export const dataProvider = {
         trend: evolutionData.trend || evolution.trend,
       } : evolution,
       collaboration: collaborationData || collaboration,
-      experts: expertsData || experts,
+      experts: collectionFromPayload(expertsData, 'experts') || experts,
       skills: skillsData || skills,
       connectors: connectorsData || connectors,
       automations: automationsData || automations,
       cases: casesData || cases,
-      approvals: approvalsData || approvals,
+      approvals: collectionFromPayload(approvalsData, 'approvals') || approvals,
       models: managedModels,
       model_routes: modelRoutes,
       model_token_trend: modelTokenTrend,
       remote_channels: remoteChannelsData || remoteChannels,
       remote_flow: remoteFlow,
-      online_agents: onlineAgentsData || onlineAgents,
+      online_agents: collectionFromPayload(onlineAgentsData, 'online_agents') || onlineAgents,
     }
   },
 
