@@ -31,6 +31,7 @@ from typing import Any
 
 from app.budget import Deadline
 from app.observability import record_llm_call
+from app.url_opener import open_url
 
 logger = logging.getLogger("nlp-service.brain.llm")
 
@@ -207,7 +208,8 @@ class HttpLlmEngine(LlmEngine):
     def __init__(self, base_url: str = "", api_key: str = "", model: str = "", level: str = L2,
                  role: str = "", name: str = "", provider: str = "",
                  max_tokens: int | None = None, temperature: float | None = None,
-                 timeout_ms: int | None = None) -> None:
+                 timeout_ms: int | None = None, proxy_url: str = "", no_proxy: str = "",
+                 trust_env: bool = True) -> None:
         self.base_url = base_url or os.getenv("LLM_BASE_URL", "")
         self.api_key = api_key or os.getenv("LLM_API_KEY", "")
         self.model = model or os.getenv("LLM_MODEL", "")
@@ -217,6 +219,9 @@ class HttpLlmEngine(LlmEngine):
         self.max_tokens = max_tokens
         self.temperature = temperature
         self.timeout_ms = timeout_ms
+        self.proxy_url = proxy_url
+        self.no_proxy = no_proxy
+        self.trust_env = trust_env
         # 名字进决策链回放，必须能区分"同角色下换了哪个模型"，故带上角色与显示名
         base_name = f"http:{self.model}" if self.model else "http"
         self.name = name or (f"{role}:{base_name}" if role else base_name)
@@ -224,6 +229,10 @@ class HttpLlmEngine(LlmEngine):
     @classmethod
     def from_spec(cls, spec: dict) -> HttpLlmEngine:
         """由 `model_config.resolve_engines()` 的规格构造（凭据已解密）。"""
+        extra = spec.get("extra") if isinstance(spec.get("extra"), dict) else {}
+        trust_env = extra.get("trust_env", True)
+        if isinstance(trust_env, str):
+            trust_env = trust_env.strip().lower() not in {"false", "0", "no", "off"}
         return cls(
             base_url=str(spec.get("base_url") or ""),
             api_key=str(spec.get("api_key") or ""),
@@ -235,6 +244,9 @@ class HttpLlmEngine(LlmEngine):
             max_tokens=spec.get("max_tokens"),
             temperature=spec.get("temperature"),
             timeout_ms=spec.get("timeout_ms"),
+            proxy_url=str(extra.get("proxy_url") or ""),
+            no_proxy=str(extra.get("no_proxy") or ""),
+            trust_env=bool(trust_env),
         )
 
     def available(self) -> bool:
@@ -257,7 +269,13 @@ class HttpLlmEngine(LlmEngine):
                      **({"Authorization": f"Bearer {self.api_key}"} if self.api_key else {})},
             method="POST",
         )
-        with urllib.request.urlopen(req, timeout=timeout) as resp:
+        with open_url(
+            req,
+            timeout=timeout,
+            proxy_url=self.proxy_url,
+            no_proxy=self.no_proxy,
+            trust_env=self.trust_env,
+        ) as resp:
             body = _json_loads(resp.read().decode("utf-8"))
         choices = body.get("choices") or []
         if not choices:

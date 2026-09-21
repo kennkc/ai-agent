@@ -68,6 +68,19 @@ spring:
       timeout: 2000ms
 
 management:
+  metrics:
+    distribution:
+      percentiles-histogram:
+        http:
+          server:
+            requests: true
+        jvm:
+          gc:
+            pause: true
+      percentiles:
+        http:
+          server:
+            requests: 0.5,0.95,0.99
   endpoints:
     web:
       exposure:

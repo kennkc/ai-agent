@@ -1922,6 +1922,7 @@ function createServer(options = {}) {
       errors: `sum by (job) (rate(http_server_requests_seconds_count${metricSelector(job, 'outcome=~"SERVER_ERROR|UNKNOWN"')}[${window}]))`,
       avg_latency: `sum by (job) (rate(${latencySum}[${window}])) / clamp_min(sum by (job) (rate(${requests}[${window}])), 0.000001)`,
       max_latency: `max by (job) (max_over_time(${latencyMax}[${window}]))`,
+      http_p95: `histogram_quantile(0.95, sum by (le, job) (rate(http_server_requests_seconds_bucket${selector}[${window}])))`,
       heap_used: `sum by (job) (${heapUsed})`,
       heap_max: `sum by (job) (${heapMax})`,
       threads: `sum by (job) (jvm_threads_live_threads${selector})`,
@@ -1931,6 +1932,7 @@ function createServer(options = {}) {
       gc_rate: `sum by (job) (rate(${gcCount}[${window}]))`,
       gc_pause_avg: `sum by (job) (rate(${gcSum}[${window}])) / clamp_min(sum by (job) (rate(${gcCount}[${window}])), 0.000001)`,
       gc_pause_max: `max by (job) (max_over_time(${gcMax}[${window}]))`,
+      gc_p95: `histogram_quantile(0.95, sum by (le, job) (rate(jvm_gc_pause_seconds_bucket${selector}[${window}])))`,
       llm_qps: `sum(rate(lifeform_llm_calls_total${selector}[${window}]))`,
       llm_failures: `sum(rate(lifeform_llm_calls_total${metricSelector(job, 'outcome="failure"')}[${window}]))`,
       llm_degraded: `sum(rate(lifeform_llm_calls_total${metricSelector(job, 'degraded="true"')}[${window}]))`,
@@ -1940,6 +1942,7 @@ function createServer(options = {}) {
       tool_failures: `sum(rate(lifeform_tool_calls_total${metricSelector(job, 'outcome="failure"')}[${window}]))`,
       tool_circuit_open: `sum(rate(lifeform_tool_circuit_open_total${selector}[${window}]))`,
       http_histogram_count: `count(http_server_requests_seconds_bucket${selector})`,
+      gc_histogram_count: `count(jvm_gc_pause_seconds_bucket${selector})`,
     }
     const entries = await Promise.all(Object.entries(queries).map(async ([key, query]) => {
       const payload = await metricQuery(query)
@@ -1948,8 +1951,8 @@ function createServer(options = {}) {
     const payloads = Object.fromEntries(entries)
     const maps = {}
     for (const key of [
-      'qps', 'errors', 'avg_latency', 'max_latency', 'heap_used', 'heap_max', 'threads',
-      'hikari_active', 'hikari_max', 'hikari_pending', 'gc_rate', 'gc_pause_avg', 'gc_pause_max',
+      'qps', 'errors', 'avg_latency', 'max_latency', 'http_p95', 'heap_used', 'heap_max', 'threads',
+      'hikari_active', 'hikari_max', 'hikari_pending', 'gc_rate', 'gc_pause_avg', 'gc_pause_max', 'gc_p95',
     ]) maps[key] = prometheusVectorMap(payloads[key])
     const scalar = key => prometheusScalarValue(payloads[key])
     const [targetsPayload, alertsPayload] = await Promise.all([
@@ -1976,6 +1979,7 @@ function createServer(options = {}) {
         error_rate: maps.qps[serviceJob] > 0 ? (maps.errors[serviceJob] || 0) / maps.qps[serviceJob] : null,
         avg_latency_ms: maps.avg_latency[serviceJob] != null ? maps.avg_latency[serviceJob] * 1000 : null,
         max_latency_ms: maps.max_latency[serviceJob] != null ? maps.max_latency[serviceJob] * 1000 : null,
+        http_p95_ms: maps.http_p95[serviceJob] != null ? maps.http_p95[serviceJob] * 1000 : null,
         heap_used_bytes: used ?? null,
         heap_max_bytes: maximum ?? null,
         heap_used_ratio: used != null && maximum > 0 ? used / maximum : null,
@@ -1983,6 +1987,7 @@ function createServer(options = {}) {
         hikari_active: maps.hikari_active[serviceJob] ?? null,
         hikari_max: maps.hikari_max[serviceJob] ?? null,
         hikari_pending: maps.hikari_pending[serviceJob] ?? null,
+        gc_p95_ms: maps.gc_p95[serviceJob] != null ? maps.gc_p95[serviceJob] * 1000 : null,
       }
     })
     const totalQps = Object.values(maps.qps).reduce((sum, value) => sum + (Number(value) || 0), 0)
@@ -2013,12 +2018,16 @@ function createServer(options = {}) {
         avg_latency_ms: totalQps > 0 ? (totalLatencySeconds / totalQps) * 1000 : null,
         max_latency_ms: Object.keys(maps.max_latency).length
           ? Math.max(...Object.values(maps.max_latency).map(value => Number(value) * 1000)) : null,
+        http_p95_ms: Object.keys(maps.http_p95).length
+          ? Math.max(...Object.values(maps.http_p95).map(value => Number(value) * 1000)) : null,
         jvm_heap_used_bytes: heapUsedTotal || null,
         jvm_heap_max_bytes: heapMaxTotal || null,
         jvm_heap_used_ratio: heapMaxTotal > 0 ? heapUsedTotal / heapMaxTotal : null,
         jvm_threads: Object.values(maps.threads).reduce((sum, value) => sum + (Number(value) || 0), 0) || null,
         gc_pause_avg_ms: scalar('gc_pause_avg') != null ? scalar('gc_pause_avg') * 1000 : null,
         gc_pause_max_ms: scalar('gc_pause_max') != null ? scalar('gc_pause_max') * 1000 : null,
+        gc_p95_ms: Object.keys(maps.gc_p95).length
+          ? Math.max(...Object.values(maps.gc_p95).map(value => Number(value) * 1000)) : null,
         hikari_active: Object.values(maps.hikari_active).reduce((sum, value) => sum + (Number(value) || 0), 0) || null,
         hikari_max: Object.values(maps.hikari_max).reduce((sum, value) => sum + (Number(value) || 0), 0) || null,
         hikari_pending: Object.values(maps.hikari_pending).reduce((sum, value) => sum + (Number(value) || 0), 0) || null,
@@ -2053,8 +2062,8 @@ function createServer(options = {}) {
       support: {
         http_p95: scalar('http_histogram_count') != null,
         http_p95_reason: scalar('http_histogram_count') != null ? '' : 'HTTP histogram bucket 未暴露',
-        gc_p95: false,
-        gc_p95_reason: 'GC histogram bucket 未暴露',
+        gc_p95: scalar('gc_histogram_count') != null,
+        gc_p95_reason: scalar('gc_histogram_count') != null ? '' : 'GC histogram bucket 未暴露',
         metric_scope: 'system',
       },
     }

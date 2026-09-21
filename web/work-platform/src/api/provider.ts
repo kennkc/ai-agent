@@ -769,9 +769,9 @@ export const dataProvider = {
       selected_job: job || 'all',
       summary: {
         targets_up: 0, targets_total: 0, active_alerts: 0,
-        qps: null, error_rate: null, avg_latency_ms: null, max_latency_ms: null,
+        qps: null, error_rate: null, avg_latency_ms: null, max_latency_ms: null, http_p95_ms: null,
         jvm_heap_used_bytes: null, jvm_heap_max_bytes: null, jvm_heap_used_ratio: null,
-        jvm_threads: null, gc_pause_avg_ms: null, gc_pause_max_ms: null,
+        jvm_threads: null, gc_pause_avg_ms: null, gc_pause_max_ms: null, gc_p95_ms: null,
         hikari_active: null, hikari_max: null, hikari_pending: null,
         llm_qps: null, llm_failure_rate: null, llm_degraded_qps: null,
         collab_domains: null, heartbeat_pending: null,

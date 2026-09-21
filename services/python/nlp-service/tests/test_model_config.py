@@ -536,3 +536,52 @@ def test_probe_refused_error_is_actionable():
     )
     assert "代理" in message
     assert "NO_PROXY" in message
+
+
+class _FakeProbeResponse:
+    def __init__(self, payload: dict):
+        import json
+        self._body = json.dumps(payload).encode("utf-8")
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, exc_type, exc, tb):
+        return False
+
+    def read(self, _limit=-1):
+        return self._body
+
+
+def test_http_probe_reads_full_model_list_and_validates_model(monkeypatch):
+    tenant = _tenant()
+    headers = {"X-Tenant-Id": tenant}
+    monkeypatch.setattr(
+        model_config,
+        "open_url",
+        lambda *_args, **_kwargs: _FakeProbeResponse({"data": [{"id": "openrouter/free"}]}),
+    )
+    with _client() as client:
+        payload = _payload(name="完整列表", model="openrouter/free")
+        model_id = client.post("/api/nlp/models", json=payload, headers=headers).json()["item"]["id"]
+        probed = client.post(f"/api/nlp/models/{model_id}/test", headers=headers).json()
+    assert probed["ok"] is True
+    assert probed["model_present"] is True
+    assert probed["discovered_models"] == ["openrouter/free"]
+
+
+def test_http_probe_rejects_model_missing_from_full_provider_list(monkeypatch):
+    tenant = _tenant()
+    headers = {"X-Tenant-Id": tenant}
+    monkeypatch.setattr(
+        model_config,
+        "open_url",
+        lambda *_args, **_kwargs: _FakeProbeResponse({"data": [{"id": "openrouter/free"}]}),
+    )
+    with _client() as client:
+        payload = _payload(name="错误模型", model="missing/model")
+        model_id = client.post("/api/nlp/models", json=payload, headers=headers).json()["item"]["id"]
+        probed = client.post(f"/api/nlp/models/{model_id}/test", headers=headers).json()
+    assert probed["ok"] is False
+    assert probed["model_present"] is False
+    assert "模型不在供应商" in probed["error"]

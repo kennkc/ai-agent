@@ -574,12 +574,14 @@ export interface MetricsSummary {
   error_rate: number | null
   avg_latency_ms: number | null
   max_latency_ms: number | null
+  http_p95_ms: number | null
   jvm_heap_used_bytes: number | null
   jvm_heap_max_bytes: number | null
   jvm_heap_used_ratio: number | null
   jvm_threads: number | null
   gc_pause_avg_ms: number | null
   gc_pause_max_ms: number | null
+  gc_p95_ms: number | null
   hikari_active: number | null
   hikari_max: number | null
   hikari_pending: number | null
@@ -600,6 +602,7 @@ export interface MetricsServiceItem {
   error_rate: number | null
   avg_latency_ms: number | null
   max_latency_ms: number | null
+  http_p95_ms: number | null
   heap_used_bytes: number | null
   heap_max_bytes: number | null
   heap_used_ratio: number | null
@@ -607,6 +610,7 @@ export interface MetricsServiceItem {
   hikari_active: number | null
   hikari_max: number | null
   hikari_pending: number | null
+  gc_p95_ms: number | null
 }
 
 export interface MetricsTargetItem {

@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-21 10:43 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-21 11:15 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -183,6 +183,7 @@ MC-01 单实例 25/100/500/1000 域规模验证通过；Phase 6 必需端点优�
 <strong>2026-09-21 前台菜单优化</strong>：左侧菜单由 21 个平铺入口调整为 4 个常用入口 + 四个可折叠分组；新增“可用 / 部分 / 规划”成熟度徽标，Phase 6/7/8 未接入能力收进“规划与演示”；侧栏 Agent 在线改接真实 <code>/api/wp/agents/online</code>，不可用时显式说明而非继续展示固定 Mock。
 <strong>2026-09-21 多模型运行态去 Mock</strong>：新增 <code>GET /api/wp/models/runtime</code>，聚合真实模型配置、连通性探测、Token 用量和 Prometheus LLM 指标；原“模型池运行态 / 路由策略”演示卡片已替换为真实运行态，成本、质量、配额、队列无数据源时显式标未接入；真实验收归档见 <code>docs/test-reports/model/2026-09-21/runtime-overview.json</code>。
 <strong>2026-09-21 指标监控接入</strong>：新增 <code>GET /api/wp/metrics/overview</code> 与观测区“指标监控”页面，固定查询 Prometheus，展示 target、HTTP、JVM / Micrometer、GC、HikariCP、LLM / Collab / Tool 业务指标和活动告警；前端不接触任意 PromQL，真实响应归档见 <code>docs/test-reports/metrics/2026-09-21/overview.json</code>。
+<strong>2026-09-21 模型代理与P95增强</strong>：模型配置支持 <code>proxy_url</code> / <code>no_proxy</code> / <code>trust_env</code>，探测完整解析供应商模型列表并校验模型名；Java 服务开启 HTTP 与 GC 直方图，指标页支持真实 P95。OpenRouter <code>openrouter/free</code> 探测已通过且 <code>model_present=true</code>。
 <strong>2026-09-19 Phase 5 复审结论</strong>：<strong>未触碰伪实现红线</strong>。复审时唯一需留意的是<strong>沙箱降级被当作"沙箱验收通过"
 叙述的风险</strong> —— 当时实测 <code>docker_available=false</code>、<code>active_backend=process-restricted</code>、<code>degraded=true</code>。
 <strong>该缺口已于同日收口轮闭合</strong>：构建 <code>agent-sandbox:latest</code> 后重启服务，<code>GET /api/tool/sandbox</code> 回到
@@ -637,7 +638,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>前端</td>
 <td><code>cd web/work-platform &amp;&amp; npm run test:report &amp;&amp; npm run typecheck &amp;&amp; npm run build</code></td>
-<td><strong>27/27 功能测试通过</strong>；覆盖率 31.72% 行 / 70.09% 分支；typecheck/build 通过</td>
+<td><strong>27/27 功能测试通过</strong>；覆盖率 31.91% 行 / 70.14% 分支；typecheck/build 通过</td>
 </tr>
 <tr>
 <td><strong>超时预算（跨服务）</strong></td>

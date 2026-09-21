@@ -426,6 +426,19 @@
             当前密钥：<code>{{ form.api_key_hint || '未配置' }}</code>。这里**不会**回填明文 —— 不回填才说明库里存的是密文。
           </p>
         </el-form-item>
+        <el-divider content-position="left">代理与网络</el-divider>
+        <div class="form-row">
+          <el-form-item label="代理 URL">
+            <el-input v-model="form.proxy_url" placeholder="留空 = 使用系统/环境代理" />
+          </el-form-item>
+          <el-form-item label="NO_PROXY">
+            <el-input v-model="form.no_proxy" placeholder="如 openrouter.ai,localhost" />
+          </el-form-item>
+        </div>
+        <el-form-item label="信任环境代理">
+          <el-switch v-model="form.trust_env" />
+          <span class="switch-hint">关闭后该模型完全直连，不读取系统 HTTP(S)_PROXY</span>
+        </el-form-item>
         <div class="form-row">
           <el-form-item label="层级">
             <el-select v-model="form.tier" style="width: 100%">
@@ -524,6 +537,9 @@ const roleGroups = computed(() => {
 const form = reactive<ModelConfigUpsert & {
   id?: number
   api_key_hint?: string
+  proxy_url?: string
+  no_proxy?: string
+  trust_env?: boolean
 }>({
   config_key: 'generate',
   name: '',
@@ -537,6 +553,9 @@ const form = reactive<ModelConfigUpsert & {
   timeout_ms: 8000,
   routing_weight: 100,
   enabled: true,
+  proxy_url: '',
+  no_proxy: '',
+  trust_env: true,
 })
 
 function paramBrief(item: ModelConfig): string {
@@ -622,6 +641,9 @@ function openCreate() {
     timeout_ms: first?.default_timeout_ms || 8000,
     routing_weight: 100,
     enabled: true,
+    proxy_url: '',
+    no_proxy: '',
+    trust_env: true,
   })
   formVisible.value = true
 }
@@ -644,6 +666,9 @@ function openEdit(item: ModelConfig) {
     timeout_ms: item.timeout_ms,
     routing_weight: item.routing_weight,
     enabled: item.enabled,
+    proxy_url: String(item.extra?.proxy_url || ''),
+    no_proxy: String(item.extra?.no_proxy || ''),
+    trust_env: item.extra?.trust_env === undefined ? true : Boolean(item.extra.trust_env),
   })
   formVisible.value = true
 }
@@ -663,6 +688,11 @@ function buildPayload(): ModelConfigUpsert {
     model: String(form.model || '').trim(),
     tier: form.tier,
     enabled: !!form.enabled,
+    extra: {
+      ...(String(form.proxy_url || '').trim() ? { proxy_url: String(form.proxy_url).trim() } : {}),
+      ...(String(form.no_proxy || '').trim() ? { no_proxy: String(form.no_proxy).trim() } : {}),
+      trust_env: form.trust_env !== false,
+    },
   }
   if (form.max_tokens !== null && form.max_tokens !== undefined) payload.max_tokens = form.max_tokens
   if (form.temperature !== null && form.temperature !== undefined) payload.temperature = form.temperature

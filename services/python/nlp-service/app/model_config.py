@@ -36,6 +36,7 @@ from pathlib import Path
 from typing import Any
 
 from app.brain import pg
+from app.url_opener import open_url
 
 logger = logging.getLogger("nlp-service.model_config")
 
@@ -594,6 +595,7 @@ def resolve_engines(tenant_id: str = "default") -> list[dict[str, Any]]:
             "temperature": float(row["temperature"]),
             "timeout_ms": int(row["timeout_ms"]),
             "routing_weight": int(row["routing_weight"]),
+            "extra": row.get("extra") if isinstance(row.get("extra"), dict) else {},
         })
     return specs
 
@@ -613,6 +615,10 @@ def probe_config(tenant_id: str, config_id: int, timeout_ms: int = 5000) -> dict
         raise ModelConfigError("AGENT_NOT_FOUND", f"模型配置不存在：{config_id}", status=404,
                                details={"model_id": config_id})
     base_url = str(row.get("base_url") or "")
+    extra = row.get("extra") if isinstance(row.get("extra"), dict) else {}
+    trust_env = extra.get("trust_env", True)
+    if isinstance(trust_env, str):
+        trust_env = trust_env.strip().lower() not in {"false", "0", "no", "off"}
     result: dict[str, Any] = {"model_id": int(config_id), "name": row["name"], "probed_at": _now_iso()}
     if not base_url:
         result.update(ok=False, latency_ms=0, supported=True,
@@ -632,12 +638,25 @@ def probe_config(tenant_id: str, config_id: int, timeout_ms: int = 5000) -> dict
     )
     started = time.time()
     try:
-        with urllib.request.urlopen(request, timeout=max(1, timeout_ms) / 1000.0) as resp:
-            body = resp.read(4096).decode("utf-8", errors="replace")
+        with open_url(
+            request,
+            timeout=max(1, timeout_ms) / 1000.0,
+            proxy_url=str(extra.get("proxy_url") or ""),
+            no_proxy=extra.get("no_proxy") or "",
+            trust_env=bool(trust_env),
+        ) as resp:
+            # OpenRouter 等供应商的模型列表可能超过 4KB；必须完整读取才能校验模型名。
+            body = resp.read(5 * 1024 * 1024).decode("utf-8", errors="replace")
         models = _model_ids(body)
-        result.update(ok=True, latency_ms=int((time.time() - started) * 1000), supported=True,
-                      error="", discovered_models=models,
-                      model_present=(str(row["model"]) in models) if models else None)
+        model_name = str(row.get("model") or "")
+        model_present = (model_name in models) if models else None
+        model_error = ""
+        ok = True
+        if models and model_name and model_name not in models:
+            ok = False
+            model_error = f"模型不在供应商 /models 列表中：{model_name}"
+        result.update(ok=ok, latency_ms=int((time.time() - started) * 1000), supported=True,
+                      error=model_error, discovered_models=models, model_present=model_present)
     except urllib.error.HTTPError as exc:
         supported = exc.code not in (404, 405)
         result.update(
@@ -678,7 +697,7 @@ def _model_ids(body: str) -> list[str]:
     for entry in entries:
         if isinstance(entry, dict) and entry.get("id"):
             ids.append(str(entry["id"]))
-    return ids[:50]
+    return ids
 
 
 # ─────────── 存储实现（PG / 进程内）──────────

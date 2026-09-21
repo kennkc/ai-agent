@@ -9,10 +9,10 @@
 
 - 测试文件：**10 个**
 - 测试用例：**27 passed / 0 failed**
-- 语句覆盖率：**31.72%**（1768 / 5573）
-- 分支覆盖率：**70.09%**（422 / 602）
+- 语句覆盖率：**31.91%**（1789 / 5605）
+- 分支覆盖率：**70.14%**（423 / 603）
 - 函数覆盖率：**31.65%**（63 / 199）
-- 行覆盖率：**31.72%**（1768 / 5573）
+- 行覆盖率：**31.91%**（1789 / 5605）
 - 覆盖率门禁：行/语句 25% · 函数 20% · 分支 65% · `npm run test:report` 强制执行
 - 类型检查：`npm run typecheck` 通过
 - 生产构建：`npm run build` 通过（仅有 Element Plus 主包 >500 kB 的体积提示）
@@ -53,8 +53,8 @@
 | `src/router/index.ts` | 100% | 100% | 路由表解析 |
 | `src/views/OverviewView.vue` | 73.24% | 77.96% | 今日摘要、模型监控、观测摘要与失败快照 |
 | `src/views/MiddlewareView.vue` | 53.25% | 94.23% | 中间件监控主路径 |
-| `src/views/ModelsView.vue` | 71.27% | 67% | 模型配置、真实运行态、探测与用量展示、统一操作按钮结构 |
-| `src/views/MetricsView.vue` | 96.68% | 75% | Prometheus target、HTTP、JVM、Hikari、业务指标与告警 |
+| `src/views/ModelsView.vue` | 70.87% | 67% | 模型配置、真实运行态、探测与用量展示、统一操作按钮结构 |
+| `src/views/MetricsView.vue` | 96.75% | 75.3% | Prometheus target、HTTP、JVM、Hikari、业务指标与告警 |
 | `src/views/ServicesView.vue` | 76.66% | 92.5% | 应用服务监控与启停主路径 |
 | 其他视图 | 0% | — | 下一步分批补组件/E2E |
 

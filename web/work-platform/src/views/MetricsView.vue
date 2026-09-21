@@ -56,6 +56,7 @@
             <div><span>错误率</span><strong>{{ formatPercent(currentHttp.error_rate) }}</strong></div>
             <div><span>平均延迟</span><strong>{{ formatMs(currentHttp.avg_latency_ms) }}</strong></div>
             <div><span>最大延迟</span><strong>{{ formatMs(currentHttp.max_latency_ms) }}</strong></div>
+            <div><span>P95 延迟</span><strong>{{ formatMs(currentHttp.http_p95_ms) }}</strong></div>
           </div>
           <p class="support-note">
             HTTP P95：{{ overview.support?.http_p95 ? '可用' : `未启用（${overview.support?.http_p95_reason || 'histogram bucket 未暴露'}）` }}
@@ -71,6 +72,7 @@
             <div><span>活跃线程</span><strong>{{ formatNumber(overview.summary.jvm_threads, 0) }}</strong></div>
             <div><span>GC 平均暂停</span><strong>{{ formatMs(overview.summary.gc_pause_avg_ms) }}</strong></div>
             <div><span>GC 最大暂停</span><strong>{{ formatMs(overview.summary.gc_pause_max_ms) }}</strong></div>
+            <div><span>GC P95</span><strong>{{ formatMs(overview.summary.gc_p95_ms) }}</strong></div>
           </div>
         </el-card>
 
@@ -113,6 +115,9 @@
           </el-table-column>
           <el-table-column label="平均延迟" width="110">
             <template #default="{ row }">{{ formatMs(row.avg_latency_ms) }}</template>
+          </el-table-column>
+          <el-table-column label="P95" width="100">
+            <template #default="{ row }">{{ formatMs(row.http_p95_ms) }}</template>
           </el-table-column>
           <el-table-column label="堆使用率" width="110">
             <template #default="{ row }">{{ formatPercent(row.heap_used_ratio) }}</template>
@@ -178,7 +183,7 @@ const selectedService = computed<MetricsServiceItem | null>(() => {
 })
 
 const currentHttp = computed(() => selectedService.value || overview.value?.summary || {
-  qps: null, error_rate: null, avg_latency_ms: null, max_latency_ms: null,
+  qps: null, error_rate: null, avg_latency_ms: null, max_latency_ms: null, http_p95_ms: null,
 })
 
 const summaryCards = computed(() => {
