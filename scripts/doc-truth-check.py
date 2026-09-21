@@ -34,6 +34,7 @@ FORBIDDEN = (
     "R-MC01-05 仍是真实协作域 UI 后续项",
     "真实 LLM 引擎未接入",
     "92a46c1",
+    "63 端点，implemented **35 路径 / 38 方法** / planned 28",
 )
 
 
@@ -87,7 +88,10 @@ def main() -> int:
     required_paths = (
         ROOT / "infra" / "prometheus" / "prometheus.yml",
         ROOT / "infra" / "prometheus" / "alerts.yml",
+        ROOT / "contracts" / "phase6-endpoint-priority.yaml",
         ROOT / "web" / "work-platform" / "playwright.config.ts",
+        ROOT / "web" / "work-platform" / "playwright.live.config.ts",
+        ROOT / "docs" / "test-reports" / "collab" / "2026-09-21" / "scale-report.md",
         ROOT / "web" / "work-platform" / "e2e" / "platform-smoke.spec.ts",
     )
     for path in required_paths:

@@ -116,10 +116,11 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 18:21 · 源文件 PROGRESS.md</span>
+  <span class="meta">生成于 2026-09-21 09:00 · 源文件 PROGRESS.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#business-metrics-live-e2e-and-mc-01-scale-closure-2026-09-21">Business Metrics, Live E2E and MC-01 Scale Closure (2026-09-21)</a></li>
 <li><a href="#five-priority-optimization-closure-2026-09-20">Five-Priority Optimization Closure (2026-09-20)</a></li>
 <li><a href="#production-hardening-phase-6-pre-design-2026-09-20">Production Hardening &amp; Phase 6 Pre-design (2026-09-20)</a></li>
 <li><a href="#mc-01-collaboration-bus-hardening-2026-09-20">MC-01 Collaboration Bus Hardening (2026-09-20)</a></li>
@@ -219,6 +220,23 @@
 <blockquote>
 <p>Last updated: 2026-09-20</p>
 </blockquote>
+<h2 id="business-metrics-live-e2e-and-mc-01-scale-closure-2026-09-21">Business Metrics, Live E2E and MC-01 Scale Closure (2026-09-21)<a class="headerlink" href="#business-metrics-live-e2e-and-mc-01-scale-closure-2026-09-21" title="Permanent link">&para;</a></h2>
+<p>This pass executes the latest recommendations without starting Phase 6 implementation:</p>
+<ul>
+<li><strong>Business metrics</strong>: collab-bus now exposes active-domain, message, retry, DLQ, heartbeat and
+  pending-flush metrics; nlp-service exposes LLM call/token/latency/degraded metrics;
+  tool-executor now publishes tool call, latency, blocked and circuit-open metrics to
+  Micrometer/Prometheus. DEBT-021 is closed.</li>
+<li><strong>Alerting</strong>: added business alert rules for Collab DLQ/retries/backlog, LLM failure/degradation,
+  and tool failure/circuit-open. A production webhook example is provided for Alertmanager.</li>
+<li><strong>Live E2E</strong>: Playwright now has a real wp-bff/API-mode test in addition to the mock UI smoke.</li>
+<li><strong>Cross-platform gates</strong>: contract-check fixes Windows GBK output; doc-truth now also guards
+  Phase 6 endpoint priorities, live E2E assets and stale contract counts.</li>
+<li><strong>MC-01 scale</strong>: real PostgreSQL + NATS single-instance tests passed for 25/100/500/1000 domains,
+  with active consumer deltas exactly matching the requested domain counts.</li>
+<li><strong>Phase 6 endpoint freeze</strong>: <code>contracts/phase6-endpoint-priority.yaml</code> freezes blocking,
+  enabling and deferred planned endpoints.</li>
+</ul>
 <h2 id="five-priority-optimization-closure-2026-09-20">Five-Priority Optimization Closure (2026-09-20)<a class="headerlink" href="#five-priority-optimization-closure-2026-09-20" title="Permanent link">&para;</a></h2>
 <p>This pass executed the five recommended follow-ups:</p>
 <ul>
@@ -241,7 +259,7 @@
 <li>session-manager: <strong>2/2 real NATS/Kafka integration tests</strong> with local containers.</li>
 <li>nlp-service: <strong>32/32 targeted tests</strong>, including <code>/metrics</code>.</li>
 <li>wp-bff: <strong>114/114 tests</strong>, including <code>/metrics</code>.</li>
-<li>Playwright: <strong>2/2 E2E tests</strong>.</li>
+<li>Playwright: <strong>2/2 mock UI E2E + 1/1 live wp-bff/API E2E</strong>.</li>
 <li><code>docker compose config</code>: valid.</li>
 </ul>
 <h2 id="production-hardening-phase-6-pre-design-2026-09-20">Production Hardening &amp; Phase 6 Pre-design (2026-09-20)<a class="headerlink" href="#production-hardening-phase-6-pre-design-2026-09-20" title="Permanent link">&para;</a></h2>

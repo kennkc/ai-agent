@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 18:21 · 源文件 部署与环境版本基线.md</span>
+  <span class="meta">生成于 2026-09-21 09:00 · 源文件 部署与环境版本基线.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -135,6 +135,7 @@
 <li><a href="#9-bff">9. 生产反向代理与 BFF 路由</a></li>
 <li><a href="#10-fail-closed">10. 模型配置生产 fail-closed</a></li>
 <li><a href="#11-prometheus">11. Prometheus 与告警</a></li>
+<li><a href="#12-e2e-mc-01">12. 真实 E2E 与 MC-01 规模验证</a></li>
 </ul>
 </div>
 </nav>
@@ -497,7 +498,21 @@ curl -fsS http://127.0.0.1/api/wp/healthz
 <li><code>LifeformHighHttpP99</code></li>
 <li><code>LifeformHighJvmMemory</code></li>
 </ul>
-<p><code>alertmanager.yml</code> 默认 receiver 不发送外部通知；生产部署必须替换为组织邮件、企业微信、Slack 或其他 webhook。</p></main>
+<p><code>alertmanager.yml</code> 默认 receiver 不发送外部通知；生产部署必须替换为组织邮件、企业微信、Slack 或其他 webhook。</p>
+<h2 id="12-e2e-mc-01">12. 真实 E2E 与 MC-01 规模验证<a class="headerlink" href="#12-e2e-mc-01" title="Permanent link">&para;</a></h2>
+<p>真实 BFF/API E2E：</p>
+<pre><code class="language-bash">cd web/work-platform
+npm run test:e2e:live
+</code></pre>
+<p>MC-01 多域规模验证：</p>
+<pre><code class="language-bash">python scripts/collab-scale-check.py \
+  --domains 1000 \
+  --concurrency 32 \
+  --cleanup \
+  --base-url http://127.0.0.1:8085 \
+  --output docs/test-reports/collab/2026-09-21/scale-1000.json
+</code></pre>
+<p>2026-09-21 单实例实测 25 / 100 / 500 / 1000 域均通过，1000 域时 consumer 增量精确为 1000。</p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

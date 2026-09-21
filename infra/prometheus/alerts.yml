@@ -27,3 +27,67 @@ groups:
         annotations:
           summary: "High JVM memory usage"
           description: "{{ $labels.job }} JVM memory usage is above 90% for 10 minutes."
+  - name: lifeform-business
+    rules:
+      - alert: LifeformCollabDeadLetters
+        expr: increase(lifeform_collab_deadletter_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Collab bus dead letters detected"
+          description: "DLQ count increased for {{ $labels.job }} in the last 5 minutes."
+
+      - alert: LifeformCollabRetriesHigh
+        expr: increase(lifeform_collab_consumer_retries_total[5m]) > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Collab consumer retry rate is high"
+          description: "More than 10 consumer retries in 5 minutes."
+
+      - alert: LifeformHeartbeatBacklog
+        expr: lifeform_collab_heartbeat_pending > 100
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Heartbeat pending backlog is high"
+          description: "More than 100 heartbeat updates waiting for flush."
+
+      - alert: LifeformLlmFailureRatio
+        expr: sum(rate(lifeform_llm_calls_total{outcome="failure"}[5m])) / clamp_min(sum(rate(lifeform_llm_calls_total[5m])), 1) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM failure ratio is high"
+          description: "LLM failure ratio is above 10% for 5 minutes."
+
+      - alert: LifeformLlmDegradedCalls
+        expr: sum(rate(lifeform_llm_calls_total{degraded="true"}[5m])) > 0
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "LLM requests are degrading to template output"
+          description: "One or more LLM requests are using the degraded template path."
+
+      - alert: LifeformToolFailureRatio
+        expr: sum(rate(lifeform_tool_calls_total{outcome="failure"}[5m])) / clamp_min(sum(rate(lifeform_tool_calls_total[5m])), 1) > 0.10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Tool failure ratio is high"
+          description: "Tool failure ratio is above 10% for 5 minutes."
+
+      - alert: LifeformToolCircuitOpen
+        expr: increase(lifeform_tool_circuit_open_total[5m]) > 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Tool circuit opened"
+          description: "A tool circuit has opened in the last 5 minutes."

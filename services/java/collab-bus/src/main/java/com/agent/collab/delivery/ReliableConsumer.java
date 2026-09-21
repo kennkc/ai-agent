@@ -5,6 +5,7 @@ import com.agent.collab.domain.DomainRepository;
 import com.agent.collab.domain.DomainService;
 import com.agent.collab.heartbeat.HeartbeatService;
 import com.agent.collab.nats.NatsConnection;
+import com.agent.collab.observability.CollabBusMetrics;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import io.nats.client.JetStreamApiException;
@@ -45,6 +46,7 @@ public class ReliableConsumer {
     private final IdempotentConsumer consumer;
     private final HeartbeatService heartbeatService;
     private final ObjectMapper objectMapper;
+    private final CollabBusMetrics metrics;
     private final String durablePrefix;
     private final long retryDelayMs;
     private final long ackWaitMs;
@@ -58,6 +60,7 @@ public class ReliableConsumer {
                             IdempotentConsumer consumer,
                             HeartbeatService heartbeatService,
                             ObjectMapper objectMapper,
+                            CollabBusMetrics metrics,
                             @Value("${app.collab.consumer-durable-prefix:collab-worker}") String durablePrefix,
                             @Value("${app.collab.retry-delay-ms:500}") long retryDelayMs,
                             @Value("${app.collab.ack-wait-ms:30000}") long ackWaitMs,
@@ -68,6 +71,7 @@ public class ReliableConsumer {
         this.consumer = consumer;
         this.heartbeatService = heartbeatService;
         this.objectMapper = objectMapper;
+        this.metrics = metrics;
         this.durablePrefix = durablePrefix;
         this.retryDelayMs = Math.max(100, retryDelayMs);
         this.ackWaitMs = Math.max(1000, ackWaitMs);
@@ -154,12 +158,14 @@ public class ReliableConsumer {
                 .name("collab-consumer-" + domainId)
                 .start(() -> pullLoop(domainId, subscription, running));
         handles.put(domainId, new ConsumerLoop(subscription, running, thread));
+        metrics.activeDomainsChanged(handles.size());
         log.info("协作域 pull consumer 已启动：domain={} stream={} durable={}", domainId, stream, durable);
     }
 
     /** 关闭域时停止拉取；durable consumer 保留未 ack 进度，供恢复继续消费。 */
     public synchronized void stopDomain(String domainId) {
         ConsumerLoop handle = handles.remove(domainId);
+        metrics.activeDomainsChanged(handles.size());
         if (handle == null) {
             return;
         }
@@ -215,6 +221,7 @@ public class ReliableConsumer {
             IdempotentConsumer.DeliveryResult result = consumer.deliver(
                     tenantId, domainId, requestId, memberId, payload,
                     body -> dispatch(type, tenantId, domainId, memberId, body));
+            metrics.messageConsumed(result.state().name());
             if (result.state() == IdempotentConsumer.DeliveryState.PROCESSED
                     || result.state() == IdempotentConsumer.DeliveryState.DUPLICATE
                     || result.state() == IdempotentConsumer.DeliveryState.DEAD_LETTER) {
@@ -223,6 +230,7 @@ public class ReliableConsumer {
         } catch (Exception e) {
             log.warn("消息未完成，延迟重投：domain={} request_id={} retry-delay={}ms err={}",
                     domainId, requestId, retryDelayMs, e.getMessage());
+            metrics.messageRetry();
             message.nakWithDelay(Duration.ofMillis(retryDelayMs));
         }
     }

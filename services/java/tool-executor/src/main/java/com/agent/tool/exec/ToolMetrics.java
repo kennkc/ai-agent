@@ -1,6 +1,7 @@
 package com.agent.tool.exec;
 
 import com.agent.tool.common.ErrorCode;
+import io.micrometer.core.instrument.MeterRegistry;
 import org.springframework.stereotype.Component;
 
 import java.util.ArrayList;
@@ -8,13 +9,13 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.ConcurrentLinkedDeque;
+import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicLong;
 
 /**
  * 工具执行指标（支撑 DoD「工具成功率 ≥ 90%」「执行 P99 < 2s」的量化验收）。
  *
- * <p>进程内滑动窗口统计（保留最近 {@code window} 次调用样本）。**未接 Prometheus**，
- * 当前只对视图/报表提供数据（《技术债台账》DEBT-021 登记）。
+ * <p>进程内滑动窗口统计（保留最近 {@code window} 次调用样本），并同步暴露 Micrometer/Prometheus 计数器与延迟 Timer。
  */
 @Component
 public class ToolMetrics {
@@ -22,10 +23,15 @@ public class ToolMetrics {
     private static final int WINDOW = 500;
 
     private final ConcurrentLinkedDeque<Sample> samples = new ConcurrentLinkedDeque<>();
+    private final MeterRegistry registry;
     private final AtomicLong totalCalls = new AtomicLong(0);
     private final AtomicLong totalFailures = new AtomicLong(0);
     private final AtomicLong blockedCalls = new AtomicLong(0);
     private final Map<String, AtomicLong> perTool = new java.util.concurrent.ConcurrentHashMap<>();
+
+    public ToolMetrics(MeterRegistry registry) {
+        this.registry = registry;
+    }
 
     public record Sample(String toolName, boolean success, long latencyMs, String errorCode) { }
 
@@ -40,6 +46,10 @@ public class ToolMetrics {
         samples.addLast(new Sample(toolName, success, latencyMs, errorCode));
         while (samples.size() > WINDOW) samples.removeFirst();
         perTool.computeIfAbsent(toolName, key -> new AtomicLong(0)).incrementAndGet();
+        registry.counter("lifeform.tool.calls", "tool", toolName, "outcome", success ? "success" : "failure").increment();
+        registry.timer("lifeform.tool.execution", "tool", toolName).record(Math.max(0, latencyMs), TimeUnit.MILLISECONDS);
+        if (errorCode != null && errorCode.startsWith("AGENT_TOOL")) registry.counter("lifeform.tool.blocked", "tool", toolName, "code", errorCode).increment();
+        if (ErrorCode.AGENT_TOOL_CIRCUIT_OPEN.code().equals(errorCode)) registry.counter("lifeform.tool.circuit.open", "tool", toolName).increment();
     }
 
     public Map<String, Object> snapshot() {

@@ -25,6 +25,11 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[1]
 
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+if hasattr(sys.stderr, "reconfigure"):
+    sys.stderr.reconfigure(encoding="utf-8")
+
 # D5-2 通用字段（所有模型必须包含，status/source 允许枚举差异）
 COMMON_FIELDS = ["id", "tenant_id", "created_at", "updated_at", "version"]
 # D5-2 命名规则：snake_case（允许下划线，禁止驼峰/大写）

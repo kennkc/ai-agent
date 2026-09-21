@@ -4,6 +4,7 @@ import com.agent.collab.common.BizException;
 import com.agent.collab.common.ErrorCode;
 import com.agent.collab.domain.CollabDomain;
 import com.agent.collab.domain.DomainRepository;
+import com.agent.collab.observability.CollabBusMetrics;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -39,6 +40,7 @@ public class HeartbeatService {
 
     private final HeartbeatRepository repository;
     private final DomainRepository domains;
+    private final CollabBusMetrics metrics;
     private final long minIntervalMs;
     private final long staleMs;
     private final ConcurrentHashMap<String, MemberHeartbeat> pending = new ConcurrentHashMap<>();
@@ -56,10 +58,12 @@ public class HeartbeatService {
 
     public HeartbeatService(HeartbeatRepository repository,
                             DomainRepository domains,
+                            CollabBusMetrics metrics,
                             @Value("${app.collab.heartbeat-min-interval-ms:5000}") long minIntervalMs,
                             @Value("${app.collab.member-stale-ms:30000}") long staleMs) {
         this.repository = repository;
         this.domains = domains;
+        this.metrics = metrics;
         this.minIntervalMs = Math.max(1L, minIntervalMs);
         this.staleMs = Math.max(1L, staleMs);
     }
@@ -124,6 +128,8 @@ public class HeartbeatService {
         body.put("state", normalizedState);
         body.put("weight", normalizedWeight);
         body.put("reported_at", now.toString());
+        metrics.heartbeatReport(throttled);
+        metrics.pendingHeartbeatsChanged(pending.size());
         return body;
     }
 
@@ -233,6 +239,8 @@ public class HeartbeatService {
         }
         lastFlushAt = now;
         lastFlushCount = flushed;
+        metrics.heartbeatFlushed(flushed);
+        metrics.pendingHeartbeatsChanged(pending.size());
         if (failed == 0) {
             lastFlushError = "";
         }

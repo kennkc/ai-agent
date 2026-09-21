@@ -5,6 +5,8 @@ import com.agent.collab.common.ErrorCode;
 import com.agent.collab.domain.CollabDomain;
 import com.agent.collab.domain.DomainRepository;
 import com.agent.collab.nats.NatsConnection;
+import com.agent.collab.observability.CollabBusMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.util.Map;
@@ -50,7 +52,7 @@ class DeliveryTest {
     void publishToClosedDomainIsRejectedWith409() {
         DomainRepository domains = mock(DomainRepository.class);
         when(domains.find("t1", "dom-1")).thenReturn(Optional.of(domain(CollabDomain.STATE_CLOSED)));
-        MessagePublisher publisher = new MessagePublisher(mock(NatsConnection.class), domains);
+        MessagePublisher publisher = new MessagePublisher(mock(NatsConnection.class), domains, new CollabBusMetrics(new SimpleMeterRegistry()));
 
         BizException e = assertThrows(BizException.class,
                 () -> publisher.publish("t1", "dom-1", "dispatch", "m1", "req-1", "payload"));
@@ -62,7 +64,7 @@ class DeliveryTest {
     void publishToMissingOrCrossTenantDomainIs404() {
         DomainRepository domains = mock(DomainRepository.class);
         when(domains.find(anyString(), anyString())).thenReturn(Optional.empty());
-        MessagePublisher publisher = new MessagePublisher(mock(NatsConnection.class), domains);
+        MessagePublisher publisher = new MessagePublisher(mock(NatsConnection.class), domains, new CollabBusMetrics(new SimpleMeterRegistry()));
 
         BizException e = assertThrows(BizException.class,
                 () -> publisher.publish("other", "dom-1", "dispatch", "m1", "req-1", "payload"));

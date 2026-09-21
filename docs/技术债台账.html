@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-20 18:21 · 源文件 技术债台账.md</span>
+  <span class="meta">生成于 2026-09-21 09:00 · 源文件 技术债台账.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -136,7 +136,7 @@
 <li><a href="#debt-013-pdf-docx">DEBT-013 · 不支持 PDF / DOCX 文档解析（本轮审核新开）</a></li>
 <li><a href="#debt-019-2026-09-19-phase-5">DEBT-019 · 工具注册表仅进程内 + 影响分析仅覆盖登记消费方（2026-09-19 Phase 5 新开）</a></li>
 <li><a href="#debt-020-networknt-everit2026-09-19-phase-5">DEBT-020 · 参数校验器实装 networknt（设计写 everit）（2026-09-19 Phase 5 新开）</a></li>
-<li><a href="#debt-021-prometheus2026-09-19-phase-5">DEBT-021 · 工具执行指标未接 Prometheus（2026-09-19 Phase 5 新开）</a></li>
+<li><a href="#debt-021-prometheus2026-09-19-2026-09-21">DEBT-021 · 工具执行指标未接 Prometheus（2026-09-19 新开，2026-09-21 关闭）</a></li>
 </ul>
 </li>
 <li><a href="#_4">三、关联未实现项（不属于技术债，但常被一起问到）</a></li>
@@ -343,10 +343,10 @@
 <tr>
 <td><strong>DEBT-021</strong></td>
 <td>tool-executor（执行指标）</td>
-<td>工具专属指标仍为<strong>进程内滑动窗口</strong>（最近 500 次）；服务已接入通用 <code>/actuator/prometheus</code>，但工具指标尚未迁到 Micrometer</td>
+<td>~~工具专属指标仅进程内~~ → <strong>已同步 Micrometer/Prometheus</strong>，保留滑动窗口供视图 P99 使用</td>
 <td>接入 Micrometer / Prometheus 暴露 <code>/actuator/prometheus</code></td>
 <td>需要跨实例聚合或告警时</td>
-<td>🟡</td>
+<td>✅ <strong>已闭合（2026-09-21）</strong></td>
 </tr>
 </tbody>
 </table>
@@ -355,7 +355,7 @@
 <strong>2026-09-18 补记</strong>：DEBT-010 / 011 / 012 在代码里早已引用（<code>nlp-service</code> 两处 + <code>SenseEventPublisher</code> 一处），
 但此前<strong>未登记本表</strong> —— 与 §4.4「后续新债从 DEBT-010 起编」的约定直接冲突。本轮审核已补齐，
 并新开 DEBT-013（PDF 解析缺口）。
-<strong>2026-09-19 Phase 5 补记</strong>：新增 <strong>DEBT-019 / 020 / 021</strong>（注册表仅进程内 / 校验器选型差异 / 指标未接 Prometheus）。
+<strong>2026-09-19 Phase 5 补记</strong>：新增 <strong>DEBT-019 / 020 / 021</strong>（注册表仅进程内 / 校验器选型差异 / 工具指标未迁 Prometheus）；<strong>DEBT-021 已于 2026-09-21 关闭</strong>。
 三条均为<strong>显式降级或选型留痕</strong>：<code>registry_backend=in-memory</code>、<code>ImpactReport.note</code>、
 <code>ToolGuard</code> 类注释、<code>ToolMetrics</code> 类注释四处都能读到实况，不属伪实现。登记率保持 <strong>100%</strong>。</p>
 </blockquote>
@@ -513,7 +513,7 @@
 <li><strong>状态</strong>：🟡 未闭合（触发点未到）。</li>
 <li><strong>证据</strong>：<code>services/java/tool-executor/src/main/java/com/agent/tool/guard/ToolGuard.java:41</code>。</li>
 </ul>
-<h3 id="debt-021-prometheus2026-09-19-phase-5">DEBT-021 · 工具执行指标未接 Prometheus（2026-09-19 Phase 5 新开）<a class="headerlink" href="#debt-021-prometheus2026-09-19-phase-5" title="Permanent link">&para;</a></h3>
+<h3 id="debt-021-prometheus2026-09-19-2026-09-21">DEBT-021 · 工具执行指标未接 Prometheus（2026-09-19 新开，2026-09-21 关闭）<a class="headerlink" href="#debt-021-prometheus2026-09-19-2026-09-21" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>简化实现</strong>：<code>ToolMetrics</code> 用 <code>ConcurrentLinkedDeque</code> 保留最近 <strong>500</strong> 次调用样本，
   给出 <code>success_rate / p50 / p95 / p99 / blocked_calls / calls_by_tool</code>。工具专属指标仍为<strong>纯进程内</strong>；

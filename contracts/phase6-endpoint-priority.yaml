@@ -1,0 +1,37 @@
+phase: 6
+status: frozen
+decision: 暂不开发 Phase 6，仅冻结 required planned endpoints
+tiers:
+  blocking:
+    - /agents/online
+    - /tasks
+    - /tasks/{task_id}
+    - /results/{task_id}
+    - /experts
+    - /approvals
+    - /approvals/{approval_id}/decision
+  enabling:
+    - /skills
+    - /automations
+    - /automations/{automation_id}
+    - /cases
+    - /cases/{case_id}/reuse
+    - /search
+  deferred:
+    - /vitals
+    - /organs
+    - /senses
+    - /evolution
+    - /connectors
+    - /connectors/{connector_id}/authorize
+    - /remote-im/channels
+    - /remote-im/command
+    - /preferences
+    - /skills/{skill_id}/install
+    - /tasks/{task_id}/retry
+    - /chat/{task_id}
+entry_conditions:
+  - MC-01 多域/多实例规模验证完成
+  - Prometheus 业务指标与告警接收完成
+  - 真实 BFF/API E2E 基线通过
+  - 工件层与验收门存储方案评审通过

@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>前端 Playwright E2E 冒烟报告</title>
+<title>MC-01 多域规模验证报告</title>
 <style>
   :root {
     --brand: #185fa5;
@@ -116,73 +116,101 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-21 09:00 · 源文件 playwright-e2e-report.md</span>
+  <span class="meta">生成于 2026-09-21 09:04 · 源文件 scale-report.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#1">1. 结论</a></li>
-<li><a href="#2">2. 覆盖用例</a></li>
-<li><a href="#3">3. 配置</a></li>
-<li><a href="#4">4. 边界</a></li>
+<li><a href="#2">2. 实测结果</a></li>
+<li><a href="#3">3. 观察</a></li>
+<li><a href="#4">4. 复现</a></li>
 </ul>
 </div>
 </nav>
-  <main class="doc"><h1 id="playwright-e2e">前端 Playwright E2E 冒烟报告<a class="headerlink" href="#playwright-e2e" title="Permanent link">&para;</a></h1>
+  <main class="doc"><h1 id="mc-01">MC-01 多域规模验证报告<a class="headerlink" href="#mc-01" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>日期</strong>：2026-09-20
-<strong>框架</strong>：Playwright ^1.63.0 + Chromium
-<strong>命令</strong>：<code>npm run test:e2e</code>
-<strong>数据源</strong>：<code>VITE_DATA_SOURCE=mock</code>（由 <code>cross-env</code> 强制注入，E2E 不依赖后端）</p>
+<p><strong>日期</strong>：2026-09-21
+<strong>环境</strong>：本机 PostgreSQL + NATS JetStream + collab-bus 单实例
+<strong>脚本</strong>：<code>scripts/collab-scale-check.py</code></p>
 </blockquote>
 <h2 id="1">1. 结论<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
-<ul>
-<li>浏览器项目：Chromium</li>
-<li>Mock UI 用例：<strong>2 passed / 0 failed</strong></li>
-<li>真实 BFF/API 用例：<strong>1 passed / 0 failed</strong></li>
-<li>失败重试：本地 0 次，CI 1 次</li>
-<li>失败产物：trace、截图、视频保留</li>
-</ul>
-<h2 id="2">2. 覆盖用例<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<p>25、100、500、1000 协作域全部创建成功，active durable consumer 增量与目标域数一致，规模 smoke 状态均为 <code>pass</code>。</p>
+<h2 id="2">2. 实测结果<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>用例</th>
-<th>覆盖内容</th>
+<th style="text-align: right;">域数</th>
+<th style="text-align: right;">并发</th>
+<th style="text-align: right;">创建总耗时</th>
+<th style="text-align: right;">创建 P50</th>
+<th style="text-align: right;">创建 P95</th>
+<th style="text-align: right;">列表延迟</th>
+<th style="text-align: right;">Consumer 增量</th>
+<th>结果</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>overview loads and theme switches between dark and light</code></td>
-<td>总览加载、默认深色、浅色切换、深色切换</td>
+<td style="text-align: right;">25</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">168.62ms</td>
+<td style="text-align: right;">42.75ms</td>
+<td style="text-align: right;">70.80ms</td>
+<td style="text-align: right;">77.65ms</td>
+<td style="text-align: right;">25</td>
+<td>pass</td>
 </tr>
 <tr>
-<td><code>core observability and model pages are reachable from navigation</code></td>
-<td>后台服务控制台、模型接入配置页导航与标题渲染</td>
+<td style="text-align: right;">100</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">700.31ms</td>
+<td style="text-align: right;">103.34ms</td>
+<td style="text-align: right;">173.88ms</td>
+<td style="text-align: right;">122.06ms</td>
+<td style="text-align: right;">100</td>
+<td>pass</td>
 </tr>
 <tr>
-<td><code>live wp-bff overview and service catalog stay reachable</code></td>
-<td>真实 wp-bff、API 数据源、服务目录与 WP BFF 项</td>
+<td style="text-align: right;">500</td>
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">3064.46ms</td>
+<td style="text-align: right;">141.80ms</td>
+<td style="text-align: right;">254.34ms</td>
+<td style="text-align: right;">669.10ms</td>
+<td style="text-align: right;">500</td>
+<td>pass</td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">6698.10ms</td>
+<td style="text-align: right;">209.36ms</td>
+<td style="text-align: right;">384.22ms</td>
+<td style="text-align: right;">1221.34ms</td>
+<td style="text-align: right;">1000</td>
+<td>pass</td>
 </tr>
 </tbody>
 </table>
-<h2 id="3">3. 配置<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<p>原始结果：</p>
 <ul>
-<li><code>web/work-platform/playwright.config.ts</code></li>
-<li><code>web/work-platform/playwright.live.config.ts</code></li>
-<li><code>web/work-platform/e2e/platform-smoke.spec.ts</code></li>
-<li><code>.env.test</code> 固定 Mock 数据源。</li>
-<li>CI 执行 <code>npx playwright install --with-deps chromium</code> 后运行 <code>npm run test:e2e</code>。</li>
+<li><code>scale-25.json</code></li>
+<li><code>scale-100.json</code></li>
+<li><code>scale-500.json</code></li>
+<li><code>scale-1000.json</code></li>
 </ul>
-<h2 id="4">4. 边界<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
-<p>当前包含 Mock UI 冒烟与真实 wp-bff/API 冒烟，但仍不覆盖完整 Docker 全栈。后续应扩展：</p>
+<h2 id="3">3. 观察<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
 <ul>
-<li>服务启停；</li>
-<li>协作域选择；</li>
-<li>知识入库与检索；</li>
-<li>大脑问答；</li>
-<li>真实 API 降级；</li>
-<li>主题与偏好持久化。</li>
-</ul></main>
+<li>创建和 consumer 激活随域数近似线性增长；</li>
+<li>1000 域时列表延迟约 1.2s，需在 Phase 6 前继续评估分页或索引优化；</li>
+<li>单实例虚拟线程与 NATS consumer 规模在 1000 域下仍可运行；</li>
+<li>本次未验证多实例共享 consumer 行为，该部分仍保留为后续项。</li>
+</ul>
+<h2 id="4">4. 复现<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<pre><code class="language-bash">python scripts/collab-scale-check.py --domains 1000 --concurrency 32 --cleanup \
+  --base-url http://127.0.0.1:8085 \
+  --output docs/test-reports/collab/2026-09-21/scale-1000.json
+</code></pre></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

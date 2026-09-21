@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>前端 Playwright E2E 冒烟报告</title>
+<title>Phase 6 必需 planned 端点排期冻结稿</title>
 <style>
   :root {
     --brand: #185fa5;
@@ -116,73 +116,97 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-21 09:00 · 源文件 playwright-e2e-report.md</span>
+  <span class="meta">生成于 2026-09-21 09:04 · 源文件 Phase6-必需端点排期冻结稿.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
-<li><a href="#1">1. 结论</a></li>
-<li><a href="#2">2. 覆盖用例</a></li>
-<li><a href="#3">3. 配置</a></li>
-<li><a href="#4">4. 边界</a></li>
+<li><a href="#1">1. 分层原则</a></li>
+<li><a href="#2-blocking">2. Blocking</a></li>
+<li><a href="#3-enabling">3. Enabling</a></li>
+<li><a href="#4-deferred">4. Deferred</a></li>
+<li><a href="#5-phase-6">5. Phase 6 解冻前置条件</a></li>
 </ul>
 </div>
 </nav>
-  <main class="doc"><h1 id="playwright-e2e">前端 Playwright E2E 冒烟报告<a class="headerlink" href="#playwright-e2e" title="Permanent link">&para;</a></h1>
+  <main class="doc"><h1 id="phase-6-planned">Phase 6 必需 planned 端点排期冻结稿<a class="headerlink" href="#phase-6-planned" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p><strong>日期</strong>：2026-09-20
-<strong>框架</strong>：Playwright ^1.63.0 + Chromium
-<strong>命令</strong>：<code>npm run test:e2e</code>
-<strong>数据源</strong>：<code>VITE_DATA_SOURCE=mock</code>（由 <code>cross-env</code> 强制注入，E2E 不依赖后端）</p>
+<p><strong>日期</strong>：2026-09-21
+<strong>状态</strong>：已冻结，<strong>不构成 Phase 6 开工声明</strong>
+<strong>机器可读清单</strong>：<code>contracts/phase6-endpoint-priority.yaml</code></p>
 </blockquote>
-<h2 id="1">1. 结论<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<h2 id="1">1. 分层原则<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
 <ul>
-<li>浏览器项目：Chromium</li>
-<li>Mock UI 用例：<strong>2 passed / 0 failed</strong></li>
-<li>真实 BFF/API 用例：<strong>1 passed / 0 failed</strong></li>
-<li>失败重试：本地 0 次，CI 1 次</li>
-<li>失败产物：trace、截图、视频保留</li>
+<li><strong>Blocking</strong>：没有这些端点，Phase 6 的编排结果无法被工作平台看见、审批或验收。</li>
+<li><strong>Enabling</strong>：不阻塞首个 Phase 6 闭环，但缺失会显著降低可用性。</li>
+<li><strong>Deferred</strong>：可继续以 Mock/降级展示，等待 Phase 6 后或产品需求明确。</li>
 </ul>
-<h2 id="2">2. 覆盖用例<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<h2 id="2-blocking">2. Blocking<a class="headerlink" href="#2-blocking" title="Permanent link">&para;</a></h2>
 <table>
 <thead>
 <tr>
-<th>用例</th>
-<th>覆盖内容</th>
+<th>路径</th>
+<th>目的</th>
 </tr>
 </thead>
 <tbody>
 <tr>
-<td><code>overview loads and theme switches between dark and light</code></td>
-<td>总览加载、默认深色、浅色切换、深色切换</td>
+<td><code>/agents/online</code></td>
+<td>在线 Agent、角色、心跳与当前任务</td>
 </tr>
 <tr>
-<td><code>core observability and model pages are reachable from navigation</code></td>
-<td>后台服务控制台、模型接入配置页导航与标题渲染</td>
+<td><code>/tasks</code></td>
+<td>任务列表与编排入口</td>
 </tr>
 <tr>
-<td><code>live wp-bff overview and service catalog stay reachable</code></td>
-<td>真实 wp-bff、API 数据源、服务目录与 WP BFF 项</td>
+<td><code>/tasks/{task_id}</code></td>
+<td>任务 DAG/节点/状态详情</td>
+</tr>
+<tr>
+<td><code>/results/{task_id}</code></td>
+<td>任务结果与工件汇总</td>
+</tr>
+<tr>
+<td><code>/experts</code></td>
+<td>专家团队选择与角色能力</td>
+</tr>
+<tr>
+<td><code>/approvals</code></td>
+<td>审批门待办</td>
+</tr>
+<tr>
+<td><code>/approvals/{approval_id}/decision</code></td>
+<td>审批决策</td>
 </tr>
 </tbody>
 </table>
-<h2 id="3">3. 配置<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
+<h2 id="3-enabling">3. Enabling<a class="headerlink" href="#3-enabling" title="Permanent link">&para;</a></h2>
 <ul>
-<li><code>web/work-platform/playwright.config.ts</code></li>
-<li><code>web/work-platform/playwright.live.config.ts</code></li>
-<li><code>web/work-platform/e2e/platform-smoke.spec.ts</code></li>
-<li><code>.env.test</code> 固定 Mock 数据源。</li>
-<li>CI 执行 <code>npx playwright install --with-deps chromium</code> 后运行 <code>npm run test:e2e</code>。</li>
+<li><code>/skills</code></li>
+<li><code>/automations</code></li>
+<li><code>/automations/{automation_id}</code></li>
+<li><code>/cases</code></li>
+<li><code>/cases/{case_id}/reuse</code></li>
+<li><code>/search</code></li>
 </ul>
-<h2 id="4">4. 边界<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
-<p>当前包含 Mock UI 冒烟与真实 wp-bff/API 冒烟，但仍不覆盖完整 Docker 全栈。后续应扩展：</p>
+<h2 id="4-deferred">4. Deferred<a class="headerlink" href="#4-deferred" title="Permanent link">&para;</a></h2>
 <ul>
-<li>服务启停；</li>
-<li>协作域选择；</li>
-<li>知识入库与检索；</li>
-<li>大脑问答；</li>
-<li>真实 API 降级；</li>
-<li>主题与偏好持久化。</li>
-</ul></main>
+<li><code>/vitals</code></li>
+<li><code>/organs</code></li>
+<li><code>/senses</code></li>
+<li><code>/evolution</code></li>
+<li><code>/connectors/*</code></li>
+<li><code>/remote-im/*</code></li>
+<li><code>/preferences</code></li>
+</ul>
+<h2 id="5-phase-6">5. Phase 6 解冻前置条件<a class="headerlink" href="#5-phase-6" title="Permanent link">&para;</a></h2>
+<ol>
+<li>MC-01 25/100/500/1000 域规模验证完成；</li>
+<li>Prometheus 业务指标和告警接收完成；</li>
+<li>真实 BFF/API E2E 基线通过；</li>
+<li>工件层与验收门存储方案评审通过；</li>
+<li>Blocking 端点完成独立排期和契约测试。</li>
+</ol>
+<p>当前 25/100/500/1000 域本地规模验证已通过；其余条件继续作为解冻门槛。</p></main>
 </div>
 <div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
 </body>

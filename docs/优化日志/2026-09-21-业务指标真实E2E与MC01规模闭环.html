@@ -1,0 +1,262 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>业务指标、真实 E2E 与 MC-01 规模闭环（2026-09-21）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-21 09:04 · 源文件 2026-09-21-业务指标真实E2E与MC01规模闭环.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 业务级指标</a><ul>
+<li><a href="#collab-bus">Collab Bus</a></li>
+<li><a href="#llm">LLM</a></li>
+<li><a href="#tool">Tool</a></li>
+</ul>
+</li>
+<li><a href="#2">2. 告警</a></li>
+<li><a href="#3-bff-e2e">3. 真实 BFF E2E</a></li>
+<li><a href="#4">4. 跨平台文档门禁</a></li>
+<li><a href="#5-mc-01">5. MC-01 多域规模</a></li>
+<li><a href="#6-phase-6">6. Phase 6 端点排期</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="e2e-mc-01-2026-09-21">业务指标、真实 E2E 与 MC-01 规模闭环（2026-09-21）<a class="headerlink" href="#e2e-mc-01-2026-09-21" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p><strong>范围</strong>：业务级 Prometheus 指标、告警、真实 BFF E2E、跨平台文档门禁、MC-01 多域规模、Phase 6 端点排期
+<strong>结论</strong>：本轮建议全部落地；Phase 6 代码仍未启动。</p>
+</blockquote>
+<h2 id="1">1. 业务级指标<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<h3 id="collab-bus">Collab Bus<a class="headerlink" href="#collab-bus" title="Permanent link">&para;</a></h3>
+<p>新增 <code>CollabBusMetrics</code>：</p>
+<ul>
+<li><code>lifeform_collab_active_domains</code></li>
+<li><code>lifeform_collab_heartbeat_pending</code></li>
+<li><code>lifeform_collab_messages_total</code></li>
+<li><code>lifeform_collab_consumer_retries_total</code></li>
+<li><code>lifeform_collab_deadletter_total</code></li>
+<li><code>lifeform_collab_heartbeat_reports_total</code></li>
+<li><code>lifeform_collab_heartbeat_flushed_total</code></li>
+</ul>
+<h3 id="llm">LLM<a class="headerlink" href="#llm" title="Permanent link">&para;</a></h3>
+<p>新增 <code>app/observability.py</code>：</p>
+<ul>
+<li><code>lifeform_llm_calls_total</code></li>
+<li><code>lifeform_llm_tokens_total</code></li>
+<li><code>lifeform_llm_latency_seconds</code></li>
+</ul>
+<h3 id="tool">Tool<a class="headerlink" href="#tool" title="Permanent link">&para;</a></h3>
+<p><code>ToolMetrics</code> 迁移到 Micrometer/Prometheus：</p>
+<ul>
+<li><code>lifeform_tool_calls_total</code></li>
+<li><code>lifeform_tool_execution_seconds</code></li>
+<li><code>lifeform_tool_blocked_total</code></li>
+<li><code>lifeform_tool_circuit_open_total</code></li>
+</ul>
+<p>DEBT-021 已关闭。</p>
+<h2 id="2">2. 告警<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<p>新增业务告警：</p>
+<ul>
+<li><code>LifeformCollabDeadLetters</code></li>
+<li><code>LifeformCollabRetriesHigh</code></li>
+<li><code>LifeformHeartbeatBacklog</code></li>
+<li><code>LifeformLlmFailureRatio</code></li>
+<li><code>LifeformLlmDegradedCalls</code></li>
+<li><code>LifeformToolFailureRatio</code></li>
+<li><code>LifeformToolCircuitOpen</code></li>
+</ul>
+<p>新增真实 webhook 生产示例：<code>infra/prometheus/alertmanager.production.yml.example</code>。</p>
+<h2 id="3-bff-e2e">3. 真实 BFF E2E<a class="headerlink" href="#3-bff-e2e" title="Permanent link">&para;</a></h2>
+<p>新增：</p>
+<ul>
+<li><code>playwright.live.config.ts</code></li>
+<li><code>e2e/live-bff.spec.ts</code></li>
+<li><code>npm run test:e2e:live</code></li>
+</ul>
+<p>真实启动 wp-bff 与 API 模式前端，验证：</p>
+<ul>
+<li>总览加载；</li>
+<li>API 数据源标识；</li>
+<li>后台服务目录与 <code>WP BFF</code> 项。</li>
+</ul>
+<p>结果：<strong>1/1 passed</strong>。</p>
+<h2 id="4">4. 跨平台文档门禁<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
+<ul>
+<li>修复 <code>contract-check.py</code> Windows GBK UnicodeEncodeError；</li>
+<li>更新 overview 旧契约统计；</li>
+<li><code>doc-truth-check.py</code> 新增旧统计禁用检查；</li>
+<li>新增 Phase 6 端点清单与 live E2E 资产检查。</li>
+</ul>
+<h2 id="5-mc-01">5. MC-01 多域规模<a class="headerlink" href="#5-mc-01" title="Permanent link">&para;</a></h2>
+<p>使用真实 PostgreSQL + NATS JetStream + collab-bus 单实例：</p>
+<table>
+<thead>
+<tr>
+<th style="text-align: right;">域数</th>
+<th style="text-align: right;">并发</th>
+<th style="text-align: right;">创建 P50</th>
+<th style="text-align: right;">创建 P95</th>
+<th style="text-align: right;">Consumer 增量</th>
+<th>结果</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td style="text-align: right;">25</td>
+<td style="text-align: right;">8</td>
+<td style="text-align: right;">42.75ms</td>
+<td style="text-align: right;">70.80ms</td>
+<td style="text-align: right;">25</td>
+<td>pass</td>
+</tr>
+<tr>
+<td style="text-align: right;">100</td>
+<td style="text-align: right;">16</td>
+<td style="text-align: right;">103.34ms</td>
+<td style="text-align: right;">173.88ms</td>
+<td style="text-align: right;">100</td>
+<td>pass</td>
+</tr>
+<tr>
+<td style="text-align: right;">500</td>
+<td style="text-align: right;">24</td>
+<td style="text-align: right;">141.80ms</td>
+<td style="text-align: right;">254.34ms</td>
+<td style="text-align: right;">500</td>
+<td>pass</td>
+</tr>
+<tr>
+<td style="text-align: right;">1000</td>
+<td style="text-align: right;">32</td>
+<td style="text-align: right;">209.36ms</td>
+<td style="text-align: right;">384.22ms</td>
+<td style="text-align: right;">1000</td>
+<td>pass</td>
+</tr>
+</tbody>
+</table>
+<p>归档：<code>docs/test-reports/collab/2026-09-21/</code>。</p>
+<p>边界：本次是单实例多域验证，多实例共享 consumer 行为仍待后续验证。</p>
+<h2 id="6-phase-6">6. Phase 6 端点排期<a class="headerlink" href="#6-phase-6" title="Permanent link">&para;</a></h2>
+<ul>
+<li><code>contracts/phase6-endpoint-priority.yaml</code></li>
+<li><code>docs/Phase6-必需端点排期冻结稿.md</code></li>
+</ul>
+<p>已冻结 blocking / enabling / deferred 三层，不构成 Phase 6 开工声明。</p></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

@@ -50,7 +50,7 @@ class ToolExecutorTest {
         doThrow(new RuntimeException("no postgres in unit test")).when(jdbc).execute(anyString());
         auditLog = new ToolAuditLog(jdbc, 100);
         AuditEventPublisher publisher = new AuditEventPublisher("127.0.0.1:9092", "lifeform.tool.invoked", false);
-        executor = new ToolExecutor(registry, guard, auditLog, publisher, new ToolMetrics(), 3, 30000L);
+        executor = new ToolExecutor(registry, guard, auditLog, publisher, new ToolMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry()), 3, 30000L);
     }
 
     private void registerOk(String name) {
@@ -251,7 +251,7 @@ class ToolExecutorTest {
         call("calculator", Map.of());
         call("calculator", Map.of("expr", "rm -rf /"));
 
-        ToolMetrics metrics = new ToolMetrics();
+        ToolMetrics metrics = new ToolMetrics(new io.micrometer.core.instrument.simple.SimpleMeterRegistry());
         metrics.record("calculator", true, 12, null);
         metrics.record("calculator", false, 30, ErrorCode.AGENT_TOOL_ARGS_INVALID.code());
 

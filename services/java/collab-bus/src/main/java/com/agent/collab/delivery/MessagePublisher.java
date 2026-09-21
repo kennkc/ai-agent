@@ -5,6 +5,7 @@ import com.agent.collab.common.ErrorCode;
 import com.agent.collab.domain.CollabDomain;
 import com.agent.collab.domain.DomainRepository;
 import com.agent.collab.nats.NatsConnection;
+import com.agent.collab.observability.CollabBusMetrics;
 import io.nats.client.PublishOptions;
 import io.nats.client.api.PublishAck;
 import io.nats.client.impl.Headers;
@@ -34,10 +35,12 @@ public class MessagePublisher {
 
     private final NatsConnection nats;
     private final DomainRepository domains;
+    private final CollabBusMetrics metrics;
 
-    public MessagePublisher(NatsConnection nats, DomainRepository domains) {
+    public MessagePublisher(NatsConnection nats, DomainRepository domains, CollabBusMetrics metrics) {
         this.nats = nats;
         this.domains = domains;
+        this.metrics = metrics;
     }
 
     /** 发布一条消息。返回 stream/seq 等回执信息。 */
@@ -70,6 +73,7 @@ public class MessagePublisher {
             row.put("member_id", memberId);
             row.put("request_id", normalizedRequest);
             row.put("duplicate_publish", ack.isDuplicate());
+            metrics.messagePublished(type);
             return row;
         } catch (Exception e) {
             log.error("发布失败 domain={} type={} member={}: {}", domainId, type, memberId, e.getMessage());

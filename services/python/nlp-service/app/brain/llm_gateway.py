@@ -30,6 +30,7 @@ from dataclasses import dataclass, field, replace
 from typing import Any
 
 from app.budget import Deadline
+from app.observability import record_llm_call
 
 logger = logging.getLogger("nlp-service.brain.llm")
 
@@ -504,10 +505,22 @@ class LlmGateway:
                     degraded = engine.name == TemplateEngine.name
                     if degraded:
                         self.stats.degraded_calls += 1
+                    latency_ms = int((time.time() - started) * 1000)
                     self._record_usage(
                         engine, request, ok=True, prompt_tokens=prompt_used,
                         completion_tokens=completion_used, token_source=token_source,
-                        latency_ms=int((time.time() - started) * 1000),
+                        latency_ms=latency_ms,
+                    )
+                    record_llm_call(
+                        role=engine.role or request.role or "unknown",
+                        backend=engine.name,
+                        outcome="degraded" if degraded else "success",
+                        degraded=degraded,
+                        latency_ms=latency_ms,
+                        prompt_tokens=prompt_used,
+                        completion_tokens=completion_used,
+                        token_source=token_source,
+                        model=getattr(engine, "model", "") or engine.name,
                     )
                     return LlmResponse(
                         text=text,
@@ -541,6 +554,15 @@ class LlmGateway:
         self._record_usage(last_engine, request, ok=False, prompt_tokens=0, completion_tokens=0,
                            token_source=TOKEN_SOURCE_ESTIMATED, latency_ms=elapsed,
                            error=last_error)
+        record_llm_call(
+            role=(getattr(last_engine, "role", "") or request.role or "unknown"),
+            backend=(getattr(last_engine, "name", "") or "unknown"),
+            outcome="failure",
+            degraded=False,
+            latency_ms=elapsed,
+            token_source=TOKEN_SOURCE_ESTIMATED,
+            model=(getattr(last_engine, "model", "") or getattr(last_engine, "name", "") or "unknown"),
+        )
         if deadline_hit:
             self.stats.deadline_exceeded += 1
             raise LlmUnavailable(

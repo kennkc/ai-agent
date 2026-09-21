@@ -1,0 +1,15 @@
+{
+  "status": "pass",
+  "domains_requested": 1000,
+  "domains_created": 1000,
+  "concurrency": 32,
+  "create_wall_ms": 6698.1,
+  "create_p50_ms": 209.36,
+  "create_p95_ms": 384.22,
+  "list_latency_ms": 1221.34,
+  "list_total": 1651,
+  "active_consumers_before": 50,
+  "active_consumers_after": 1050,
+  "active_consumer_delta": 1000,
+  "health_ms": 53.62
+}

@@ -2,6 +2,23 @@
 
 > Last updated: 2026-09-20
 
+## Business Metrics, Live E2E and MC-01 Scale Closure (2026-09-21)
+
+This pass executes the latest recommendations without starting Phase 6 implementation:
+
+- **Business metrics**: collab-bus now exposes active-domain, message, retry, DLQ, heartbeat and
+  pending-flush metrics; nlp-service exposes LLM call/token/latency/degraded metrics;
+  tool-executor now publishes tool call, latency, blocked and circuit-open metrics to
+  Micrometer/Prometheus. DEBT-021 is closed.
+- **Alerting**: added business alert rules for Collab DLQ/retries/backlog, LLM failure/degradation,
+  and tool failure/circuit-open. A production webhook example is provided for Alertmanager.
+- **Live E2E**: Playwright now has a real wp-bff/API-mode test in addition to the mock UI smoke.
+- **Cross-platform gates**: contract-check fixes Windows GBK output; doc-truth now also guards
+  Phase 6 endpoint priorities, live E2E assets and stale contract counts.
+- **MC-01 scale**: real PostgreSQL + NATS single-instance tests passed for 25/100/500/1000 domains,
+  with active consumer deltas exactly matching the requested domain counts.
+- **Phase 6 endpoint freeze**: `contracts/phase6-endpoint-priority.yaml` freezes blocking,
+  enabling and deferred planned endpoints.
 ## Five-Priority Optimization Closure (2026-09-20)
 
 This pass executed the five recommended follow-ups:
@@ -25,7 +42,7 @@ Verification:
 - session-manager: **2/2 real NATS/Kafka integration tests** with local containers.
 - nlp-service: **32/32 targeted tests**, including `/metrics`.
 - wp-bff: **114/114 tests**, including `/metrics`.
-- Playwright: **2/2 E2E tests**.
+- Playwright: **2/2 mock UI E2E + 1/1 live wp-bff/API E2E**.
 - `docker compose config`: valid.
 ## Production Hardening & Phase 6 Pre-design (2026-09-20)
 

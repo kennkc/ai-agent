@@ -13,7 +13,8 @@
     "test:coverage": "vitest run --coverage",
     "test:report": "vitest run --coverage --reporter=default --reporter=junit --outputFile=test-results/junit.xml",
     "test:e2e": "playwright test",
-    "dev:e2e": "cross-env VITE_DATA_SOURCE=mock vite --mode test --port 3001"
+    "dev:e2e": "cross-env VITE_DATA_SOURCE=mock vite --mode test --port 3001",
+    "test:e2e:live": "playwright test --config=playwright.live.config.ts"
   },
   "dependencies": {
     "@element-plus/icons-vue": "^2.3.1",

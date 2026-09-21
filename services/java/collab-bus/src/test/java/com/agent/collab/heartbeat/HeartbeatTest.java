@@ -4,6 +4,8 @@ import com.agent.collab.common.BizException;
 import com.agent.collab.common.ErrorCode;
 import com.agent.collab.domain.CollabDomain;
 import com.agent.collab.domain.DomainRepository;
+import com.agent.collab.observability.CollabBusMetrics;
+import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
 import org.junit.jupiter.api.Test;
 
 import java.time.Instant;
@@ -32,7 +34,7 @@ class HeartbeatTest {
     }
 
     private HeartbeatService service(HeartbeatRepository repository, DomainRepository domains) {
-        return new HeartbeatService(repository, domains, 5000, 30000);
+        return new HeartbeatService(repository, domains, new CollabBusMetrics(new SimpleMeterRegistry()), 5000, 30000);
     }
 
     private static void commonStubs(HeartbeatRepository repository, DomainRepository domains) {

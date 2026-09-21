@@ -170,6 +170,9 @@ jobs:
       - name: 前端 E2E 冒烟
         working-directory: web/work-platform
         run: npm run test:e2e
+      - name: 前端真实 BFF E2E
+        working-directory: web/work-platform
+        run: npm run test:e2e:live
       - name: 文档真相源校验（使用当前测试生成物）
         run: python scripts/doc-truth-check.py
       - name: 上传前端测试报告
