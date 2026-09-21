@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-21 09:36 · 源文件 frontend-functional-report.md</span>
+  <span class="meta">生成于 2026-09-21 10:43 · 源文件 frontend-functional-report.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -138,12 +138,12 @@
 </blockquote>
 <h2 id="1">1. 结论<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
 <ul>
-<li>测试文件：<strong>8 个</strong></li>
-<li>测试用例：<strong>19 passed / 0 failed</strong></li>
-<li>语句覆盖率：<strong>27.33%</strong>（1388 / 5077）</li>
-<li>分支覆盖率：<strong>73.92%</strong>（326 / 441）</li>
-<li>函数覆盖率：<strong>27.22%</strong>（49 / 180）</li>
-<li>行覆盖率：<strong>27.33%</strong>（1388 / 5077）</li>
+<li>测试文件：<strong>10 个</strong></li>
+<li>测试用例：<strong>27 passed / 0 failed</strong></li>
+<li>语句覆盖率：<strong>31.72%</strong>（1768 / 5573）</li>
+<li>分支覆盖率：<strong>70.09%</strong>（422 / 602）</li>
+<li>函数覆盖率：<strong>31.65%</strong>（63 / 199）</li>
+<li>行覆盖率：<strong>31.72%</strong>（1768 / 5573）</li>
 <li>覆盖率门禁：行/语句 25% · 函数 20% · 分支 65% · <code>npm run test:report</code> 强制执行</li>
 <li>类型检查：<code>npm run typecheck</code> 通过</li>
 <li>生产构建：<code>npm run build</code> 通过（仅有 Element Plus 主包 &gt;500 kB 的体积提示）</li>
@@ -165,9 +165,14 @@
 <td>降级记录去重、恢复清理、20 条上限</td>
 </tr>
 <tr>
+<td><code>src/config/modules.test.ts</code></td>
+<td style="text-align: right;">3</td>
+<td>置顶入口、规划状态、分组合法性</td>
+</tr>
+<tr>
 <td><code>src/api/provider.test.ts</code></td>
-<td style="text-align: right;">2</td>
-<td>优先读取 <code>/collab/domains</code>、真实域替换固定 <code>DOM-2048</code>、无真实域时保留 Mock 且不请求演示域、BFF 映射结果消费</td>
+<td style="text-align: right;">5</td>
+<td>真实协作域选择、Phase 6 空态、侧栏 Agent 在线、模型运行态、Prometheus 指标总览</td>
 </tr>
 <tr>
 <td><code>src/stores/app.test.ts</code></td>
@@ -195,6 +200,11 @@
 <td>模型配置不可用态、OpenRouter 兼容配置渲染与角色装配显示</td>
 </tr>
 <tr>
+<td><code>src/views/MetricsView.test.ts</code></td>
+<td style="text-align: right;">2</td>
+<td>Prometheus / Micrometer 指标页面、不可读显式降级</td>
+</tr>
+<tr>
 <td><code>src/views/ServicesView.test.ts</code></td>
 <td style="text-align: right;">2</td>
 <td>应用服务控制台真实状态、托管/外部区分、BFF 降级只读态</td>
@@ -206,6 +216,8 @@
 <li>组件测试暴露出 <code>MiddlewareView</code> 在 <code>enabled=false</code> 且无 <code>summary</code> 时会渲染崩溃；已改为安全读取 summary 并增加回归用例。</li>
 <li>真实协作域接线最初在 provider 测试中错误模拟了 collab-bus 原始结构，而 BFF 才是字段映射边界；已改为模拟 BFF 已映射契约，并断言 <code>/collab/domains</code> 与真实域详情均被调用。</li>
 <li><code>provider.ts</code> 的真实域列表解析曾产生隐式 <code>any</code>，已补显式类型，恢复类型检查与生产构建通过。</li>
+<li>左侧菜单从平铺入口改为分组折叠后，原 E2E 直接点击隐藏子项的路径失效；已把测试改为先展开所属分组，并锁定“常用入口 → 分组 → 子项”的新交互。</li>
+<li>“多模型管理”原模型池运行态与路由策略为 Mock；现已改为 BFF 聚合真实配置、探测、Token 用量和 Prometheus 指标，成本/质量/配额/队列显式标记未接入。</li>
 </ol>
 <h2 id="4">4. 覆盖率摘要<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
 <table>
@@ -226,9 +238,15 @@
 </tr>
 <tr>
 <td><code>src/api/provider.ts</code></td>
-<td style="text-align: right;">20.14%</td>
-<td style="text-align: right;">42.55%</td>
-<td>新增 Phase 6 <code>available=false</code> 到空列表的诚实降级；其余 API 分支待扩测</td>
+<td style="text-align: right;">23.5%</td>
+<td style="text-align: right;">34.24%</td>
+<td>新增 Phase 6、Agent 在线、模型运行态与 Prometheus 指标读路径；其余 API 分支待扩测</td>
+</tr>
+<tr>
+<td><code>src/config/modules.ts</code></td>
+<td style="text-align: right;">100%</td>
+<td style="text-align: right;">100%</td>
+<td>菜单置顶、分组与成熟度元数据</td>
 </tr>
 <tr>
 <td><code>src/stores/app.ts</code></td>
@@ -256,9 +274,15 @@
 </tr>
 <tr>
 <td><code>src/views/ModelsView.vue</code></td>
-<td style="text-align: right;">67.16%</td>
-<td style="text-align: right;">71.12%</td>
-<td>模型配置主路径</td>
+<td style="text-align: right;">71.27%</td>
+<td style="text-align: right;">67%</td>
+<td>模型配置、真实运行态、探测与用量展示、统一操作按钮结构</td>
+</tr>
+<tr>
+<td><code>src/views/MetricsView.vue</code></td>
+<td style="text-align: right;">96.68%</td>
+<td style="text-align: right;">75%</td>
+<td>Prometheus target、HTTP、JVM、Hikari、业务指标与告警</td>
 </tr>
 <tr>
 <td><code>src/views/ServicesView.vue</code></td>

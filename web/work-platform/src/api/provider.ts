@@ -10,7 +10,7 @@ import {
 import { reportApiOk, reportDegrade } from './status'
 import type {
   BrainAnswer, ExecutionOverview, ExecutionTool, KnowledgeHit, KnowledgeIngestInput, KnowledgeIngestResult, KnowledgeSearchResult, KnowledgeStats,
-  ManagedServiceOverview, MiddlewareNode, MiddlewareOverview, ModelConfigList, ModelConfigUpsert, ModelProbeResult, ModelUsage, ModelWriteResult, OptimizationSuggestion, SessionContext, SessionInfo, SessionStats,
+  ManagedServiceOverview, MetricsOverview, MiddlewareNode, MiddlewareOverview, ModelConfigList, ModelConfigUpsert, ModelProbeResult, ModelRuntimeOverview, ModelUsage, ModelWriteResult, OnlineAgent, OptimizationSuggestion, SessionContext, SessionInfo, SessionStats,
   SuggestionExecution, ToolExecutionResult, ToolImpactReport, TracingOverview,
 } from '../types'
 const source = (import.meta.env.VITE_DATA_SOURCE || 'mock') as 'mock' | 'api'
@@ -758,6 +758,74 @@ export const dataProvider = {
     }
   },
 
+  /**
+   * 指标监控总览。BFF 只接受白名单 job/window，前端不接触任意 PromQL。
+   */
+  async getMetricsOverview(job = '', window = '5m'): Promise<MetricsOverview> {
+    const empty = (reason: string): MetricsOverview => ({
+      available: false,
+      reason,
+      window,
+      selected_job: job || 'all',
+      summary: {
+        targets_up: 0, targets_total: 0, active_alerts: 0,
+        qps: null, error_rate: null, avg_latency_ms: null, max_latency_ms: null,
+        jvm_heap_used_bytes: null, jvm_heap_max_bytes: null, jvm_heap_used_ratio: null,
+        jvm_threads: null, gc_pause_avg_ms: null, gc_pause_max_ms: null,
+        hikari_active: null, hikari_max: null, hikari_pending: null,
+        llm_qps: null, llm_failure_rate: null, llm_degraded_qps: null,
+        collab_domains: null, heartbeat_pending: null,
+        tool_qps: null, tool_failure_rate: null, tool_circuit_open_qps: null,
+      },
+      services: [], targets: [], alerts: [],
+      support: { http_p95: false, http_p95_reason: 'Prometheus 不可达', gc_p95: false, gc_p95_reason: 'Prometheus 不可达', metric_scope: 'system' },
+    })
+    if (source !== 'api') return empty('mock 数据源不提供真实监控指标')
+    try {
+      const payload = unwrapBody(await api.get('/metrics/overview', { params: { job, window } })) as MetricsOverview
+      if (!payload || typeof payload !== 'object' || !('available' in payload)) {
+        reportDegrade('metrics', '响应缺少 available 字段')
+        return empty('响应结构不符合契约')
+      }
+      if (payload.available === false) reportDegrade('metrics', String(payload.reason || 'Prometheus 不可达'))
+      else reportApiOk('metrics')
+      return {
+        ...payload,
+        services: Array.isArray(payload.services) ? payload.services : [],
+        targets: Array.isArray(payload.targets) ? payload.targets : [],
+        alerts: Array.isArray(payload.alerts) ? payload.alerts : [],
+      }
+    } catch (error) {
+      const reason = (error as Error)?.message || 'BFF /metrics/overview 不可达'
+      reportDegrade('metrics', reason)
+      return empty(`BFF /metrics/overview 不可达（${reason}）`)
+    }
+  },
+
+  /**
+   * 左侧栏 Agent 在线面板专用读路径。
+   * API 模式下从 `/agents/online` 获取 collab-bus 真实心跳派生成员；
+   * 注册表 / 总线不可用时返回空列表并登记降级，避免侧栏继续显示固定 Mock Agent。
+   */
+  async getOnlineAgents(): Promise<{ available: boolean; items: OnlineAgent[]; reason?: string }> {
+    if (source === 'mock') return { available: true, items: onlineAgents }
+    try {
+      const payload = unwrapBody(await api.get('/agents/online'))
+      if (payload?.available === false) {
+        const reason = String(payload.reason || 'Agent 在线数据不可用')
+        reportDegrade('online_agents', reason)
+        return { available: false, items: [], reason }
+      }
+      const items = Array.isArray(payload) ? payload : (Array.isArray(payload?.items) ? payload.items : [])
+      reportApiOk('online_agents')
+      return { available: true, items }
+    } catch (error) {
+      const reason = (error as Error)?.message || 'Agent 在线数据不可达'
+      reportDegrade('online_agents', reason)
+      return { available: false, items: [], reason }
+    }
+  },
+
   async getWorkbenchData() {
     if (source === 'mock') return mockWorkbench
 
@@ -914,6 +982,45 @@ export const dataProvider = {
       const reason = (error as Error)?.message || 'BFF /models/usage 不可达'
       reportDegrade('models_usage', reason)
       return mockModelUsageUnavailable(`BFF /models/usage 不可达（${reason}）`)
+    }
+  },
+
+  /**
+   * 真实模型运行态：BFF 聚合配置、探测、Token 用量和 Prometheus 指标。
+   * cost/quality/quota/queue 无数据源时保持 unavailable，不由 Mock 回填。
+   */
+  async getModelRuntime(days = 7): Promise<ModelRuntimeOverview> {
+    const unavailable = (reason: string): ModelRuntimeOverview => ({
+      available: false, reason, items: [], routing: [],
+      window: { days: Math.max(1, Math.min(Number(days) || 7, 90)) },
+    })
+    if (source !== 'api') return unavailable('mock 数据源不提供真实模型运行态')
+    try {
+      const payload = unwrapBody(await api.get('/models/runtime', { params: { days } })) as ModelRuntimeOverview
+      if (!payload || typeof payload !== 'object' || !('available' in payload)) {
+        reportDegrade('models_runtime', '响应缺少 available 字段')
+        return unavailable('响应结构不符合契约')
+      }
+      if (payload.available === false) {
+        reportDegrade('models_runtime', String(payload.reason || '模型运行态不可用'))
+      } else {
+        reportApiOk('models_runtime')
+        if (payload.sources?.usage?.available === false) {
+          reportDegrade('models_runtime_usage', String(payload.sources.usage.reason || '真实用量不可读'))
+        }
+        if (payload.sources?.prometheus?.available === false) {
+          reportDegrade('models_runtime_prometheus', String(payload.sources.prometheus.reason || 'Prometheus 不可达'))
+        }
+      }
+      return {
+        ...payload,
+        items: Array.isArray(payload.items) ? payload.items : [],
+        routing: Array.isArray(payload.routing) ? payload.routing : [],
+      }
+    } catch (error) {
+      const reason = (error as Error)?.message || 'BFF /models/runtime 不可达'
+      reportDegrade('models_runtime', reason)
+      return unavailable(`BFF /models/runtime 不可达（${reason}）`)
     }
   },
 

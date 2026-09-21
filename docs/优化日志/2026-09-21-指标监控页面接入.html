@@ -1,0 +1,168 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>2026-09-21 指标监控页面接入 Prometheus / Micrometer</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-21 10:11 · 源文件 2026-09-21-指标监控页面接入.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#_1">目标</a></li>
+<li><a href="#_2">实现</a></li>
+<li><a href="#_3">验证</a></li>
+<li><a href="#_4">后续增强</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="2026-09-21-prometheus-micrometer">2026-09-21 指标监控页面接入 Prometheus / Micrometer<a class="headerlink" href="#2026-09-21-prometheus-micrometer" title="Permanent link">&para;</a></h1>
+<h2 id="_1">目标<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
+<p>在观测区新增“指标监控”页面，用固定 PromQL 模板展示系统级 Prometheus / Micrometer 指标，不把 Prometheus 查询面直接暴露给浏览器。</p>
+<h2 id="_2">实现<a class="headerlink" href="#_2" title="Permanent link">&para;</a></h2>
+<ol>
+<li>新增 <code>GET /api/wp/metrics/overview</code>：
+   - Target 健康与最近抓取错误；
+   - HTTP QPS、错误率、平均/最大延迟；
+   - JVM 堆、线程、GC；
+   - HikariCP 活跃/最大/等待连接；
+   - LLM、Collab、Tool 业务指标；
+   - Prometheus 活动告警。</li>
+<li>job 与 window 都使用白名单；不接受任意 PromQL。</li>
+<li>查询结果缓存 10 秒，避免前端短轮询放大 Prometheus 压力。</li>
+<li>新增观测区菜单“指标监控”和 <code>MetricsView.vue</code>。</li>
+<li>HTTP P95 / GC P95 未暴露 histogram bucket 时明确标记“未启用”，不伪造分位值。</li>
+<li>指标不带 tenant 标签，因此明确标记为 <code>system</code> 级指标，不伪装多租户隔离。</li>
+</ol>
+<h2 id="_3">验证<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
+<ul>
+<li>wp-bff：120/120 通过；</li>
+<li>前端：27/27 通过；</li>
+<li>TypeScript / 生产构建：通过；</li>
+<li>Playwright Mock：2/2；Live API：1/1；</li>
+<li>契约：implemented 51 路径 / 55 方法，planned 20，0 FAIL；</li>
+<li>真实 Prometheus：8/8 targets up，指标接口返回 HTTP、JVM、Hikari 与告警数据；</li>
+<li>真实响应：<code>docs/test-reports/metrics/2026-09-21/overview.json</code>。</li>
+</ul>
+<h2 id="_4">后续增强<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
+<ul>
+<li>启用 <code>http.server.requests</code> 与 GC histograms 后增加 P95/P99；</li>
+<li>增加 <code>query_range</code> 时间序列图和 SLO/错误预算；</li>
+<li>增加管理员权限与指标访问审计；</li>
+<li>业务指标稳定后增加 LLM、Tool、Collab 独立趋势面板。</li>
+</ul></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

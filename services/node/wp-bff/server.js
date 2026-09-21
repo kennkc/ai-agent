@@ -325,6 +325,8 @@ const IMPLEMENTED_ENDPOINTS = [
   // WB-10 多模型管理面板：前台可配置不同功能角色的大模型接口（nlp-service /api/nlp/models）
   { method: 'GET', path: '/models' },
   { method: 'GET', path: '/models/usage' },
+  { method: 'GET', path: '/models/runtime' },
+  { method: 'GET', path: '/metrics/overview' },
   { method: 'POST', path: '/models' },
   { method: 'POST', path: '/models/reload' },
   { method: 'PATCH', path: '/models/{model_id}' },
@@ -418,6 +420,9 @@ const DEFAULT_SESSION_URL = String(process.env.WP_BFF_SESSION_URL || 'http://127
 /** 四肢层（tool-executor）地址；未启动时 /tools 系列如实返回 available=false */
 const DEFAULT_TOOL_URL = String(process.env.WP_BFF_TOOL_URL || 'http://127.0.0.1:8084').replace(/\/+$/, '')
 const DEFAULT_COLLAB_URL = String(process.env.WP_BFF_COLLAB_URL || 'http://127.0.0.1:8085').replace(/\/+$/, '')
+const DEFAULT_PROMETHEUS_URL = String(process.env.WP_BFF_PROMETHEUS_URL || 'http://127.0.0.1:9090').replace(/\/+$/, '')
+const METRIC_WINDOWS = new Set(['5m', '15m', '1h', '6h', '24h'])
+const METRIC_JOBS = new Set(['gateway-service', 'session-manager', 'sense-service', 'body-service', 'tool-executor', 'collab-bus', 'nlp-service', 'wp-bff'])
 const DEFAULT_ALERT_TOKEN = String(process.env.WP_BFF_ALERT_TOKEN || 'lifeform-local-alertmanager')
 
 const START_TIMEOUT_MS = 180000
@@ -520,6 +525,8 @@ function createServer(options = {}) {
   const sessionUrl = String(options.sessionUrl || DEFAULT_SESSION_URL).replace(/\/+$/, '')
   const toolUrl = String(options.toolUrl || DEFAULT_TOOL_URL).replace(/\/+$/, '')
   const collabUrl = String(options.collabUrl || DEFAULT_COLLAB_URL).replace(/\/+$/, '')
+  const prometheusUrl = String(options.prometheusUrl || DEFAULT_PROMETHEUS_URL).replace(/\/+$/, '')
+  const metricsCache = new Map()
   const alertToken = String(options.alertToken || DEFAULT_ALERT_TOKEN)
   const alertPath = options.alertPath || path.join(__dirname, 'logs', 'wp-bff-alerts.jsonl')
   const recentAlerts = []
@@ -1669,6 +1676,392 @@ function createServer(options = {}) {
     return send(req, res, 200, { data: { available: true, tenant_id: tenantId, ...outcome.data } })
   }
 
+  function prometheusRoleValues(payload) {
+    const result = payload?.data?.result
+    const values = {}
+    if (!Array.isArray(result)) return values
+    for (const item of result) {
+      const role = String(item?.metric?.role || '').trim()
+      const value = Number(item?.value?.[1])
+      if (role && Number.isFinite(value)) values[role] = value
+    }
+    return values
+  }
+
+  async function fetchPrometheusRoleMetrics() {
+    const queries = {
+      qps: 'sum by (role) (rate(lifeform_llm_calls_total[5m]))',
+      failure_qps: 'sum by (role) (rate(lifeform_llm_calls_total{outcome="failure"}[5m]))',
+      p95_latency_seconds: 'histogram_quantile(0.95, sum by (le, role) (rate(lifeform_llm_latency_seconds_bucket[5m])))',
+    }
+    const entries = await Promise.all(Object.entries(queries).map(async ([key, query]) => {
+      const payload = await fetchJson(
+        `${prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`, 3000,
+      ).catch(() => null)
+      return [key, prometheusRoleValues(payload), payload != null]
+    }))
+    const byRole = {}
+    const availability = {}
+    for (const [key, values, ok] of entries) {
+      availability[key] = ok
+      for (const [role, value] of Object.entries(values)) {
+        byRole[role] = { ...(byRole[role] || {}), [key]: value }
+      }
+    }
+    for (const role of Object.keys(byRole)) {
+      const qps = Number(byRole[role].qps || 0)
+      const failureQps = Number(byRole[role].failure_qps || 0)
+      byRole[role].failure_rate = qps > 0 ? failureQps / qps : null
+      byRole[role].p95_latency_ms = byRole[role].p95_latency_seconds != null
+        ? Math.round(Number(byRole[role].p95_latency_seconds) * 1000)
+        : null
+    }
+    return {
+      available: Object.values(availability).some(Boolean),
+      complete: Object.values(availability).every(Boolean),
+      availability,
+      by_role: byRole,
+      reason: Object.values(availability).some(Boolean) ? '' : 'Prometheus 不可达',
+    }
+  }
+
+  /**
+   * 模型运行态聚合：配置 / 探测 / 用量 / Prometheus 指标均为真实来源。
+   * 成本、质量、配额没有可信数据源时显式标记未接入，不用 Mock 填满页面。
+   */
+  async function handleModelRuntime(req, res, days) {
+    const tenantId = String(req.headers['x-tenant-id'] || 'default')
+    const window = Math.max(1, Math.min(Number(days) || 7, 90))
+    const headers = { 'X-Tenant-Id': tenantId }
+    const [configOutcome, usageOutcome, prometheus] = await Promise.all([
+      jsonRequestDetailed(modelsTarget(''), { headers }),
+      jsonRequestDetailed(modelsTarget(`/usage?days=${window}`), { headers }),
+      fetchPrometheusRoleMetrics(),
+    ])
+    if (!configOutcome.ok || !configOutcome.data) {
+      return send(req, res, 200, {
+        data: {
+          available: false,
+          tenant_id: tenantId,
+          window: { days: window },
+          items: [],
+          routing: [],
+          reason: `大脑层不可用：模型运行态不可读（reason=${configOutcome.reason || 'unreachable'}）`,
+        },
+      })
+    }
+    const config = configOutcome.data || {}
+    const usage = usageOutcome.ok && usageOutcome.data ? usageOutcome.data : null
+    const roleLabels = Object.fromEntries((config.roles || []).map(role => [role.key, role.label || role.key]))
+    const usageByModel = usage?.by_model || {}
+    const totalAttempts = Number(usage?.totals?.attempts || 0)
+    const items = (config.items || []).map(item => {
+      const counters = usageByModel?.[item.model] || null
+      const calls = Number(counters?.calls || 0)
+      const failures = Number(counters?.failures || 0)
+      const attempts = calls + failures
+      const latencySum = Number(counters?.latency_ms_sum || 0)
+      const roleMetrics = prometheus.by_role?.[item.config_key] || {}
+      const probeState = item.last_probe_ok === true ? 'passed'
+        : item.last_probe_ok === false ? 'failed' : 'unverified'
+      const usageFailureRate = attempts > 0 ? failures / attempts : null
+      const effectiveFailureRate = usageFailureRate ?? roleMetrics.failure_rate ?? null
+      const runtimeState = !item.enabled ? 'disabled'
+        : probeState === 'failed' ? 'offline'
+        : effectiveFailureRate != null && effectiveFailureRate > 0.1 ? 'degraded'
+        : probeState === 'unverified' ? 'unverified' : 'active'
+      return {
+        config_id: Number(item.id),
+        config_key: String(item.config_key || ''),
+        role_label: roleLabels[item.config_key] || item.config_key || '',
+        name: String(item.name || ''),
+        provider: String(item.provider || ''),
+        model: String(item.model || ''),
+        tier: String(item.tier || ''),
+        enabled: Boolean(item.enabled),
+        routing_weight: Number(item.routing_weight || 0),
+        runtime_state: runtimeState,
+        probe: {
+          state: probeState,
+          ok: item.last_probe_ok ?? null,
+          at: item.last_probe_at || null,
+          latency_ms: item.last_probe_latency_ms ?? null,
+          error: item.last_probe_error || '',
+        },
+        usage: counters ? {
+          calls,
+          failures,
+          attempts,
+          success_rate: attempts > 0 ? calls / attempts : null,
+          tokens: Number(counters.prompt_tokens || 0) + Number(counters.completion_tokens || 0),
+          avg_latency_ms: attempts > 0 ? Math.round(latencySum / attempts) : null,
+          share: totalAttempts > 0 ? attempts / totalAttempts : null,
+        } : null,
+        prometheus: Object.keys(roleMetrics).length ? roleMetrics : null,
+      }
+    })
+    const routing = Object.entries(config.by_role || {}).map(([role, configs]) => {
+      const enabled = (configs || [])
+        .filter(item => item.enabled)
+        .slice()
+        .sort((a, b) => (b.routing_weight || 0) - (a.routing_weight || 0) || a.id - b.id)
+      const counters = usage?.by_role?.[role] || null
+      const attempts = Number(counters?.calls || 0) + Number(counters?.failures || 0)
+      return {
+        role,
+        role_label: roleLabels[role] || role,
+        mode: 'role_weight_fallback',
+        primary_config_id: enabled[0]?.id ?? null,
+        candidates: enabled.map(item => ({
+          config_id: Number(item.id),
+          name: String(item.name || ''),
+          provider: String(item.provider || ''),
+          model: String(item.model || ''),
+          routing_weight: Number(item.routing_weight || 0),
+          probe_state: item.last_probe_ok === true ? 'passed' : item.last_probe_ok === false ? 'failed' : 'unverified',
+        })),
+        usage: counters ? {
+          calls: Number(counters.calls || 0),
+          failures: Number(counters.failures || 0),
+          attempts,
+          avg_latency_ms: attempts > 0 ? Math.round(Number(counters.latency_ms_sum || 0) / attempts) : null,
+        } : null,
+      }
+    })
+    return send(req, res, 200, {
+      data: {
+        available: true,
+        tenant_id: tenantId,
+        window: { days: window },
+        generated_at: new Date().toISOString(),
+        sources: {
+          config: { available: true, backend: config.storage?.backend || 'unknown', degraded: Boolean(config.storage?.degraded) },
+          usage: {
+            available: Boolean(usage),
+            degraded: Boolean(usage?.storage?.degraded),
+            reason: usage ? '' : String(usageOutcome.reason || 'unreachable'),
+          },
+          prometheus,
+        },
+        items,
+        routing,
+        unsupported_fields: {
+          cost: { available: false, reason: 'price_metadata_not_configured' },
+          quality: { available: false, reason: 'evaluation_not_connected' },
+          quota: { available: false, reason: 'provider_quota_not_connected' },
+          queue: { available: false, reason: 'runtime_gauge_not_connected' },
+        },
+      },
+    })
+  }
+
+  function normalizeMetricWindow(value) {
+    const candidate = String(value || '5m')
+    return METRIC_WINDOWS.has(candidate) ? candidate : '5m'
+  }
+
+  function normalizeMetricJob(value) {
+    const candidate = String(value || '').trim()
+    return METRIC_JOBS.has(candidate) ? candidate : ''
+  }
+
+  function metricSelector(job, extra = '') {
+    const labels = []
+    if (job) labels.push(`job="${job}"`)
+    if (extra) labels.push(extra)
+    return labels.length ? `{${labels.join(',')}}` : ''
+  }
+
+  function prometheusVectorMap(payload, label = 'job') {
+    const result = payload?.data?.result
+    const values = {}
+    if (!Array.isArray(result)) return values
+    for (const item of result) {
+      const key = String(item?.metric?.[label] || '').trim()
+      const value = Number(item?.value?.[1])
+      if (key && Number.isFinite(value)) values[key] = value
+    }
+    return values
+  }
+
+  function prometheusScalarValue(payload) {
+    const result = payload?.data?.result
+    if (!Array.isArray(result) || !result.length) return null
+    const value = Number(result[0]?.value?.[1])
+    return Number.isFinite(value) ? value : null
+  }
+
+  async function metricQuery(query) {
+    return fetchJson(`${prometheusUrl}/api/v1/query?query=${encodeURIComponent(query)}`, 3000)
+      .catch(() => null)
+  }
+
+  /**
+   * 指标监控聚合页首期实现：全部使用固定 PromQL 模板。
+   * 前端只传白名单 job 与窗口，不接收任意 PromQL，避免把 Prometheus 管理面暴露给浏览器。
+   */
+  async function handleMetricsOverview(req, res, rawJob, rawWindow) {
+    const job = normalizeMetricJob(rawJob)
+    const window = normalizeMetricWindow(rawWindow)
+    const cacheKey = `${job || 'all'}|${window}`
+    const cached = metricsCache.get(cacheKey)
+    if (cached && Date.now() - cached.at < 10000) {
+      return send(req, res, 200, { data: cached.data })
+    }
+    const selector = metricSelector(job)
+    const requests = `http_server_requests_seconds_count${selector}`
+    const latencySum = `http_server_requests_seconds_sum${selector}`
+    const latencyMax = `http_server_requests_seconds_max${selector}`
+    const gcCount = `jvm_gc_pause_seconds_count${selector}`
+    const gcSum = `jvm_gc_pause_seconds_sum${selector}`
+    const gcMax = `jvm_gc_pause_seconds_max${selector}`
+    const heapUsed = `jvm_memory_used_bytes${metricSelector(job, 'area="heap"')}`
+    const heapMax = `jvm_memory_max_bytes${metricSelector(job, 'area="heap"')}`
+    const queries = {
+      qps: `sum by (job) (rate(${requests}[${window}]))`,
+      errors: `sum by (job) (rate(http_server_requests_seconds_count${metricSelector(job, 'outcome=~"SERVER_ERROR|UNKNOWN"')}[${window}]))`,
+      avg_latency: `sum by (job) (rate(${latencySum}[${window}])) / clamp_min(sum by (job) (rate(${requests}[${window}])), 0.000001)`,
+      max_latency: `max by (job) (max_over_time(${latencyMax}[${window}]))`,
+      heap_used: `sum by (job) (${heapUsed})`,
+      heap_max: `sum by (job) (${heapMax})`,
+      threads: `sum by (job) (jvm_threads_live_threads${selector})`,
+      hikari_active: `sum by (job) (hikaricp_connections_active${selector})`,
+      hikari_max: `sum by (job) (hikaricp_connections_max${selector})`,
+      hikari_pending: `sum by (job) (hikaricp_connections_pending${selector})`,
+      gc_rate: `sum by (job) (rate(${gcCount}[${window}]))`,
+      gc_pause_avg: `sum by (job) (rate(${gcSum}[${window}])) / clamp_min(sum by (job) (rate(${gcCount}[${window}])), 0.000001)`,
+      gc_pause_max: `max by (job) (max_over_time(${gcMax}[${window}]))`,
+      llm_qps: `sum(rate(lifeform_llm_calls_total${selector}[${window}]))`,
+      llm_failures: `sum(rate(lifeform_llm_calls_total${metricSelector(job, 'outcome="failure"')}[${window}]))`,
+      llm_degraded: `sum(rate(lifeform_llm_calls_total${metricSelector(job, 'degraded="true"')}[${window}]))`,
+      collab_domains: `sum(lifeform_collab_active_domains${selector})`,
+      heartbeat_pending: `sum(lifeform_collab_heartbeat_pending${selector})`,
+      tool_qps: `sum(rate(lifeform_tool_calls_total${selector}[${window}]))`,
+      tool_failures: `sum(rate(lifeform_tool_calls_total${metricSelector(job, 'outcome="failure"')}[${window}]))`,
+      tool_circuit_open: `sum(rate(lifeform_tool_circuit_open_total${selector}[${window}]))`,
+      http_histogram_count: `count(http_server_requests_seconds_bucket${selector})`,
+    }
+    const entries = await Promise.all(Object.entries(queries).map(async ([key, query]) => {
+      const payload = await metricQuery(query)
+      return [key, payload]
+    }))
+    const payloads = Object.fromEntries(entries)
+    const maps = {}
+    for (const key of [
+      'qps', 'errors', 'avg_latency', 'max_latency', 'heap_used', 'heap_max', 'threads',
+      'hikari_active', 'hikari_max', 'hikari_pending', 'gc_rate', 'gc_pause_avg', 'gc_pause_max',
+    ]) maps[key] = prometheusVectorMap(payloads[key])
+    const scalar = key => prometheusScalarValue(payloads[key])
+    const [targetsPayload, alertsPayload] = await Promise.all([
+      fetchJson(`${prometheusUrl}/api/v1/targets?state=any`, 3000).catch(() => null),
+      fetchJson(`${prometheusUrl}/api/v1/alerts`, 3000).catch(() => null),
+    ])
+    const targetItems = Array.isArray(targetsPayload?.data?.activeTargets)
+      ? targetsPayload.data.activeTargets
+      : []
+    const alerts = Array.isArray(alertsPayload?.data?.alerts) ? alertsPayload.data.alerts : []
+    const targetHealth = {}
+    for (const target of targetItems) {
+      const targetJob = String(target?.labels?.job || '')
+      if (targetJob) targetHealth[targetJob] = String(target?.health || 'unknown')
+    }
+    const serviceJobs = [...new Set([...Object.keys(targetHealth), ...Object.keys(maps.qps)])].sort()
+    const services = serviceJobs.map(serviceJob => {
+      const used = maps.heap_used[serviceJob]
+      const maximum = maps.heap_max[serviceJob]
+      return {
+        job: serviceJob,
+        health: targetHealth[serviceJob] || 'unknown',
+        qps: maps.qps[serviceJob] ?? null,
+        error_rate: maps.qps[serviceJob] > 0 ? (maps.errors[serviceJob] || 0) / maps.qps[serviceJob] : null,
+        avg_latency_ms: maps.avg_latency[serviceJob] != null ? maps.avg_latency[serviceJob] * 1000 : null,
+        max_latency_ms: maps.max_latency[serviceJob] != null ? maps.max_latency[serviceJob] * 1000 : null,
+        heap_used_bytes: used ?? null,
+        heap_max_bytes: maximum ?? null,
+        heap_used_ratio: used != null && maximum > 0 ? used / maximum : null,
+        threads: maps.threads[serviceJob] ?? null,
+        hikari_active: maps.hikari_active[serviceJob] ?? null,
+        hikari_max: maps.hikari_max[serviceJob] ?? null,
+        hikari_pending: maps.hikari_pending[serviceJob] ?? null,
+      }
+    })
+    const totalQps = Object.values(maps.qps).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    const totalErrors = Object.values(maps.errors).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    const totalLatencySeconds = Object.values(maps.avg_latency).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    const heapUsedTotal = Object.values(maps.heap_used).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    const heapMaxTotal = Object.values(maps.heap_max).reduce((sum, value) => sum + (Number(value) || 0), 0)
+    const targetsUp = targetItems.filter(target => target?.health === 'up').length
+    const prometheusAvailable = targetsPayload != null || alertsPayload != null
+      || entries.some(([, payload]) => payload != null)
+    const data = {
+      available: prometheusAvailable,
+      reason: prometheusAvailable ? '' : 'Prometheus 不可达',
+      window,
+      selected_job: job || 'all',
+      generated_at: new Date().toISOString(),
+      sources: {
+        prometheus: { available: prometheusAvailable, url: prometheusUrl },
+        targets: { available: targetsPayload != null, total: targetItems.length, up: targetsUp },
+        alerts: { available: alertsPayload != null, active: alerts.length },
+      },
+      summary: {
+        targets_up: targetsUp,
+        targets_total: targetItems.length,
+        active_alerts: alerts.length,
+        qps: totalQps || null,
+        error_rate: totalQps > 0 ? totalErrors / totalQps : null,
+        avg_latency_ms: totalQps > 0 ? (totalLatencySeconds / totalQps) * 1000 : null,
+        max_latency_ms: Object.keys(maps.max_latency).length
+          ? Math.max(...Object.values(maps.max_latency).map(value => Number(value) * 1000)) : null,
+        jvm_heap_used_bytes: heapUsedTotal || null,
+        jvm_heap_max_bytes: heapMaxTotal || null,
+        jvm_heap_used_ratio: heapMaxTotal > 0 ? heapUsedTotal / heapMaxTotal : null,
+        jvm_threads: Object.values(maps.threads).reduce((sum, value) => sum + (Number(value) || 0), 0) || null,
+        gc_pause_avg_ms: scalar('gc_pause_avg') != null ? scalar('gc_pause_avg') * 1000 : null,
+        gc_pause_max_ms: scalar('gc_pause_max') != null ? scalar('gc_pause_max') * 1000 : null,
+        hikari_active: Object.values(maps.hikari_active).reduce((sum, value) => sum + (Number(value) || 0), 0) || null,
+        hikari_max: Object.values(maps.hikari_max).reduce((sum, value) => sum + (Number(value) || 0), 0) || null,
+        hikari_pending: Object.values(maps.hikari_pending).reduce((sum, value) => sum + (Number(value) || 0), 0) || null,
+        llm_qps: scalar('llm_qps'),
+        llm_failure_rate: scalar('llm_qps') > 0 ? scalar('llm_failures') / scalar('llm_qps') : null,
+        llm_degraded_qps: scalar('llm_degraded'),
+        collab_domains: scalar('collab_domains'),
+        heartbeat_pending: scalar('heartbeat_pending'),
+        tool_qps: scalar('tool_qps'),
+        tool_failure_rate: scalar('tool_qps') > 0 ? scalar('tool_failures') / scalar('tool_qps') : null,
+        tool_circuit_open_qps: scalar('tool_circuit_open'),
+      },
+      services,
+      targets: targetItems.map(target => ({
+        job: String(target?.labels?.job || ''),
+        instance: String(target?.labels?.instance || ''),
+        health: String(target?.health || 'unknown'),
+        scrape_url: String(target?.scrapeUrl || ''),
+        last_error: String(target?.lastError || ''),
+        last_scrape_at: target?.lastScrape || null,
+      })).sort((a, b) => a.job.localeCompare(b.job)),
+      alerts: alerts.slice(0, 20).map(alert => ({
+        name: String(alert?.labels?.alertname || ''),
+        severity: String(alert?.labels?.severity || ''),
+        job: String(alert?.labels?.job || ''),
+        instance: String(alert?.labels?.instance || ''),
+        state: String(alert?.status?.state || alert?.state || 'unknown'),
+        active_at: alert?.activeAt || null,
+        summary: String(alert?.annotations?.summary || ''),
+        description: String(alert?.annotations?.description || ''),
+      })),
+      support: {
+        http_p95: scalar('http_histogram_count') != null,
+        http_p95_reason: scalar('http_histogram_count') != null ? '' : 'HTTP histogram bucket 未暴露',
+        gc_p95: false,
+        gc_p95_reason: 'GC histogram bucket 未暴露',
+        metric_scope: 'system',
+      },
+    }
+    metricsCache.set(cacheKey, { at: Date.now(), data })
+    return send(req, res, 200, { data })
+  }
+
   async function handleModelCreate(req, res) {
     let payload
     try {
@@ -2379,6 +2772,9 @@ function createServer(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/wp/healthz') return handleHealthz(req, res)
     if (req.method === 'GET' && url.pathname === '/metrics') return handleMetrics(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/overview') return handleOverview(req, res)
+    if (req.method === 'GET' && url.pathname === '/api/wp/metrics/overview') {
+      return handleMetricsOverview(req, res, url.searchParams.get('job'), url.searchParams.get('window'))
+    }
     if (req.method === 'GET' && url.pathname === '/api/wp/middleware') return handleMiddleware(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/services') return handleAppServices(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/collab/domains') return handleCollabDomains(req, res)
@@ -2451,6 +2847,9 @@ function createServer(options = {}) {
     if (req.method === 'GET' && url.pathname === '/api/wp/models') return handleModels(req, res)
     if (req.method === 'GET' && url.pathname === '/api/wp/models/usage') {
       return handleModelUsage(req, res, url.searchParams.get('days'))
+    }
+    if (req.method === 'GET' && url.pathname === '/api/wp/models/runtime') {
+      return handleModelRuntime(req, res, url.searchParams.get('days'))
     }
     if (req.method === 'POST' && url.pathname === '/api/wp/models') return handleModelCreate(req, res)
     if (req.method === 'POST' && url.pathname === '/api/wp/models/reload') return handleModelsReload(req, res)

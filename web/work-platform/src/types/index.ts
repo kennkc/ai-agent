@@ -2,7 +2,7 @@ export type ModuleId =
   | 'overview' | 'vitals' | 'brain' | 'senses' | 'evolution' | 'collab'
   | 'tasks' | 'chat' | 'experts' | 'skills' | 'connectors' | 'automation' | 'models' | 'remote'
   | 'cases' | 'approvals'
-  | 'middleware' | 'services' | 'tracing' | 'knowledge' | 'execution'
+  | 'middleware' | 'services' | 'tracing' | 'metrics' | 'knowledge' | 'execution'
 
 export type ModuleGroup = '生命体区' | '工作台区' | '治理区' | '观测区'
 export type ThemeMode = 'dark' | 'light' | 'system'
@@ -16,6 +16,8 @@ export interface WorkModule {
   status: 'ready' | 'prototype' | 'planned'
   description: string
   icon: string
+  /** 高频入口固定在左侧菜单顶部，避免被分组折叠隐藏。 */
+  pinned?: boolean
 }
 
 export interface MetricCard {
@@ -563,6 +565,94 @@ export interface TracingOverview {
   checked_at: string
 }
 
+
+export interface MetricsSummary {
+  targets_up: number
+  targets_total: number
+  active_alerts: number
+  qps: number | null
+  error_rate: number | null
+  avg_latency_ms: number | null
+  max_latency_ms: number | null
+  jvm_heap_used_bytes: number | null
+  jvm_heap_max_bytes: number | null
+  jvm_heap_used_ratio: number | null
+  jvm_threads: number | null
+  gc_pause_avg_ms: number | null
+  gc_pause_max_ms: number | null
+  hikari_active: number | null
+  hikari_max: number | null
+  hikari_pending: number | null
+  llm_qps: number | null
+  llm_failure_rate: number | null
+  llm_degraded_qps: number | null
+  collab_domains: number | null
+  heartbeat_pending: number | null
+  tool_qps: number | null
+  tool_failure_rate: number | null
+  tool_circuit_open_qps: number | null
+}
+
+export interface MetricsServiceItem {
+  job: string
+  health: 'up' | 'down' | 'unknown' | string
+  qps: number | null
+  error_rate: number | null
+  avg_latency_ms: number | null
+  max_latency_ms: number | null
+  heap_used_bytes: number | null
+  heap_max_bytes: number | null
+  heap_used_ratio: number | null
+  threads: number | null
+  hikari_active: number | null
+  hikari_max: number | null
+  hikari_pending: number | null
+}
+
+export interface MetricsTargetItem {
+  job: string
+  instance: string
+  health: string
+  scrape_url: string
+  last_error: string
+  last_scrape_at: string | null
+}
+
+export interface MetricsAlertItem {
+  name: string
+  severity: string
+  job: string
+  instance: string
+  state: string
+  active_at: string | null
+  summary: string
+  description: string
+}
+
+export interface MetricsOverview {
+  available: boolean
+  reason?: string
+  window: string
+  selected_job: string
+  generated_at?: string
+  sources?: {
+    prometheus?: { available: boolean; url?: string }
+    targets?: { available: boolean; total: number; up: number }
+    alerts?: { available: boolean; active: number }
+  }
+  summary: MetricsSummary
+  services: MetricsServiceItem[]
+  targets: MetricsTargetItem[]
+  alerts: MetricsAlertItem[]
+  support?: {
+    http_p95: boolean
+    http_p95_reason: string
+    gc_p95: boolean
+    gc_p95_reason: string
+    metric_scope: 'system' | string
+  }
+}
+
 /** 三层存储中的一层（R-C03 躯体视图；available 为真实探针结果） */
 export interface KnowledgeTier {
   tier: 'HOT' | 'WARM' | 'COLD'
@@ -1064,6 +1154,89 @@ export interface ModelUsage {
   estimated_share?: number
   daily?: ModelUsageDaily[]
   storage?: { degraded?: boolean; backend?: string; reason?: string; note?: string }
+}
+
+export type ModelRuntimeState = 'active' | 'degraded' | 'offline' | 'unverified' | 'disabled'
+
+export interface ModelRuntimeUsage {
+  calls: number
+  failures: number
+  attempts: number
+  success_rate: number | null
+  tokens: number
+  avg_latency_ms: number | null
+  share: number | null
+}
+
+export interface ModelRuntimeItem {
+  config_id: number
+  config_key: string
+  role_label: string
+  name: string
+  provider: string
+  model: string
+  tier: string
+  enabled: boolean
+  routing_weight: number
+  runtime_state: ModelRuntimeState
+  probe: {
+    state: 'passed' | 'failed' | 'unverified'
+    ok: boolean | null
+    at: string | null
+    latency_ms: number | null
+    error: string
+  }
+  usage: ModelRuntimeUsage | null
+  prometheus: {
+    qps?: number
+    failure_qps?: number
+    failure_rate?: number | null
+    p95_latency_seconds?: number
+    p95_latency_ms?: number | null
+  } | null
+}
+
+export interface ModelRoutingEntry {
+  role: string
+  role_label: string
+  mode: 'role_weight_fallback'
+  primary_config_id: number | null
+  candidates: Array<{
+    config_id: number
+    name: string
+    provider: string
+    model: string
+    routing_weight: number
+    probe_state: 'passed' | 'failed' | 'unverified'
+  }>
+  usage: {
+    calls: number
+    failures: number
+    attempts: number
+    avg_latency_ms: number | null
+  } | null
+}
+
+export interface ModelRuntimeOverview {
+  available: boolean
+  tenant_id?: string
+  reason?: string
+  window?: { days: number; start?: string; end?: string }
+  generated_at?: string
+  sources?: {
+    config?: { available: boolean; backend?: string; degraded?: boolean }
+    usage?: { available: boolean; degraded?: boolean; reason?: string }
+    prometheus?: {
+      available: boolean
+      complete: boolean
+      availability: Record<string, boolean>
+      by_role: Record<string, Record<string, number | null>>
+      reason?: string
+    }
+  }
+  items: ModelRuntimeItem[]
+  routing: ModelRoutingEntry[]
+  unsupported_fields?: Record<string, { available: false; reason: string }>
 }
 
 /** 写路径结果（统一信封：成功回传 item/reload，失败带 code） */

@@ -1,0 +1,107 @@
+{
+  "data": {
+    "available": true,
+    "tenant_id": "default",
+    "window": {
+      "days": 7
+    },
+    "generated_at": "2026-09-21T02:02:37.712Z",
+    "sources": {
+      "config": {
+        "available": true,
+        "backend": "postgres",
+        "degraded": false
+      },
+      "usage": {
+        "available": true,
+        "degraded": false,
+        "reason": ""
+      },
+      "prometheus": {
+        "available": true,
+        "complete": true,
+        "availability": {
+          "qps": true,
+          "failure_qps": true,
+          "p95_latency_seconds": true
+        },
+        "by_role": {},
+        "reason": ""
+      }
+    },
+    "items": [],
+    "routing": [
+      {
+        "role": "intent",
+        "role_label": "意图识别",
+        "mode": "role_weight_fallback",
+        "primary_config_id": null,
+        "candidates": [],
+        "usage": null
+      },
+      {
+        "role": "embed",
+        "role_label": "向量嵌入",
+        "mode": "role_weight_fallback",
+        "primary_config_id": null,
+        "candidates": [],
+        "usage": null
+      },
+      {
+        "role": "rerank",
+        "role_label": "检索重排",
+        "mode": "role_weight_fallback",
+        "primary_config_id": null,
+        "candidates": [],
+        "usage": null
+      },
+      {
+        "role": "generate",
+        "role_label": "内容生成",
+        "mode": "role_weight_fallback",
+        "primary_config_id": null,
+        "candidates": [],
+        "usage": {
+          "calls": 3,
+          "failures": 0,
+          "attempts": 3,
+          "avg_latency_ms": 4980
+        }
+      },
+      {
+        "role": "plan",
+        "role_label": "复杂规划",
+        "mode": "role_weight_fallback",
+        "primary_config_id": null,
+        "candidates": [],
+        "usage": null
+      },
+      {
+        "role": "code",
+        "role_label": "代码生成",
+        "mode": "role_weight_fallback",
+        "primary_config_id": null,
+        "candidates": [],
+        "usage": null
+      }
+    ],
+    "unsupported_fields": {
+      "cost": {
+        "available": false,
+        "reason": "price_metadata_not_configured"
+      },
+      "quality": {
+        "available": false,
+        "reason": "evaluation_not_connected"
+      },
+      "quota": {
+        "available": false,
+        "reason": "provider_quota_not_connected"
+      },
+      "queue": {
+        "available": false,
+        "reason": "runtime_gauge_not_connected"
+      }
+    }
+  }
+}

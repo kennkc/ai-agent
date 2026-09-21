@@ -1611,6 +1611,28 @@ paths:
                       by_token_source: { type: object, description: 按 token 来源（真实/估算）聚合, additionalProperties: true }
                       daily: { type: array, items: { type: object }, description: 按日序列 }
                       reason: { type: string, description: available=false 时的原因 }
+  /models/runtime:
+    x-wp-status: implemented
+    get:
+      summary: 模型真实运行态聚合（配置 / 探测 / 用量 / Prometheus）
+      description: >
+        BFF 聚合 nlp-service `llm_model_config`、`llm_token_usage` 以及 Prometheus
+        `lifeform_llm_*` 指标。成本、质量、供应商配额、队列指标缺少可信数据源时返回
+        `unsupported_fields`，不使用 Mock 数值填充。
+      parameters:
+        - name: days
+          in: query
+          required: false
+          schema: { type: integer, minimum: 1, maximum: 90, default: 7 }
+        - name: X-Tenant-Id
+          in: header
+          required: false
+          schema: { type: string, default: default }
+      responses:
+        '200':
+          description: OK（available=false 时同样返回明确原因）
+        '405':
+          $ref: '#/components/responses/ErrorEnvelope'
   /models/reload:
     x-wp-status: implemented
     post:
@@ -1746,6 +1768,29 @@ paths:
         '200':
           description: OK
 
+  /metrics/overview:
+    x-wp-status: implemented
+    get:
+      summary: 指标监控总览（Prometheus + Micrometer / prometheus_client）
+      description: >
+        BFF 使用固定 PromQL 模板聚合系统级运维指标，包括 target 健康、HTTP QPS/错误率/延迟、
+        JVM 堆与线程、GC、HikariCP、LLM / collab / tool 业务指标和告警。
+        前端只传白名单 job 与 window，不支持任意 PromQL。当前指标未带 tenant 标签，
+        因此明确为 system 级指标，不伪装多租户隔离。
+      parameters:
+        - name: job
+          in: query
+          required: false
+          schema:
+            type: string
+            enum: [gateway-service, session-manager, sense-service, body-service, tool-executor, collab-bus, nlp-service, wp-bff]
+        - name: window
+          in: query
+          required: false
+          schema: { type: string, enum: [5m, 15m, 1h, 6h, 24h], default: 5m }
+      responses:
+        '200': { description: OK（available=false 时返回明确原因） }
+        '405': { $ref: '#/components/responses/ErrorEnvelope' }
   /alerts:
     x-wp-status: implemented
     get:

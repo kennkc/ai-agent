@@ -82,4 +82,55 @@ describe('dataProvider collaboration wiring', () => {
     expect(client.get).not.toHaveBeenCalledWith('/collab/DOM-2048')
     expect(result.collaboration.domain_id).toBe('DOM-2048')
   })
+
+  it('reads the sidebar Agent roster from /agents/online and keeps unavailable explicit', async () => {
+    const { dataProvider } = await import('./provider')
+    const unavailable = await dataProvider.getOnlineAgents()
+    expect(unavailable.available).toBe(false)
+    expect(unavailable.items).toEqual([])
+
+    client.get.mockImplementation(async (path: string) => {
+      if (path === '/agents/online') {
+        return { data: { data: { available: true, total: 1, items: [{ agent_id: 'agent-real', name: '真实 Agent', role: 'Collaboration Member', state: 'run', task: 'dom-1', model: '-', latency_ms: 0 }] } } }
+      }
+      return { data: { data: null } }
+    })
+    const available = await dataProvider.getOnlineAgents()
+    expect(available.available).toBe(true)
+    expect(available.items[0].agent_id).toBe('agent-real')
+  })
+  it('loads the real model runtime aggregate through /models/runtime', async () => {
+    client.get.mockImplementation(async (path: string) => {
+      if (path === '/models/runtime') {
+        return { data: { data: {
+          available: true,
+          items: [{ config_id: 1, runtime_state: 'active' }],
+          routing: [{ role: 'generate' }],
+          sources: { prometheus: { available: true, complete: true, availability: {}, by_role: {} } },
+        } } }
+      }
+      return { data: { data: null } }
+    })
+    const { dataProvider } = await import('./provider')
+    const result = await dataProvider.getModelRuntime(7)
+    expect(client.get).toHaveBeenCalledWith('/models/runtime', { params: { days: 7 } })
+    expect(result.available).toBe(true)
+    expect(result.items[0].config_id).toBe(1)
+    expect(result.routing[0].role).toBe('generate')
+  })
+
+  it('loads Prometheus metric overview through the BFF whitelist contract', async () => {
+    client.get.mockImplementation(async (path: string) => {
+      if (path === '/metrics/overview') {
+        return { data: { data: { available: true, window: '15m', selected_job: 'all', summary: { targets_up: 8, targets_total: 8, active_alerts: 0 }, services: [], targets: [], alerts: [], support: { http_p95: false, http_p95_reason: 'bucket missing', metric_scope: 'system' } } } }
+      }
+      return { data: { data: null } }
+    })
+    const { dataProvider } = await import('./provider')
+    const result = await dataProvider.getMetricsOverview('', '15m')
+    expect(client.get).toHaveBeenCalledWith('/metrics/overview', { params: { job: '', window: '15m' } })
+    expect(result.available).toBe(true)
+    expect(result.summary.targets_up).toBe(8)
+  })
+
 })

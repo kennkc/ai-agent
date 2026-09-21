@@ -17,9 +17,18 @@
           存储 {{ list.storage.backend || '—' }}
         </el-tag>
         <el-tag :type="store.dataSource === 'api' ? 'success' : 'info'" effect="plain">{{ store.dataSource.toUpperCase() }}</el-tag>
-        <el-button size="small" :loading="loading" @click="refresh">刷新</el-button>
-        <el-button size="small" :loading="reloading" @click="doReload">重载引擎</el-button>
-        <el-button size="small" type="primary" @click="openCreate">新增配置</el-button>
+        <div class="model-toolbar-actions">
+          <el-button
+            class="model-toolbar-button"
+            :icon="Plus"
+            data-testid="model-create"
+            @click="openCreate"
+          >
+            新增模型配置
+          </el-button>
+          <el-button class="model-toolbar-button" :icon="Refresh" :loading="loading" @click="refreshAll">刷新</el-button>
+          <el-button class="model-toolbar-button" :icon="RefreshRight" :loading="reloading" @click="doReload">重载引擎</el-button>
+        </div>
       </div>
     </header>
 
@@ -135,15 +144,20 @@
           </p>
 
           <div class="model-actions">
-            <el-switch
-              :model-value="item.enabled"
-              size="small"
-              :loading="busyId === item.id"
-              @change="(value: boolean) => toggleEnabled(item, value)"
-            />
-            <el-button size="small" text type="primary" @click="openEdit(item)">编辑</el-button>
-            <el-button size="small" text :loading="probingId === item.id" @click="doTest(item)">测试连通</el-button>
-            <el-button size="small" text type="danger" @click="confirmDelete(item)">删除</el-button>
+            <label class="model-enable-toggle">
+              <el-switch
+                :model-value="item.enabled"
+                size="small"
+                :loading="busyId === item.id"
+                @change="(value: boolean) => toggleEnabled(item, value)"
+              />
+              <span>{{ item.enabled ? '已启用' : '已停用' }}</span>
+            </label>
+            <div class="model-action-buttons">
+              <el-button size="small" text type="primary" :icon="Edit" @click="openEdit(item)">编辑</el-button>
+              <el-button size="small" text :icon="Connection" :loading="probingId === item.id" @click="doTest(item)">测试连通</el-button>
+              <el-button size="small" text type="danger" :icon="Delete" @click="confirmDelete(item)">删除</el-button>
+            </div>
           </div>
         </article>
       </div>
@@ -262,58 +276,111 @@
       </template>
     </el-card>
 
-    <!-- 运行态观测：该数据域 BFF 尚未提供接口（与"配置"是两回事），以下为演示数据 -->
-    <el-card class="section-card runtime-card" shadow="never">
+    <!-- 运行态观测：配置 / 探测 / 用量 / Prometheus 指标均为真实来源。
+         成本、质量、配额、队列缺数据源时显式标记“未接入”。 -->
+    <el-card v-loading="runtimeLoading" class="section-card runtime-card" shadow="never">
       <template #header>
         <div class="role-head">
           <div>
-            <strong>模型池运行态</strong>
-            <span class="role-desc">成本 / 延迟 / 质量 / 流量份额 · 按成本与质量动态路由</span>
+            <strong>模型接入运行态</strong>
+            <span class="role-desc">真实配置 · 连通性探测 · 调用用量 · Prometheus LLM 指标</span>
           </div>
-          <el-tag size="small" type="warning" effect="plain">演示数据（BFF 未提供该数据域）</el-tag>
+          <el-tag v-if="runtimeUnavailable" size="small" type="danger" effect="dark">运行态不可达</el-tag>
+          <el-tag v-else-if="runtime?.available" size="small" type="success" effect="dark">真实数据</el-tag>
+          <el-tag v-else size="small" type="info" effect="plain">加载中</el-tag>
         </div>
       </template>
 
-      <div class="model-grid">
-        <article v-for="model in managedModels" :key="model.model_id" class="runtime-model" :class="model.state">
-          <div class="model-card-head">
-            <div class="model-title">
-              <strong>{{ model.name }}</strong>
-              <small>{{ model.provider }} · {{ model.model_id }}</small>
-            </div>
-            <el-tag size="small" :type="model.state === 'active' ? 'success' : 'info'">
-              {{ model.state === 'active' ? '活跃' : model.state === 'standby' ? '待命' : model.state }}
-            </el-tag>
-          </div>
-          <div class="runtime-stats">
-            <span>成本<strong>{{ model.cost_per_1k ? `¥${model.cost_per_1k}/1K` : '免费' }}</strong></span>
-            <span>延迟<strong>{{ model.latency_ms }}ms</strong></span>
-            <span>质量<strong>{{ model.quality }}</strong></span>
-            <span>流量<strong>{{ model.share }}%</strong></span>
-          </div>
-          <div class="tag-line">
-            <el-tag v-for="task in model.task_types" :key="task" size="small" type="info">{{ task }}</el-tag>
-          </div>
-        </article>
-      </div>
+      <el-alert
+        v-if="runtimeUnavailable"
+        :closable="false"
+        type="error"
+        show-icon
+        title="模型运行态不可读"
+        :description="runtime?.reason || 'BFF /models/runtime 不可达；这里不显示 0 或 Mock 运行指标。'"
+      />
 
-      <div class="runtime-tables">
-        <div>
-          <p class="runtime-caption">模型路由策略</p>
-          <el-table :data="modelRoutes" size="small">
-            <el-table-column prop="task_type" label="任务类型" min-width="110" />
-            <el-table-column prop="model_name" label="模型" min-width="150" />
-            <el-table-column prop="share" label="流量" width="80" />
-            <el-table-column prop="cost" label="成本" width="90" />
-          </el-table>
+      <template v-else-if="runtime?.available">
+        <div class="runtime-source-line">
+          <el-tag size="small" :type="runtime.sources?.config?.degraded ? 'warning' : 'success'" effect="plain">
+            配置 {{ runtime.sources?.config?.backend || 'unknown' }}
+          </el-tag>
+          <el-tag size="small" :type="runtime.sources?.usage?.available ? (runtime.sources.usage.degraded ? 'warning' : 'success') : 'danger'" effect="plain">
+            用量 {{ runtime.sources?.usage?.available ? (runtime.sources.usage.degraded ? '降级' : '真实') : '不可读' }}
+          </el-tag>
+          <el-tag size="small" :type="runtime.sources?.prometheus?.complete ? 'success' : runtime.sources?.prometheus?.available ? 'warning' : 'danger'" effect="plain">
+            Prometheus {{ runtime.sources?.prometheus?.complete ? '完整' : runtime.sources?.prometheus?.available ? '部分' : '不可达' }}
+          </el-tag>
+          <span class="runtime-window">窗口 {{ runtime.window?.days || usageDays }} 天</span>
         </div>
-        <div>
-          <p class="runtime-caption">Token 用量趋势</p>
-          <!-- 这块的替代品已在本页上方（真实用量看板，数据源 llm_token_usage）。
-               留一个假趋势在这里会与真数据并排显示同一件事，故移除。 -->
-          <el-empty :image-size="50" description="已由上方「Token 用量看板」的真实数据取代" />
+
+        <el-empty v-if="!runtime.items.length" :image-size="60" description="尚无模型配置，新增配置后这里展示真实运行状态" />
+        <div v-else class="model-grid">
+          <article v-for="item in runtime.items" :key="item.config_id" class="runtime-model" :class="item.runtime_state">
+            <div class="model-card-head">
+              <div class="model-title">
+                <strong>{{ item.name }}</strong>
+                <small>{{ item.provider }} · {{ item.model }}</small>
+              </div>
+              <el-tag size="small" :type="runtimeStateMeta(item.runtime_state).type">
+                {{ runtimeStateMeta(item.runtime_state).label }}
+              </el-tag>
+            </div>
+            <div class="runtime-role-line">
+              <el-tag size="small" effect="plain">{{ item.role_label || item.config_key }}</el-tag>
+              <span>权重 {{ item.routing_weight }}</span>
+              <span v-if="item.prometheus?.qps !== undefined">QPS {{ Number(item.prometheus.qps).toFixed(2) }}</span>
+            </div>
+            <div class="runtime-stats">
+              <span>调用<strong>{{ item.usage ? item.usage.attempts : '—' }}</strong></span>
+              <span>失败<strong>{{ item.usage ? item.usage.failures : '—' }}</strong></span>
+              <span>成功率<strong>{{ runtimePercent(item.usage?.success_rate) }}</strong></span>
+              <span>流量<strong>{{ runtimePercent(item.usage?.share) }}</strong></span>
+            </div>
+            <div class="runtime-evidence">
+              <span>{{ runtimeProbeText(item) }}</span>
+              <span>推理平均 {{ runtimeUsageText(item.usage?.avg_latency_ms, 'ms') }}</span>
+              <span>P95 {{ runtimeUsageText(item.prometheus?.p95_latency_ms, 'ms') }}</span>
+              <span>Tokens {{ item.usage ? formatTokens(item.usage.tokens) : '—' }}</span>
+            </div>
+            <div class="tag-line">
+              <el-tag v-if="item.tier" size="small" type="info">{{ item.tier }}</el-tag>
+              <el-tag size="small" :type="item.enabled ? 'success' : 'info'" effect="plain">{{ item.enabled ? '已启用' : '已停用' }}</el-tag>
+              <el-tag v-if="item.probe.at" size="small" type="info" effect="plain">探测 {{ item.probe.at }}</el-tag>
+            </div>
+          </article>
         </div>
-      </div>
+
+        <div class="runtime-tables">
+          <div class="runtime-routing-panel">
+            <p class="runtime-caption">真实路由配置：角色优先 · 权重排序 · 故障后层级降级</p>
+            <el-table :data="runtime.routing" size="small" empty-text="暂无已启用角色路由">
+              <el-table-column prop="role_label" label="功能角色" min-width="110" />
+              <el-table-column label="主模型" min-width="180">
+                <template #default="{ row }">{{ row.candidates[0]?.name || '—' }}</template>
+              </el-table-column>
+              <el-table-column label="候选模型" width="100">
+                <template #default="{ row }">{{ row.candidates.length }}</template>
+              </el-table-column>
+              <el-table-column label="实际调用" width="100">
+                <template #default="{ row }">{{ row.usage?.attempts ?? '—' }}</template>
+              </el-table-column>
+              <el-table-column label="失败" width="80">
+                <template #default="{ row }">{{ row.usage?.failures ?? '—' }}</template>
+              </el-table-column>
+              <el-table-column label="平均延迟" width="110">
+                <template #default="{ row }">{{ runtimeUsageText(row.usage?.avg_latency_ms, 'ms') }}</template>
+              </el-table-column>
+            </el-table>
+          </div>
+        </div>
+
+        <div class="unsupported-grid">
+          <el-tag v-for="(value, key) in runtime.unsupported_fields || {}" :key="key" size="small" type="info" effect="plain">
+            {{ runtimeUnsupportedText(String(key)) }}
+          </el-tag>
+        </div>
+      </template>
     </el-card>
 
     <!-- 新增 / 编辑 -->
@@ -398,12 +465,13 @@
 <script setup lang="ts">
 import { computed, onMounted, reactive, ref } from 'vue'
 import { ElMessage, ElMessageBox } from 'element-plus'
+import { Connection, Delete, Edit, Plus, Refresh, RefreshRight } from '@element-plus/icons-vue'
 import { dataProvider } from '../api/provider'
-import {
-  managedModels, modelRoutes, modelTokenTrend,
-} from '../api/mock'
 import { useAppStore } from '../stores/app'
-import type { ModelConfig, ModelConfigList, ModelConfigUpsert, ModelProvider, ModelProbeResult, ModelRole, ModelUsage } from '../types'
+import type {
+  ModelConfig, ModelConfigList, ModelConfigUpsert, ModelProvider, ModelProbeResult,
+  ModelRole, ModelRuntimeItem, ModelRuntimeOverview, ModelRuntimeState, ModelUsage,
+} from '../types'
 
 const store = useAppStore()
 
@@ -413,12 +481,15 @@ const saving = ref(false)
 const busyId = ref<number | null>(null)
 const probingId = ref<number | null>(null)
 const list = ref<ModelConfigList | null>(null)
+const runtime = ref<ModelRuntimeOverview | null>(null)
+const runtimeLoading = ref(false)
 const probes = reactive<Record<number, ModelProbeResult>>({})
 const formVisible = ref(false)
 const formError = ref('')
 
 const live = computed(() => list.value?.available === true)
 const unavailable = computed(() => list.value !== null && list.value.available === false)
+const runtimeUnavailable = computed(() => runtime.value !== null && runtime.value.available === false)
 
 /** 角色字典优先用后端返回值（避免前端硬编码第二份字典）；后端不可用时回落本地最小集 */
 const FALLBACK_ROLES: ModelRole[] = [
@@ -491,6 +562,37 @@ function probeText(id: number): string {
     ? `探测通过 · ${probe.latency_ms ?? '—'}ms`
     : `探测未通过 · ${probe.detail || probe.reason || '连接失败'}`
 }
+
+const runtimeStateMeta = (state: ModelRuntimeState) => ({
+  active: { label: '已启用 · 探测通过', type: 'success' },
+  degraded: { label: '已启用 · 失败率偏高', type: 'warning' },
+  offline: { label: '已启用 · 探测失败', type: 'danger' },
+  unverified: { label: '已启用 · 未探测', type: 'info' },
+  disabled: { label: '已停用', type: 'info' },
+}[state] || { label: state, type: 'info' })
+
+const runtimeProbeText = (item: ModelRuntimeItem) => {
+  if (item.probe.state === 'passed') return `探测通过 · ${item.probe.latency_ms ?? '—'}ms`
+  if (item.probe.state === 'failed') return `探测失败 · ${item.probe.error || '连接异常'}`
+  return '尚未执行连通性探测'
+}
+
+const runtimeUsageText = (value: number | null | undefined, suffix = '') => {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—'
+  return `${Number(value)}${suffix}`
+}
+
+const runtimePercent = (value: number | null | undefined) => {
+  if (value === null || value === undefined || !Number.isFinite(Number(value))) return '—'
+  return `${(Number(value) * 100).toFixed(1)}%`
+}
+
+const runtimeUnsupportedText = (key: string) => ({
+  cost: '成本：未接入价格元数据',
+  quality: '质量：未接入评测结果',
+  quota: '配额：未接入供应商接口',
+  queue: '队列：未接入运行态 Gauge',
+}[key] || `${key}：未接入`)
 
 async function refresh() {
   loading.value = true
@@ -598,7 +700,7 @@ async function submitForm() {
       ElMessage.success(form.id ? '配置已更新并生效' : '配置已创建并生效')
     }
     formVisible.value = false
-    await refresh()
+    await refreshAll()
   } finally {
     saving.value = false
   }
@@ -617,7 +719,7 @@ async function toggleEnabled(item: ModelConfig, value: boolean) {
       return
     }
     ElMessage.success(value ? '已启用' : '已停用')
-    await refresh()
+    await refreshAll()
   } finally {
     busyId.value = null
   }
@@ -649,7 +751,7 @@ async function confirmDelete(item: ModelConfig) {
     return
   }
   ElMessage.success('已删除')
-  await refresh()
+  await refreshAll()
 }
 
 async function doReload() {
@@ -666,7 +768,7 @@ async function doReload() {
     } else {
       ElMessage.success(`引擎已重载 · ${reload?.count ?? 0} 个引擎 · 角色 ${(reload?.roles || []).join(' / ') || '无'}`)
     }
-    await refresh()
+    await refreshAll()
   } finally {
     reloading.value = false
   }
@@ -742,9 +844,21 @@ async function refreshUsage() {
   usage.value = await dataProvider.getModelUsage(Number(usageDays.value) || 7)
 }
 
+async function refreshRuntime() {
+  runtimeLoading.value = true
+  try {
+    runtime.value = await dataProvider.getModelRuntime(Number(usageDays.value) || 7)
+  } finally {
+    runtimeLoading.value = false
+  }
+}
+
+async function refreshAll() {
+  await Promise.all([refresh(), refreshUsage(), refreshRuntime()])
+}
+
 onMounted(() => {
-  refresh()
-  refreshUsage()
+  void refreshAll()
 })
 </script>
 
@@ -757,6 +871,36 @@ onMounted(() => {
 .view-sub code { color: var(--wp-gold-soft); font-family: ui-monospace, monospace; }
 .tenant-tag { margin-left: 8px; color: var(--wp-gold-soft); }
 .head-actions { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.model-toolbar-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid rgba(94, 234, 212, .26);
+  border-radius: 12px;
+  background: rgba(8, 15, 28, .42);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, .16), inset 0 0 18px rgba(94, 234, 212, .035);
+}
+.model-toolbar-button.el-button {
+  height: 30px;
+  margin-left: 0;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 9px;
+  background: rgba(148, 163, 184, .055);
+  color: var(--wp-text);
+  font-weight: 600;
+  letter-spacing: .02em;
+  transition: background .18s ease, border-color .18s ease, color .18s ease, transform .18s ease;
+}
+.model-toolbar-button.el-button:hover,
+.model-toolbar-button.el-button:focus-visible {
+  border-color: rgba(94, 234, 212, .55);
+  background: rgba(20, 184, 166, .14);
+  color: var(--wp-primary);
+  transform: translateY(-1px);
+}
+.model-toolbar-button.el-button :deep(.el-icon) { font-size: 15px; }
 .state-alert :deep(.el-alert__description) { font-family: ui-monospace, monospace; font-size: 11px; line-height: 1.8; }
 .summary-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(140px, 1fr)); gap: 12px; }
 .summary-chip { padding: 14px 16px; border: 1px solid var(--wp-border); border-radius: 12px; background: rgba(148, 163, 184, .05); display: flex; flex-direction: column; gap: 6px; }
@@ -788,23 +932,35 @@ onMounted(() => {
 .probe-line.ok { color: var(--wp-success); }
 .probe-line.bad { color: var(--wp-danger); }
 .probe-line.warn { color: var(--wp-gold-soft); }
-.model-actions { display: flex; align-items: center; gap: 4px; margin-top: auto; }
+.model-actions { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-top: auto; padding-top: 9px; border-top: 1px solid rgba(148,163,184,.14); }
+.model-enable-toggle { display: inline-flex; align-items: center; gap: 6px; color: var(--wp-sub); font-size: 10px; cursor: pointer; }
+.model-action-buttons { display: inline-flex; align-items: center; gap: 4px; }
+.model-action-buttons .el-button { height: 28px; margin-left: 0; padding: 0 7px; border-radius: 8px; }
+.model-action-buttons .el-button :deep(.el-icon) { font-size: 13px; }
 .form-alert { margin-bottom: 12px; }
 .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 0 12px; }
 .field-hint { margin: 4px 0 0; color: var(--wp-sub); font-size: 11px; line-height: 1.7; }
 .field-hint code { color: var(--wp-gold-soft); font-family: ui-monospace, monospace; }
 .switch-hint { margin-left: 10px; color: var(--wp-sub); font-size: 11px; }
-/* 运行态观测区（数据域仍为 Mock，样式沿用 ModuleView 的卡片口径） */
+/* 运行态观测区：仅展示配置 / 探测 / 用量 / Prometheus 可证实数据 */
 .runtime-card { margin-top: 2px; }
 .runtime-model { padding: 14px; border: 1px solid var(--wp-border); border-radius: 12px; background: rgba(148, 163, 184, .04); display: flex; flex-direction: column; gap: 10px; }
 .runtime-model.active { border-left: 2px solid var(--wp-success); }
-.runtime-model.standby { border-left: 2px solid var(--wp-gold-soft); }
+.runtime-model.degraded { border-left: 2px solid var(--wp-gold-soft); }
+.runtime-model.offline { border-left: 2px solid var(--wp-danger); }
+.runtime-model.unverified { border-left: 2px solid var(--wp-primary); }
+.runtime-model.disabled { border-left: 2px solid #64748b; opacity: .72; }
+.runtime-source-line { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 14px; }
+.runtime-window { color: var(--wp-sub); font-size: 11px; }
+.runtime-role-line, .runtime-evidence { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; color: var(--wp-sub); font-size: 10px; }
 .runtime-stats { display: grid; grid-template-columns: repeat(4, 1fr); gap: 8px; }
 .runtime-stats span { display: flex; flex-direction: column; gap: 2px; color: var(--wp-sub); font-size: 10px; }
 .runtime-stats strong { color: var(--wp-text); font-size: 12px; }
 .tag-line { display: flex; flex-wrap: wrap; gap: 6px; }
-.runtime-tables { display: grid; grid-template-columns: minmax(0, 1.2fr) minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.runtime-tables { display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; margin-top: 16px; }
+.runtime-routing-panel { min-width: 0; }
 .runtime-caption { margin: 0 0 8px; color: var(--wp-sub); font-size: 11px; }
+.unsupported-grid { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
 .token-trend { display: flex; align-items: flex-end; gap: 10px; height: 120px; }
 .token-column { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; justify-content: flex-end; }
 .token-column span { color: var(--wp-sub); font-size: 10px; }

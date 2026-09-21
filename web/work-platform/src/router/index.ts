@@ -11,6 +11,7 @@ const ModuleView = () => import('../views/ModuleView.vue')
 const MiddlewareView = () => import('../views/MiddlewareView.vue')
 const ServicesView = () => import('../views/ServicesView.vue')
 const TracingView = () => import('../views/TracingView.vue')
+const MetricsView = () => import('../views/MetricsView.vue')
 const KnowledgeView = () => import('../views/KnowledgeView.vue')
 const ExecutionView = () => import('../views/ExecutionView.vue')
 // WB-10 模型接入配置：有真实写路径（CRUD），与只读模块面板拆开，避免写逻辑混进大而全的 ModuleView
@@ -37,6 +38,7 @@ const router = createRouter({
         { path: 'services', name: 'services', component: ServicesView },
         { path: 'knowledge', name: 'knowledge', component: KnowledgeView },
         { path: 'tracing', name: 'tracing', component: TracingView },
+        { path: 'metrics', name: 'metrics', component: MetricsView },
         // R-C05(预) 执行视图：工具调用流 / 拦截记录 / 沙箱状态（wp-bff /tools 聚合）
         { path: 'execution', name: 'execution', component: ExecutionView },
         // WB-10 多模型管理面板：按功能角色配置大模型接入（wp-bff /models 真实 CRUD）

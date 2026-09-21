@@ -22,6 +22,11 @@ test('core observability and model pages are reachable from navigation', async (
   await page.getByRole('menuitem', { name: '后台服务' }).click()
   await expect(page.getByRole('heading', { name: '后台服务控制台' })).toBeVisible()
 
+  await page.getByRole('menuitem', { name: /工作台区/ }).click()
   await page.getByRole('menuitem', { name: '多模型管理' }).click()
   await expect(page.getByRole('heading', { name: '模型接入配置' })).toBeVisible()
+
+  await page.getByRole('menuitem', { name: /观测区/ }).click()
+  await page.getByRole('menuitem', { name: '指标监控' }).click()
+  await expect(page.getByRole('heading', { name: '指标监控' })).toBeVisible()
 })

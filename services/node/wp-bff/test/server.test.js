@@ -1541,6 +1541,52 @@ test('/api/wp/models/usage 读路径：大脑层不可达 → 200 + available:fa
   }, { jsonRequest: async () => null })
 })
 
+test('/api/wp/models/runtime 聚合真实配置 / 用量 / Prometheus，并显式标未接入字段', async () => {
+  const configPayload = {
+    items: [{
+      id: 7, config_key: 'generate', name: 'OpenRouter Free', provider: 'custom',
+      model: 'openrouter/free', tier: 'L2', routing_weight: 100, enabled: true,
+      last_probe_at: '2026-09-21T10:00:00Z', last_probe_ok: true,
+      last_probe_latency_ms: 123, last_probe_error: '',
+    }],
+    by_role: { generate: [{ id: 7, config_key: 'generate', name: 'OpenRouter Free', provider: 'custom', model: 'openrouter/free', routing_weight: 100, enabled: true, last_probe_ok: true }] },
+    roles: [{ key: 'generate', label: '内容生成' }],
+    storage: { backend: 'postgres', degraded: false },
+  }
+  const usagePayload = {
+    totals: { attempts: 3, calls: 2, failures: 1, prompt_tokens: 100, completion_tokens: 50, latency_ms_sum: 900 },
+    by_model: { 'openrouter/free': { calls: 2, failures: 1, prompt_tokens: 100, completion_tokens: 50, latency_ms_sum: 900 } },
+    by_role: { generate: { calls: 2, failures: 1, prompt_tokens: 100, completion_tokens: 50, latency_ms_sum: 900 } },
+    storage: { degraded: false, backend: 'postgres' },
+  }
+  const jsonRequestDetailed = async url => {
+    if (String(url).includes('/usage?days=7')) return { ok: true, status: 200, data: usagePayload, reason: null }
+    return { ok: true, status: 200, data: configPayload, reason: null }
+  }
+  const fetchJson = async url => {
+    const decoded = decodeURIComponent(String(url))
+    if (decoded.includes('outcome="failure"')) {
+      return { data: { result: [{ metric: { role: 'generate' }, value: [0, '0.25'] }] } }
+    }
+    if (decoded.includes('histogram_quantile')) {
+      return { data: { result: [{ metric: { role: 'generate' }, value: [0, '1.25'] }] } }
+    }
+    return { data: { result: [{ metric: { role: 'generate' }, value: [0, '2.5'] }] } }
+  }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/models/runtime?days=7' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.items[0].runtime_state, 'degraded')
+    assert.equal(res.json.data.items[0].usage.attempts, 3)
+    assert.equal(res.json.data.items[0].usage.tokens, 150)
+    assert.equal(res.json.data.items[0].prometheus.p95_latency_ms, 1250)
+    assert.equal(res.json.data.routing[0].primary_config_id, 7)
+    assert.equal(res.json.data.unsupported_fields.cost.available, false)
+    assert.equal(res.json.data.sources.prometheus.complete, true)
+  }, { jsonRequestDetailed, fetchJson })
+})
+
 test('/api/wp/models 写路径缺控制令牌 → 401，且绝不触达上游', async () => {
   const rec = recordingModelsRequest(() => ({ item: { id: 1 } }))
   await withServer(async ({ server }) => {
@@ -1695,6 +1741,7 @@ test('ROUTE_GUARD 与固定段派生：/models/reload 只允许 POST，且被登
   // `/models/usage` 是**只读固定段**，与 reload 同一类陷阱：不登记为保留段时，
   // `POST /models/usage` 会被当作"更新 id=usage 的配置"发出去，而 ROUTE_GUARD 判 405。
   assert.deepEqual(ROUTE_GUARD.allowedMethods('/api/wp/models/usage'), ['GET'])
+  assert.deepEqual(ROUTE_GUARD.allowedMethods('/api/wp/models/runtime'), ['GET'])
   assert.ok(MODEL_RESERVED_SEGMENTS.has('usage'), 'usage 必须登记为保留段，否则会被参数路由吃掉')
 })
 
@@ -1706,6 +1753,61 @@ test('OVERVIEW_GAPS 不再声称 models 未实现（/models 已落地，留着�
 // ─────────── 写端点统一鉴权回归（2026-09-20） ───────────
 // 背景：此前 19 个 POST 端点中只有 2 个自带鉴权校验，模型配置 / 记忆写入等写路径可被
 // 「简单请求」绕过（CSRF）。现在鉴权收敛到路由层唯一入口，以下用例锁定该不变量。
+
+test('GET /api/wp/metrics/overview 使用固定 PromQL 聚合 target / HTTP / JVM / 告警', async () => {
+  const fetchJson = async url => {
+    const raw = String(url)
+    const decoded = decodeURIComponent(raw)
+    if (raw.includes('/api/v1/targets')) {
+      return { data: { activeTargets: [{ labels: { job: 'gateway-service', instance: 'host:8080' }, health: 'up', scrapeUrl: 'http://gateway/actuator/prometheus', lastError: '' }] } }
+    }
+    if (raw.includes('/api/v1/alerts')) {
+      return { data: { alerts: [{ labels: { alertname: 'LifeformTargetDown', severity: 'critical', job: 'gateway-service' }, status: { state: 'firing' }, activeAt: '2026-09-21T10:00:00Z', annotations: { summary: 'down' } }] } }
+    }
+    if (decoded.includes('outcome=~"SERVER_ERROR|UNKNOWN"')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '0.2'] }] } }
+    }
+    if (decoded.includes('rate(http_server_requests_seconds_sum')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '0.25'] }] } }
+    }
+    if (decoded.includes('http_server_requests_seconds_max')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '0.5'] }] } }
+    }
+    if (decoded.includes('http_server_requests_seconds_count')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '2'] }] } }
+    }
+    if (decoded.includes('jvm_memory_used_bytes')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '100'] }] } }
+    }
+    if (decoded.includes('jvm_memory_max_bytes')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '200'] }] } }
+    }
+    if (decoded.includes('jvm_threads_live_threads')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '5'] }] } }
+    }
+    if (decoded.includes('hikaricp_connections_active')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '1'] }] } }
+    }
+    if (decoded.includes('hikaricp_connections_max')) {
+      return { data: { result: [{ metric: { job: 'gateway-service' }, value: [0, '5'] }] } }
+    }
+    return { data: { result: [] } }
+  }
+  await withServer(async ({ server }) => {
+    const res = await request(server, { path: '/api/wp/metrics/overview?job=gateway-service&window=15m' })
+    assert.equal(res.status, 200)
+    assert.equal(res.json.data.available, true)
+    assert.equal(res.json.data.window, '15m')
+    assert.equal(res.json.data.summary.targets_up, 1)
+    assert.equal(res.json.data.summary.qps, 2)
+    assert.equal(res.json.data.summary.error_rate, 0.1)
+    assert.equal(res.json.data.summary.avg_latency_ms, 125)
+    assert.equal(res.json.data.services[0].job, 'gateway-service')
+    assert.equal(res.json.data.services[0].heap_used_ratio, 0.5)
+    assert.equal(res.json.data.alerts[0].name, 'LifeformTargetDown')
+    assert.equal(res.json.data.support.http_p95, false)
+  }, { fetchJson })
+})
 
 test('路由层统一鉴权：所有写方法在鉴权前不匹配路由（未带令牌 -> 401 而非 404）', async () => {
   await withServer(async ({ server }) => {

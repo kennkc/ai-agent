@@ -16,6 +16,7 @@
 | POST | `/api/wp/services/:key/stop` | 仅停止由本 BFF 启动的应用服务；外部进程返回 409，不猜 PID |
 | GET | `/api/wp/tracing` | Jaeger 在线时返回真实服务注册列表与每服务最近 20 条 trace 聚合统计（traces/spans/错误率/P99）及全局最新 12 条链路；Jaeger 未启动时返回 `enabled:false` |
 | GET | `/api/wp/alerts` | 查询最近接收的 Alertmanager 投递；内存保留最近 200 条，JSONL 真实归档 |
+| GET | `/api/wp/metrics/overview` | Prometheus 固定查询聚合：target、HTTP、JVM/Micrometer、GC、HikariCP、业务指标与告警；job/window 白名单 |
 | POST | `/api/wp/alerts/alertmanager` | Alertmanager webhook 接收端；Bearer 令牌独立于控制令牌，默认落盘到 `logs/wp-bff-alerts.jsonl` |
 | GET | `/api/wp/agents/online` | Phase 6：由 collab-bus 心跳真实派生在线 Agent，不伪造模型延迟 |
 | GET/POST | `/api/wp/tasks` | Phase 6：把协作域映射为任务；POST 会创建真实协作域，不返回伪任务 ID |

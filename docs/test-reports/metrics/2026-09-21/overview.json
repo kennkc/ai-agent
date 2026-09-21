@@ -1,0 +1,246 @@
+{
+  "data": {
+    "available": true,
+    "reason": "",
+    "window": "15m",
+    "selected_job": "all",
+    "generated_at": "2026-09-21T02:10:39.631Z",
+    "sources": {
+      "prometheus": {
+        "available": true,
+        "url": "http://127.0.0.1:9090"
+      },
+      "targets": {
+        "available": true,
+        "total": 8,
+        "up": 8
+      },
+      "alerts": {
+        "available": true,
+        "active": 0
+      }
+    },
+    "summary": {
+      "targets_up": 8,
+      "targets_total": 8,
+      "active_alerts": 0,
+      "qps": 0.4621765846264839,
+      "error_rate": 0,
+      "avg_latency_ms": 1494.4410914992202,
+      "max_latency_ms": 2482.4272,
+      "jvm_heap_used_bytes": 409607216,
+      "jvm_heap_max_bytes": 25341984756,
+      "jvm_heap_used_ratio": 0.016163186109683886,
+      "jvm_threads": 314,
+      "gc_pause_avg_ms": 1.888888888888889,
+      "gc_pause_max_ms": 3,
+      "hikari_active": 1,
+      "hikari_max": 22,
+      "hikari_pending": null,
+      "llm_qps": null,
+      "llm_failure_rate": null,
+      "llm_degraded_qps": null,
+      "collab_domains": 50,
+      "heartbeat_pending": 0,
+      "tool_qps": null,
+      "tool_failure_rate": null,
+      "tool_circuit_open_qps": null
+    },
+    "services": [
+      {
+        "job": "body-service",
+        "health": "up",
+        "qps": 0.06893099329561339,
+        "error_rate": 0,
+        "avg_latency_ms": 118.50840000000001,
+        "max_latency_ms": 164.34019999999998,
+        "heap_used_bytes": 88737304,
+        "heap_max_bytes": 4223664126,
+        "heap_used_ratio": 0.021009555057598345,
+        "threads": 61,
+        "hikari_active": 0,
+        "hikari_max": 8,
+        "hikari_pending": 0
+      },
+      {
+        "job": "collab-bus",
+        "health": "up",
+        "qps": 0.12430179118881104,
+        "error_rate": 0,
+        "avg_latency_ms": 110.19027545454547,
+        "max_latency_ms": 2482.4272,
+        "heap_used_bytes": 53299072,
+        "heap_max_bytes": 4223664126,
+        "heap_used_ratio": 0.012619154935143154,
+        "threads": 59,
+        "hikari_active": 1,
+        "hikari_max": 8,
+        "hikari_pending": 0
+      },
+      {
+        "job": "gateway-service",
+        "health": "up",
+        "qps": 0.06893099329561338,
+        "error_rate": 0,
+        "avg_latency_ms": 96.16642786885248,
+        "max_latency_ms": 155.471,
+        "heap_used_bytes": 98033472,
+        "heap_max_bytes": 4223664126,
+        "heap_used_ratio": 0.023210527417776024,
+        "threads": 56,
+        "hikari_active": null,
+        "hikari_max": null,
+        "hikari_pending": null
+      },
+      {
+        "job": "nlp-service",
+        "health": "up",
+        "qps": null,
+        "error_rate": null,
+        "avg_latency_ms": null,
+        "max_latency_ms": null,
+        "heap_used_bytes": null,
+        "heap_max_bytes": null,
+        "heap_used_ratio": null,
+        "threads": null,
+        "hikari_active": null,
+        "hikari_max": null,
+        "hikari_pending": null
+      },
+      {
+        "job": "sense-service",
+        "health": "up",
+        "qps": 0.0666709607285441,
+        "error_rate": 0,
+        "avg_latency_ms": 122.6644474576271,
+        "max_latency_ms": 219.0384,
+        "heap_used_bytes": 68959936,
+        "heap_max_bytes": 4223664126,
+        "heap_used_ratio": 0.016327040679086424,
+        "threads": 51,
+        "hikari_active": null,
+        "hikari_max": null,
+        "hikari_pending": null
+      },
+      {
+        "job": "session-manager",
+        "health": "up",
+        "qps": 0.06667088538935798,
+        "error_rate": 0,
+        "avg_latency_ms": 109.38522711864407,
+        "max_latency_ms": 161.41920000000002,
+        "heap_used_bytes": 45435360,
+        "heap_max_bytes": 4223664126,
+        "heap_used_ratio": 0.010757332648756172,
+        "threads": 53,
+        "hikari_active": null,
+        "hikari_max": null,
+        "hikari_pending": null
+      },
+      {
+        "job": "tool-executor",
+        "health": "up",
+        "qps": 0.0666709607285441,
+        "error_rate": 0,
+        "avg_latency_ms": 133.78090169491526,
+        "max_latency_ms": 223.7964,
+        "heap_used_bytes": 55142072,
+        "heap_max_bytes": 4223664126,
+        "heap_used_ratio": 0.013055505919743202,
+        "threads": 34,
+        "hikari_active": 0,
+        "hikari_max": 6,
+        "hikari_pending": 0
+      },
+      {
+        "job": "wp-bff",
+        "health": "up",
+        "qps": null,
+        "error_rate": null,
+        "avg_latency_ms": null,
+        "max_latency_ms": null,
+        "heap_used_bytes": null,
+        "heap_max_bytes": null,
+        "heap_used_ratio": null,
+        "threads": null,
+        "hikari_active": null,
+        "hikari_max": null,
+        "hikari_pending": null
+      }
+    ],
+    "targets": [
+      {
+        "job": "body-service",
+        "instance": "host.docker.internal:8083",
+        "health": "up",
+        "scrape_url": "http://host.docker.internal:8083/actuator/prometheus",
+        "last_error": "",
+        "last_scrape_at": "2026-09-21T02:10:31.557910049Z"
+      },
+      {
+        "job": "collab-bus",
+        "instance": "host.docker.internal:8085",
+        "health": "up",
+        "scrape_url": "http://host.docker.internal:8085/actuator/prometheus",
+        "last_error": "",
+        "last_scrape_at": "2026-09-21T02:10:25.85838544Z"
+      },
+      {
+        "job": "gateway-service",
+        "instance": "host.docker.internal:8080",
+        "health": "up",
+        "scrape_url": "http://host.docker.internal:8080/actuator/prometheus",
+        "last_error": "",
+        "last_scrape_at": "2026-09-21T02:10:31.046326463Z"
+      },
+      {
+        "job": "nlp-service",
+        "instance": "host.docker.internal:8000",
+        "health": "up",
+        "scrape_url": "http://host.docker.internal:8000/metrics",
+        "last_error": "",
+        "last_scrape_at": "2026-09-21T02:10:25.933082776Z"
+      },
+      {
+        "job": "sense-service",
+        "instance": "host.docker.internal:8082",
+        "health": "up",
+        "scrape_url": "http://host.docker.internal:8082/actuator/prometheus",
+        "last_error": "",
+        "last_scrape_at": "2026-09-21T02:10:25.914795493Z"
+      },
+      {
+        "job": "session-manager",
+        "instance": "host.docker.internal:8081",
+        "health": "up",
+        "scrape_url": "http://host.docker.internal:8081/actuator/prometheus",
+        "last_error": "",
+        "last_scrape_at": "2026-09-21T02:10:38.569051968Z"
+      },
+      {
+        "job": "tool-executor",
+        "instance": "host.docker.internal:8084",
+        "health": "up",
+        "scrape_url": "http://host.docker.internal:8084/actuator/prometheus",
+        "last_error": "",
+        "last_scrape_at": "2026-09-21T02:10:30.376594556Z"
+      },
+      {
+        "job": "wp-bff",
+        "instance": "host.docker.internal:8090",
+        "health": "up",
+        "scrape_url": "http://host.docker.internal:8090/metrics",
+        "last_error": "",
+        "last_scrape_at": "2026-09-21T02:10:36.479143306Z"
+      }
+    ],
+    "alerts": [],
+    "support": {
+      "http_p95": false,
+      "http_p95_reason": "HTTP histogram bucket 未暴露",
+      "gc_p95": false,
+      "gc_p95_reason": "GC histogram bucket 未暴露",
+      "metric_scope": "system"
+    }
+  }
+}

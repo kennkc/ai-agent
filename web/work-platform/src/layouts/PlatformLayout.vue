@@ -12,24 +12,67 @@
         <span class="pulse-dot" /> 系统在线 · {{ store.dataSource.toUpperCase() }}
       </div>
       <el-scrollbar class="nav-scroll">
-        <el-menu :default-active="route.path" router :collapse="store.sidebarCollapsed" class="platform-menu">
-          <template v-for="group in groups" :key="group">
-            <el-menu-item-group :title="group">
-              <el-menu-item v-for="item in modulesByGroup(group)" :key="item.id" :index="item.path">
+        <el-menu
+          :default-active="route.path"
+          :default-openeds="defaultOpenedGroups"
+          router
+          unique-opened
+          :collapse="store.sidebarCollapsed"
+          class="platform-menu"
+        >
+          <div v-if="!store.sidebarCollapsed && pinnedModules.length" class="menu-section-label">常用入口</div>
+          <el-menu-item v-for="item in pinnedModules" :key="item.id" :index="item.path">
+            <el-icon><component :is="iconMap[item.icon]" /></el-icon>
+            <template #title>
+              <span class="menu-item-title">{{ item.title }}</span>
+              <span class="menu-status-text" :class="item.status">{{ statusMeta(item.status).label }}</span>
+            </template>
+          </el-menu-item>
+
+          <el-sub-menu v-for="group in groups" :key="group" :index="groupMenuIndex(group)">
+            <template #title>
+              <el-icon><component :is="groupIconMap[group]" /></el-icon>
+              <span class="menu-group-title">{{ group }}</span>
+              <span class="menu-group-count">{{ groupCount(group) }}</span>
+            </template>
+
+            <el-menu-item v-for="item in groupModules(group)" :key="item.id" :index="item.path">
+              <el-icon><component :is="iconMap[item.icon]" /></el-icon>
+              <template #title>
+                <span class="menu-item-title">{{ item.title }}</span>
+                <span class="menu-status-text" :class="item.status">{{ statusMeta(item.status).label }}</span>
+              </template>
+            </el-menu-item>
+
+            <el-sub-menu v-if="plannedModulesByGroup(group).length" :index="plannedMenuIndex(group)">
+              <template #title>
+                <el-icon><Collection /></el-icon>
+                <span class="menu-group-title">规划与演示</span>
+                <span class="menu-group-count">{{ plannedModulesByGroup(group).length }}</span>
+              </template>
+              <el-menu-item v-for="item in plannedModulesByGroup(group)" :key="item.id" :index="item.path">
                 <el-icon><component :is="iconMap[item.icon]" /></el-icon>
-                <template #title>{{ item.title }}</template>
+                <template #title>
+                  <span class="menu-item-title">{{ item.title }}</span>
+                  <span class="menu-status-text planned">规划</span>
+                </template>
               </el-menu-item>
-            </el-menu-item-group>
-          </template>
+            </el-sub-menu>
+          </el-sub-menu>
         </el-menu>
       </el-scrollbar>
       <div v-if="!store.sidebarCollapsed" class="agent-online-panel">
         <div class="agent-online-head"><span>Agent 在线</span><strong>{{ activeAgentCount }}/{{ onlineAgents.length }}</strong></div>
-        <button v-for="agent in onlineAgents" :key="agent.agent_id" type="button" class="online-agent-row" @click="router.push('/collab')">
-          <i class="online-agent-dot" :class="agent.state" />
-          <span class="online-agent-copy"><strong>{{ agent.name }}</strong><small>{{ agent.role }} · {{ agent.task }}</small></span>
-          <em>{{ agent.latency_ms }}ms</em>
-        </button>
+        <template v-if="onlineAgents.length">
+          <button v-for="agent in onlineAgents" :key="agent.agent_id" type="button" class="online-agent-row" @click="router.push('/collab')">
+            <i class="online-agent-dot" :class="agent.state" />
+            <span class="online-agent-copy"><strong>{{ agent.name }}</strong><small>{{ agent.role }} · {{ agent.task }}</small></span>
+            <em>{{ agent.latency_ms }}ms</em>
+          </button>
+        </template>
+        <div v-else class="agent-online-empty">
+          {{ onlineAgentsLoading ? '正在读取 Agent 心跳…' : agentAvailabilityText }}
+        </div>
       </div>
       <div v-if="!store.sidebarCollapsed" class="aside-footer">
         <span>NODE 01</span><span>v0.2</span>
@@ -189,10 +232,9 @@ import { useRoute, useRouter } from 'vue-router'
 import { ElMessage } from 'element-plus'
 import {
   ArrowRight, Bell, ChatDotRound, Checked, Collection, Connection, Cpu, DataBoard, Expand, Fold,
-  Files, Grid, Guide, List, Monitor, Moon, Odometer, Refresh, Search, SetUp, Share, Sunny, Timer, UserFilled, View,
+  Files, Grid, Guide, List, Monitor, Moon, Odometer, Refresh, Search, SetUp, Share, Sunny, Timer, TrendCharts, UserFilled, View,
 } from '@element-plus/icons-vue'
 import { modules } from '../config/modules'
-import { onlineAgents } from '../api/mock'
 import { useAppStore } from '../stores/app'
 import { notifications as notificationSeed, searchIndex, vitalSigns } from '../api/mock'
 import { dataProvider } from '../api/provider'
@@ -205,9 +247,27 @@ const router = useRouter()
 const groups = ['生命体区', '工作台区', '治理区', '观测区'] as const
 const iconMap: Record<string, unknown> = {
   DataBoard, Odometer, Cpu, View, Refresh, Share, List, ChatDotRound,
-  UserFilled, Grid, Connection, Timer, Collection, Checked, Monitor, Guide, Files, SetUp,
+  UserFilled, Grid, Connection, Timer, Collection, Checked, Monitor, Guide, Files, SetUp, TrendCharts,
 }
-const modulesByGroup = (group: string) => modules.filter(item => item.group === group)
+const groupIconMap: Record<string, unknown> = {
+  生命体区: DataBoard,
+  工作台区: List,
+  治理区: Checked,
+  观测区: Monitor,
+}
+const pinnedModules = computed(() => modules.filter(item => item.pinned))
+const groupModules = (group: string) => modules.filter(item => item.group === group && !item.pinned && item.status !== 'planned')
+const plannedModulesByGroup = (group: string) => modules.filter(item => item.group === group && !item.pinned && item.status === 'planned')
+const groupCount = (group: string) => groupModules(group).length + plannedModulesByGroup(group).length
+const groupMenuIndex = (group: string) => `group:${group}`
+const plannedMenuIndex = (group: string) => `planned:${group}`
+const activeGroup = computed(() => modules.find(item => route.path.startsWith(item.path))?.group || '生命体区')
+const defaultOpenedGroups = computed(() => [`group:${activeGroup.value}`])
+const statusMeta = (status: string) => ({
+  ready: { label: '可用', className: 'ready' },
+  prototype: { label: '部分', className: 'prototype' },
+  planned: { label: '规划', className: 'planned' },
+}[status] || { label: '未知', className: 'planned' })
 
 const searchVisible = ref(false)
 const notificationVisible = ref(false)
@@ -221,7 +281,18 @@ const searchInputRef = ref<{ focus: () => void } | null>(null)
 const notificationList = ref<NotificationItem[]>(notificationSeed.map(item => ({ ...item })))
 const online = ref(navigator.onLine)
 const headerVitals = computed(() => vitalSigns.slice(0, 3))
-const activeAgentCount = computed(() => onlineAgents.filter(agent => agent.state === 'run').length)
+const onlineAgentsState = reactive({
+  loading: true,
+  available: true,
+  reason: '',
+  items: [] as import('../types').OnlineAgent[],
+})
+const onlineAgents = computed(() => onlineAgentsState.items)
+const onlineAgentsLoading = computed(() => onlineAgentsState.loading)
+const activeAgentCount = computed(() => onlineAgents.value.filter(agent => agent.state === 'run').length)
+const agentAvailabilityText = computed(() => onlineAgentsState.available
+  ? '暂无在线 Agent'
+  : `Agent 注册表未接入：${onlineAgentsState.reason || '数据不可用'}`)
 const unreadCount = computed(() => notificationList.value.filter(item => item.unread).length)
 const filteredSearchResults = computed(() => searchResults.value.filter(item => activeSearchScope.value === '全部' || item.type === activeSearchScope.value))
 const preferenceDraft = reactive<UserPreferences>({
@@ -316,15 +387,31 @@ function updateOnlineStatus() {
   online.value = navigator.onLine
 }
 
+async function loadOnlineAgents() {
+  onlineAgentsState.loading = true
+  try {
+    const result = await dataProvider.getOnlineAgents()
+    onlineAgentsState.available = result.available
+    onlineAgentsState.reason = result.reason || ''
+    onlineAgentsState.items = result.items
+  } finally {
+    onlineAgentsState.loading = false
+  }
+}
+
+let onlineAgentTimer: number | undefined
 onMounted(() => {
   window.addEventListener('keydown', handleGlobalKeydown)
   window.addEventListener('online', updateOnlineStatus)
   window.addEventListener('offline', updateOnlineStatus)
+  void loadOnlineAgents()
+  onlineAgentTimer = window.setInterval(() => { void loadOnlineAgents() }, 30_000)
 })
 onUnmounted(() => {
   window.removeEventListener('keydown', handleGlobalKeydown)
   window.removeEventListener('online', updateOnlineStatus)
   window.removeEventListener('offline', updateOnlineStatus)
+  if (onlineAgentTimer !== undefined) window.clearInterval(onlineAgentTimer)
 })
 </script>
 
@@ -352,8 +439,16 @@ onUnmounted(() => {
 .pulse-dot, .status-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wp-success); box-shadow: 0 0 12px var(--wp-success); animation: breathe 2s ease-in-out infinite; }
 .nav-scroll { flex: 1 1 auto; min-height: 0; }
 .nav-scroll :deep(.el-scrollbar__wrap) { overflow-y: auto; }
-.platform-menu { width: 100%; }
-.platform-menu { padding: 6px 0 18px; }
+.platform-menu { width: 100%; padding: 6px 0 18px; }
+.menu-section-label { margin: 8px 20px 5px; color: rgba(148,163,184,.55); font-size: 9px; letter-spacing: .18em; text-transform: uppercase; }
+.menu-item-title { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.menu-status-text { margin-left: 8px; padding: 1px 5px; border-radius: 999px; font-size: 8px; line-height: 15px; letter-spacing: .05em; }
+.menu-status-text.ready { color: #34d399; background: rgba(52,211,153,.1); }
+.menu-status-text.prototype { color: #d4af37; background: rgba(212,175,55,.12); }
+.menu-status-text.planned { color: #94a3b8; background: rgba(148,163,184,.12); }
+.menu-group-title { flex: 1; }
+.menu-group-count { margin-left: auto; padding: 1px 5px; border: 1px solid rgba(148,163,184,.18); border-radius: 999px; color: rgba(148,163,184,.72); font-size: 8px; line-height: 14px; }
+.platform-menu :deep(.el-sub-menu .el-menu) { background: transparent; }
 .aside-footer { flex: 0 0 auto; display: flex; justify-content: space-between; padding: 0 20px; color: rgba(148,163,184,.55); font-size: 10px; letter-spacing: .16em; }
 .platform-header {
   display: flex; align-items: center; gap: 10px; height: 72px;
@@ -406,6 +501,7 @@ onUnmounted(() => {
 .agent-online-panel { flex: 0 0 auto; max-height: 240px; margin: 8px 12px 0; padding: 10px 8px; overflow-y: auto; border: 1px solid var(--wp-border); border-radius: 12px; background: rgba(8, 15, 28, .34); }
 .agent-online-head { display: flex; justify-content: space-between; padding: 0 6px 7px; color: var(--wp-sub); font-size: 10px; letter-spacing: .1em; }
 .agent-online-head strong { color: var(--wp-success); }
+.agent-online-empty { padding: 8px 7px; color: var(--wp-sub); font-size: 10px; line-height: 1.55; }
 .online-agent-row { display: grid; grid-template-columns: 8px 1fr auto; align-items: center; gap: 7px; width: 100%; padding: 5px 6px; border: 0; border-radius: 8px; background: transparent; color: var(--wp-text); cursor: pointer; text-align: left; }
 .online-agent-row:hover { background: rgba(148,163,184,.08); }
 .online-agent-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--wp-success); box-shadow: 0 0 7px rgba(52,211,153,.55); }

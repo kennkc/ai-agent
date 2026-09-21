@@ -3,8 +3,15 @@
     <div class="hero-command compact-hero">
       <div class="hero-kicker">{{ module.group }} / {{ module.phase }}</div>
       <h2 class="hero-title">{{ module.title }}</h2>
-      <p class="hero-desc">{{ module.description }} · {{ module.status === 'ready' ? '真实数据就绪' : '阶段性展示' }}</p>
+      <p class="hero-desc">{{ module.description }} · {{ moduleStatusText }}</p>
     </div>
+    <el-alert
+      v-if="module.status === 'planned'"
+      title="规划预览：后端能力或注册表尚未接入，本页不代表已交付，也不提供伪造成功状态。"
+      type="warning"
+      :closable="false"
+      show-icon
+    />
     <el-alert
       v-if="module.status === 'prototype'"
       title="当前为 Vue 3 + Element Plus 阶段性展示；Mock/API 结构一致，随对应 Phase 接入真实数据后零 UI 改动切换。"
@@ -545,6 +552,11 @@ import type {
 const route = useRoute()
 const moduleId = computed(() => (route.meta.module as ModuleId) || 'overview')
 const module = computed(() => moduleMap[moduleId.value] || moduleMap.overview)
+const moduleStatusText = computed(() => ({
+  ready: '真实数据就绪',
+  prototype: '部分可用 · 阶段性展示',
+  planned: '规划预览 · 尚未交付',
+} as Record<string, string>)[module.value.status] || '阶段性展示')
 const iconMap: Record<string, unknown> = { View, Microphone, Document, Promotion, Checked }
 
 const loading = ref(true)
