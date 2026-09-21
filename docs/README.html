@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-21 08:59 · 源文件 README.md</span>
+  <span class="meta">生成于 2026-09-21 12:28 · 源文件 README.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -130,7 +130,7 @@
   <main class="doc"><h1 id="docs">docs · 目录地图<a class="headerlink" href="#docs" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>Agent-Lifeform 项目文档归档总入口
-<strong>口径时间</strong>：2026-09-20 · <strong>代码基线</strong>：以 <code>codex/main</code> 当前提交与《项目进度总览》为准</p>
+<strong>口径时间</strong>：2026-09-21 · <strong>代码基线</strong>：以 <code>codex/main</code> 当前提交与《项目进度总览》为准（三分支 <code>codex/main</code> / <code>dev</code> / <code>workbuddy/main</code> 内容一致）</p>
 </blockquote>
 <p>本目录是<strong>项目过程资产</strong>的归档地。代码回答"怎么做"，这里回答"做到哪了、凭什么算做完"。</p>
 <hr />
@@ -274,7 +274,7 @@
 </tr>
 <tr>
 <td><code>java-services/</code></td>
-<td><strong>Java 逐文件说明</strong>：8 篇文档覆盖 106 个手写源文件（81 主 + 25 测），90 个 proto 生成文件按契约维度说明；08 篇为数据存储总纲</td>
+<td><strong>Java 逐文件说明</strong>：10 篇文档覆盖 <strong>187 个手写源文件（138 主 + 49 测）</strong>，90 个 proto 生成文件按契约维度说明；08 篇为数据存储总纲，09 篇 tool-executor，10 篇 collab-bus</td>
 <td>增删 Java 文件后（配 <code>scripts/java-doc-coverage.py</code> 自查）</td>
 </tr>
 <tr>
@@ -284,13 +284,18 @@
 </tr>
 <tr>
 <td><code>demo/</code></td>
-<td><strong>端到端演示脚本</strong>：<code>Phase0-DEMO.md</code> / <code>Phase1-DEMO.md</code> / <code>Phase2-DEMO.md</code></td>
+<td><strong>端到端演示脚本</strong>：<code>Phase0~5-DEMO.md</code> 六份（Phase 3 躯体 / Phase 4 大脑 / Phase 5 四肢均已补齐）</td>
 <td>每阶段收口</td>
 </tr>
 <tr>
 <td><code>优化日志/</code></td>
 <td><strong>工程化加固日志</strong>：按日期命名，记录 P0/P1/P2 项的处理与验证</td>
 <td>每轮加固后</td>
+</tr>
+<tr>
+<td><code>test-reports/</code></td>
+<td><strong>实测产物归档</strong>：<code>collab/</code>（规模验证 25/100/500/1000 域、多实例接管、告警投递）、<code>metrics/</code>、<code>model/</code>、<code>frontend/</code>，按日期分目录</td>
+<td>每次真实验收后</td>
 </tr>
 </tbody>
 </table>
@@ -299,24 +304,20 @@
 <h2 id="html">生成 HTML 镜像<a class="headerlink" href="#html" title="Permanent link">&para;</a></h2>
 <p><code>.md</code> 改动后<strong>必须重新生成对应 <code>.html</code> 并一并提交</strong>，否则版本漂移。</p>
 <pre><code class="language-bash"># 批量（处理目标目录「当层」的 .md，自动排除 README.md；不递归子目录）
-PYTHONPATH=&quot;E:\AI\核心知识\.workbuddy\tmp\pylibs&quot; \
-  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
-  scripts/md2html-report.py --all &quot;docs/项目进度日志报告&quot;
+E:/software/anaconda3/python.exe scripts/md2html-report.py --all &quot;docs/项目进度日志报告&quot;
 
 # 单文件
-PYTHONPATH=&quot;E:\AI\核心知识\.workbuddy\tmp\pylibs&quot; \
-  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
-  scripts/md2html-report.py &quot;docs/项目进度总览.md&quot;
+E:/software/anaconda3/python.exe scripts/md2html-report.py &quot;docs/项目进度总览.md&quot;
 
 # 覆盖标题 / 指定输出路径（仅单文件模式）
-... scripts/md2html-report.py &quot;docs/项目进度总览.md&quot; -t &quot;标题&quot; -o &quot;docs/out.html&quot;
+E:/software/anaconda3/python.exe scripts/md2html-report.py &quot;docs/项目进度总览.md&quot; -t &quot;标题&quot; -o &quot;docs/out.html&quot;
 </code></pre>
 <blockquote>
-<p><strong>本机环境变更（2026-09-18）</strong>：原先用的 anaconda（<code>E:/software/anaconda3/python.exe</code>）<strong>已卸载</strong>，
-本机现只有 <code>E:/software/python/python312</code>（无 <code>markdown</code> 包）。
-因此 HTML 生成统一走 <strong>托管 Python + <code>PYTHONPATH</code> 指向 <code>pylibs</code></strong>（内含 markdown 3.10.3）：
-<code>pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown</code>（不污染系统环境）。
-中文路径需加引号。</p>
+<p><strong>环境口径修正（2026-09-21 实测）</strong>：生成本文档镜像<strong>必须用 anaconda Python</strong>
+<code>E:/software/anaconda3/python.exe</code>（内含 <code>markdown 3.4.1</code>）—— 它<strong>处于可用状态</strong>（可 <code>--version</code> 直接验证）。
+WorkBuddy 托管 Python <strong>未安装 <code>markdown</code> 包</strong>。
+⚠️ 本文档此前写的「anaconda 已卸载 → 改用托管 Python + <code>PYTHONPATH</code> 指向 pylibs」<strong>是错的</strong>：
+<code>E:\AI\核心知识\.workbuddy\tmp\pylibs</code> <strong>不存在</strong>，照抄那条命令会直接失败。已按实测改正。</p>
 <p><strong>脚本没有 <code>--dry-run</code></strong>，重新生成是<strong>幂等覆盖</strong>（直接重写目标 <code>.html</code>）：
 改完 <code>.md</code> 就重跑一次，再用 <code>git status --short</code> 看哪些 <code>.html</code> 被改动即可确认同步范围。
 <code>--all</code> <strong>只扫当层目录</strong>，<code>docs/java-services/</code>、<code>docs/demo/</code> 这类子目录需各自传参。</p>

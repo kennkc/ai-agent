@@ -1,7 +1,7 @@
 # 03 · gateway-service 网关服务
 
 > 模块路径：`services/java/gateway-service/`
-> 源文件：**6 个主代码 + 1 个测试**
+> 源文件：**6 个主代码 + 2 个测试**
 > HTTP 端口：**8080**（统一入口）· gRPC 端口：**9091**
 > 技术栈：Spring Cloud Gateway（WebFlux 响应式）+ JJWT
 
@@ -51,6 +51,7 @@
 | `security/JwtAuthFilter.java` | 全局过滤器 | 58 | 鉴权 + 租户注入 |
 | `security/AuthController.java` | 控制器 | 36 | 开发令牌端点（默认关闭） |
 | `test/…/JwtServiceTest.java` | 测试 | 24 | 密钥强度与租户往返 |
+| `test/…/WpBffRouteIntegrationTest.java` | 测试 | 94 | **真实起网关**：`/api/wp/**` 转发到假 BFF + 租户头注入 + `/actuator/prometheus` 可用 |
 
 ## 4. 逐文件说明
 
@@ -160,12 +161,27 @@
 **这个测试的价值在于第二条** —— 它是对「禁止弱密钥」这一安全约定的回归守卫，防止有人为了「方便本地开发」
 把启动期校验删掉。
 
+### 4.8 `test/…/WpBffRouteIntegrationTest.java` · 测试 · 94 行 · 2 个用例
+
+**真实启动网关上下文**（`@SpringBootTest(RANDOM_PORT)` + `WebTestClient`），并在测试内用 JDK 自带的
+`com.sun.net.httpserver.HttpServer` 起一个**假 wp-bff**，把 `WP_BFF_URI` 通过 `@DynamicPropertySource`
+指到它。这样验证的是**网关自己的路由与鉴权行为**，不依赖 8090 是否在跑、也不依赖 Nacos。
+
+| 用例 | 验证内容 |
+|---|---|
+| `routesApiWpThroughGatewayAndInjectsTenant` | 带合法 JWT 访问 `/api/wp/healthz` → 断言响应即假 BFF 的 JSON；并断言假 BFF 收到的 `X-Tenant-Id` 等于令牌里的租户（**租户注入在路由链路上真的生效**） |
+| `exposesPrometheusMetricsEndpoint` | `/actuator/prometheus` 返回 200 且含 `jvm_memory_used_bytes`（指标页依赖该端点，属回归守卫） |
+
+配套的启动属性里显式关掉了 Nacos 注册与 `discovery.locator`，避免自动路由把结果搅浑 ——
+**该测试只认 `spring.cloud.gateway.routes` 里显式声明的路由**。
+
 ## 5. 路由配置
 
 路由定义在 `src/main/resources/application.yml`：
 
 | 路由 id | 匹配路径 | 目标 |
 |---|---|---|
+| `work-platform-bff` | `/api/wp/**` | `${WP_BFF_URI:http://127.0.0.1:8090}`（Node BFF，**非** `lb://`） |
 | `session-manager` | `/api/session/**` | `lb://session-manager` |
 | `sense-service` | `/api/sense/**` | `lb://sense-service` |
 | `nlp-service` | `/api/nlp/**` | `lb://nlp-service`（Python 服务，也注册到 Nacos） |
@@ -175,9 +191,12 @@
 意味着**未显式配置的服务也会按 `/{service-id}/**` 自动生成路由** —— 这是服务发现定位器的默认行为。
 新增服务时优先补显式路由，以便控制路径前缀。
 
-**已知缺口**：中间件观测的 `wp-bff`（Node，端口 8090）**尚无网关路由**。
-当前前端在开发期依赖 Vite 代理 `/api/wp → 127.0.0.1:8090`；生产路径需要在网关补一条
-`/api/wp/**` 路由。详见 [07-运行时配置与横切约定](07-运行时配置与横切约定.md)。
+**两个服务刻意不经网关**（2026-09-21 实况，别照抄旧文档的「/api/{...}/tool」写法）：
+
+- `tool-executor`（8084）与 `collab-bus`（8085）**没有网关路由**，只由 wp-bff 通过
+  `WP_BFF_TOOL_URL` / `WP_BFF_COLLAB_URL` 直接调用（前端走 `/api/wp/tools*`、`/api/wp/collab*`）。
+  原因是这两个域在**控制面**（工作平台运维视图）使用，鉴权模型是 BFF 的
+  「来源白名单 + `X-WP-Control-Token`」，与网关的 JWT 模型不同 —— 混进网关会引入两套鉴权口径。
 
 ## 6. 修改指引
 

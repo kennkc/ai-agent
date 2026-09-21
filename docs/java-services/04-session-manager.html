@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 22:40 · 源文件 04-session-manager.md</span>
+  <span class="meta">生成于 2026-09-21 12:28 · 源文件 04-session-manager.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -151,6 +151,7 @@
 </ul>
 </li>
 <li><a href="#415-fsmsessionstatstestjava-3-r-c04">4.15 fsm/SessionStatsTest.java · 3 个用例（R-C04 会话统计）</a></li>
+<li><a href="#4151-bussessionbuslinktestjava-2-debt-009">4.15.1 bus/SessionBusLinkTest.java · 2 个用例（条件集成，DEBT-009 的收口产物）</a></li>
 <li><a href="#416-orchestrationrequestbudgetjava-60-rec-01">4.16 orchestration/RequestBudget.java · 工具类 · 60 行（REC-01）</a></li>
 </ul>
 </li>
@@ -162,7 +163,8 @@
   <main class="doc"><h1 id="04-session-manager">04 · session-manager 会话服务<a class="headerlink" href="#04-session-manager" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>模块路径：<code>services/java/session-manager/</code>
-源文件：<strong>16 个主代码（1389 行）+ 10 个测试（933 行 / 43 个用例）</strong>
+源文件：<strong>17 个主代码（1637 行）+ 11 个测试（1028 行 / 45 个用例）</strong>
+默认执行 <strong>43 个</strong>：<code>bus/SessionBusLinkTest</code> 的 2 个用例需要真实 NATS + Kafka，由 <code>SESSION_BUS_IT=true</code> 守卫
 HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（原 9092 与 Kafka 宿主端口冲突，2026-09-19 外移）
 主要依赖：Spring Web、Spring Data Redis、NATS（jnats）、Kafka clients</p>
 </blockquote>
@@ -402,6 +404,24 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 <td>测试</td>
 <td style="text-align: right;">192</td>
 <td>落库字段 / TTL / 上下文窗口 / 旧数据兼容</td>
+</tr>
+<tr>
+<td><code>test/…/GlobalExceptionHandlerTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">68</td>
+<td>路由层 404 / 405 / 415 分流，真实故障仍 500（见 §4.14）</td>
+</tr>
+<tr>
+<td><code>test/…/SessionStatsTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">128</td>
+<td>R-C04 会话统计口径：剔除已关闭、租户过滤、SCAN 失败降级（见 §4.15）</td>
+</tr>
+<tr>
+<td><code>test/…/SessionBusLinkTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">85</td>
+<td><strong>条件集成</strong>：真实 NATS 请求-应答 + 真实 Kafka 发布（见 §4.15.1）</td>
 </tr>
 </tbody>
 </table>
@@ -977,6 +997,34 @@ HTTP 端口：<strong>8081</strong> · gRPC 端口：<strong>19092</strong>（�
 mock <code>HashOperations.entries</code> / <code>ListOperations.range</code> 时先在 Lambda 里取 <code>Object key = inv.getArgument(0)</code>
 再 <code>String.valueOf(key)</code> —— 直接 <code>getArgument(0)</code> 会被推断成 <code>char[]</code> 重载并 <code>ClassCastException</code>
 （与 <code>SessionStoreTest</code> 同一坑，注释已留痕）。</p>
+<h3 id="4151-bussessionbuslinktestjava-2-debt-009">4.15.1 <code>bus/SessionBusLinkTest.java</code> · 2 个用例（条件集成，DEBT-009 的收口产物）<a class="headerlink" href="#4151-bussessionbuslinktestjava-2-debt-009" title="Permanent link">&para;</a></h3>
+<p><strong>这是「消息链路只测了 mock」这一技术债（DEBT-009）的关闭依据</strong>：不 mock 任何客户端，
+直接连真实中间件跑通两件事。</p>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>验证内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>natsRequestResponseFlowsThroughBusProxy</code></td>
+<td>在临时 subject 上起一个<strong>真实 responder</strong>（收到消息即向 <code>replyTo</code> 回 <code>pong</code>），再用 <code>NatsClient</code> + <code>BusProxy.request()</code> 走完整请求-应答，断言返回 <code>pong</code></td>
+</tr>
+<tr>
+<td><code>kafkaPublisherWritesToRealBroker</code></td>
+<td><code>KafkaEventPublisher.publish()</code> 后用一个<strong>同 topic 的真实 <code>KafkaConsumer</code></strong> 拉取，断言能读到 key=<code>route-test</code> 的记录且 topic 名与发布方一致</td>
+</tr>
+</tbody>
+</table>
+<ul>
+<li><strong>守卫</strong>：<code>@EnabledIfEnvironmentVariable(named = "SESSION_BUS_IT", matches = "true")</code> —— 默认跳过，
+  因此本地 <code>mvn test</code> 的基线是 43 个用例；要跑真链路需 NATS（4222）与 Kafka（9092）在线。</li>
+<li><strong>可配置</strong>：NATS 地址读 <code>NATS_URL</code>、Kafka 读 <code>KAFKA_BOOTSTRAP</code>，都用 <code>System.getenv().getOrDefault</code>，
+  不写死。</li>
+<li>两个用例都<strong>自建随机 subject / 随机 groupId</strong>，因此可重复执行、不会互相干扰。</li>
+</ul>
 <h3 id="416-orchestrationrequestbudgetjava-60-rec-01">4.16 <code>orchestration/RequestBudget.java</code> · 工具类 · 60 行（REC-01）<a class="headerlink" href="#416-orchestrationrequestbudgetjava-60-rec-01" title="Permanent link">&para;</a></h3>
 <ul>
 <li><strong>职责</strong>：承载<strong>一次请求的总预算（deadline）</strong>，让调用链上<strong>每一跳</strong>都只能在剩余预算内发起。</li>

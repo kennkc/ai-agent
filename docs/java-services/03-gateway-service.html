@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 22:40 · 源文件 03-gateway-service.md</span>
+  <span class="meta">生成于 2026-09-21 12:28 · 源文件 03-gateway-service.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -136,6 +136,7 @@
 <li><a href="#45-securityjwtauthfilterjava-58">4.5 security/JwtAuthFilter.java · 全局过滤器 · 58 行</a></li>
 <li><a href="#46-securityauthcontrollerjava-36">4.6 security/AuthController.java · 控制器 · 36 行</a></li>
 <li><a href="#47-testjwtservicetestjava-24-2">4.7 test/…/JwtServiceTest.java · 测试 · 24 行 · 2 个用例</a></li>
+<li><a href="#48-testwpbffrouteintegrationtestjava-94-2">4.8 test/…/WpBffRouteIntegrationTest.java · 测试 · 94 行 · 2 个用例</a></li>
 </ul>
 </li>
 <li><a href="#5">5. 路由配置</a></li>
@@ -146,7 +147,7 @@
   <main class="doc"><h1 id="03-gateway-service">03 · gateway-service 网关服务<a class="headerlink" href="#03-gateway-service" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>模块路径：<code>services/java/gateway-service/</code>
-源文件：<strong>6 个主代码 + 1 个测试</strong>
+源文件：<strong>6 个主代码 + 2 个测试</strong>
 HTTP 端口：<strong>8080</strong>（统一入口）· gRPC 端口：<strong>9091</strong>
 技术栈：Spring Cloud Gateway（WebFlux 响应式）+ JJWT</p>
 </blockquote>
@@ -240,6 +241,12 @@ HTTP 端口：<strong>8080</strong>（统一入口）· gRPC 端口：<strong>90
 <td>测试</td>
 <td style="text-align: right;">24</td>
 <td>密钥强度与租户往返</td>
+</tr>
+<tr>
+<td><code>test/…/WpBffRouteIntegrationTest.java</code></td>
+<td>测试</td>
+<td style="text-align: right;">94</td>
+<td><strong>真实起网关</strong>：<code>/api/wp/**</code> 转发到假 BFF + 租户头注入 + <code>/actuator/prometheus</code> 可用</td>
 </tr>
 </tbody>
 </table>
@@ -409,6 +416,30 @@ HTTP 端口：<strong>8080</strong>（统一入口）· gRPC 端口：<strong>90
 </table>
 <p><strong>这个测试的价值在于第二条</strong> —— 它是对「禁止弱密钥」这一安全约定的回归守卫，防止有人为了「方便本地开发」
 把启动期校验删掉。</p>
+<h3 id="48-testwpbffrouteintegrationtestjava-94-2">4.8 <code>test/…/WpBffRouteIntegrationTest.java</code> · 测试 · 94 行 · 2 个用例<a class="headerlink" href="#48-testwpbffrouteintegrationtestjava-94-2" title="Permanent link">&para;</a></h3>
+<p><strong>真实启动网关上下文</strong>（<code>@SpringBootTest(RANDOM_PORT)</code> + <code>WebTestClient</code>），并在测试内用 JDK 自带的
+<code>com.sun.net.httpserver.HttpServer</code> 起一个<strong>假 wp-bff</strong>，把 <code>WP_BFF_URI</code> 通过 <code>@DynamicPropertySource</code>
+指到它。这样验证的是<strong>网关自己的路由与鉴权行为</strong>，不依赖 8090 是否在跑、也不依赖 Nacos。</p>
+<table>
+<thead>
+<tr>
+<th>用例</th>
+<th>验证内容</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>routesApiWpThroughGatewayAndInjectsTenant</code></td>
+<td>带合法 JWT 访问 <code>/api/wp/healthz</code> → 断言响应即假 BFF 的 JSON；并断言假 BFF 收到的 <code>X-Tenant-Id</code> 等于令牌里的租户（<strong>租户注入在路由链路上真的生效</strong>）</td>
+</tr>
+<tr>
+<td><code>exposesPrometheusMetricsEndpoint</code></td>
+<td><code>/actuator/prometheus</code> 返回 200 且含 <code>jvm_memory_used_bytes</code>（指标页依赖该端点，属回归守卫）</td>
+</tr>
+</tbody>
+</table>
+<p>配套的启动属性里显式关掉了 Nacos 注册与 <code>discovery.locator</code>，避免自动路由把结果搅浑 ——
+<strong>该测试只认 <code>spring.cloud.gateway.routes</code> 里显式声明的路由</strong>。</p>
 <h2 id="5">5. 路由配置<a class="headerlink" href="#5" title="Permanent link">&para;</a></h2>
 <p>路由定义在 <code>src/main/resources/application.yml</code>：</p>
 <table>
@@ -420,6 +451,11 @@ HTTP 端口：<strong>8080</strong>（统一入口）· gRPC 端口：<strong>90
 </tr>
 </thead>
 <tbody>
+<tr>
+<td><code>work-platform-bff</code></td>
+<td><code>/api/wp/**</code></td>
+<td><code>${WP_BFF_URI:http://127.0.0.1:8090}</code>（Node BFF，<strong>非</strong> <code>lb://</code>）</td>
+</tr>
 <tr>
 <td><code>session-manager</code></td>
 <td><code>/api/session/**</code></td>
@@ -445,9 +481,13 @@ HTTP 端口：<strong>8080</strong>（统一入口）· gRPC 端口：<strong>90
 <p>同时开启了 <code>discovery.locator</code>（<code>enabled: true</code>、<code>lower-case-service-id: true</code>），
 意味着<strong>未显式配置的服务也会按 <code>/{service-id}/**</code> 自动生成路由</strong> —— 这是服务发现定位器的默认行为。
 新增服务时优先补显式路由，以便控制路径前缀。</p>
-<p><strong>已知缺口</strong>：中间件观测的 <code>wp-bff</code>（Node，端口 8090）<strong>尚无网关路由</strong>。
-当前前端在开发期依赖 Vite 代理 <code>/api/wp → 127.0.0.1:8090</code>；生产路径需要在网关补一条
-<code>/api/wp/**</code> 路由。详见 <a href="07-运行时配置与横切约定.md">07-运行时配置与横切约定</a>。</p>
+<p><strong>两个服务刻意不经网关</strong>（2026-09-21 实况，别照抄旧文档的「/api/{...}/tool」写法）：</p>
+<ul>
+<li><code>tool-executor</code>（8084）与 <code>collab-bus</code>（8085）<strong>没有网关路由</strong>，只由 wp-bff 通过
+  <code>WP_BFF_TOOL_URL</code> / <code>WP_BFF_COLLAB_URL</code> 直接调用（前端走 <code>/api/wp/tools*</code>、<code>/api/wp/collab*</code>）。
+  原因是这两个域在<strong>控制面</strong>（工作平台运维视图）使用，鉴权模型是 BFF 的
+  「来源白名单 + <code>X-WP-Control-Token</code>」，与网关的 JWT 模型不同 —— 混进网关会引入两套鉴权口径。</li>
+</ul>
 <h2 id="6">6. 修改指引<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
 <table>
 <thead>

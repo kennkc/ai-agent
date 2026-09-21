@@ -20,6 +20,19 @@
 mtime —— 否则 git 在 rebase / checkout 后按任意顺序重写工作区，会把内容同步的孪生对误判为过期
 （2026-09-20 实测踩到，三组同步孪生对同时报 FAIL）。
 
+### 2026-09-21 修复（孪生判定曾整体失效）
+
+同一天 27 组孪生对同时报 FAIL，逐条核实**全是本脚本的假告警**（文档内容并未过期）。三处缺陷：
+
+| # | 缺陷 | 后果 | 修法 |
+|---|---|---|---|
+| 1 | git 输出**未解码非 ASCII 路径** | 中文文档名被输出成 `"docs/\346\226\207..."`，与 `Path` 拼出的相对路径对不上 → 提交时间查不到 | 所有 git 调用加 `-c core.quotepath=false` |
+| 2 | `git log` 的 pathspec **漏了根目录 `.html`** | `README.html` / `PROGRESS.html` 永远查不到提交时间 | pathspec 补上两个 `.html` |
+| 3 | 时间查不到时**直接判过期**（`return True`） | 「查不到」被当成「过期」，真问题被噪声埋掉 | 改为三态 `ok / stale / unknown`，`unknown` 只告警不计 FAIL，并做**逐文件 git 兜底查询** |
+
+> 教训：门禁的**假阳性比漏检更危险** —— 一旦长期飘红，人就开始忽略它。
+> 所以「无法判定」必须与「判定为坏」分开报告。
+
 ## 用法
 
 ```bash
@@ -87,10 +100,15 @@ TWIN_SKIP_DIRS = {"node_modules", ".git", "target", "dist", ".workbuddy"}
 
 
 def _git(*args: str) -> str | None:
-    """执行 git 子命令，返回 strip 后的 stdout；git 不可用/非仓库/出错时返回 None。"""
+    """执行 git 子命令，返回 strip 后的 stdout；git 不可用/非仓库/出错时返回 None。
+
+    **必须带 `-c core.quotepath=false`**：否则非 ASCII 路径（本项目文档大量中文名）会被 git
+    输出成 `"docs/\\346\\226\\207..."` 形式（引号 + 八进制转义），与 `Path` 拼出的相对路径
+    永远对不上 —— 表现为「所有中文文档的提交时间都查不到」（2026-09-21 实测的假 FAIL 根因）。
+    """
     try:
         done = subprocess.run(
-            ["git", *args],
+            ["git", "-c", "core.quotepath=false", *args],
             cwd=ROOT,
             capture_output=True,
             text=True,
@@ -114,12 +132,19 @@ class TwinGitState:
 
     LOG_LIMIT = 800
 
+    #: 孪生判定关心的路径 —— **`.html` 必须显式列出**：`git log -- README.md` 不匹配 README.html，
+    #: 漏了它会让根目录两组孪生永远查不到提交时间（2026-09-21 修复的缺陷之一）。
+    PATHS = ("docs", "README.md", "README.html", "PROGRESS.md", "PROGRESS.html")
+
     def __init__(self) -> None:
         self.dirty: set[str] | None = None
         self.commit_ts: dict[str, int] = {}
+        self._fallback: dict[str, int | None] = {}
+        self.git_available = False
 
-        out = _git("status", "--porcelain", "--", "docs", "README.md", "PROGRESS.md")
+        out = _git("status", "--porcelain", "--", *self.PATHS)
         if out is not None:
+            self.git_available = True
             self.dirty = {line[3:].strip().strip('"') for line in out.splitlines() if len(line) > 3}
 
         log = _git(
@@ -129,9 +154,7 @@ class TwinGitState:
             "--name-only",
             "--no-renames",
             "--",
-            "docs",
-            "README.md",
-            "PROGRESS.md",
+            *self.PATHS,
         )
         if log:
             ts: int | None = None
@@ -146,37 +169,57 @@ class TwinGitState:
         return None if self.dirty is None else rel.replace("\\", "/") in self.dirty
 
     def last_commit_ts(self, rel: str) -> int | None:
-        return self.commit_ts.get(rel.replace("\\", "/"))
+        """文件最后一次提交时间（unix 秒）；查不到返回 None。
+
+        批量 `git log -n800` 未覆盖到的文件做**逐文件兜底** —— 只在 miss 时付 git 启动成本，
+        且结果缓存，避免「老文件一律 unknown」把告警刷成噪声。
+        """
+        rel = rel.replace("\\", "/")
+        if rel in self.commit_ts:
+            return self.commit_ts[rel]
+        if rel not in self._fallback:
+            out = _git("log", "-1", "--format=%ct", "--no-renames", "--", rel) if self.git_available else None
+            self._fallback[rel] = int(out) if out and out.isdigit() else None
+        return self._fallback[rel]
 
 
-def twin_is_stale(md: Path, html: Path, state: TwinGitState) -> bool:
-    """判定 `.md` 是否比同名 `.html` 新（孪生过期）。
+def twin_status(md: Path, html: Path, state: TwinGitState) -> str:
+    """判定 `.md` 与同名 `.html` 的同步状态，返回 **`ok` / `stale` / `unknown`**。
 
     为什么不直接比 `st_mtime`：git 在 rebase / checkout / stash 时会**按任意顺序**重写工作区
     文件，md 与 html 的 mtime 先后与「谁的内容更新」无关。2026-09-20 实测：一轮 rebase 之后
     三组「已提交且内容同步」的孪生对全部被判过期，真正的过期问题反而被噪声掩盖。
 
     判定顺序（快路径优先，避免为每组文件付出 git 启动成本）：
-    1. md 不比 html 新 → 直接放行（绝大多数文件走这条，零 git 查询）。
-    2. md 更新 → 若有未提交改动，说明确实是刚改的，维持 mtime 结论。
-    3. md 更新且两侧都已提交 → 比「最后一次提交时间」，提交更晚才算过期；
+
+    1. md 不比 html 新 → `ok`（绝大多数文件走这条，零 git 查询）。
+    2. md 更新且**有未提交改动** → `stale`：确实是刚改的 md、html 还没重生。
+    3. md 更新、两侧都已提交 → 比「最后一次提交时间」：提交更晚才是 `stale`；
        同一次提交（孪生同批入库）视为同步 —— 这正是 rebase 后的情形。
+    4. 其余情形（提交时间查不到、git 不可用、只有 html 脏）→ `unknown`：
+       **「查不到」不等于「过期」**。历史上这里 `return True`，制造了 27 组假 FAIL。
     """
     if md.stat().st_mtime <= html.stat().st_mtime:
-        return False
+        return "ok"
 
     md_rel, html_rel = str(md.relative_to(ROOT)), str(html.relative_to(ROOT))
     md_dirty, html_dirty = state.is_dirty(md_rel), state.is_dirty(html_rel)
+    if md_dirty is True:
+        return "stale"
     if md_dirty is False and html_dirty is False:
         md_ts, html_ts = state.last_commit_ts(md_rel), state.last_commit_ts(html_rel)
         if md_ts is not None and html_ts is not None:
-            return md_ts > html_ts
-    return True
+            return "stale" if md_ts > html_ts else "ok"
+    return "unknown"
 
 
-def check_twins(problems: list[str]) -> tuple[int, int]:
-    """③ md/html 孪生同步（只查已有 html 孪生的 md，缺 html 不算失败）。"""
-    checked = stale = 0
+def check_twins(problems: list[str], warnings: list[str]) -> tuple[int, int, int]:
+    """③ md/html 孪生同步（只查已有 html 孪生的 md，缺 html 不算失败）。
+
+    返回 `(配对数, 过期数, 无法判定数)`。**无法判定只进 warnings，不计 FAIL** ——
+    告警与失败必须分开，否则门禁一旦长期飘红就没人看了。
+    """
+    checked = stale = unknown = 0
     pairs: list[tuple[Path, Path]] = []
 
     for md in (ROOT / "docs").rglob("*.md"):
@@ -192,12 +235,20 @@ def check_twins(problems: list[str]) -> tuple[int, int]:
             pairs.append((md, html))
 
     state = TwinGitState()
+    if not state.git_available:
+        warnings.append("git 不可用：孪生判定退化为 unknown，本次只做 mtime 快筛（结果不可作准）")
     for md, html in pairs:
         checked += 1
-        if twin_is_stale(md, html, state):
+        status = twin_status(md, html, state)
+        if status == "stale":
             stale += 1
             problems.append(f"孪生过期：{md.relative_to(ROOT)} 比同名 .html 新（需重跑 md2html-report.py）")
-    return checked, stale
+        elif status == "unknown":
+            unknown += 1
+            warnings.append(
+                f"孪生无从判定：{md.relative_to(ROOT)} 新于 .html，但提交时间未知 —— 请重跑 md2html-report.py 或确认内容已同步"
+            )
+    return checked, stale, unknown
 
 
 def main() -> int:
@@ -206,6 +257,7 @@ def main() -> int:
     args = ap.parse_args()
 
     problems: list[str] = []
+    warnings: list[str] = []
 
     n_ids, n_secs = check_anomaly_ids(problems)
     print("── 文档一致性门禁 ──")
@@ -213,8 +265,8 @@ def main() -> int:
     print(" OK" if not any("撞号" in p for p in problems) else " FAIL")
 
     if not args.no_twin:
-        checked, stale = check_twins(problems)
-        print(f"  孪生配对 {checked} 组 · 过期 {stale} 组")
+        checked, stale, unknown = check_twins(problems, warnings)
+        print(f"  孪生配对 {checked} 组 · 过期 {stale} 组 · 无从判定 {unknown} 组")
     else:
         print("  孪生检查：已跳过（--no-twin）")
 
@@ -222,10 +274,16 @@ def main() -> int:
         print()
         for p in problems:
             print(f"  FAIL {p}")
-        print(f"\n合计: FAIL={len(problems)}")
+    if warnings:
+        print()
+        for w in warnings:
+            print(f"  WARN {w}")
+
+    if problems:
+        print(f"\n合计: FAIL={len(problems)} · WARN={len(warnings)}")
         return 1
 
-    print("\n合计: FAIL=0（编号唯一、孪生同步）")
+    print(f"\n合计: FAIL=0（编号唯一、孪生同步）" + (f" · WARN={len(warnings)}" if warnings else ""))
     print("  说明：本门禁只查「编号撞号」与「孪生过期」，不查文档内容准确性 ——")
     print("        内容仍须拿实测输出对（用例数 / 行数 / 端点计数）。")
     return 0

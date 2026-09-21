@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 15:39 · 源文件 README.md</span>
+  <span class="meta">生成于 2026-09-21 12:31 · 源文件 README.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -131,8 +131,8 @@
   <main class="doc"><h1 id="java">Java 服务源码说明文档<a class="headerlink" href="#java" title="Permanent link">&para;</a></h1>
 <blockquote>
 <p>目标读者：接手本项目开发的工程师、需要快速定位改动点的维护者、代码评审人。
-覆盖范围：<code>services/java/</code> 下 6 个 Maven 模块的<strong>全部 247 个 Java 源文件</strong>（157 手写 + 90 protoc 生成），逐文件说明其职责、关键成员与协作关系。
-最后更新：2026-09-19（Phase 5 四肢期收口：新增 09-tool-executor，回填各模块真实文件计数）</p>
+覆盖范围：<code>services/java/</code> 下 <strong>7 个 Maven 模块</strong>的<strong>全部 277 个 Java 源文件</strong>（187 手写 + 90 protoc 生成），逐文件说明其职责、关键成员与协作关系。
+最后更新：2026-09-21（新增 10-collab-bus，回填模块数与文件计数）</p>
 </blockquote>
 <h2 id="_1">这套文档解决什么问题<a class="headerlink" href="#_1" title="Permanent link">&para;</a></h2>
 <p>项目采用「人体生命体」隐喻做分层，模块名（感官 / 躯体 / 神经）与业务语义不是一一对应的字面关系，
@@ -193,6 +193,11 @@
 <td>四肢服务：工具注册表、执行引擎、沙箱隔离、安全三闸、全量审计、IN-06 契约治理</td>
 <td>工具调用、沙箱策略、审计、契约变更</td>
 </tr>
+<tr>
+<td><a href="10-collab-bus.md">10-collab-bus</a></td>
+<td>协作总线（MC-01 / Phase 6 前置）：域生命周期、JetStream 可靠投递与幂等、心跳聚合、多实例租约</td>
+<td>协作域、消息可靠性、进度聚合</td>
+</tr>
 </tbody>
 </table>
 <h2 id="_3">代码规模<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
@@ -215,13 +220,13 @@
 <tr>
 <td><code>gateway-service</code></td>
 <td style="text-align: right;">6</td>
-<td style="text-align: right;">1</td>
+<td style="text-align: right;">2</td>
 <td>网关与鉴权</td>
 </tr>
 <tr>
 <td><code>session-manager</code></td>
-<td style="text-align: right;">16</td>
-<td style="text-align: right;">10</td>
+<td style="text-align: right;">17</td>
+<td style="text-align: right;">11</td>
 <td>会话与问答编排</td>
 </tr>
 <tr>
@@ -232,28 +237,35 @@
 </tr>
 <tr>
 <td><code>body-service</code></td>
-<td style="text-align: right;">27</td>
+<td style="text-align: right;">28</td>
 <td style="text-align: right;">11</td>
 <td>Phase 3 重写：格式解析 + 知识管道 + 三层存储 + 对账</td>
 </tr>
 <tr>
 <td><code>tool-executor</code></td>
 <td style="text-align: right;">32</td>
-<td style="text-align: right;">10</td>
+<td style="text-align: right;">11</td>
 <td>Phase 5 新增：注册表 + 执行引擎 + 沙箱 + 审计</td>
 </tr>
 <tr>
+<td><code>collab-bus</code></td>
+<td style="text-align: right;">20</td>
+<td style="text-align: right;">5</td>
+<td>MC-01 协作总线（Phase 6 前置）：域 + 可靠投递 + 心跳</td>
+</tr>
+<tr>
 <td><strong>合计</strong></td>
-<td style="text-align: right;"><strong>116</strong></td>
-<td style="text-align: right;"><strong>41</strong></td>
-<td>157 个手写 <code>.java</code> 文件（另有 90 个 protoc 生成产物）</td>
+<td style="text-align: right;"><strong>228</strong></td>
+<td style="text-align: right;"><strong>49</strong></td>
+<td><strong>277 个 <code>.java</code></strong>（含 90 个 protoc 生成产物）；<strong>手写 187 个 = 138 主 + 49 测</strong></td>
 </tr>
 </tbody>
 </table>
 <h2 id="_4">阅读约定<a class="headerlink" href="#_4" title="Permanent link">&para;</a></h2>
 <ul>
 <li><strong>需求编号</strong>：<code>R0-xx</code> / <code>R1-xx</code> 为 Phase 0/1 需求，<code>R2-xx</code> 为 Phase 2 感官期需求，
-  <code>R3-xx</code> 为 Phase 3 躯体期需求，<code>R-Cxx</code> 为终端线（Console / 工作平台）相关需求。
+  <code>R3-xx</code> 为 Phase 3 躯体期需求，<code>R5-xx</code> 为 Phase 5 四肢期需求，<code>R-MC01-xx</code> 为 MC-01 协作总线
+  （Phase 6 前置切片）需求，<code>R-Cxx</code> 为终端线（Console / 工作平台）相关需求。
   编号定义在项目外的设计文档中：<code>…\AI知识库\任务指挥中心知识库\核心知识\AGENT_CONTEXT\</code>。</li>
 <li><strong><code>proto-contracts</code> 的 90 个文件不在本文档逐文件展开</strong>：它们 100% 由 <code>protoc</code> 生成，逐个人工描述没有信息增量；
   该模块改为按「契约 → 生成产物」维度说明，见 02 篇。</li>

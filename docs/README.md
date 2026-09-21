@@ -1,7 +1,7 @@
 # docs · 目录地图
 
 > Agent-Lifeform 项目文档归档总入口
-> **口径时间**：2026-09-20 · **代码基线**：以 `codex/main` 当前提交与《项目进度总览》为准
+> **口径时间**：2026-09-21 · **代码基线**：以 `codex/main` 当前提交与《项目进度总览》为准（三分支 `codex/main` / `dev` / `workbuddy/main` 内容一致）
 
 本目录是**项目过程资产**的归档地。代码回答"怎么做"，这里回答"做到哪了、凭什么算做完"。
 
@@ -41,10 +41,11 @@
 | `部署与环境版本基线.md` · `.html` | **部署与版本唯一入口**：工具链、镜像、生产 Nginx 路由、模型配置 fail-closed 与检查命令 | 版本、路由或部署边界变化时 |
 | `模型接入配置-功能逻辑.md` · `.html` | **WB-10 多模型接入的功能逻辑**：唯一真相源与四层职责、`llm_model_config` 表、AES-256-GCM 凭据落库与主密钥来源链、六个功能角色的引擎装配与「角色优先 / 层级兜底」候选序、三条关键时序、BFF 安全边界、降级矩阵、验收口径与未闭合项 | 模型接入逻辑变化时 |
 | `项目进度日志报告/` | **分阶段过程留痕**：每阶段三件套（阶段性报告 / 开发执行日志 / 测试验收报告），各含 HTML；含目录索引 `README.md` | 每阶段收口 |
-| `java-services/` | **Java 逐文件说明**：8 篇文档覆盖 106 个手写源文件（81 主 + 25 测），90 个 proto 生成文件按契约维度说明；08 篇为数据存储总纲 | 增删 Java 文件后（配 `scripts/java-doc-coverage.py` 自查） |
+| `java-services/` | **Java 逐文件说明**：10 篇文档覆盖 **187 个手写源文件（138 主 + 49 测）**，90 个 proto 生成文件按契约维度说明；08 篇为数据存储总纲，09 篇 tool-executor，10 篇 collab-bus | 增删 Java 文件后（配 `scripts/java-doc-coverage.py` 自查） |
 | `../db/` | **数据存储归档**：PG/Redis/Qdrant/暂存 4 份结构文档 + 运行态快照（`snapshots/`，只增不改）与恢复指引 | 存储结构变更时同步结构文档；需要新快照时带时间戳追加 |
-| `demo/` | **端到端演示脚本**：`Phase0-DEMO.md` / `Phase1-DEMO.md` / `Phase2-DEMO.md` | 每阶段收口 |
+| `demo/` | **端到端演示脚本**：`Phase0~5-DEMO.md` 六份（Phase 3 躯体 / Phase 4 大脑 / Phase 5 四肢均已补齐） | 每阶段收口 |
 | `优化日志/` | **工程化加固日志**：按日期命名，记录 P0/P1/P2 项的处理与验证 | 每轮加固后 |
+| `test-reports/` | **实测产物归档**：`collab/`（规模验证 25/100/500/1000 域、多实例接管、告警投递）、`metrics/`、`model/`、`frontend/`，按日期分目录 | 每次真实验收后 |
 
 其余（`dev分支代码分析与进度验证-2026-09-12.md` 等）为**当期分析快照**，属历史留痕，**不回改口径**。
 
@@ -56,24 +57,20 @@
 
 ```bash
 # 批量（处理目标目录「当层」的 .md，自动排除 README.md；不递归子目录）
-PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
-  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
-  scripts/md2html-report.py --all "docs/项目进度日志报告"
+E:/software/anaconda3/python.exe scripts/md2html-report.py --all "docs/项目进度日志报告"
 
 # 单文件
-PYTHONPATH="E:\AI\核心知识\.workbuddy\tmp\pylibs" \
-  C:/Users/Administrator/.workbuddy/binaries/python/versions/3.13.12/python.exe \
-  scripts/md2html-report.py "docs/项目进度总览.md"
+E:/software/anaconda3/python.exe scripts/md2html-report.py "docs/项目进度总览.md"
 
 # 覆盖标题 / 指定输出路径（仅单文件模式）
-... scripts/md2html-report.py "docs/项目进度总览.md" -t "标题" -o "docs/out.html"
+E:/software/anaconda3/python.exe scripts/md2html-report.py "docs/项目进度总览.md" -t "标题" -o "docs/out.html"
 ```
 
-> **本机环境变更（2026-09-18）**：原先用的 anaconda（`E:/software/anaconda3/python.exe`）**已卸载**，
-> 本机现只有 `E:/software/python/python312`（无 `markdown` 包）。
-> 因此 HTML 生成统一走 **托管 Python + `PYTHONPATH` 指向 `pylibs`**（内含 markdown 3.10.3）：
-> `pip install --target "E:\AI\核心知识\.workbuddy\tmp\pylibs" markdown`（不污染系统环境）。
-> 中文路径需加引号。
+> **环境口径修正（2026-09-21 实测）**：生成本文档镜像**必须用 anaconda Python**
+> `E:/software/anaconda3/python.exe`（内含 `markdown 3.4.1`）—— 它**处于可用状态**（可 `--version` 直接验证）。
+> WorkBuddy 托管 Python **未安装 `markdown` 包**。
+> ⚠️ 本文档此前写的「anaconda 已卸载 → 改用托管 Python + `PYTHONPATH` 指向 pylibs」**是错的**：
+> `E:\AI\核心知识\.workbuddy\tmp\pylibs` **不存在**，照抄那条命令会直接失败。已按实测改正。
 >
 > **脚本没有 `--dry-run`**，重新生成是**幂等覆盖**（直接重写目标 `.html`）：
 > 改完 `.md` 就重跑一次，再用 `git status --short` 看哪些 `.html` 被改动即可确认同步范围。

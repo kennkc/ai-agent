@@ -116,7 +116,7 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-19 22:40 · 源文件 01-模块总览与架构.md</span>
+  <span class="meta">生成于 2026-09-21 12:28 · 源文件 01-模块总览与架构.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
@@ -141,8 +141,9 @@
 </nav>
   <main class="doc"><h1 id="01">01 · 模块总览与架构<a class="headerlink" href="#01" title="Permanent link">&para;</a></h1>
 <blockquote>
-<p>本文说明 <code>services/java</code> 下五个 Maven 模块的职责边界、协作方式与运行形态。
-读完这篇应能回答：「我要改的功能应该在哪个模块？」</p>
+<p>本文说明 <code>services/java</code> 下 <strong>7 个服务模块</strong>（外加契约模块 <code>proto-contracts</code>）的职责边界、协作方式与运行形态。
+读完这篇应能回答：「我要改的功能应该在哪个模块？」
+最后更新：2026-09-21（补 <code>collab-bus</code> 模块与端口 8085，回填各模块文件计数）</p>
 </blockquote>
 <h2 id="1">1. 生命体分层与模块映射<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
 <p>项目用「人体生命体」隐喻组织架构，各层落到 Java 侧的映射关系如下：</p>
@@ -183,8 +184,8 @@
 <tr>
 <td>小脑层</td>
 <td>DAG、Saga、多 Agent 编排</td>
-<td>—</td>
-<td>Phase 6+</td>
+<td><code>collab-bus</code>（<strong>协作总线 MC-01，Phase 6 前置</strong>：域 + 可靠投递 + 心跳聚合）</td>
+<td>总线已落地，编排待 Phase 6</td>
 </tr>
 <tr>
 <td>免疫层</td>
@@ -256,8 +257,19 @@
 <td style="text-align: right;">9095</td>
 <td>工具注册表（R5-01）+ 执行引擎（R5-02）+ 沙箱（R5-03/05）+ 安全闸（R5-07）+ 审计（R5-08）+ 契约治理（IN-06）</td>
 </tr>
+<tr>
+<td><code>collab-bus</code></td>
+<td><code>collab-bus</code></td>
+<td style="text-align: right;"><strong>8085</strong></td>
+<td style="text-align: right;"><strong>—</strong></td>
+<td>协作总线（MC-01，Phase 6 前置）：域生命周期（R-MC01-01）+ JetStream 可靠投递与幂等（R-MC01-02/04）+ 心跳聚合（R-MC01-03）</td>
+</tr>
 </tbody>
 </table>
+<blockquote>
+<p><strong><code>collab-bus</code> 没有 gRPC 端口</strong> —— pom 里保留 grpc 依赖只为与其它模块对齐，未注册任何 gRPC 服务。
+它也是<strong>唯一不经网关</strong>的服务（前端经 wp-bff 的 <code>/api/wp/collab*</code> 访问），详见 <a href="03-gateway-service.md">03-gateway-service</a> §5。</p>
+</blockquote>
 <p>Python 侧的 <code>nlp-service</code>（端口 8000）不在本文档范围，但它是问答链路的必经环节，此处标出以完整呈现链路。</p>
 <h2 id="3">3. 模块依赖关系<a class="headerlink" href="#3" title="Permanent link">&para;</a></h2>
 <pre><code class="language-text">                        ┌──────────────────────┐
@@ -284,6 +296,9 @@
    （Phase 5+）大脑规划器 / 组合任务 ──HTTP /api/tool/execute──────────────┘
 
   所有模块 ──▶ proto-contracts（编译期依赖，含 gRPC 契约与 Health 服务）
+
+  （Phase 6 前置 / MC-01，**不经网关**）
+  工作平台 BFF 8090 ──HTTP /api/collab/**──▶ collab-bus 8085 ──▶ NATS JetStream（持久化）+ PG（4 张协作表）
 </code></pre>
 <p>要点：</p>
 <ul>
@@ -295,6 +310,9 @@
 <li><strong><code>tool-executor</code> 是平台唯一允许执行外部动作的模块</strong>（算数 / 出网 / 跑代码）；
   它对上游只提供一条无状态 HTTP 契约，不反向调用任何服务，审计真相源是自己的 PG 表
   <code>tool_audit_log</code>（Kafka 仅事件旁路）。</li>
+<li><strong><code>collab-bus</code> 是平台唯一的「服务间协作总线」</strong>（多 Agent 分工时的消息与进度中枢）：
+  传输层用 NATS JetStream（持久化 + 幂等 + 死信），状态真相源是自己的 4 张 PG 表；
+  它同样<strong>不反向调用任何服务</strong>，且<strong>没有网关路由</strong>（前端经 wp-bff 访问）。</li>
 </ul>
 <h2 id="4">4. 两条主要链路<a class="headerlink" href="#4" title="Permanent link">&para;</a></h2>
 <h3 id="41-vs1-phase-1">4.1 VS1 问答链路（Phase 1 打通，当前主干）<a class="headerlink" href="#41-vs1-phase-1" title="Permanent link">&para;</a></h3>
@@ -339,7 +357,7 @@ POST /api/session/{id}/ask            → 提问
 │       ├── GatewayApplication.java
 │       ├── grpc/                  # gRPC Health 探针
 │       └── security/              # JWT 签发、校验过滤器、开发令牌端点
-├── session-manager/               # 13 main + 4 test
+├── session-manager/               # 17 main + 11 test
 │   ├── pom.xml
 │   └── src/main/java/com/agent/session/
 │       ├── SessionManagerApplication.java
@@ -350,7 +368,7 @@ POST /api/session/{id}/ask            → 提问
 │       ├── kafka/                 # 事件消费与发布
 │       ├── nats/                  # NATS 客户端
 │       └── orchestration/         # 跨服务 HTTP 出口 + 上游客户端
-├── sense-service/                 # 35 main + 8 test
+├── sense-service/                 # 35 main + 9 test
 │   ├── pom.xml
 │   └── src/main/java/com/agent/sense/
 │       ├── SenseServiceApplication.java
@@ -373,7 +391,7 @@ POST /api/session/{id}/ask            → 提问
 │       ├── security/              # R2-02 SSRF 出站守卫
 │       ├── staging/               # R2-10 隔离暂存（多后端）
 │       └── util/                  # HTTP 客户端构建器 / 文本抽取
-└── body-service/                  # 27 main + 11 test
+└── body-service/                  # 28 main + 11 test
     ├── pom.xml
     └── src/main/java/com/agent/body/
         ├── BodyServiceApplication.java
@@ -386,7 +404,7 @@ POST /api/session/{id}/ask            → 提问
         ├── grpc/
         ├── service/               # 入库 / 检索 / RAG / 指标
         └── store/                 # 三层存储（PG 冷 / Redis 热 / 门面 + 分层路由）
-└── tool-executor/                 # 32 main + 10 test（Phase 5 四肢期）
+└── tool-executor/                 # 32 main + 11 test（Phase 5 四肢期）
     ├── pom.xml
     └── src/main/java/com/agent/tool/
         ├── ToolExecutorApplication.java
@@ -400,6 +418,17 @@ POST /api/session/{id}/ask            → 提问
         ├── registry/              # R5-01 注册表 + IN-06 契约治理
         ├── sandbox/               # R5-03/R5-05 沙箱（Docker + 受限子进程降级）
         └── tools/                 # R5-04/R5-05 内置工具（calculator / http / code）
+└── collab-bus/                    # 20 main + 5 test（MC-01 协作总线，Phase 6 前置）
+    ├── pom.xml
+    └── src/main/java/com/agent/collab/
+        ├── CollabBusApplication.java
+        ├── common/                # 错误码 / 业务异常 / 全局异常处理
+        ├── nats/                  # NATS 连接管理（惰性连接 + 状态可见）
+        ├── domain/                # R-MC01-01 域生命周期 + JetStream stream 编排
+        ├── delivery/              # R-MC01-02/04 发布 / 幂等状态机 / durable pull consumer / 实例租约
+        ├── heartbeat/             # R-MC01-03 心跳降频窗口 + 加权聚合
+        ├── controller/            # 域端点 + /api/collab/health
+        └── observability/         # Micrometer 协作指标
 </code></pre>
 <h2 id="6">6. 技术基线<a class="headerlink" href="#6" title="Permanent link">&para;</a></h2>
 <table>
@@ -473,8 +502,13 @@ POST /api/session/{id}/ask            → 提问
 </tr>
 <tr>
 <td>jnats / 自研客户端</td>
-<td>—</td>
-<td><code>session-manager</code> 用 jnats；<code>sense-service</code> 用自研最小实现</td>
+<td>jnats <strong>2.16.3</strong></td>
+<td><code>session-manager</code> 与 <code>collab-bus</code> 用 jnats；<code>sense-service</code> 的 pom <strong>也声明了 jnats 但代码零 <code>import io.nats.client</code></strong>，实际走自研最小实现（依赖 ≠ 使用）</td>
+</tr>
+<tr>
+<td>JetStream</td>
+<td>NATS 2.10（容器 <code>nats:2.10-alpine</code>）</td>
+<td><strong>仅 <code>collab-bus</code> 使用</strong>（持久化投递 / 幂等 / 死信的前提，容器需 <code>-js --store_dir</code>）</td>
 </tr>
 </tbody>
 </table>
@@ -511,7 +545,7 @@ POST /api/session/{id}/ask            → 提问
 </tr>
 <tr>
 <td><code>session-manager</code></td>
-<td>Nacos、Redis（会话存储）</td>
+<td>Nacos、Redis（会话存储）、NATS（总线握手；缺失时链路降级）、Kafka（事件）</td>
 </tr>
 <tr>
 <td><code>sense-service</code></td>
@@ -519,7 +553,15 @@ POST /api/session/{id}/ask            → 提问
 </tr>
 <tr>
 <td><code>body-service</code></td>
-<td>Nacos</td>
+<td>Nacos、PostgreSQL（元数据）、Redis（热缓存）、Qdrant（向量）、Kafka（感官事件）</td>
+</tr>
+<tr>
+<td><code>tool-executor</code></td>
+<td>PostgreSQL（审计真相源）、Kafka（事件旁路）、Docker（沙箱主路径；缺失时<strong>显式降级</strong>为受限子进程）</td>
+</tr>
+<tr>
+<td><code>collab-bus</code></td>
+<td><strong>PostgreSQL（4 张协作表，核心状态，不可用即 503 不降级）</strong>、<strong>NATS + JetStream（必须开启 <code>-js</code>）</strong>、Nacos（可选，默认不注册）</td>
 </tr>
 </tbody>
 </table>
@@ -532,6 +574,7 @@ POST /api/session/{id}/ask            → 提问
 <li>要加采集渠道 / 调质检策略 → <a href="05-sense-service.md">05-sense-service</a></li>
 <li>要接入 / 调试知识库 → <a href="06-body-service.md">06-body-service</a></li>
 <li>要改工具注册 / 执行 / 沙箱 / 审计 → <a href="09-tool-executor.md">09-tool-executor</a></li>
+<li>要改协作域 / 消息可靠性 / 心跳聚合 → <a href="10-collab-bus.md">10-collab-bus</a></li>
 <li>要部署或排查环境问题 → <a href="07-运行时配置与横切约定.md">07-运行时配置与横切约定</a></li>
 </ul></main>
 </div>

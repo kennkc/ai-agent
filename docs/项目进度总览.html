@@ -116,14 +116,14 @@
 <div class="topbar">
   <span class="dot"></span>
   <span class="name">Agent-Lifeform · 项目进度日志报告</span>
-  <span class="meta">生成于 2026-09-21 11:15 · 源文件 项目进度总览.md</span>
+  <span class="meta">生成于 2026-09-21 12:31 · 源文件 项目进度总览.md</span>
 </div>
 <div class="layout">
   <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
 <li><a href="#_1">一、当前状态一句话</a></li>
 <li><a href="#_2">二、阶段进度</a></li>
 <li><a href="#_3">三、功能交付矩阵</a><ul>
-<li><a href="#31-java157-116-41-90-proto">3.1 后端 Java（157 个手写源文件 = 116 主 + 41 测；另有 90 个 proto 生成文件）</a></li>
+<li><a href="#31-java187-138-49-90-proto">3.1 后端 Java（187 个手写源文件 = 138 主 + 49 测；另有 90 个 proto 生成文件）</a></li>
 <li><a href="#32-pythonservicespythonnlp-service10-py-12-proto">3.2 Python（services/python/nlp-service，10 个业务 py + 12 个 proto 生成文件）</a></li>
 <li><a href="#33-webwork-platformvue-3-vite-ts-element-plus9-vue-8-ts">3.3 前端（web/work-platform，Vue 3 + Vite + TS + Element Plus，9 vue + 8 ts）</a></li>
 <li><a href="#34-ops-bffservicesnodewp-bff-node-8090">3.4 Ops BFF（services/node/wp-bff，零依赖 Node，端口 8090）</a></li>
@@ -316,7 +316,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 </table>
 <hr />
 <h2 id="_3">三、功能交付矩阵<a class="headerlink" href="#_3" title="Permanent link">&para;</a></h2>
-<h3 id="31-java157-116-41-90-proto">3.1 后端 Java（157 个手写源文件 = 116 主 + 41 测；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java157-116-41-90-proto" title="Permanent link">&para;</a></h3>
+<h3 id="31-java187-138-49-90-proto">3.1 后端 Java（<strong>187 个手写源文件 = 138 主 + 49 测</strong>；另有 90 个 proto 生成文件）<a class="headerlink" href="#31-java187-138-49-90-proto" title="Permanent link">&para;</a></h3>
 <table>
 <thead>
 <tr>
@@ -332,7 +332,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td><code>gateway-service</code></td>
 <td>8080</td>
-<td>统一入口路由（<code>/api/{session,sense,nlp,body,tool}/**</code>）、JWT 校验、<strong>网关注入 <code>X-Tenant-Id</code></strong>、跨租户访问防护、统一错误响应模型</td>
+<td>统一入口路由（<code>/api/{session,sense,nlp,body,wp}/**</code>）、JWT 校验、<strong>网关注入 <code>X-Tenant-Id</code></strong>、跨租户访问防护、统一错误响应模型（<code>tool-executor</code> 8084 / <code>collab-bus</code> 8085 <strong>不经网关</strong>，前端经 wp-bff 访问）</td>
 <td><code>GatewayApplication</code> · 路由见 <code>application.yml</code></td>
 <td>2</td>
 <td>✅</td>
@@ -358,7 +358,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <td>8083</td>
 <td><strong>躯体期知识管道</strong>：<strong>格式解析（md/text/html）</strong> → 分块 → 嵌入 → 三层存储（Redis 热 / Qdrant 温 / PostgreSQL 冷）→ 语义检索 → 重排 → RAG；知识管理 REST API（含<strong>三层一致性对账</strong>与 <strong>IN-05 迭代检索预留接口</strong>）；<strong>消费 <code>lifeform.sense.collected</code> 形成感官→躯体闭环</strong>；<strong>写路径失效检索热缓存</strong>；统一错误码 + OTLP 链路 + <strong>路由层错误语义（404/405/415）</strong></td>
 <td><code>KnowledgeController</code> · <code>DocumentParser</code> · <code>ChunkProcessor</code> · <code>IngestService</code> · <code>RetrievalService</code> · <code>RagPipeline</code> · <code>StorageFacade</code> · <code>QdrantClient</code> · <code>SenseCollectedConsumer</code></td>
-<td>64</td>
+<td>67</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -366,7 +366,15 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <td><strong>8084</strong></td>
 <td><strong>四肢期工具执行</strong>：注册表（R5-01，注册/列表/详情/卸载/废弃 30 天期）、执行引擎（R5-02，白名单→Schema→敏感参数→熔断→带超时执行→标准化→审计）、沙箱（R5-03/05，Docker <code>--network none</code>/只读 rootfs/去能力 + 受限子进程<strong>显式降级</strong>）、三内置工具（R5-04/05：calculator 手写解析器<strong>无 eval</strong>、http 域名白名单+SSRF 拦截、code 沙箱执行）、安全三闸（R5-07）、全量审计（R5-08，PG 真相源 + Kafka 旁路 + 内存降级）、<strong>IN-06 契约治理（semver + schema 指纹 + 影响分析）</strong>、路由层错误语义（404/405/415）</td>
 <td><code>ToolController</code> · <code>ToolRegistry</code> · <code>ToolGuard</code> · <code>ToolExecutor</code> · <code>SandboxExecutor</code> · <code>ToolAuditLog</code> · <code>ToolBootstrap</code></td>
-<td><strong>82</strong></td>
+<td>86</td>
+<td>✅</td>
+</tr>
+<tr>
+<td><strong><code>collab-bus</code></strong></td>
+<td><strong>8085</strong></td>
+<td><strong>MC-01 协作总线（Phase 6 前置，独立切片）</strong>：域生命周期（R-MC01-01，<code>creating→active→closed</code> + 创建补偿 + 启动对账）、<strong>JetStream durable pull consumer</strong>（R-MC01-02/04，手工 ack/nak + <code>request_id</code> 幂等状态机 + 有限重投 + 自动 DLQ）、<strong>多实例域租约</strong>（抢不到不消费，租约不可用 fail-closed）、心跳聚合（R-MC01-03，5s 降频窗口合并 + 加权进度 + <code>stale</code> 派生）；<strong>不经网关</strong>，前端经 wp-bff <code>/api/wp/collab*</code> 访问</td>
+<td><code>CollabBusApplication</code> · <code>DomainService</code> · <code>ReliableConsumer</code> · <code>IdempotentConsumer</code> · <code>HeartbeatService</code> · <code>NatsConnection</code> · <code>DomainLeaseRepository</code></td>
+<td>38</td>
 <td>✅</td>
 </tr>
 <tr>
@@ -648,7 +656,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td><strong>文档一致性</strong></td>
 <td><code>python scripts/doc-consistency-check.py</code></td>
-<td><strong>0 FAIL</strong>：异常编号 35 条无撞号 · 章节号 20 个无重复 · md↔html 孪生 57 组无过期（无需 <code>--no-twin</code>）</td>
+<td><strong>0 FAIL</strong>：异常编号 35 条无撞号 · 章节号 20 个无重复 · md↔html 孪生 <strong>79 组</strong>无过期（无需 <code>--no-twin</code>）。<strong>2026-09-21 修掉脚本三处假告警缺陷</strong>（git 中文路径未解码 / pathspec 漏根目录 <code>.html</code> / 时间未知直接判过期），修前 27 组假 FAIL，修后抓出并修掉 1 组<strong>真实</strong>漏生 HTML（<code>docs/java-services/README.md</code>）</td>
 </tr>
 <tr>
 <td>端到端（Docker）</td>
@@ -673,7 +681,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>文档覆盖率</td>
 <td><code>python scripts/java-doc-coverage.py</code></td>
-<td><strong>160/160</strong> 业务源文件已登记（GAP 收尾轮登记 <code>BudgetGuard.java</code>；tool-executor <strong>43/43</strong>）</td>
+<td><strong>187/187</strong> 业务源文件已登记（逐模块：body 39 · collab-bus 25 · gateway 8 · sense 44 · session-manager 28 · tool-executor 43）</td>
 </tr>
 </tbody>
 </table>
@@ -721,7 +729,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <blockquote>
 <p>表内角色描述以当前远端配置为准；提交号不写死在文档里，使用 <code>git branch -vv</code> / <code>git rev-parse</code> 查询。</p>
 </blockquote>
-<p><strong>远端（本机）</strong>：</p>
+<p><strong>远端（本机，2026-09-21 实测 <code>git remote -v</code>）</strong>：</p>
 <table>
 <thead>
 <tr>
@@ -733,16 +741,17 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tbody>
 <tr>
 <td><code>origin</code></td>
-<td><code>https://ghfast.top/https://github.com/kennkc/ai-agent.git</code></td>
-<td>加速镜像（拉取）</td>
-</tr>
-<tr>
-<td><code>github</code></td>
 <td><code>git@github.com:kennkc/ai-agent.git</code></td>
-<td>SSH 直达</td>
+<td><strong>SSH 直达，fetch 与 push 同一地址</strong>（本机只有一个 remote）</td>
 </tr>
 </tbody>
 </table>
+<blockquote>
+<p>⚠️ 另一台开发机的拓扑<strong>与本机不同</strong>（<code>origin</code> = 本地镜像仓库、pushurl 直达 GitHub），
+见 <code>README.md</code> §8.4.1。<strong>动 remote 前先 <code>git remote -v</code> 确认</strong>，不要照抄任何一侧的结论。
+github 直连在本机是<strong>间歇性</strong>的（曾长期被阻 443），失败先重试 1~2 次；
+gh-proxy 类镜像<strong>只能读不能 push</strong>，仅可用于 <code>git ls-remote</code> 核对 SHA。</p>
+</blockquote>
 <p><strong>约定</strong>：跨分支吸收按「<strong>时间 + 语义</strong>逐项合并」，<strong>禁止整文件覆盖</strong>。</p>
 <h3 id="53">5.3 变更前置约定（强制）<a class="headerlink" href="#53" title="Permanent link">&para;</a></h3>
 <p>任何仓库内容变更之前，先执行 <strong><code>README.md</code> §8.0</strong>：<code>git fetch</code> → 判落后/领先 → <strong>解读</strong>对方改动
@@ -776,7 +785,7 @@ wp-bff <code>/api/wp/models*</code> 6 个方法、契约 4 条路径转 <code>im
 <tr>
 <td>3</td>
 <td><strong>BFF 契约 20 个 planned 端点</strong></td>
-<td>已实现 49 个路径 / 53 个方法；Phase 6 Blocking 已完成最小闭环，完整注册表 / 编排仍待解冻</td>
+<td>已实现 51 个路径 / 55 个方法；Phase 6 Blocking 已完成最小闭环，完整注册表 / 编排仍待解冻</td>
 <td>已实现域接真实数据；未接入注册表显式 unavailable 或 503，不伪装成功</td>
 </tr>
 <tr>
@@ -1096,7 +1105,7 @@ DEBT-007 虽未闭合，但实测已满足 R2-08 指标（90.0% / 0.035ms），<
 </tr>
 <tr>
 <td><code>docs/java-services/</code></td>
-<td>Java 逐文件说明（<strong>9 篇</strong>，覆盖 <strong>157 个手写源文件</strong> + 90 个生成文件；08 篇为数据存储总纲，<strong>09 篇为 tool-executor</strong>）</td>
+<td>Java 逐文件说明（<strong>10 篇</strong>，覆盖 <strong>187 个手写源文件</strong> + 90 个生成文件；08 篇为数据存储总纲，<strong>09 篇为 tool-executor，10 篇为 collab-bus</strong>）</td>
 <td>增删 Java 文件后</td>
 </tr>
 <tr>

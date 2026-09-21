@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>10 · collab-bus 协作总线服务（Phase 6 前置 / MC-01）</title>
+<style>
+  :root {
+    --brand: #185fa5;
+    --brand-soft: #e8f0fa;
+    --ink: #1f2329;
+    --ink-2: #545a63;
+    --ink-3: #8a9099;
+    --line: #e3e6eb;
+    --bg: #f6f7f9;
+    --card: #ffffff;
+    --ok: #1a7f43;
+    --warn: #b26a00;
+    --code-bg: #f3f4f6;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; padding: 0; background: var(--bg); color: var(--ink);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei",
+                 "PingFang SC", "Hiragino Sans GB", "Source Han Sans SC", sans-serif;
+    font-size: 15px; line-height: 1.75;
+    -webkit-font-smoothing: antialiased;
+  }
+  .topbar {
+    position: sticky; top: 0; z-index: 20; background: rgba(255,255,255,.92);
+    backdrop-filter: blur(8px); border-bottom: 1px solid var(--line);
+    padding: 10px 28px; display: flex; align-items: center; gap: 14px;
+  }
+  .topbar .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--brand); }
+  .topbar .name { font-weight: 600; font-size: 14px; }
+  .topbar .meta { margin-left: auto; color: var(--ink-3); font-size: 12px; }
+  .layout { display: flex; gap: 26px; max-width: 1320px; margin: 0 auto; padding: 26px 28px 80px; }
+  .tocnav {
+    flex: 0 0 260px; position: sticky; top: 70px; align-self: flex-start;
+    max-height: calc(100vh - 100px); overflow: auto;
+    background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px 18px; font-size: 13px;
+  }
+  /* markdown 的 toc 扩展会自行输出一个 div.toc 包装，这里取消它的卡片样式避免双边框 */
+  .tocnav .toc { background: none; border: none; padding: 0; margin: 0; }
+  .tocnav .toctitle { font-weight: 700; color: var(--brand); margin-bottom: 10px; font-size: 13px; display: block; }
+  .tocnav ul { list-style: none; margin: 0; padding-left: 12px; }
+  .tocnav > .toc > ul { padding-left: 0; }
+  .tocnav li { margin: 3px 0; }
+  .tocnav a { color: var(--ink-2); text-decoration: none; display: inline-block; padding: 2px 0; }
+  .tocnav a:hover { color: var(--brand); }
+  .doc {
+    flex: 1 1 auto; min-width: 0; background: var(--card);
+    border: 1px solid var(--line); border-radius: 12px; padding: 38px 46px 60px;
+  }
+  .doc h1 {
+    font-size: 27px; line-height: 1.35; margin: 0 0 6px;
+    padding-bottom: 14px; border-bottom: 3px solid var(--brand);
+  }
+  .doc h2 {
+    font-size: 20px; margin: 42px 0 14px; padding-left: 12px;
+    border-left: 4px solid var(--brand); line-height: 1.4;
+  }
+  .doc h3 { font-size: 16.5px; margin: 30px 0 10px; color: #2b3138; }
+  .doc h4 { font-size: 15px; margin: 22px 0 8px; color: var(--ink-2); }
+  .doc p { margin: 10px 0; }
+  .doc a { color: var(--brand); }
+  .doc hr { border: none; border-top: 1px solid var(--line); margin: 34px 0; }
+  .doc table {
+    border-collapse: collapse; width: 100%; margin: 16px 0; font-size: 13.5px;
+    display: block; overflow-x: auto;
+  }
+  .doc thead th {
+    background: var(--brand-soft); color: #123f6d; font-weight: 600;
+    text-align: left; white-space: nowrap;
+  }
+  .doc th, .doc td { border: 1px solid var(--line); padding: 8px 11px; vertical-align: top; }
+  .doc tbody tr:nth-child(even) { background: #fafbfc; }
+  .doc code {
+    background: var(--code-bg); padding: 1.5px 6px; border-radius: 4px;
+    font-family: "Cascadia Mono", Consolas, "JetBrains Mono", Menlo, monospace; font-size: 13px;
+  }
+  .doc pre {
+    background: #1f2329; color: #e6e8eb; padding: 15px 18px; border-radius: 8px;
+    overflow-x: auto; font-size: 12.8px; line-height: 1.65;
+  }
+  .doc pre code { background: none; color: inherit; padding: 0; font-size: inherit; }
+  .doc blockquote {
+    margin: 16px 0; padding: 12px 18px; background: #fffaf0;
+    border-left: 4px solid var(--warn); color: #6b4a00; border-radius: 0 6px 6px 0;
+  }
+  .doc blockquote p { margin: 5px 0; }
+  .doc ul, .doc ol { padding-left: 26px; }
+  .doc li { margin: 5px 0; }
+  .doc li input[type=checkbox] { margin-right: 7px; }
+  .doc img { max-width: 100%; }
+  .wikilink { color: var(--brand); }
+  .footer { max-width: 1320px; margin: 0 auto; padding: 0 28px 50px;
+            color: var(--ink-3); font-size: 12px; text-align: center; }
+  @media (max-width: 980px) {
+    .layout { flex-direction: column; padding: 18px 16px 60px; }
+    .tocnav { position: static; flex: none; max-height: none; }
+    .doc { padding: 24px 20px 40px; }
+  }
+  @media print {
+    body { background: #fff; }
+    .topbar, .tocnav { display: none; }
+    .layout { display: block; padding: 0; }
+    .doc { border: none; padding: 0; }
+    .doc h2 { page-break-after: avoid; }
+    .doc table, .doc pre, .doc blockquote { page-break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="topbar">
+  <span class="dot"></span>
+  <span class="name">Agent-Lifeform · 项目进度日志报告</span>
+  <span class="meta">生成于 2026-09-21 12:28 · 源文件 10-collab-bus.md</span>
+</div>
+<div class="layout">
+  <nav class="tocnav"><div class="toc"><span class="toctitle">目录</span><ul>
+<li><a href="#1">1. 模块职责</a></li>
+<li><a href="#2">2. 三条不变量（先记住这三条，再看代码）</a></li>
+<li><a href="#3-creating">3. 域的创建顺序（为什么先落 creating）</a></li>
+<li><a href="#4-r-mc01-02">4. 投递状态机（R-MC01-02 的核心）</a><ul>
+<li><a href="#41-durable-pull-consumer">4.1 durable pull consumer 与多实例租约</a></li>
+</ul>
+</li>
+<li><a href="#5-r-mc01-03">5. 心跳聚合（R-MC01-03）</a><ul>
+<li><a href="#51">5.1 降频窗口：限流不等于丢数据</a></li>
+<li><a href="#52-stale">5.2 stale 是查询时派生的状态，不写库</a></li>
+<li><a href="#53">5.3 消息类型与业务处理器的边界</a></li>
+</ul>
+</li>
+<li><a href="#6-4-pg-postconstruct">6. 数据模型（4 张 PG 表，全部由 @PostConstruct 建表）</a></li>
+<li><a href="#7">7. 文件清单</a><ul>
+<li><a href="#71-20-2347">7.1 主代码（20 个，2347 行）</a></li>
+<li><a href="#72-5-38">7.2 测试（5 个文件，38 个用例，全绿）</a></li>
+</ul>
+</li>
+<li><a href="#8">8. 逐文件说明（关键实现）</a><ul>
+<li><a href="#81-natsnatsconnectionjava-140">8.1 nats/NatsConnection.java · 传输底座 · 140 行</a></li>
+<li><a href="#82-domaindomainservicejava-187">8.2 domain/DomainService.java · 域生命周期 · 187 行</a></li>
+<li><a href="#83-deliveryidempotencyrepositoryjava-187">8.3 delivery/IdempotencyRepository.java · 幂等状态 · 187 行</a></li>
+<li><a href="#84-deliveryreliableconsumerjava-348">8.4 delivery/ReliableConsumer.java · 可靠消费 · 348 行</a></li>
+<li><a href="#85-heartbeatheartbeatservicejava-372">8.5 heartbeat/HeartbeatService.java · 心跳聚合 · 372 行</a></li>
+<li><a href="#86-commonerrorcodejava">8.6 错误码（common/ErrorCode.java）</a></li>
+</ul>
+</li>
+<li><a href="#9">9. 运行与配置</a><ul>
+<li><a href="#91">9.1 端口与服务名</a></li>
+<li><a href="#92">9.2 环境变量</a></li>
+<li><a href="#93-actuatorprometheus">9.3 指标（/actuator/prometheus）</a></li>
+<li><a href="#94">9.4 本地起服务</a></li>
+</ul>
+</li>
+<li><a href="#10">10. 已知缺口（诚实登记，勿当已完成）</a></li>
+<li><a href="#11">11. 改这里要注意什么</a></li>
+<li><a href="#12">12. 相关文档</a></li>
+</ul>
+</div>
+</nav>
+  <main class="doc"><h1 id="10-collab-bus-phase-6-mc-01">10 · collab-bus 协作总线服务（Phase 6 前置 / MC-01）<a class="headerlink" href="#10-collab-bus-phase-6-mc-01" title="Permanent link">&para;</a></h1>
+<blockquote>
+<p>模块路径：<code>services/java/collab-bus/</code>
+源文件：<strong>20 个主代码（2347 行）+ 5 个测试（763 行 / 38 个用例，全绿）</strong>
+HTTP 端口：<strong>8085</strong>（<code>COLLAB_HTTP_PORT</code>）· <strong>无 gRPC 端口</strong>（未提供服务实现，pom 的 grpc 依赖仅为与其它模块对齐）
+外部依赖：<strong>NATS + JetStream</strong>（传输与持久化）· <strong>PostgreSQL</strong>（域元数据 / 幂等状态 / 心跳快照 / 实例租约，共 4 张表）
+阶段来源：<strong>Phase 6 前置（不属任何 Phase 交付范围）</strong> —— MC-01 协作总线独立切片，需求号 <code>R-MC01-01 ~ R-MC01-05</code>
+上游入口：<strong>工作平台 BFF <code>services/node/wp-bff</code>（8090）</strong> —— <code>/api/wp/collab/domains</code>、<code>/api/wp/collab/{domain_id}</code>；
+<strong>网关 <code>gateway-service</code> 没有 <code>/api/collab/**</code> 路由</strong>，本服务不经网关对外</p>
+</blockquote>
+<h2 id="1">1. 模块职责<a class="headerlink" href="#1" title="Permanent link">&para;</a></h2>
+<p><code>collab-bus</code> 是生命体的<strong>协作总线</strong>（设计术语「C26 独立切片」）：多 Agent 在同一个<strong>协作域</strong>
+（collaboration domain）里分工干活时，本服务负责三件事 —— <strong>域的生命周期</strong>、<strong>消息的可靠投递</strong>、
+<strong>成员进度的聚合</strong>。它不承载业务语义：<code>dispatch / result / negotiate</code> 三类消息目前只走通传输层，
+真实业务处理器由 Phase 6 注册（见 §5.3）。</p>
+<table>
+<thead>
+<tr>
+<th>需求</th>
+<th>能力</th>
+<th>落点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R-MC01-01</td>
+<td>域生命周期：创建 / 列表 / 详情 / 关闭；按域隔离的 JetStream stream</td>
+<td><code>domain/*</code> + <code>controller/DomainController</code></td>
+</tr>
+<tr>
+<td>R-MC01-02</td>
+<td>可靠投递：JetStream 持久化 + <code>request_id</code> 幂等 + 有限重投 + 死信</td>
+<td><code>delivery/*</code> + <code>nats/NatsConnection</code></td>
+</tr>
+<tr>
+<td>R-MC01-03</td>
+<td>心跳聚合：降频窗口 / 失联标记 / 加权进度聚合</td>
+<td><code>heartbeat/*</code></td>
+</tr>
+<tr>
+<td>R-MC01-04</td>
+<td>可靠性加固：durable <strong>pull</strong> consumer、手工 ack/nak、P99 门禁</td>
+<td><code>delivery/ReliableConsumer</code></td>
+</tr>
+<tr>
+<td>R-MC01-05</td>
+<td>工作平台接入：BFF 代理协作域列表 / 详情 + 前端真实域选择与降级</td>
+<td><code>services/node/wp-bff</code>（非本模块代码）</td>
+</tr>
+</tbody>
+</table>
+<p>对外契约登记在 <code>contracts/collab-bus-openapi.yaml</code>；Phase 6 端点优先级见
+<code>contracts/phase6-endpoint-priority.yaml</code> 与 <code>docs/Phase6-必需端点排期冻结稿.md</code>。</p>
+<h2 id="2">2. 三条不变量（先记住这三条，再看代码）<a class="headerlink" href="#2" title="Permanent link">&para;</a></h2>
+<p>后续所有设计选择都可以用这三条解释：</p>
+<ol>
+<li><strong>不做内存降级（与审计类旁路数据相反）</strong>。域元数据、幂等状态、心跳快照都是<strong>核心状态</strong>，
+   PG 不可用时 <code>Repository.available()</code> 立刻转 false，服务层统一抛
+   <code>AGENT_COLLAB_BUS_UNAVAILABLE</code>(503)，<strong>绝不退化成进程内 Map</strong>。
+   理由写在 <code>CollabDomain</code> 类注释里：内存降级会造成「域创建了、重启后找不回」这类语义级伪实现。</li>
+<li><strong>降级必须可见</strong>。<code>NatsConnection.status()</code> 固定返回
+   <code>nats_connected / jetstream_available / degraded / last_error</code>，<code>/api/collab/health</code> 把
+   bus + consumer + heartbeat 三段状态拼在一起如实上报（沿用 2026-09-16 的降级可见化约定）。</li>
+<li><strong>消息不静默丢弃</strong>。消费失败先 <code>nak</code> 延迟重投；重投超过上限（默认 <code>retry-max=3</code>，即最多
+   4 次尝试）写入死信主题 <code>collab.&lt;domain&gt;.deadletter</code> <strong>并把幂等状态标记为 <code>dlq</code></strong>，
+   死信发布自身失败时抛 503 而不是吞掉（宁可人工介入，不假装成功）。</li>
+</ol>
+<h2 id="3-creating">3. 域的创建顺序（为什么先落 <code>creating</code>）<a class="headerlink" href="#3-creating" title="Permanent link">&para;</a></h2>
+<pre><code class="language-text">POST /api/collab/domains
+  │
+  ├─ requireReady()        PG 可用？JetStream 可用？    ← 任一不可用 → 503（不插库）
+  ├─ repository.insert()   写 collab_domain，state = creating
+  ├─ addStream()           建 JetStream stream COLLAB_DOM_XXXX（File 存储，maxAge 24h）
+  ├─ consumer.startDomain()建 durable pull consumer（并申请实例租约）
+  └─ markActive()          creating/failed → active
+        └─ 任一步失败 → stopDomain() + 删 stream + markFailed() → 抛 503（带 domain_id / state=failed）
+</code></pre>
+<p><strong>为什么要这个中间态</strong>：如果先写 <code>active</code> 再建 stream，中途失败就会留下「库里有 active 域、
+总线里没有 stream」的半成品 —— 之后所有发布都会失败且无从区分。
+<code>DomainService.recoverIncompleteDomains()</code>（<code>ApplicationReadyEvent</code>）在启动时对账：
+把 <code>active</code> 域重新挂上 consumer，把遗留的 <code>creating</code> 域补成 <code>active</code>，<code>failed</code> 域跳过不动。</p>
+<p><strong>关闭域的顺序是反的</strong>：先改 PG 状态（<code>close</code>），再停 consumer。
+注释写明理由 —— <strong>NATS 暂时不可用不应阻止域收口</strong>，否则总线故障期间连域都关不掉。</p>
+<h2 id="4-r-mc01-02">4. 投递状态机（R-MC01-02 的核心）<a class="headerlink" href="#4-r-mc01-02" title="Permanent link">&para;</a></h2>
+<p>幂等状态在 <code>collab_seen_request</code> 表，主键 <code>(domain_id, request_id)</code>：
+<strong>同一 <code>request_id</code> 在不同域中互不影响</strong>。状态流转：</p>
+<pre><code class="language-text">claim(domain_id, request_id, member_id, maxAttempts)
+  ├─ 首次插入成功        → CLAIMED     attempts=1        → 执行业务
+  ├─ 已有 pending/failed → attempts+1
+  │     ├─ ≤ 上限        → RETRY                        → 执行业务
+  │     └─ &gt; 上限        → EXHAUSTED                    → 直接 DLQ + ack
+  └─ 已有 processed/dlq  → PROCESSED / DEAD_LETTER      → 直接 ack，不执行副作用
+</code></pre>
+<ul>
+<li><strong>业务成功</strong> → <code>markProcessed</code> → <code>ack</code></li>
+<li><strong>业务失败且未达上限</strong> → <code>markFailed</code> → 抛 <code>BizException</code> → 消费端 <code>nakWithDelay(retry-delay-ms)</code></li>
+<li><strong>业务失败且已达上限</strong> → <code>deadLetter()</code>（发布 DLQ + <code>markDeadLetter</code>）→ <code>ack</code></li>
+</ul>
+<p>三条容易被误读的点：</p>
+<ul>
+<li><strong><code>claim()</code> 里 <code>status</code> 会从 <code>failed</code> 被改回 <code>pending</code></strong>，所以「失败」不是终态；
+  这正是把原来的「看到 request_id 就永久丢弃」改成状态机的原因 —— 否则「重投 ≤ N → 死信」永远不成立。</li>
+<li><strong>DLQ 用的是独立 message id（<code>requestId + ".dlq"</code>）</strong>，否则死信会在同一个 stream 内被
+  JetStream 判为与原始消息重复而直接丢掉。</li>
+<li><strong><code>consume()</code> 是兼容旧行为的薄封装</strong>：只返回「本次是否真正完成一次业务」，<code>deliver()</code> 才是全状态版本。</li>
+</ul>
+<h3 id="41-durable-pull-consumer">4.1 durable pull consumer 与多实例租约<a class="headerlink" href="#41-durable-pull-consumer" title="Permanent link">&para;</a></h3>
+<p>每个域一个 <strong>durable pull consumer</strong>（<code>durable = collab-worker-&lt;domainId&gt;</code>），
+用虚拟线程跑 <code>pullLoop</code>：<code>fetch(batchSize=32, timeout=500ms)</code> → 逐条 <code>handle</code> → 循环。
+选 pull 而非 push 的理由写在 <code>ReliableConsumer</code> 类注释：push 在进程重启后可能因
+deliver subject / ackWait 配置漂移而<strong>无法重新绑定</strong>，未 ack 消息就变成孤儿。</p>
+<p>启动时对既有 consumer 做一次兼容处理：若发现旧 push consumer（<code>deliver_subject</code> 非空）且
+<code>pending=0 &amp;&amp; ack_pending=0</code>，自动删除并迁移为 pull；<strong>若有未处理消息则拒绝自动迁移并抛错</strong>
+（宁可人工介入，不冒险丢消息）。绑定既有 durable 时使用<strong>服务端快照配置</strong>（<code>bind(true)</code>），
+避免客户端默认值触发 NATS 的「不可修改」校验。</p>
+<p>多实例安全靠 <code>collab_domain_lease</code> 表：</p>
+<ul>
+<li>每个进程一个 owner UUID（<code>UUID.randomUUID()</code>，进程级稳定）；</li>
+<li><code>tryAcquire(domainId, leaseMs)</code> 用 <code>INSERT ... ON CONFLICT DO UPDATE ... WHERE lease_until &lt; now()
+  OR owner_id = EXCLUDED.owner_id RETURNING owner_id</code> 做<strong>原子抢占</strong>；</li>
+<li><code>reconcile()</code> 每 <code>domain-reconcile-interval-ms</code>(5s) 跑一次：发现活跃域 → 自有则 <code>renew</code>、
+  非自有则 <code>startDomain</code>（抢不到就跳过）；域被关闭 / failed → <code>stopDomain</code>；</li>
+<li><code>@PreDestroy</code> 清掉本实例全部租约，让接管不必等租期自然过期。</li>
+<li><strong>fail-closed</strong>：租约后端不可用时 <code>reconcile()</code> 直接 <code>log.error</code> 并 return，
+  <code>startDomain</code> 抛 <code>IllegalStateException</code> —— 宁可不起 consumer，也不出现两个实例消费同一域。</li>
+</ul>
+<h2 id="5-r-mc01-03">5. 心跳聚合（R-MC01-03）<a class="headerlink" href="#5-r-mc01-03" title="Permanent link">&para;</a></h2>
+<h3 id="51">5.1 降频窗口：限流不等于丢数据<a class="headerlink" href="#51" title="Permanent link">&para;</a></h3>
+<pre><code class="language-text">report()
+  ├─ 距上次接受 &lt; 5s（min-interval-ms）→ throttled=true：只覆盖 pending 缓冲区，不写 PG
+  └─ 否则                            → 直接 PG upsert
+后台 flusher 每 5s 跑一次 flushPendingAt()：把缓冲区最后值落库
+查询（members / aggregate）时 snapshot() = PG 快照 ⊕ pending 缓冲区（pending 覆盖 PG）
+</code></pre>
+<p>关键语义：<strong>窗口内被限流的上报，其「最后一次值」仍会被采纳</strong> —— 所以 <code>throttled=true</code> 不代表数据丢失，
+响应体里同时给出 <code>accepted / throttled / persisted / queued / throttle_window_ms</code> 五个字段说明去向。
+<code>pending</code> 是短时效旁路状态，进程崩溃最多丢一个窗口，失联会由 <code>stale</code> 暴露。</p>
+<h3 id="52-stale">5.2 <code>stale</code> 是查询时派生的状态，不写库<a class="headerlink" href="#52-stale" title="Permanent link">&para;</a></h3>
+<p><code>MemberHeartbeat.staleAt(now, staleMs)</code> 只是 <code>reportedAt + 30s &lt;= now</code> 的判定；
+<code>memberView()</code> 返回 <code>state = stale ? "stale" : item.state()</code>，同时用 <code>reported_state</code> 保留原始上报状态。
+<code>REPORTABLE_STATES = {idle, working, blocked, done}</code> —— <strong><code>stale</code> 不允许客户端上报</strong>（会被 400 拒）。
+失联成员<strong>保留不删除</strong>，聚合结果里计入 <code>stale_count</code>，其最后已知进度仍参与加权平均。</p>
+<p>聚合口径：<code>progress = Σ(weight × progress) / Σ(weight)</code>，<code>weight</code> 必须落在 <code>(0, 100]</code>，
+缺省 1.0（等权即算术平均），结果四舍五入到两位小数。</p>
+<h3 id="53">5.3 消息类型与业务处理器的边界<a class="headerlink" href="#53" title="Permanent link">&para;</a></h3>
+<p><code>MessagePublisher.TYPES = {dispatch, result, heartbeat, negotiate}</code>，主题形状：</p>
+<pre><code class="language-text">collab.&lt;domain_id&gt;.&lt;type&gt;.&lt;member_id&gt;        # member_id 为空时用 &quot;-&quot;
+collab.&lt;domain_id&gt;.deadletter                # 死信
+</code></pre>
+<p>消费端 <code>ReliableConsumer.dispatch()</code> 目前<strong>只实现了 <code>heartbeat</code></strong>（解析 JSON 后交给
+<code>HeartbeatService.report</code>）；<code>dispatch / result / negotiate</code> 走到 <code>log.debug("消息传输层已消费（业务处理器预留）")</code>。
+这是<strong>刻意留白</strong>：传输层（持久化 / 幂等 / 重投 / 死信）已闭环并验收，业务处理器按 Phase 6 设计注册，
+<strong>不是未实现的伪实现</strong> —— 消息确实被消费并 ack 了，只是没有副作用。</p>
+<h2 id="6-4-pg-postconstruct">6. 数据模型（4 张 PG 表，全部由 <code>@PostConstruct</code> 建表）<a class="headerlink" href="#6-4-pg-postconstruct" title="Permanent link">&para;</a></h2>
+<table>
+<thead>
+<tr>
+<th>表</th>
+<th>主键</th>
+<th>作用</th>
+<th>PG 不可用时</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>collab_domain</code></td>
+<td><code>domain_id</code></td>
+<td>域元数据；唯一真相源</td>
+<td>503（不降级）</td>
+</tr>
+<tr>
+<td><code>collab_seen_request</code></td>
+<td><code>(domain_id, request_id)</code></td>
+<td>幂等 + 投递状态机（<code>pending/processed/failed/dlq</code>）</td>
+<td>503（不降级）</td>
+</tr>
+<tr>
+<td><code>collab_member_heartbeat</code></td>
+<td><code>(domain_id, member_id)</code></td>
+<td>成员心跳快照（原子 upsert）</td>
+<td>503（不降级）</td>
+</tr>
+<tr>
+<td><code>collab_domain_lease</code></td>
+<td><code>domain_id</code></td>
+<td>多实例域租约（owner + <code>lease_until</code>）</td>
+<td><strong>fail-closed</strong>：不起 consumer</td>
+</tr>
+</tbody>
+</table>
+<p>三张业务表都带索引（<code>(tenant_id, state)</code> / <code>(status, updated_at)</code> / <code>(domain_id, reported_at DESC)</code>），
+<code>IdempotencyRepository</code> 还带一组 <code>ADD COLUMN IF NOT EXISTS</code> 迁移语句，兼容早期只存 <code>seen</code> 标记的表结构。
+详细结构见 <a href="08-数据存储与归档.md">08-数据存储与归档</a> 与仓库根 <code>db/</code>。</p>
+<h2 id="7">7. 文件清单<a class="headerlink" href="#7" title="Permanent link">&para;</a></h2>
+<h3 id="71-20-2347">7.1 主代码（20 个，2347 行）<a class="headerlink" href="#71-20-2347" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th>类型</th>
+<th style="text-align: right;">行数</th>
+<th>职责</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>CollabBusApplication.java</code></td>
+<td>启动类</td>
+<td style="text-align: right;">26</td>
+<td>Spring Boot 入口 + <code>@EnableDiscoveryClient</code>（Nacos 默认关闭）</td>
+</tr>
+<tr>
+<td><code>common/ErrorCode.java</code></td>
+<td>枚举</td>
+<td style="text-align: right;">34</td>
+<td>统一错误码 + <strong>4 个 MC-01 专属码</strong></td>
+</tr>
+<tr>
+<td><code>common/BizException.java</code></td>
+<td>异常</td>
+<td style="text-align: right;">28</td>
+<td>携带错误码 + <code>details</code>，由全局处理器转错误信封</td>
+</tr>
+<tr>
+<td><code>common/GlobalExceptionHandler.java</code></td>
+<td>切面</td>
+<td style="text-align: right;">42</td>
+<td><code>BizException</code> / <code>IllegalArgumentException</code> / 兜底 500 → <code>{code,message,details}</code></td>
+</tr>
+<tr>
+<td><code>nats/NatsConnection.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">140</td>
+<td>NATS 连接管理：<strong>惰性连接 + 断线重连 + 能力状态如实上报</strong></td>
+</tr>
+<tr>
+<td><code>domain/CollabDomain.java</code></td>
+<td>record</td>
+<td style="text-align: right;">41</td>
+<td>域元数据 + 四个状态常量 + <code>active()</code> / <code>closed()</code></td>
+</tr>
+<tr>
+<td><code>domain/DomainRepository.java</code></td>
+<td>仓储</td>
+<td style="text-align: right;">132</td>
+<td><code>collab_domain</code> 建表 / 增查列删 / <code>markActive</code> / <code>markFailed</code> / <code>close</code>（幂等）</td>
+</tr>
+<tr>
+<td><code>domain/DomainService.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">187</td>
+<td>R-MC01-01 域生命周期 + stream 编排 + <strong>创建补偿</strong> + <strong>启动对账</strong></td>
+</tr>
+<tr>
+<td><code>delivery/MessagePublisher.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">155</td>
+<td>R-MC01-02 发布（JetStream message id 去重）+ 死信发布 + 主题命名</td>
+</tr>
+<tr>
+<td><code>delivery/IdempotencyRepository.java</code></td>
+<td>仓储</td>
+<td style="text-align: right;">187</td>
+<td>幂等状态机存储：<code>claim</code> 原子领取 + 四态标记 + 过期清理</td>
+</tr>
+<tr>
+<td><code>delivery/IdempotentConsumer.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">133</td>
+<td>消费编排：claim → 执行 → processed/failed/DLQ</td>
+</tr>
+<tr>
+<td><code>delivery/ReliableConsumer.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">348</td>
+<td>R-MC01-02/04 durable pull consumer + 租约对账 + 虚拟线程拉取循环</td>
+</tr>
+<tr>
+<td><code>delivery/DomainLeaseRepository.java</code></td>
+<td>仓储</td>
+<td style="text-align: right;">113</td>
+<td>多实例域租约：原子抢占 / 续约 / 释放 / 退出清理</td>
+</tr>
+<tr>
+<td><code>heartbeat/MemberHeartbeat.java</code></td>
+<td>record</td>
+<td style="text-align: right;">43</td>
+<td>心跳快照 + <code>REPORTABLE_STATES</code> + <code>staleAt()</code> 派生判定</td>
+</tr>
+<tr>
+<td><code>heartbeat/HeartbeatRepository.java</code></td>
+<td>仓储</td>
+<td style="text-align: right;">125</td>
+<td><code>collab_member_heartbeat</code> 建表 / 原子 upsert / 列表</td>
+</tr>
+<tr>
+<td><code>heartbeat/HeartbeatService.java</code></td>
+<td>服务</td>
+<td style="text-align: right;">372</td>
+<td>R-MC01-03 降频窗口 + 后台 flush + 合并快照 + 加权聚合</td>
+</tr>
+<tr>
+<td><code>heartbeat/HeartbeatController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">57</td>
+<td>心跳上报 / 成员列表端点（租户取 <code>X-Tenant-Id</code>）</td>
+</tr>
+<tr>
+<td><code>controller/DomainController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">84</td>
+<td>域创建 / 列表 / 详情（<strong>拼心跳聚合</strong>）/ 关闭</td>
+</tr>
+<tr>
+<td><code>controller/CollabController.java</code></td>
+<td>控制器</td>
+<td style="text-align: right;">41</td>
+<td><code>/api/collab/health</code>：服务 + 总线 + consumer + 心跳四段状态</td>
+</tr>
+<tr>
+<td><code>observability/CollabBusMetrics.java</code></td>
+<td>组件</td>
+<td style="text-align: right;">59</td>
+<td>Micrometer 指标（域数 / 消息数 / 重投 / 心跳 / 积压）</td>
+</tr>
+</tbody>
+</table>
+<h3 id="72-5-38">7.2 测试（5 个文件，38 个用例，全绿）<a class="headerlink" href="#72-5-38" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>文件</th>
+<th style="text-align: right;">行数</th>
+<th style="text-align: right;">用例</th>
+<th>覆盖验收点</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>delivery/DeliveryTest.java</code></td>
+<td style="text-align: right;">197</td>
+<td style="text-align: right;">11</td>
+<td>R-MC01-02 单测：主题命名 / 关闭域 409 / 跨租户 404 / 状态机四态 / 重投 / 死信 / PG 不可用 503</td>
+</tr>
+<tr>
+<td><code>domain/DomainServiceTest.java</code></td>
+<td style="text-align: right;">143</td>
+<td style="text-align: right;">8</td>
+<td>R-MC01-01 单测：PG 与 JetStream 不可用不插库 / stream 失败补偿 / 关闭幂等 / 命名约定</td>
+</tr>
+<tr>
+<td><code>heartbeat/HeartbeatTest.java</code></td>
+<td style="text-align: right;">202</td>
+<td style="text-align: right;">10</td>
+<td>R-MC01-03 单测：窗口合并 / flush 落最后值 / 查询含 pending / stale 保留 / 越界拒绝</td>
+</tr>
+<tr>
+<td><code>delivery/DeliveryIntegrationTest.java</code></td>
+<td style="text-align: right;">146</td>
+<td style="text-align: right;">6</td>
+<td><strong>真实 PG + NATS</strong>：publish ack / 幂等只执行一次 / <strong>离线 50 条全量恢复</strong> / 自动 DLQ / 死信 ack</td>
+</tr>
+<tr>
+<td><code>heartbeat/HeartbeatIntegrationTest.java</code></td>
+<td style="text-align: right;">75</td>
+<td style="text-align: right;">3</td>
+<td><strong>真实 PG</strong>：三成员加权聚合 / stale 可见 / 限流后仍更新最后值</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>两个集成测试类由 <code>@EnabledIfEnvironmentVariable(named = "COLLAB_IT", matches = "true")</code> 守卫，
+默认（本地 <code>mvn test</code>）<strong>不执行</strong>，因此基线统计是「29 执行 / 9 条件跳过 / 0 失败」。
+需要真跑时：<code>COLLAB_IT=true</code> 且 PG + NATS 就绪。</p>
+</blockquote>
+<h2 id="8">8. 逐文件说明（关键实现）<a class="headerlink" href="#8" title="Permanent link">&para;</a></h2>
+<h3 id="81-natsnatsconnectionjava-140">8.1 <code>nats/NatsConnection.java</code> · 传输底座 · 140 行<a class="headerlink" href="#81-natsnatsconnectionjava-140" title="Permanent link">&para;</a></h3>
+<p>构造函数里只调一次 <code>connectQuietly()</code>，<strong>失败不抛出</strong>（<code>connection = null</code> + 记 <code>lastError</code>），
+所以 NATS 不在线<strong>不会让服务启动失败</strong>；<code>connection()</code> 每次调用时若发现未连接会<strong>惰性重试一次</strong>。
+<code>Options</code> 用 <code>maxReconnects(-1)</code> + <code>reconnectWait(2000ms)</code> + <code>connectionTimeout(3s)</code>。
+<code>jetStream()</code> / <code>jetStreamManagement()</code> 在未连接时抛 <code>IllegalStateException</code>（由上层转 503）。
+<code>status()</code> 是给前端「总线状态灯」用的事实来源，<code>note</code> 字段会明确写出降级后果。</p>
+<h3 id="82-domaindomainservicejava-187">8.2 <code>domain/DomainService.java</code> · 域生命周期 · 187 行<a class="headerlink" href="#82-domaindomainservicejava-187" title="Permanent link">&para;</a></h3>
+<p>除 §3 的创建/关闭顺序外，两个值得记住的点：</p>
+<ul>
+<li><code>streamName(domainId)</code> = <code>COLLAB_</code> + 域名大写、<code>-</code> 换 <code>_</code>（<code>dom-abc123</code> → <code>COLLAB_DOM_ABC123</code>）；
+  <code>subjectPattern</code> = <code>collab.&lt;domainId&gt;.&gt;</code>。命名是<strong>域隔离的唯一依据</strong>（一个域一个 stream）。</li>
+<li><code>summary()</code> 是给 BFF 用的运行态视图，额外带上 <code>stream</code> 与 <code>subject_pattern</code>，方便排障时直接照抄。</li>
+<li>构造参数 <code>domain-concurrency-limit</code>(8) 写入域元数据（本切片<strong>仅登记</strong>，Phase 6 才用于限流），
+  <code>stream-max-age-hours</code>(24) 决定新建 stream 的 <code>maxAge</code>（该键<strong>未在 yml 声明</strong>，见 §10 第 3 条）。</li>
+</ul>
+<h3 id="83-deliveryidempotencyrepositoryjava-187">8.3 <code>delivery/IdempotencyRepository.java</code> · 幂等状态 · 187 行<a class="headerlink" href="#83-deliveryidempotencyrepositoryjava-187" title="Permanent link">&para;</a></h3>
+<p><code>claim()</code> 用「先 <code>INSERT ... ON CONFLICT DO NOTHING</code>，再条件 <code>UPDATE</code>」两步实现原子领取，
+不需要显式事务：插入成功即 <code>CLAIMED</code>；插入被冲突挡下才走 <code>UPDATE ... WHERE status IN ('pending','failed')</code>，
+<code>affected=0</code> 说明该行是终态（<code>processed</code> / <code>dlq</code>），返回重复结果。
+<code>last_error</code> 截断到 2000 字符，<code>cleanupOlderThanHours()</code> 按 <code>updated_at</code> 清理过期幂等记录
+（应与 stream 保留期一致）。<code>ClaimResult.shouldExecute()</code> / <code>duplicate()</code> 把状态判定收在 record 里，
+调用方不必自己写 switch。</p>
+<h3 id="84-deliveryreliableconsumerjava-348">8.4 <code>delivery/ReliableConsumer.java</code> · 可靠消费 · 348 行<a class="headerlink" href="#84-deliveryreliableconsumerjava-348" title="Permanent link">&para;</a></h3>
+<p>本模块最重的文件，四段职责：</p>
+<table>
+<thead>
+<tr>
+<th>段</th>
+<th>方法</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>对账</td>
+<td><code>startAll</code> / <code>reconcile</code> / <code>reconcileSafe</code></td>
+<td><code>ApplicationReadyEvent</code> 起一次 + 5s 定时；<strong>租约不可用直接 fail-closed</strong></td>
+</tr>
+<tr>
+<td>生命周期</td>
+<td><code>startDomain</code> / <code>stopDomain</code> / <code>stopAll</code></td>
+<td>全部 <code>synchronized</code>；<code>stopDomain</code> 保留 durable 进度供恢复继续消费</td>
+</tr>
+<tr>
+<td>拉取</td>
+<td><code>pullLoop</code></td>
+<td>虚拟线程 <code>Thread.ofVirtual()</code>，批次 32 / 500ms 超时；异常 sleep 后重试</td>
+</tr>
+<tr>
+<td>处理</td>
+<td><code>handle</code> / <code>dispatch</code></td>
+<td>读 headers → <code>IdempotentConsumer.deliver</code> → 按结果 <code>ack</code> 或 <code>nakWithDelay</code></td>
+</tr>
+</tbody>
+</table>
+<p><code>ConsumerConfiguration</code>：<code>AckPolicy.Explicit</code> + <code>DeliverPolicy.All</code> + <code>ackWait=30s</code> +
+<code>maxDeliver = retryMax + 1</code> + 退避 <code>250ms / 1s / 2s</code> + <code>filterSubject = collab.&lt;domain&gt;.*.*</code>
+（<strong>注意是三段通配</strong>：<code>collab.&lt;domain&gt;.&lt;type&gt;.&lt;member&gt;</code>，而 stream 的 subjects 是 <code>collab.&lt;domain&gt;.&gt;</code>）。
+<code>requestId</code> 缺失时用 <code>msg-&lt;stream&gt;-&lt;seq&gt;</code> 兜底，保证「没有 header 的消息」也能进入幂等状态机。
+<code>status()</code> 暴露 <code>active_domains / domain_ids / lease_owner / lease_backend_available</code>。</p>
+<h3 id="85-heartbeatheartbeatservicejava-372">8.5 <code>heartbeat/HeartbeatService.java</code> · 心跳聚合 · 372 行<a class="headerlink" href="#85-heartbeatheartbeatservicejava-372" title="Permanent link">&para;</a></h3>
+<p><code>reportAt()</code> 是<strong>可注入时间</strong>的核心（<code>report()</code> 只是喂 <code>Instant.now()</code>），单测因此能在
+<code>T0</code> / <code>T0+1s</code> / <code>T0+31s</code> 上精确验证窗口与 stale。<code>status()</code> 暴露
+<code>pending_updates / last_flush_at / last_flush_count / last_flush_error / min_interval_ms / stale_after_ms</code> ——
+<strong>「合并是否真的生效」是可以从健康端点直接看出来的</strong>。
+<code>forgetDomain()</code> 在域停止时按 <code>domainId|</code> 前缀清掉两个 Map，避免长期运行后键泄漏。
+<code>@PreDestroy</code> 里 <code>flusher.shutdownNow()</code> 后再 <code>flushPendingSafely()</code> 做最后一次落库。</p>
+<h3 id="86-commonerrorcodejava">8.6 错误码（<code>common/ErrorCode.java</code>）<a class="headerlink" href="#86-commonerrorcodejava" title="Permanent link">&para;</a></h3>
+<p>通用码沿用项目约定（400/401/403/404/405/409/500/503/504），额外 4 个 MC-01 专属码：</p>
+<table>
+<thead>
+<tr>
+<th>码</th>
+<th style="text-align: right;">HTTP</th>
+<th>触发</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>AGENT_COLLAB_DOMAIN_NOT_FOUND</code></td>
+<td style="text-align: right;">404</td>
+<td>域不存在<strong>或不属于当前租户</strong>（不泄露存在性）</td>
+</tr>
+<tr>
+<td><code>AGENT_COLLAB_DOMAIN_CLOSED</code></td>
+<td style="text-align: right;">409</td>
+<td>向已关闭域发布消息 / 上报心跳</td>
+</tr>
+<tr>
+<td><code>AGENT_COLLAB_BUS_UNAVAILABLE</code></td>
+<td style="text-align: right;">503</td>
+<td>PG 或 JetStream 不可用；域创建失败</td>
+</tr>
+<tr>
+<td><code>AGENT_COLLAB_HEARTBEAT_INVALID</code></td>
+<td style="text-align: right;">400</td>
+<td>心跳字段非法；消息类型不在 <code>TYPES</code> 内</td>
+</tr>
+</tbody>
+</table>
+<p>注释里专门强调 <strong>404 与 5xx 必须可区分</strong> —— 这是前端判定「端点未实现」与「服务故障」的前提。</p>
+<h2 id="9">9. 运行与配置<a class="headerlink" href="#9" title="Permanent link">&para;</a></h2>
+<h3 id="91">9.1 端口与服务名<a class="headerlink" href="#91" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>项</th>
+<th>值</th>
+<th>覆盖变量</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTTP</td>
+<td><code>8085</code></td>
+<td><code>COLLAB_HTTP_PORT</code></td>
+</tr>
+<tr>
+<td>gRPC</td>
+<td>—</td>
+<td>未启用</td>
+</tr>
+<tr>
+<td>Nacos 服务名</td>
+<td><code>collab-bus</code></td>
+<td><code>NACOS_ENABLED</code>（<strong>默认 <code>false</code></strong>，本地单体不注册）</td>
+</tr>
+</tbody>
+</table>
+<blockquote>
+<p>8085 是 MC-01 切片新分配的端口；本服务<strong>不经网关</strong>，因此不占用网关路由表。</p>
+</blockquote>
+<h3 id="92">9.2 环境变量<a class="headerlink" href="#92" title="Permanent link">&para;</a></h3>
+<table>
+<thead>
+<tr>
+<th>变量</th>
+<th>默认</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>NATS_URL</code></td>
+<td><code>nats://127.0.0.1:4222</code></td>
+<td>JetStream 必须开启（容器 <code>-js --store_dir /data</code>）</td>
+</tr>
+<tr>
+<td><code>PG_URL</code> / <code>PG_USER</code> / <code>PG_PASSWORD</code></td>
+<td><code>jdbc:postgresql://127.0.0.1:5432/lifeform</code> / <code>agent</code> / <code>agent123</code></td>
+<td>4 张协作表所在库</td>
+</tr>
+<tr>
+<td><code>COLLAB_HEARTBEAT_MIN_INTERVAL_MS</code></td>
+<td><code>5000</code></td>
+<td>心跳降频窗口</td>
+</tr>
+<tr>
+<td><code>COLLAB_MEMBER_STALE_MS</code></td>
+<td><code>30000</code></td>
+<td>成员失联阈值（<code>state</code> 派生为 <code>stale</code>）</td>
+</tr>
+<tr>
+<td><code>COLLAB_RETRY_MAX</code></td>
+<td><code>3</code></td>
+<td>重投上限（总尝试次数 = 该值 + 1）</td>
+</tr>
+<tr>
+<td><code>COLLAB_DOMAIN_CONCURRENCY_LIMIT</code></td>
+<td><code>8</code></td>
+<td>域并发上限（<strong>本切片仅登记</strong>）</td>
+</tr>
+<tr>
+<td><code>COLLAB_DOMAIN_LEASE_MS</code></td>
+<td><code>30000</code></td>
+<td>多实例域租约时长</td>
+</tr>
+<tr>
+<td><code>COLLAB_DOMAIN_RECONCILE_INTERVAL_MS</code></td>
+<td><code>5000</code></td>
+<td>租约对账周期</td>
+</tr>
+</tbody>
+</table>
+<p>未被 <code>application.yml</code> 声明、只能靠代码默认值生效的项（<strong>想改必须加进 yml</strong>）：
+<code>app.collab.consumer-durable-prefix</code>(collab-worker)、<code>app.collab.retry-delay-ms</code>(500)、
+<code>app.collab.ack-wait-ms</code>(30000)、<code>app.collab.consumer-batch-size</code>(32)、
+<code>app.collab.consumer-poll-timeout-ms</code>(500)。</p>
+<h3 id="93-actuatorprometheus">9.3 指标（<code>/actuator/prometheus</code>）<a class="headerlink" href="#93-actuatorprometheus" title="Permanent link">&para;</a></h3>
+<p><code>lifeform.collab.active.domains</code>(gauge) · <code>lifeform.collab.heartbeat.pending</code>(gauge) ·
+<code>lifeform.collab.messages{direction=published|consumed}</code> · <code>lifeform.collab.consumer.retries</code> ·
+<code>lifeform.collab.heartbeat.reports{outcome}</code> · <code>lifeform.collab.heartbeat.flushed</code> ·
+<code>lifeform.collab.deadletter</code>（见 §10 第 2 条）。
+HTTP 与 GC 直方图已开启（<code>percentiles-histogram</code> + <code>0.5/0.95/0.99</code>），指标页可读真实 P95/P99。</p>
+<h3 id="94">9.4 本地起服务<a class="headerlink" href="#94" title="Permanent link">&para;</a></h3>
+<pre><code class="language-bash">docker compose up -d nats postgres          # 依赖：lifeform-nats（-js）/ lifeform-postgres
+cd services/java
+../../scripts/mvn-dev.sh -pl collab-bus -am clean package
+java -jar collab-bus/target/collab-bus-0.1.0-SNAPSHOT.jar     # 默认 8085
+</code></pre>
+<h2 id="10">10. 已知缺口（诚实登记，勿当已完成）<a class="headerlink" href="#10" title="Permanent link">&para;</a></h2>
+<ol>
+<li><strong>业务处理器未注册</strong>：<code>dispatch / result / negotiate</code> 三类消息只走到传输层（§5.3），
+   真实处理器按 Phase 6 设计接入。这属<strong>刻意的接口冻结</strong>，不是遗漏。</li>
+<li><strong><code>CollabBusMetrics.deadLetter()</code> 是死代码</strong>：全模块<strong>无任何调用点</strong>（已 grep 确认），
+   因此 <code>lifeform.collab.deadletter</code> 计数恒为 0 —— 死信确实发出去了（<code>MessagePublisher.publishToDeadLetter</code>），
+   只是没打点。指标页若展示该指标，会低估死信量。</li>
+<li><strong>配置键漂移</strong>：<code>application.yml</code> 声明了 <code>app.collab.stream-retention-after-close-ms</code>
+   （<code>COLLAB_STREAM_RETENTION_MS</code>），但<strong>代码里没有任何地方读它</strong>；代码实际读的
+   <code>app.collab.stream-max-age-hours</code>（<code>DomainService</code> 构造参数）<strong>在 yml 里不存在</strong> ——
+   因此 stream 保留期恒为代码默认 24h，设 <code>COLLAB_STREAM_RETENTION_MS</code> <strong>无效</strong>。
+   另注：<code>stream-retention-after-close-ms</code> 语义是「域关闭后保留」，与 stream 的 <code>maxAge</code> 并不是同一件事，
+   修的时候需要先定语义再接线。</li>
+<li><strong><code>concurrency_limit</code> 只登记不生效</strong>：域并发上限已入库、已出现在 <code>summary()</code>，但没有任何限流逻辑消费它（Phase 6 使用）。</li>
+<li><strong><code>GET /api/collab/domains/{id}</code> 与 <code>/members</code> 的聚合形态不同</strong>：详情端点把心跳聚合
+   <code>putAll</code> 到域摘要里（字段平铺），成员列表端点则返回 <code>{total, stale_count, items}</code> 包装；
+   前端取字段时需分别处理。这是既定接口形态，改动需同步 <code>contracts/collab-bus-openapi.yaml</code>。</li>
+<li><strong>无 Dockerfile</strong>：本模块与其它 Java 服务一样，只有 <code>pom.xml</code>，部署形态是 <code>java -jar</code>。</li>
+</ol>
+<h2 id="11">11. 改这里要注意什么<a class="headerlink" href="#11" title="Permanent link">&para;</a></h2>
+<ul>
+<li><strong>改契约前先看</strong> <code>contracts/collab-bus-openapi.yaml</code> 与 <code>docs/Phase6-前置设计冻结稿.md</code>：
+  <code>publish(domain, type, member, request_id, payload)</code> 的形状已冻结供 Phase 6 依赖。</li>
+<li><strong>不要给核心状态加内存降级</strong>（§2 不变量 1）。要加降级，先在 <code>docs/技术债台账.md</code> 登记。</li>
+<li><strong>域状态机只增不改</strong>：<code>creating → active → closed</code>、失败进 <code>failed</code>；<code>markActive</code> 只接受
+  <code>creating/failed</code> 两个来源状态，绕过它直接改 state 会破坏启动对账。</li>
+<li><strong>测试分层</strong>：单测用 mock（<code>DeliveryTest</code> / <code>DomainServiceTest</code> / <code>HeartbeatTest</code>），
+  真链路必须走 <code>COLLAB_IT=true</code> 的集成测试；新增可靠性语义时<strong>两边都要补</strong>。</li>
+<li>改完 Java 文件后跑 <code>python scripts/java-doc-coverage.py</code> 确认本篇清单未过期。</li>
+</ul>
+<h2 id="12">12. 相关文档<a class="headerlink" href="#12" title="Permanent link">&para;</a></h2>
+<ul>
+<li><a href="01-模块总览与架构.md">01-模块总览与架构</a> —— 模块清单、依赖与端口</li>
+<li><a href="07-运行时配置与横切约定.md">07-运行时配置与横切约定</a> —— 全平台配置与横切约定</li>
+<li><a href="08-数据存储与归档.md">08-数据存储与归档</a> —— 4 张协作表的存储总纲</li>
+<li><code>docs/Phase6-前置设计冻结稿.md</code> —— MC-01 与 Phase 6 的边界</li>
+<li><code>docs/test-reports/collab/2026-09-21/</code> —— 规模验证（25/100/500/1000 域）、多实例接管、告警投递实测产物</li>
+</ul></main>
+</div>
+<div class="footer">本页由 scripts/md2html-report.py 自动生成 · 修改请编辑同名 .md 后重新生成</div>
+</body>
+</html>

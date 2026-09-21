@@ -1,7 +1,8 @@
 # 04 · session-manager 会话服务
 
 > 模块路径：`services/java/session-manager/`
-> 源文件：**16 个主代码（1389 行）+ 10 个测试（933 行 / 43 个用例）**
+> 源文件：**17 个主代码（1637 行）+ 11 个测试（1028 行 / 45 个用例）**
+> 默认执行 **43 个**：`bus/SessionBusLinkTest` 的 2 个用例需要真实 NATS + Kafka，由 `SESSION_BUS_IT=true` 守卫
 > HTTP 端口：**8081** · gRPC 端口：**19092**（原 9092 与 Kafka 宿主端口冲突，2026-09-19 外移）
 > 主要依赖：Spring Web、Spring Data Redis、NATS（jnats）、Kafka clients
 
@@ -96,6 +97,9 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 | `fsm/SessionStore.java` | 存储 | 281 | **R4-02** Redis Hash 持久化 + TTL + 最近 K 轮上下文（DEBT-014）；`@Component`（多构造需显式指定注入构造） |
 | `test/…/SessionFsmTest.java` | 测试 | 82 | 全量迁移、终态拒绝、超时可恢复 |
 | `test/…/SessionStoreTest.java` | 测试 | 192 | 落库字段 / TTL / 上下文窗口 / 旧数据兼容 |
+| `test/…/GlobalExceptionHandlerTest.java` | 测试 | 68 | 路由层 404 / 405 / 415 分流，真实故障仍 500（见 §4.14） |
+| `test/…/SessionStatsTest.java` | 测试 | 128 | R-C04 会话统计口径：剔除已关闭、租户过滤、SCAN 失败降级（见 §4.15） |
+| `test/…/SessionBusLinkTest.java` | 测试 | 85 | **条件集成**：真实 NATS 请求-应答 + 真实 Kafka 发布（见 §4.15.1） |
 
 ## 4. 逐文件说明
 
@@ -392,6 +396,22 @@ RestClient 在无 Apache HttpClient 依赖时回退到 JdkClientHttpRequestFacto
 mock `HashOperations.entries` / `ListOperations.range` 时先在 Lambda 里取 `Object key = inv.getArgument(0)`
 再 `String.valueOf(key)` —— 直接 `getArgument(0)` 会被推断成 `char[]` 重载并 `ClassCastException`
 （与 `SessionStoreTest` 同一坑，注释已留痕）。
+
+### 4.15.1 `bus/SessionBusLinkTest.java` · 2 个用例（条件集成，DEBT-009 的收口产物）
+
+**这是「消息链路只测了 mock」这一技术债（DEBT-009）的关闭依据**：不 mock 任何客户端，
+直接连真实中间件跑通两件事。
+
+| 用例 | 验证内容 |
+|---|---|
+| `natsRequestResponseFlowsThroughBusProxy` | 在临时 subject 上起一个**真实 responder**（收到消息即向 `replyTo` 回 `pong`），再用 `NatsClient` + `BusProxy.request()` 走完整请求-应答，断言返回 `pong` |
+| `kafkaPublisherWritesToRealBroker` | `KafkaEventPublisher.publish()` 后用一个**同 topic 的真实 `KafkaConsumer`** 拉取，断言能读到 key=`route-test` 的记录且 topic 名与发布方一致 |
+
+- **守卫**：`@EnabledIfEnvironmentVariable(named = "SESSION_BUS_IT", matches = "true")` —— 默认跳过，
+  因此本地 `mvn test` 的基线是 43 个用例；要跑真链路需 NATS（4222）与 Kafka（9092）在线。
+- **可配置**：NATS 地址读 `NATS_URL`、Kafka 读 `KAFKA_BOOTSTRAP`，都用 `System.getenv().getOrDefault`，
+  不写死。
+- 两个用例都**自建随机 subject / 随机 groupId**，因此可重复执行、不会互相干扰。
 
 ### 4.16 `orchestration/RequestBudget.java` · 工具类 · 60 行（REC-01）
 
