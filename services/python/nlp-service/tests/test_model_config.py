@@ -529,3 +529,10 @@ def test_http_probe_reports_honestly_when_base_url_missing():
         probed = client.post(f"/api/nlp/models/{model_id}/test", headers=headers).json()
     assert probed["ok"] is False and "base_url" in probed["error"]
     assert probed["supported"] is True
+
+def test_probe_refused_error_is_actionable():
+    message = model_config._probe_error_message(
+        OSError("[WinError 10061] 由于目标计算机积极拒绝，无法连接。")
+    )
+    assert "代理" in message
+    assert "NO_PROXY" in message

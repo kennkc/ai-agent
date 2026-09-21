@@ -13,6 +13,9 @@ export NLP_BASE_URL="${NLP_BASE_URL:-http://127.0.0.1:8000}"
 export BODY_BASE_URL="${BODY_BASE_URL:-http://127.0.0.1:8083}"
 export WP_BFF_PORT="${WP_BFF_PORT:-8090}"
 export WP_BFF_URL="${WP_BFF_URL:-http://127.0.0.1:$WP_BFF_PORT}"
+export VITE_DATA_SOURCE="${VITE_DATA_SOURCE:-api}"
+export NO_PROXY="${NO_PROXY:-openrouter.ai,127.0.0.1,localhost}"
+export no_proxy="${no_proxy:-$NO_PROXY}"
 
 # 前置门禁：跨服务超时预算（contracts/timeout-budget.yaml）
 #
@@ -81,7 +84,7 @@ start_frontend() {
   echo "[5/6] Vue work-platform on :${WP_DEV_PORT:-3001} ..."
   cd "$ROOT/web/work-platform"
   if [ ! -d node_modules ]; then npm install --silent; fi
-  nohup env WP_BFF_URL="$WP_BFF_URL" npm run dev -- --host 0.0.0.0 --port "${WP_DEV_PORT:-3001}" >/tmp/work-platform.log 2>&1 &
+  nohup env WP_BFF_URL="$WP_BFF_URL" VITE_DATA_SOURCE="$VITE_DATA_SOURCE" npm run dev -- --host 0.0.0.0 --port "${WP_DEV_PORT:-3001}" >/tmp/work-platform.log 2>&1 &
 }
 
 verify() { echo "[6/6] health check..."; sleep 8; "$ROOT/scripts/healthcheck.sh"; }

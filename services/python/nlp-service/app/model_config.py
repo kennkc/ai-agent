@@ -650,9 +650,20 @@ def probe_config(tenant_id: str, config_id: int, timeout_ms: int = 5000) -> dict
         )
     except Exception as exc:  # noqa: BLE001
         result.update(ok=False, latency_ms=int((time.time() - started) * 1000), supported=True,
-                      error=f"{type(exc).__name__}: {exc}")
+                      error=_probe_error_message(exc))
     _record_probe(tenant_id, config_id, result)
     return result
+
+
+def _probe_error_message(exc: Exception) -> str:
+    """把常见网络异常转换成可操作提示，避免只显示 WinError 数字。"""
+    text = str(exc)
+    if "10061" in text or "actively refused" in text.lower() or "积极拒绝" in text:
+        return ("连接被拒绝：目标服务或系统代理不可达。请检查 HTTP(S)_PROXY / NO_PROXY；"
+                "当前 nlp-service 可能继承了失效的本地代理。")
+    if "timed out" in text.lower() or "timeout" in text.lower():
+        return "连接超时：请检查供应商地址、网络出口和 NO_PROXY 配置。"
+    return f"{type(exc).__name__}: {exc}"
 
 
 def _model_ids(body: str) -> list[str]:

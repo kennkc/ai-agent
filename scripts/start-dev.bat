@@ -9,6 +9,9 @@ if "%JAVA_HOME%"=="" set JAVA_HOME=E:\software\java\jdk-21
 rem 端口单一来源：WP_BFF_URL（Vite 代理目标）由 WP_BFF_PORT 派生
 if "%WP_BFF_PORT%"=="" set WP_BFF_PORT=8090
 if "%WP_BFF_URL%"=="" set WP_BFF_URL=http://127.0.0.1:%WP_BFF_PORT%
+if "%VITE_DATA_SOURCE%"=="" set VITE_DATA_SOURCE=api
+if "%NO_PROXY%"=="" set "NO_PROXY=openrouter.ai,127.0.0.1,localhost"
+if "%no_proxy%"=="" set "no_proxy=%NO_PROXY%"
 set JAVA_SERVICES=gateway-service session-manager sense-service body-service tool-executor collab-bus
 if "%MODE%"=="infra" goto :infra
 if "%MODE%"=="java" goto :java
@@ -46,7 +49,7 @@ goto :eof
 :frontend
 cd web\work-platform
 if not exist node_modules call npm install
-start "agent-lifeform-work-platform" cmd /c "set WP_BFF_URL=%WP_BFF_URL%&& npm run dev -- --host 0.0.0.0 --port 3001"
+start "agent-lifeform-work-platform" cmd /c "set WP_BFF_URL=%WP_BFF_URL%&& set VITE_DATA_SOURCE=%VITE_DATA_SOURCE%&& npm run dev -- --host 0.0.0.0 --port 3001"
 cd ..\..
 goto :eof
 :all
